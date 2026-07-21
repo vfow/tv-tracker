@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+<meta name="csrf-token" content="{{ csrf_token }}">
+
+<title>TV Tracker</title>
+
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/favicon.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+<aside class="sidebar">
+
+    <button class="active" data-page="shows">
+        SHOWS
+    </button>
+
+    <button data-page="discover">
+        DiSCOVER
+    </button>
+
+    <button data-page="profile">
+        PROFILE
+    </button>
+
+    <button class="sidebar-settings-button" data-page="settings">
+        SETTINGS
+    </button>
+
+</aside>
+
+
+
+
+<section class="main">
+
+
+
+<!-- SHOWS PAGE -->
+
+<div id="shows-page" class="page active-page">
+
+    <nav class="top-tabs">
+
+      <button class="active" data-tab="watchlist">
+        WATCHLIST
+      </button>
+
+      <button data-tab="upcoming">
+        UPCOMING
+      </button>
+
+      <button data-tab="history">
+        HISTORY
+     </button>
+
+    </nav>
+
+
+
+    <div class="filters">
+
+        <button class="active" data-filter="watching">
+            Watching
+        </button>
+
+        <button data-filter="paused">
+            Paused
+        </button>
+
+        <button data-filter="finished">
+            Completed
+        </button>
+
+        <button data-filter="plan">
+            Plan To Watch
+        </button>
+
+        <button data-filter="dropped">
+            Dropped
+        </button>
+
+    </div>
+
+
+
+    <main class="content" id="show-list"></main>
+
+</div>
+
+
+
+
+
+<!-- DISCOVER PAGE -->
+
+<div id="discover-page" class="page">
+
+    <div class="search-container">
+
+        <input
+        class="search-bar"
+        id="search"
+        placeholder="Search TV shows..."
+        >
+
+        <div class="search-results" id="search-results"></div>
+
+    </div>
+
+</div>
+
+
+
+
+
+<!-- PROFILE PAGE -->
+
+<div id="profile-page" class="page">
+
+    <div class="profile" id="profile-content"></div>
+
+</div>
+
+
+
+<!-- SETTINGS PAGE -->
+
+<div id="settings-page" class="page">
+
+    <div class="settings" id="settings-content"></div>
+
+</div>
+
+
+
+</section>
+
+
+
+
+
+<!-- STATUS POPUP -->
+
+<div class="popup-overlay" id="status-popup">
+
+    <div class="popup">
+
+        <h2 id="popup-title">
+            Add Show
+        </h2>
+
+        <p>
+            Choose status:
+        </p>
+
+        <div class="popup-buttons">
+
+            <button data-status="watching">
+                Watching
+            </button>
+
+            <button data-status="plan">
+                Plan To Watch
+            </button>
+
+            <button data-status="finished">
+                Completed
+            </button>
+
+            <button data-status="paused">
+                Paused
+            </button>
+			
+			<button data-status="dropped">
+			Dropped    
+			</button>
+				
+
+        </div>
+
+        <button class="close-popup" id="close-popup">
+            Cancel
+        </button>
+
+    </div>
+
+</div>
+
+
+<!-- SHOW DETAIL MODAL -->
+
+<div class="show-modal-overlay" id="show-modal">
+
+    <div class="show-modal">
+
+        <button class="show-modal-close" id="close-show-modal">
+            ×
+        </button>
+
+        <div id="show-modal-content"></div>
+
+    </div>
+
+</div>
+
+
+<!-- FAVORITES POPUP -->
+
+<div class="popup-overlay" id="favorites-popup">
+
+    <div class="popup favorites-popup-box">
+
+        <h2>Favorite Shows</h2>
+
+        <p>Choose up to 8 favorite shows.</p>
+
+        <div id="favorites-popup-content"></div>
+
+        <button class="close-popup" id="close-favorites-popup">
+            Close
+        </button>
+
+    </div>
+
+</div>
+
+
+<!-- TOAST -->
+
+<div class="toast" id="toast"></div>
+
+
+
+
+
+<script src="{{ url_for('static', filename='js/config.js') }}"></script>
+<script src="{{ url_for('static', filename='js/db.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tmdb.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>

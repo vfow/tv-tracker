@@ -1,0 +1,4030 @@
+@font-face {
+    font-family: "League Gothic";
+    src: url("../assets/league-gothic.regular.ttf");
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html{
+    width:100%;
+    max-width:100%;
+    overflow:hidden;
+}
+
+body{
+    background:#000;
+    color:#fff;
+    height:100vh;
+    display:flex;
+    font-family:Arial, Helvetica, sans-serif;
+    overflow:hidden;
+}
+
+
+
+/* ---------- Sidebar ---------- */
+
+.sidebar{
+    width:160px;
+    height:100vh;
+    background:#080808;
+    border-right:1px solid #222;
+    display:flex;
+    flex-direction:column;
+    padding-top:30px;
+
+    position:fixed;
+    left:0;
+    top:0;
+}
+
+
+.sidebar button{
+    background:none;
+    border:none;
+    color:#777;
+    text-align:left;
+    padding:10px 10px;
+    cursor:pointer;
+
+    font-family:"League Gothic", sans-serif;
+    font-size:50px;
+    letter-spacing:0px;
+
+    transition:.2s;
+}
+
+
+.sidebar button:hover{
+    color:#fff;
+    background:#111;
+}
+
+
+.sidebar button.active{
+    color:#fff;
+    border-left:2px solid #fff;
+}
+
+
+
+/* ---------- Main Area ---------- */
+
+.main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    margin-left:160px;
+    width:calc(100vw - 160px);
+    max-width:calc(100vw - 160px);
+    height:100vh;
+    overflow-x:hidden;
+}
+
+
+
+/* ---------- Page System ---------- */
+
+.page{
+    height:100vh;
+    display:none;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+}
+
+.page::-webkit-scrollbar{
+    width:0;
+    height:0;
+    display:none;
+}
+
+
+.page.active-page{
+    display:block;
+}
+
+
+#shows-page.active-page{
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+}
+
+
+
+/* ---------- Top Tabs ---------- */
+
+.top-tabs{
+    height:70px;
+    display:flex;
+    align-items:center;
+    border-bottom:1px solid #222;
+    padding-left:30px;
+    gap:350px;
+    background:#000;
+    flex-shrink:0;
+}
+
+
+.top-tabs button{
+    background:none;
+    border:none;
+    color:#777;
+    cursor:pointer;
+
+    font-family:"League Gothic";
+    font-size:50px;
+    letter-spacing:0px;
+
+    transition:.2s;
+}
+
+
+.top-tabs button:hover{
+    color:#fff;
+}
+
+
+.top-tabs button.active{
+    color:#fff;
+}
+
+
+
+/* ---------- Filters ---------- */
+
+.filters{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:15px 30px;
+    border-bottom:1px solid #222;
+    flex-shrink:0;
+}
+
+
+.filters button{
+    background:#111;
+    color:#888;
+    border:0;
+    border-radius:5px;
+    padding:8px 18px;
+    cursor:pointer;
+}
+
+
+.filters button:hover{
+    color:#fff;
+}
+
+
+.filters button.active{
+    background:#fff;
+    color:#000;
+}
+
+
+
+/* ---------- Shows ---------- */
+
+.content{
+    flex:1;
+    overflow-y:auto;
+}
+
+
+.show{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    padding:18px 30px;
+    border-bottom:1px solid #222;
+    cursor:pointer;
+}
+
+
+.show:hover{
+    background:#111;
+}
+
+
+.poster{
+    width:70px;
+    height:100px;
+    object-fit:cover;
+    background:#161616;
+    border:1px solid #222;
+    flex-shrink:0;
+}
+
+
+.poster-placeholder{
+    width:70px;
+    height:100px;
+    background:#161616;
+    border:1px solid #222;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
+
+
+.info{
+    flex:1;
+    min-width:0;
+}
+
+
+.title{
+    font-size:18px;
+    font-weight:bold;
+    margin-bottom:6px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+
+.episode{
+    color:#aaa;
+    font-size:15px;
+    margin-bottom:5px;
+}
+
+
+.episode-title{
+    color:#777;
+    font-style:italic;
+    line-height:1.4;
+}
+
+
+.check{
+    width:35px;
+    height:35px;
+    border-radius:50%;
+    background:#111;
+    color:#fff;
+    border:1px solid #fff;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    font-size:22px;
+    font-weight:bold;
+    flex-shrink:0;
+    cursor:pointer;
+    transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.check:hover{
+    background:#fff;
+    color:#000;
+}
+
+.check.marking{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+    animation:checkSuccessPop .85s ease;
+}
+
+@keyframes checkSuccessPop{
+    0%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+
+    25%{
+        transform:scale(1.18);
+        box-shadow:0 0 0 8px rgba(34,197,94,0.18);
+    }
+
+    55%{
+        transform:scale(1.08);
+        box-shadow:0 0 0 14px rgba(34,197,94,0.10);
+    }
+
+    100%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+}
+
+
+
+/* ---------- Empty State ---------- */
+
+.empty-state{
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    color:#777;
+    text-align:center;
+    padding:30px;
+}
+
+
+.empty-state h2{
+    color:#fff;
+    margin-bottom:8px;
+}
+
+
+
+/* ---------- Discover ---------- */
+
+.search-container{
+    padding:30px;
+    width:100%;
+    max-width:100%;
+    overflow-x:hidden;
+}
+
+
+.search-bar{
+    width:100%;
+    max-width:600px;
+    background:#111;
+    border:1px solid #222;
+    color:#fff;
+    padding:15px;
+    font-size:18px;
+    outline:none;
+}
+
+
+.search-bar:focus{
+    border-color:#555;
+}
+
+
+.search-results{
+    margin-top:30px;
+}
+
+
+
+.add-button{
+    margin-top:10px;
+    background:#fff;
+    color:#000;
+    border:none;
+    padding:8px 15px;
+    cursor:pointer;
+    border-radius:5px;
+}
+
+
+.add-button:hover{
+    background:#ccc;
+}
+
+
+.tracked-label{
+    margin-top:10px;
+    color:#22c55e;
+    font-size:14px;
+}
+
+
+
+/* ---------- Status Popup ---------- */
+
+.popup-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.75);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+}
+
+
+.popup{
+    width:360px;
+    background:#080808;
+    border:1px solid #222;
+    padding:25px;
+}
+
+
+.popup h2{
+    font-size:22px;
+    margin-bottom:8px;
+}
+
+
+.popup p{
+    color:#888;
+    margin-bottom:20px;
+}
+
+
+.popup-buttons{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+
+.popup-buttons button{
+    background:#111;
+    color:#fff;
+    border:1px solid #222;
+    padding:12px;
+    cursor:pointer;
+    text-align:left;
+}
+
+
+.popup-buttons button:hover{
+    background:#fff;
+    color:#000;
+}
+
+
+.close-popup{
+    margin-top:15px;
+    background:none;
+    color:#777;
+    border:none;
+    cursor:pointer;
+}
+
+
+
+/* ---------- Toast ---------- */
+
+.toast{
+    position:fixed;
+    right:25px;
+    bottom:25px;
+    background:#fff;
+    color:#000;
+    padding:12px 18px;
+    border-radius:5px;
+    display:none;
+    z-index:200;
+}
+
+
+
+/* ---------- Profile ---------- */
+
+.profile{
+    padding:30px;
+}
+
+
+/* ---------- Show Detail Modal ---------- */
+
+.show-modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.8);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:150;
+}
+
+
+.show-modal{
+    width:min(900px,90vw);
+    height:min(850px,90vh);
+    background:#080808;
+    border:1px solid #222;
+    overflow-y:auto;
+    position:relative;
+}
+
+
+.show-modal-close{
+    position:absolute;
+    top:15px;
+    right:18px;
+    z-index:10;
+    background:none;
+    border:none;
+    color:#fff;
+    font-size:34px;
+    cursor:pointer;
+}
+
+
+.modal-hero{
+    min-height:260px;
+    padding:30px;
+    display:flex;
+    align-items:flex-end;
+    background-size:cover;
+    background-position:center;
+    border-bottom:1px solid #222;
+}
+
+
+.modal-hero-content{
+    max-width:700px;
+}
+
+.show-detail-hero{
+    padding-bottom:16px;
+}
+
+
+.modal-title{
+    font-family:"League Gothic", sans-serif;
+    font-size:70px;
+    line-height:0.9;
+    margin-bottom:10px;
+}
+
+
+.modal-meta{
+    color:#aaa;
+    margin-bottom:10px;
+}
+
+
+.modal-body{
+    padding:30px;
+}
+
+
+.modal-section{
+    margin-bottom:30px;
+}
+
+
+.modal-section h3{
+    margin-bottom:12px;
+    font-size:18px;
+}
+
+
+.modal-overview{
+    color:#aaa;
+    line-height:1.6;
+}
+
+
+.modal-status-buttons{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+
+
+.modal-status-button{
+    background:#111;
+    color:#888;
+    border:1px solid #222;
+    padding:10px 14px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+
+.modal-status-button:hover{
+    color:#fff;
+}
+
+
+.modal-status-button.active{
+    color:#fff;
+    border-color:#fff;
+    background:#151515;
+}
+
+
+.rating-stars{
+    display:flex;
+    gap:8px;
+}
+
+
+.rating-star{
+    background:none;
+    border:none;
+    color:#444;
+    font-size:34px;
+    cursor:pointer;
+}
+
+
+.rating-star.active{
+    color:#FFD400;
+}
+
+
+.progress-text{
+    color:#aaa;
+    margin-bottom:10px;
+}
+
+
+.progress-bar{
+    width:100%;
+    height:10px;
+    background:#111;
+    border-radius:999px;
+    overflow:hidden;
+}
+
+
+.progress-fill{
+    height:100%;
+    background:#22c55e;
+    width:0%;
+}
+
+
+.season-box{
+    border:1px solid #222;
+}
+
+
+.season-header{
+    padding:14px 16px;
+    border-bottom:1px solid #222;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+
+.season-title{
+    font-weight:bold;
+}
+
+
+.season-count{
+    color:#aaa;
+    font-size:14px;
+}
+
+
+.episode-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px 16px;
+    border-bottom:1px solid #181818;
+}
+
+
+.episode-row:last-child{
+    border-bottom:none;
+}
+
+
+.episode-row input{
+    width:18px;
+    height:18px;
+    accent-color:#22c55e;
+}
+
+
+.episode-row.watched{
+    opacity:0.55;
+}
+
+
+.episode-row.watched .episode-name{
+    text-decoration:line-through;
+}
+
+
+.episode-name{
+    flex:1;
+}
+
+
+.episode-date{
+    color:#777;
+    font-size:13px;
+}
+
+
+.notes-box{
+    width:100%;
+    min-height:120px;
+    background:#111;
+    color:#fff;
+    border:1px solid #222;
+    padding:14px;
+    resize:vertical;
+    outline:none;
+}
+
+
+.notes-box:focus{
+    border-color:#555;
+}
+
+/* ---------- TMDB Rating ---------- */
+
+.tmdb-rating-box{
+    display:flex;
+    align-items:flex-end;
+    gap:10px;
+}
+
+
+.tmdb-rating-number{
+    font-size:34px;
+    font-weight:bold;
+    color:#FFD400;
+}
+
+
+.tmdb-rating-scale{
+    color:#aaa;
+    margin-bottom:5px;
+}
+
+
+.tmdb-rating-votes{
+    color:#777;
+    font-size:14px;
+    margin-top:6px;
+}
+
+
+
+/* ---------- Seasons Accordion ---------- */
+
+.seasons-list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+
+.season-box{
+    border:1px solid #222;
+    background:#080808;
+}
+
+
+.season-header{
+    padding:14px 16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    cursor:pointer;
+    user-select:none;
+}
+
+
+.season-header:hover{
+    background:#111;
+}
+
+
+.season-left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+
+.season-arrow{
+    color:#777;
+    transition:.2s;
+}
+
+
+.season-box.open .season-arrow{
+    transform:rotate(90deg);
+}
+
+
+.season-title{
+    font-weight:bold;
+}
+
+
+.season-count{
+    color:#aaa;
+    font-size:14px;
+}
+
+
+.season-episodes{
+    border-top:1px solid #222;
+}
+
+
+.episode-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px 16px;
+    border-bottom:1px solid #181818;
+}
+
+
+.episode-row:last-child{
+    border-bottom:none;
+}
+
+
+.episode-row input{
+    width:18px;
+    height:18px;
+    accent-color:#22c55e;
+}
+
+
+.episode-row.watched{
+    opacity:0.55;
+}
+
+
+.episode-row.watched .episode-name{
+    text-decoration:line-through;
+}
+
+
+.episode-name{
+    flex:1;
+}
+
+
+.episode-date{
+    color:#777;
+    font-size:13px;
+}
+
+
+.season-loading{
+    padding:14px 16px;
+    color:#777;
+}
+
+
+
+
+/* ---------- Season Actions ---------- */
+
+.season-right{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+
+.season-all-button{
+    background:#111;
+    color:#aaa;
+    border:1px solid #222;
+    border-radius:5px;
+    padding:6px 10px;
+    cursor:pointer;
+    font-size:13px;
+}
+
+
+.season-all-button:hover{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+
+
+/* ---------- Remove Show ---------- */
+
+.remove-show-button{
+    background:none;
+    border:1px solid #ff4444;
+    color:#ff4444;
+    padding:12px 16px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+
+.remove-show-button:hover{
+    background:#ff4444;
+    color:#000;
+}
+
+
+/* ---------- Modal Cleanup Updates ---------- */
+
+.modal-meta .tmdb-rating-group{
+    display:inline-flex;
+    align-items:baseline;
+    gap:4px;
+    white-space:nowrap;
+}
+
+.modal-meta .tmdb-rating-inline{
+    color:#FFD400;
+    font-weight:bold;
+    text-shadow:0 0 10px rgba(255,212,0,0.45);
+}
+
+.modal-meta .tmdb-rating-slash{
+    color:#aaa;
+}
+
+.modal-meta .tmdb-rating-ten{
+    color:#fff;
+    font-family:Arial, Helvetica, sans-serif;
+    font-size:inherit;
+    font-weight:bold;
+    line-height:inherit;
+    letter-spacing:0;
+}
+
+
+.modal-status-section{
+    margin-bottom:26px;
+}
+
+
+.modal-status-buttons{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+
+
+.remove-show-button{
+    background:none;
+    border:1px solid #ff4444;
+    color:#ff4444;
+    padding:10px 14px;
+    border-radius:5px;
+    cursor:pointer;
+    margin-left:auto;
+}
+
+
+.remove-show-button:hover{
+    background:#ff4444;
+    color:#000;
+}
+
+
+.season-right{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+
+.season-all-button{
+    width:34px;
+    height:28px;
+    background:#111;
+    color:#aaa;
+    border:1px solid #222;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:15px;
+}
+
+
+.season-all-button:hover{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+
+.episode-row{
+    border:1px solid #181818;
+    border-radius:8px;
+    margin:8px 12px;
+    padding:12px 14px;
+    border-bottom:1px solid #181818;
+}
+
+
+.episode-row:hover{
+    background:#111;
+}
+
+
+.episode-check-button{
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    border:1px solid #333;
+    background:#111;
+    color:#777;
+    cursor:pointer;
+    flex-shrink:0;
+}
+
+
+.episode-check-button:hover{
+    border-color:#22c55e;
+    color:#22c55e;
+}
+
+
+.episode-check-button.checked{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+
+/* ---------- Main List Rounded Cards ---------- */
+
+.show{
+    border-radius:0;
+    margin:0;
+    border-left:none;
+    border-right:none;
+    border-top:none;
+    border-bottom:1px solid #222;
+}
+
+/* ---------- Hide Modal Scrollbar ---------- */
+
+.show-modal{
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+}
+
+.show-modal::-webkit-scrollbar{
+    display:none;
+}
+
+
+/* ---------- Rounded Show Modal ---------- */
+
+.show-modal{
+    border-radius:10px;
+    overflow-y:auto;
+    overflow-x:hidden;
+}
+
+.modal-hero{
+    border-radius:0px 0px 0 0;
+}
+
+
+/* ---------- Upcoming Tab ---------- */
+
+.upcoming-dot{
+    width:10px;
+    height:10px;
+    background:#FFD400;
+    border-radius:50%;
+    box-shadow:0 0 12px rgba(255,212,0,0.7);
+    flex-shrink:0;
+    animation:upcomingPulse 1.8s infinite;
+}
+
+
+@keyframes upcomingPulse{
+    0%{
+        opacity:0.4;
+        transform:scale(0.9);
+    }
+
+    50%{
+        opacity:1;
+        transform:scale(1.2);
+    }
+
+    100%{
+        opacity:0.4;
+        transform:scale(0.9);
+    }
+}
+
+
+.upcoming-date{
+    color:#FFD400;
+    font-size:14px;
+    margin-top:5px;
+}
+
+
+.upcoming-countdown{
+    color:#aaa;
+    font-size:14px;
+    margin-top:4px;
+}
+
+
+/* ---------- History Tab ---------- */
+.history-date{
+    color:#777;
+    font-size:14px;
+    margin-top:5px;
+}
+
+
+.history-progress{
+    color:#aaa;
+    font-size:14px;
+    margin-top:4px;
+}
+
+
+.history-check{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    background:#22c55e;
+    color:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:bold;
+    flex-shrink:0;
+}
+
+
+/* ---------- Real History Layout ---------- */
+
+.history-group{
+    margin-bottom:26px;
+}
+
+
+.history-group-title{
+    color:#aaa;
+    font-size:18px;
+    margin:18px 20px 10px;
+    font-family:"League Gothic", sans-serif;
+    letter-spacing:1px;
+    text-transform:uppercase;
+}
+
+
+.history-entry-card{
+    display:flex;
+    align-items:center;
+    gap:16px;
+}
+
+
+.history-still{
+    width:128px;
+    height:72px;
+    object-fit:cover;
+    border-radius:8px;
+    background:#111;
+    flex-shrink:0;
+}
+
+
+.history-still-placeholder{
+    width:128px;
+    height:72px;
+    border-radius:8px;
+    background:#111;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
+
+
+.history-entry-card .info{
+    flex:1;
+}
+
+
+.history-episode-line{
+    color:#aaa;
+    font-size:15px;
+    margin-top:4px;
+}
+
+
+.history-time{
+    color:#888;
+    font-size:14px;
+    white-space:nowrap;
+    margin-left:auto;
+    padding-right:18px;
+}
+
+
+
+/* ---------- Future Episodes ---------- */
+
+.episode-row.future{
+    opacity:0.45;
+}
+
+
+.episode-check-button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+}
+
+
+.episode-check-button:disabled:hover{
+    border-color:#333;
+    color:#777;
+}
+
+
+
+/* ---------- Upcoming Schedule Layout ---------- */
+
+.upcoming-group{
+    margin-bottom:26px;
+}
+
+
+.upcoming-group-title{
+    color:#aaa;
+    font-size:18px;
+    margin:18px 20px 10px;
+    font-family:"League Gothic", sans-serif;
+    letter-spacing:1px;
+    text-transform:uppercase;
+}
+
+
+.upcoming-entry-card{
+    display:flex;
+    align-items:center;
+    gap:16px;
+}
+
+
+.upcoming-still{
+    width:128px;
+    height:72px;
+    object-fit:cover;
+    border-radius:8px;
+    background:#111;
+    flex-shrink:0;
+}
+
+
+.upcoming-still-placeholder{
+    width:128px;
+    height:72px;
+    border-radius:8px;
+    background:#111;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
+
+
+.upcoming-entry-card .info{
+    flex:1;
+}
+
+
+.upcoming-episode-line{
+    color:#aaa;
+    font-size:15px;
+    margin-top:4px;
+}
+
+
+.upcoming-time{
+    color:#888;
+    font-size:14px;
+    white-space:nowrap;
+    margin-left:auto;
+    padding-right:18px;
+}
+
+
+/* ---------- NEW Badge ---------- */
+
+.new-badge{
+    display:inline-block;
+    margin-top:8px;
+    background:#FFD400;
+    color:#000;
+    font-size:11px;
+    font-weight:bold;
+    padding:3px 7px;
+    border-radius:4px;
+    letter-spacing:0.5px;
+    box-shadow:0 0 10px rgba(255,212,0,0.45);
+}
+
+
+/* ---------- Upcoming Behind Count ---------- */
+
+.upcoming-behind{
+    color:#777;
+    font-size:13px;
+    margin-top:6px;
+}
+
+/* ---------- Upcoming Check Button ---------- */
+
+.upcoming-check{
+    margin-right:18px;
+}
+
+/* ---------- Upcoming Batch Dropdown ---------- */
+
+.upcoming-batch-button{
+    margin-top:8px;
+    background:#0b5cff;
+    color:#fff;
+    border:none;
+    border-radius:5px;
+    padding:5px 9px;
+    cursor:pointer;
+    font-size:13px;
+}
+
+
+.upcoming-batch-button:hover{
+    background:#2f75ff;
+}
+
+
+.upcoming-batch-list{
+    margin-top:10px;
+    border-top:1px solid #222;
+    padding-top:8px;
+}
+
+
+.upcoming-batch-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 0;
+}
+
+
+.upcoming-batch-episode{
+    color:#aaa;
+    font-size:14px;
+    flex:1;
+}
+
+
+.upcoming-batch-check{
+    width:28px;
+    height:28px;
+    font-size:18px;
+    margin-right:0;
+}
+
+
+/* ---------- Build 8.9 Completed + Batch Polish ---------- */
+
+.completed-label{
+    color:#22c55e;
+    font-weight:bold;
+}
+
+.upcoming-batch-button{
+    margin-top:10px;
+    background:#0b4a8f;
+    color:#dbeafe;
+    border:1px solid #1d6fd1;
+    border-radius:6px;
+    padding:7px 12px;
+    cursor:pointer;
+    font-size:13px;
+    min-width:115px;
+    text-align:center;
+}
+
+.upcoming-batch-button:hover{
+    background:#1262b8;
+    color:#fff;
+}
+
+.upcoming-batch-list{
+    margin-top:14px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.upcoming-batch-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:12px;
+    background:#0b0b0b;
+    border:1px solid #1b1b1b;
+    border-radius:8px;
+}
+
+.upcoming-batch-still,
+.upcoming-batch-still-placeholder{
+    width:104px;
+    height:58px;
+    object-fit:cover;
+    border-radius:6px;
+    background:#111;
+    flex-shrink:0;
+}
+
+.upcoming-batch-still-placeholder{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.upcoming-batch-info{
+    flex:1;
+    min-width:0;
+}
+
+.upcoming-batch-episode{
+    color:#ddd;
+    font-size:14px;
+    line-height:1.35;
+}
+
+.upcoming-batch-date{
+    color:#777;
+    font-size:13px;
+    margin-top:5px;
+}
+
+.upcoming-batch-check{
+    margin-left:auto;
+}
+
+
+/* ---------- Profile Dashboard ---------- */
+
+.profile{
+    padding:0;
+    min-height:100vh;
+    background:#000;
+}
+
+.profile-hero{
+    min-height:290px;
+    padding:78px 30px 40px;
+    display:flex;
+    align-items:center;
+    gap:18px;
+    border-bottom:1px solid #222;
+    position:relative;
+    isolation:isolate;
+    overflow:hidden;
+}
+
+.profile-header-default{
+    background:
+    radial-gradient(circle at 10% 20%, rgba(120,0,40,0.45), transparent 35%),
+    linear-gradient(135deg,#111 0%,#080808 60%,#000 100%);
+}
+
+.profile-header-blue{
+    background:
+    radial-gradient(circle at 12% 20%, rgba(0,82,180,.55), transparent 38%),
+    linear-gradient(135deg,#10131a 0%,#080a0f 62%,#000 100%);
+}
+
+.profile-header-purple{
+    background:
+    radial-gradient(circle at 12% 20%, rgba(104,45,180,.55), transparent 38%),
+    linear-gradient(135deg,#15101a 0%,#0b080f 62%,#000 100%);
+}
+
+.profile-header-green{
+    background:
+    radial-gradient(circle at 12% 20%, rgba(12,120,70,.52), transparent 38%),
+    linear-gradient(135deg,#0d1712 0%,#070c09 62%,#000 100%);
+}
+
+.profile-header-amber{
+    background:
+    radial-gradient(circle at 12% 20%, rgba(175,105,0,.5), transparent 38%),
+    linear-gradient(135deg,#19140c 0%,#0d0a06 62%,#000 100%);
+}
+
+.profile-header-monochrome{
+    background:
+    radial-gradient(circle at 12% 20%, rgba(160,160,160,.22), transparent 40%),
+    linear-gradient(135deg,#1b1b1b 0%,#0b0b0b 62%,#000 100%);
+}
+
+.profile-header-upload{
+    background:#080808;
+}
+
+.profile-header-image-layer,
+.profile-header-image-overlay{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+}
+
+.profile-header-image-layer{
+    z-index:-2;
+}
+
+.profile-header-image-layer img{
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+}
+
+.profile-header-image-overlay{
+    z-index:-1;
+    background:
+    linear-gradient(90deg,rgba(0,0,0,.48),rgba(0,0,0,.18) 58%,rgba(0,0,0,.55)),
+    linear-gradient(0deg,rgba(0,0,0,.4),rgba(0,0,0,.08) 58%,rgba(0,0,0,.22));
+}
+
+.profile-avatar{
+    width:110px;
+    height:110px;
+    border-radius:50%;
+    border:2px solid #fff;
+    flex-shrink:0;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#080808;
+    transform:translateY(34px);
+}
+
+.profile-name{
+    color:#fff;
+    font-size:30px;
+    font-weight:bold;
+    transform:translateY(34px);
+}
+
+.profile-avatar-image,
+.settings-avatar-preview .profile-avatar-image{
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+}
+
+.profile-avatar-preset,
+.profile-avatar-preset svg{
+    width:100%;
+    height:100%;
+    display:block;
+}
+
+.profile-avatar-initial{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:64px;
+    line-height:1;
+    color:#fff;
+}
+
+
+.profile-stats-preview-card{
+    width:calc(100% - 60px);
+    margin:30px 30px 34px;
+    background:#080808;
+    border:1px solid #222;
+    color:#fff;
+    padding:24px 26px;
+    min-height:128px;
+    display:grid;
+    grid-template-columns:1fr 1px 1fr auto;
+    align-items:center;
+    gap:24px;
+    cursor:pointer;
+    text-align:left;
+    transition:border-color .2s ease, background .2s ease, transform .2s ease;
+    position:relative;
+}
+
+.profile-stats-preview-card:hover{
+    border-color:#fff;
+    background:#0d0d0d;
+    transform:translateY(-1px);
+}
+
+.profile-stats-preview-item{
+    min-width:0;
+}
+
+.profile-stats-preview-divider{
+    width:1px;
+    height:70px;
+    background:#222;
+}
+
+.profile-stats-preview-arrow{
+    color:#fff;
+    font-size:58px;
+    line-height:1;
+    opacity:.9;
+    padding-left:6px;
+}
+
+.profile-stat-label{
+    color:#888;
+    font-size:13px;
+    letter-spacing:1px;
+}
+
+.profile-stat-value{
+    color:#fff;
+    font-size:38px;
+    font-weight:bold;
+}
+
+.profile-stat-value-with-icon{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:18px;
+}
+
+.profile-stat-icon{
+    width:34px;
+    height:34px;
+    object-fit:contain;
+    filter:invert(1);
+    flex-shrink:0;
+}
+
+.profile-stats-page{
+    min-height:100vh;
+    padding:44px 30px 70px;
+    background:#000;
+}
+
+.profile-stats-back{
+    background:#111;
+    color:#aaa;
+    border:1px solid #222;
+    padding:10px 16px;
+    border-radius:5px;
+    cursor:pointer;
+    margin-bottom:34px;
+}
+
+.profile-stats-back:hover{
+    background:#fff;
+    color:#000;
+}
+
+.profile-stats-title-block{
+    margin-bottom:26px;
+}
+
+.profile-stats-title-block h1{
+    font-family:"League Gothic", sans-serif;
+    color:#fff;
+    font-size:58px;
+    letter-spacing:1px;
+    font-weight:normal;
+    line-height:1;
+}
+
+.profile-detail-stats-grid{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(160px,1fr));
+    gap:16px;
+    margin-bottom:32px;
+}
+
+.profile-detail-stat-card{
+    background:#080808;
+    border:1px solid #222;
+    min-height:110px;
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+}
+
+.profile-detail-stat-label{
+    color:#888;
+    font-size:12px;
+    letter-spacing:1px;
+}
+
+.profile-detail-stat-value{
+    color:#fff;
+    font-size:34px;
+    font-weight:bold;
+}
+
+.profile-ranked-stats-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:18px;
+}
+
+.profile-ranked-panel{
+    border:1px solid #222;
+    background:#080808;
+    min-width:0;
+}
+
+.profile-ranked-header{
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:16px;
+    padding:20px;
+    border-bottom:1px solid #222;
+}
+
+.profile-ranked-header h2{
+    font-family:"League Gothic", sans-serif;
+    color:#fff;
+    font-size:38px;
+    letter-spacing:1px;
+    font-weight:normal;
+    line-height:1;
+}
+
+.profile-ranked-list{
+    padding:4px 20px 12px;
+}
+
+.ranked-stats-row{
+    display:grid;
+    grid-template-columns:28px minmax(0,1fr) auto 42px;
+    align-items:center;
+    gap:10px;
+    min-height:48px;
+    border-bottom:1px solid #171717;
+}
+
+.ranked-stats-row:last-child{
+    border-bottom:none;
+}
+
+.ranked-stats-rank{
+    color:#555;
+    font-size:12px;
+}
+
+.ranked-stats-name{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+    color:#fff;
+    font-weight:bold;
+}
+
+.ranked-stats-name > span:last-child{
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.ranked-stats-count,
+.ranked-stats-percent{
+    color:#888;
+    font-size:12px;
+    text-align:right;
+    white-space:nowrap;
+}
+
+.ranked-stats-percent{
+    color:#fff;
+    font-weight:bold;
+}
+
+.ranked-network-logo{
+    width:48px;
+    height:24px;
+    padding:3px 5px;
+    background:#fff;
+    border-radius:3px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+}
+
+.ranked-network-logo img{
+    max-width:100%;
+    max-height:100%;
+    object-fit:contain;
+}
+
+.ranked-stats-empty,
+.ranked-stats-sync{
+    color:#666;
+    font-size:13px;
+    padding:16px 20px;
+}
+
+.ranked-stats-sync{
+    border-bottom:1px solid #171717;
+}
+
+.ranked-stats-sync.warning{
+    color:#c99966;
+}
+
+@media (max-width:900px){
+    .profile-stats-preview-card{
+        grid-template-columns:1fr auto;
+        gap:18px;
+    }
+
+    .profile-stats-preview-divider{
+        display:none;
+    }
+
+    .profile-detail-stats-grid{
+        grid-template-columns:repeat(2,minmax(140px,1fr));
+    }
+
+    .profile-ranked-stats-grid{
+        grid-template-columns:1fr;
+    }
+}
+
+@media (max-width:600px){
+    .profile-stats-preview-card{
+        width:calc(100% - 32px);
+        margin:22px 16px 28px;
+        grid-template-columns:1fr;
+        padding:20px;
+    }
+
+    .profile-stats-preview-arrow{
+        position:absolute;
+        right:28px;
+        top:auto;
+    }
+
+    .profile-detail-stats-grid{
+        grid-template-columns:1fr;
+    }
+}
+
+
+.profile-section{
+    padding:0 30px 40px;
+}
+
+.profile-section-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:18px;
+}
+
+.profile-section-header h2{
+    font-family:"League Gothic", sans-serif;
+    font-size:38px;
+    letter-spacing:1px;
+    font-weight:normal;
+}
+
+.profile-edit-button{
+    background:#111;
+    color:#aaa;
+    border:1px solid #222;
+    padding:9px 16px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+.profile-edit-button:hover{
+    background:#fff;
+    color:#000;
+}
+
+.profile-favorites-grid{
+    display:grid;
+    grid-template-columns:repeat(8,120px);
+    gap:20px;
+}
+
+.profile-favorite-slot{
+    width:120px;
+    height:180px;
+    border:1px solid #222;
+    background:#080808;
+    color:#777;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+}
+
+.profile-favorite-slot.empty{
+    font-size:42px;
+}
+
+.profile-favorite-slot:hover{
+    border-color:#fff;
+    color:#fff;
+}
+
+.profile-favorite-slot img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.profile-favorite-placeholder{
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#111;
+}
+
+.favorites-popup-box{
+    width:520px;
+    max-width:90vw;
+    height:min(650px,calc(100vh - 32px));
+    max-height:calc(100vh - 32px);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+}
+
+.favorites-popup-box > h2,
+.favorites-popup-box > p,
+.favorites-popup-box > .close-popup{
+    flex-shrink:0;
+}
+
+#favorites-popup-content{
+    min-height:0;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+}
+
+.favorites-popup-controls{
+    flex-shrink:0;
+}
+
+.favorites-current-scroll{
+    min-height:0;
+    flex:1;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+    padding-right:4px;
+}
+
+.favorites-add-row{
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+}
+
+.favorites-add-row input,
+.favorites-add-row select{
+    flex:1;
+    background:#111;
+    color:#fff;
+    border:1px solid #222;
+    padding:12px;
+    outline:none;
+}
+
+.favorites-add-row button{
+    background:#fff;
+    color:#000;
+    border:none;
+    padding:0 18px;
+    cursor:pointer;
+}
+
+.favorites-add-row button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+}
+
+.favorites-search-results{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top:-8px;
+    margin-bottom:20px;
+    max-height:170px;
+    overflow:auto;
+}
+
+.favorites-search-result{
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:#111;
+    color:#fff;
+    border:1px solid #222;
+    padding:8px;
+    text-align:left;
+    cursor:pointer;
+}
+
+.favorites-search-result:hover{
+    border-color:#555;
+    background:#161616;
+}
+
+.favorites-search-poster{
+    width:34px;
+    height:48px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#000;
+    flex-shrink:0;
+}
+
+.favorites-search-poster img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.favorites-search-placeholder{
+    font-size:18px;
+    opacity:0.55;
+}
+
+.favorites-search-hint{
+    color:#888;
+    font-size:13px;
+    padding:4px 0 10px;
+}
+
+.favorites-current-list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    min-height:100%;
+}
+
+.favorites-popup-item{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    min-height:86px;
+    background:#111;
+    border:1px solid #222;
+    padding:10px;
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+    flex-shrink:0;
+    transition:transform .12s ease,background .12s ease,border-color .12s ease,opacity .12s ease;
+}
+
+.favorites-popup-poster{
+    width:44px;
+    height:64px;
+    min-width:44px;
+    min-height:64px;
+    max-width:44px;
+    max-height:64px;
+    overflow:hidden;
+    background:#080808;
+    flex:0 0 44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.favorites-popup-poster img{
+    width:44px;
+    height:64px;
+    max-width:44px;
+    max-height:64px;
+    display:block;
+    object-fit:cover;
+}
+
+.favorites-popup-item:active,
+body.favorite-reordering .favorites-popup-item{
+    cursor:grabbing;
+}
+
+.favorites-popup-item.favorites-live-dragging{
+    opacity:.88;
+    min-height:86px;
+    max-height:86px;
+    overflow:hidden;
+    background:#181818;
+    border-color:#fff;
+    box-shadow:0 14px 32px rgba(0,0,0,.65);
+    transition:none;
+    pointer-events:none;
+}
+
+.favorites-drag-placeholder{
+    flex-shrink:0;
+    border:1px dashed #555;
+    background:#0b0b0b;
+}
+
+.favorites-popup-item button,
+.favorites-popup-item input{
+    touch-action:manipulation;
+}
+
+
+.favorites-popup-poster-placeholder{
+    width:44px;
+    height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#080808;
+}
+
+.favorites-popup-title{
+    flex:1;
+    font-weight:bold;
+    min-width:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.favorites-popup-actions{
+    display:flex;
+    gap:6px;
+    flex-shrink:0;
+}
+
+.favorites-popup-actions button{
+    background:#080808;
+    color:#aaa;
+    border:1px solid #222;
+    padding:7px 9px;
+    cursor:pointer;
+}
+
+.favorites-popup-actions button:hover:not(:disabled){
+    background:#fff;
+    color:#000;
+}
+
+.favorites-popup-actions button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+}
+
+.favorites-empty-text,
+.favorites-limit-text{
+    color:#777;
+    padding:12px 0;
+}
+
+.history-load-more{
+    display:block;
+    margin:24px auto 40px;
+    background:#111;
+    color:#fff;
+    border:1px solid #333;
+    padding:12px 28px;
+    font-family:"League Gothic", sans-serif;
+    font-size:28px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    cursor:pointer;
+}
+
+.history-load-more:hover{
+    background:#fff;
+    color:#000;
+}
+
+
+
+
+
+/* ---------- Network Logos ---------- */
+
+.modal-meta{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:7px;
+}
+
+.modal-meta-separator{
+    color:#777;
+}
+
+.modal-meta-under-status{
+    margin-top:15px;
+    min-height:28px;
+}
+
+.network-inline-group{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+}
+
+.network-logo-chip{
+    height:23px;
+    min-width:34px;
+    max-width:82px;
+    padding:3px 6px;
+    border-radius:3px;
+    background:rgba(255,255,255,.94);
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.network-logo-inline{
+    display:block;
+    max-width:70px;
+    max-height:17px;
+    object-fit:contain;
+}
+
+.network-name-inline{
+    color:#ddd;
+    font-size:13px;
+}
+
+
+/* ---------- Settings ---------- */
+
+.sidebar-settings-button{
+    margin-top:auto;
+    margin-bottom:30px;
+}
+
+.settings{
+    min-height:100vh;
+    background:#000;
+    padding:40px 30px;
+}
+
+.settings-inner{
+    width:100%;
+    max-width:1240px;
+}
+
+.settings h1{
+    font-family:"League Gothic", sans-serif;
+    font-size:64px;
+    font-weight:normal;
+    letter-spacing:1px;
+    margin-bottom:30px;
+}
+
+.settings-section{
+    background:#080808;
+    border:1px solid #222;
+    padding:24px;
+    margin-bottom:20px;
+}
+
+.settings-section-header{
+    margin-bottom:20px;
+}
+
+.settings-section-header h2{
+    font-family:"League Gothic", sans-serif;
+    font-size:38px;
+    font-weight:normal;
+    letter-spacing:1px;
+    margin-bottom:8px;
+}
+
+.settings-section-header p{
+    color:#777;
+    line-height:1.5;
+    max-width:680px;
+}
+
+.settings-summary-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(220px,1fr));
+    gap:16px;
+    margin-bottom:22px;
+}
+
+.settings-summary-card{
+    background:#111;
+    border:1px solid #222;
+    padding:22px;
+    min-height:120px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+}
+
+.settings-summary-card span{
+    display:block;
+    color:#777;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:8px;
+}
+
+.settings-summary-card strong{
+    color:#fff;
+    font-size:36px;
+}
+
+.settings-action-button{
+    background:#fff;
+    color:#000;
+    border:none;
+    padding:12px 22px;
+    cursor:pointer;
+    font-family:"League Gothic", sans-serif;
+    font-size:30px;
+    letter-spacing:1px;
+}
+
+.settings-action-button:hover:not(:disabled){
+    background:#ddd;
+}
+
+.settings-action-button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+}
+
+.settings-action-button.muted{
+    background:#111;
+    color:#aaa;
+    border:1px solid #222;
+}
+
+.settings-action-button.danger{
+    background:#2a0808;
+    color:#ff8a8a;
+    border:1px solid #552222;
+}
+
+.settings-button-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+.settings-small-note{
+    color:#666;
+    font-size:13px;
+    line-height:1.5;
+    margin-top:14px;
+    max-width:700px;
+}
+
+.settings-disabled-section{
+    opacity:0.95;
+}
+
+.danger-section{
+    border-color:#341515;
+}
+
+@media(max-width:800px){
+
+    .settings-summary-grid{
+        grid-template-columns:1fr;
+    }
+
+}
+
+
+.compatible-preview-box{
+    margin-top:22px;
+    background:#050505;
+    border:1px solid #222;
+    padding:20px;
+}
+
+.compatible-preview-header{
+    margin-bottom:18px;
+}
+
+.compatible-preview-header h3{
+    font-family:"League Gothic", sans-serif;
+    font-size:34px;
+    font-weight:normal;
+    letter-spacing:1px;
+    margin-bottom:4px;
+}
+
+.compatible-preview-header p{
+    color:#777;
+    font-size:13px;
+    word-break:break-word;
+}
+
+.preview-grid{
+    grid-template-columns:repeat(3,minmax(180px,1fr));
+}
+
+.settings-preview-columns{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:16px;
+    margin-top:18px;
+}
+
+.settings-preview-panel{
+    background:#0d0d0d;
+    border:1px solid #222;
+    padding:16px;
+}
+
+.settings-preview-panel h4{
+    color:#aaa;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:12px;
+}
+
+.settings-preview-row{
+    display:flex;
+    justify-content:space-between;
+    gap:16px;
+    padding:8px 0;
+    border-bottom:1px solid #1d1d1d;
+    color:#888;
+}
+
+.settings-preview-row:last-child{
+    border-bottom:none;
+}
+
+.settings-preview-row strong{
+    color:#fff;
+}
+
+.settings-preview-warnings{
+    margin-top:18px;
+    padding-left:18px;
+    color:#888;
+    line-height:1.6;
+    font-size:13px;
+}
+
+@media(max-width:900px){
+
+    .settings-preview-columns,
+    .preview-grid{
+        grid-template-columns:1fr;
+    }
+
+}
+
+/* Build 10.8.2 metadata sync */
+.metadata-sync-section {
+    margin-top: 20px;
+}
+
+.metadata-sync-status {
+    border: 1px solid #2a2a2a;
+    background: #111;
+    padding: 18px 20px;
+    margin: 14px 0;
+}
+
+.metadata-sync-topline,
+.metadata-sync-details {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.metadata-sync-topline strong {
+    color: #fff;
+    font-size: 18px;
+}
+
+.metadata-sync-topline span,
+.metadata-sync-details span {
+    color: #aaa;
+    font-size: 13px;
+}
+
+.metadata-sync-bar {
+    width: 100%;
+    height: 8px;
+    background: #050505;
+    border: 1px solid #222;
+    margin: 14px 0 10px;
+    overflow: hidden;
+}
+
+.metadata-sync-fill {
+    height: 100%;
+    background: #2ecc71;
+    width: 0%;
+    transition: width .2s ease;
+}
+
+.warning-note {
+    color: #ffcc66 !important;
+}
+
+.settings-action-button:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+
+/* ---------- Build 10.25 Episode Detail Polish ---------- */
+
+.episode-row{
+    cursor:pointer;
+}
+
+.episode-detail-hero{
+    min-height:360px;
+    position:relative;
+    background-size:cover;
+    background-position:center;
+}
+
+.episode-detail-hero::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(90deg,rgba(0,0,0,.72),rgba(0,0,0,.18) 58%,rgba(0,0,0,.72));
+    pointer-events:none;
+}
+
+.episode-detail-hero-content{
+    position:relative;
+    z-index:1;
+    max-width:820px;
+}
+
+
+.episode-detail-info-card.watched{
+    border-color:rgba(34,197,94,.55);
+}
+
+
+.episode-detail-title{
+    max-width:820px;
+    font-size:82px;
+    margin-bottom:2px;
+}
+
+.episode-detail-meta-line{
+    color:#c8c8c8;
+    font-size:15px;
+    display:flex;
+    align-items:baseline;
+    flex-wrap:wrap;
+    gap:7px;
+    margin-top:12px;
+}
+
+.episode-meta-separator{
+    color:#777;
+}
+
+.episode-rating-group{
+    display:inline-flex;
+    align-items:baseline;
+    gap:4px;
+    white-space:nowrap;
+}
+
+.episode-rating-value{
+    color:#FFD400;
+    font-weight:bold;
+    text-shadow:0 0 10px rgba(255,212,0,0.45);
+}
+
+.episode-rating-slash{
+    color:#aaa;
+}
+
+.episode-rating-ten{
+    color:#fff;
+    font-family:Arial, Helvetica, sans-serif;
+    font-size:inherit;
+    font-weight:bold;
+    line-height:inherit;
+}
+
+.episode-detail-body{
+    padding:26px 30px 32px;
+}
+
+.episode-detail-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+}
+
+.episode-detail-action-button{
+    background:#111;
+    color:#ddd;
+    border:1px solid #2a2a2a;
+    padding:11px 15px;
+    border-radius:6px;
+    cursor:pointer;
+    font-family:Arial, Helvetica, sans-serif;
+    transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease;
+}
+
+.episode-detail-action-button:hover{
+    background:#fff;
+    color:#000;
+    border-color:#fff;
+    transform:translateY(-1px);
+}
+
+.episode-detail-action-button.primary{
+    background:#22c55e;
+    border-color:#22c55e;
+    color:#000;
+    font-weight:bold;
+}
+
+.episode-detail-action-button.primary:hover{
+    background:#35e273;
+    border-color:#35e273;
+    color:#000;
+}
+
+.episode-detail-action-button.disabled,
+.episode-detail-action-button:disabled{
+    opacity:.35;
+    cursor:not-allowed;
+    transform:none;
+}
+
+.episode-detail-action-button.disabled:hover,
+.episode-detail-action-button:disabled:hover{
+    background:#111;
+    color:#ddd;
+    border-color:#2a2a2a;
+}
+
+.episode-detail-main{
+    display:grid;
+    grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);
+    gap:18px;
+    align-items:start;
+}
+
+.episode-detail-overview-card{
+    background:#0b0b0b;
+    border:1px solid #222;
+    padding:20px;
+    min-height:210px;
+}
+
+.episode-detail-section-label{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:34px;
+    line-height:1;
+    text-transform:uppercase;
+    margin-bottom:14px;
+}
+
+.episode-detail-overview{
+    color:#aaa;
+    line-height:1.72;
+    max-width:780px;
+    font-size:15px;
+}
+
+.episode-detail-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    align-content:start;
+}
+
+.episode-detail-info-card{
+    background:#0b0b0b;
+    border:1px solid #222;
+    padding:15px 16px;
+    min-height:74px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+}
+
+.episode-detail-info-card.watched{
+    background:
+    linear-gradient(90deg,
+        rgba(34,197,94,.18) 0%,
+        rgba(34,197,94,.13) 18%,
+        rgba(34,197,94,.075) 40%,
+        rgba(34,197,94,.035) 62%,
+        rgba(34,197,94,.012) 80%,
+        rgba(34,197,94,0) 100%
+    ),
+    #0b0b0b;
+}
+
+.episode-detail-label{
+    color:#777;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:8px;
+}
+
+.episode-detail-value{
+    color:#fff;
+    font-size:16px;
+    font-weight:bold;
+    line-height:1.35;
+}
+
+@media(max-width:900px){
+    .episode-detail-title{
+        font-size:64px;
+    }
+
+    .episode-detail-main{
+        grid-template-columns:1fr;
+    }
+
+    .episode-detail-grid{
+        grid-template-columns:repeat(2,minmax(130px,1fr));
+    }
+}
+
+@media(max-width:600px){
+    .episode-detail-hero{
+        min-height:300px;
+    }
+
+    .episode-detail-title{
+        font-size:52px;
+    }
+
+    .episode-detail-grid{
+        grid-template-columns:1fr;
+    }
+}
+
+
+/* ---------- Build 10.19 Checkmark State Cleanup ---------- */
+
+.check,
+.upcoming-check,
+.upcoming-batch-check{
+    background:#111;
+    color:#fff;
+    border:1px solid #fff;
+}
+
+.check:hover,
+.upcoming-check:hover,
+.upcoming-batch-check:hover{
+    background:#fff;
+    color:#000;
+    border-color:#fff;
+}
+
+.check.marking,
+.upcoming-check.marking,
+.upcoming-batch-check.marking{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+    animation:checkSuccessPop .85s ease;
+}
+
+.season-all-button{
+    background:#111;
+    color:#fff;
+    border:1px solid #fff;
+    transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.season-all-button:hover{
+    background:#fff;
+    color:#000;
+    border-color:#fff;
+}
+
+.season-all-button.checked{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+.season-all-button.checked:hover{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+.season-all-button.marking{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+    animation:checkSuccessPop .85s ease;
+}
+
+.episode-check-button{
+    background:#111;
+    color:#fff;
+    border:1px solid #fff;
+    transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.episode-check-button:hover{
+    background:#fff;
+    color:#000;
+    border-color:#fff;
+}
+
+.episode-check-button.checked{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+.episode-check-button.checked:hover{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+}
+
+.episode-check-button.marking{
+    background:#22c55e;
+    color:#000;
+    border-color:#22c55e;
+    animation:checkSuccessPop .85s ease;
+}
+
+.episode-check-button:disabled,
+.episode-check-button:disabled:hover{
+    background:#111;
+    color:#555;
+    border-color:#333;
+    cursor:not-allowed;
+}
+
+
+/* ---------- Build 10.19.1 Circle Only + Longer Animation ---------- */
+
+.check,
+.upcoming-check,
+.upcoming-batch-check,
+.season-all-button,
+.episode-check-button{
+    font-size:0 !important;
+}
+
+.season-all-button{
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    padding:0;
+    flex-shrink:0;
+}
+
+.check.marking,
+.upcoming-check.marking,
+.upcoming-batch-check.marking,
+.season-all-button.marking,
+.episode-check-button.marking{
+    animation:checkSuccessPop .85s ease;
+}
+
+
+
+/* ---------- Build 10.19.2 Ring + Ripple Animation ---------- */
+
+.check,
+.upcoming-check,
+.upcoming-batch-check,
+.season-all-button,
+.episode-check-button{
+    position:relative;
+    overflow:visible;
+    isolation:isolate;
+}
+
+.check.marking,
+.upcoming-check.marking,
+.upcoming-batch-check.marking,
+.season-all-button.marking,
+.episode-check-button.marking{
+    background:#111;
+    color:transparent;
+    border-color:#22c55e;
+    animation:circleSettleSuccess 1.25s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+.check.marking::before,
+.upcoming-check.marking::before,
+.upcoming-batch-check.marking::before,
+.season-all-button.marking::before,
+.episode-check-button.marking::before{
+    content:"";
+    position:absolute;
+    inset:-6px;
+    border-radius:50%;
+    border:2px solid rgba(34,197,94,.16);
+    border-top-color:#22c55e;
+    border-right-color:#22c55e;
+    pointer-events:none;
+    z-index:2;
+    animation:circleRingDraw 1.05s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+.check.marking::after,
+.upcoming-check.marking::after,
+.upcoming-batch-check.marking::after,
+.season-all-button.marking::after,
+.episode-check-button.marking::after{
+    content:"";
+    position:absolute;
+    inset:4px;
+    border-radius:50%;
+    background:#22c55e;
+    pointer-events:none;
+    z-index:1;
+    transform:scale(0);
+    opacity:.95;
+    animation:circleFillSuccess 1.15s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+@keyframes circleRingDraw{
+    0%{
+        opacity:0;
+        transform:rotate(-110deg) scale(.55);
+    }
+
+    18%{
+        opacity:1;
+    }
+
+    68%{
+        opacity:1;
+        transform:rotate(230deg) scale(1);
+    }
+
+    100%{
+        opacity:0;
+        transform:rotate(300deg) scale(1.18);
+    }
+}
+
+@keyframes circleFillSuccess{
+    0%{
+        transform:scale(0);
+        opacity:.95;
+    }
+
+    48%{
+        transform:scale(.72);
+        opacity:.95;
+    }
+
+    72%{
+        transform:scale(1.15);
+        opacity:.95;
+    }
+
+    100%{
+        transform:scale(1);
+        opacity:.95;
+    }
+}
+
+@keyframes circleSettleSuccess{
+    0%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+
+    36%{
+        transform:scale(1.04);
+        box-shadow:0 0 0 7px rgba(34,197,94,.10);
+    }
+
+    72%{
+        transform:scale(1.10);
+        box-shadow:0 0 0 13px rgba(34,197,94,.08);
+    }
+
+    100%{
+        transform:scale(1);
+        background:#22c55e;
+        border-color:#22c55e;
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+}
+
+
+/* ---------- Build 10.19.3 Whole Card Green Confirm ---------- */
+
+.show,
+.episode-row,
+.behind-episode-row,
+.upcoming-batch-row,
+.season-box{
+    transition:background-color .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.check.marking,
+.upcoming-check.marking,
+.upcoming-batch-check.marking,
+.season-all-button.marking,
+.episode-check-button.marking{
+    background:#22c55e !important;
+    border-color:#22c55e !important;
+    color:transparent !important;
+    animation:circleFastConfirm .52s ease-out both !important;
+}
+
+.check.marking::before,
+.upcoming-check.marking::before,
+.upcoming-batch-check.marking::before,
+.season-all-button.marking::before,
+.episode-check-button.marking::before,
+.check.marking::after,
+.upcoming-check.marking::after,
+.upcoming-batch-check.marking::after,
+.season-all-button.marking::after,
+.episode-check-button.marking::after{
+    content:none !important;
+    display:none !important;
+    animation:none !important;
+}
+
+.show.card-marking,
+.episode-row.card-marking,
+.behind-episode-row.card-marking,
+.upcoming-batch-row.card-marking,
+.season-box.card-marking{
+    animation:cardGreenConfirm .52s ease-out both;
+}
+
+.episode-row.card-marking{
+    opacity:1 !important;
+}
+
+@keyframes cardGreenConfirm{
+    0%{
+        background-color:rgba(34,197,94,.08);
+        box-shadow:inset 0 0 0 1px rgba(34,197,94,.20);
+    }
+
+    32%{
+        background-color:rgba(34,197,94,.26);
+        box-shadow:inset 0 0 0 1px rgba(34,197,94,.55), 0 0 18px rgba(34,197,94,.10);
+    }
+
+    100%{
+        background-color:rgba(34,197,94,0);
+        box-shadow:inset 0 0 0 1px rgba(34,197,94,0), 0 0 0 rgba(34,197,94,0);
+    }
+}
+
+@keyframes circleFastConfirm{
+    0%{
+        transform:scale(.92);
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+
+    45%{
+        transform:scale(1.08);
+        box-shadow:0 0 0 8px rgba(34,197,94,.14);
+    }
+
+    100%{
+        transform:scale(1);
+        box-shadow:0 0 0 0 rgba(34,197,94,0);
+    }
+}
+
+
+
+/* ---------- Build 10.20/10.21 Quality of Life ---------- */
+
+
+.toast{
+    display:none;
+    align-items:center;
+    gap:14px;
+    max-width:min(420px,calc(100vw - 40px));
+}
+
+.toast-message{
+    line-height:1.35;
+}
+
+.toast-action{
+    background:#000;
+    color:#fff;
+    border:1px solid #000;
+    border-radius:4px;
+    padding:6px 10px;
+    cursor:pointer;
+    font-weight:bold;
+}
+
+.toast-action:hover{
+    background:#222;
+}
+
+.upcoming-behind{
+    margin-top:6px;
+    padding:0;
+    background:none;
+    border:none;
+    color:#999;
+    font-size:13px;
+    cursor:pointer;
+    text-align:left;
+    font-family:inherit;
+}
+
+.upcoming-behind:hover{
+    color:#fff;
+    text-decoration:underline;
+}
+
+.behind-popup-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.78);
+    z-index:260;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+}
+
+.behind-popup-box{
+    position:relative;
+    width:min(680px,100%);
+    max-height:82vh;
+    overflow-y:auto;
+    background:#080808;
+    border:1px solid #222;
+    padding:28px;
+    box-shadow:0 20px 80px rgba(0,0,0,.55);
+}
+
+.behind-popup-box h2{
+    margin:0 0 8px;
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:42px;
+    font-weight:400;
+    letter-spacing:1px;
+    text-transform:uppercase;
+}
+
+.behind-popup-box p{
+    margin:0 44px 22px 0;
+    color:#888;
+    line-height:1.5;
+}
+
+.behind-popup-close{
+    position:absolute;
+    top:18px;
+    right:18px;
+    width:34px;
+    height:34px;
+    border:1px solid #333;
+    background:#111;
+    color:#fff;
+    font-size:22px;
+    cursor:pointer;
+}
+
+.behind-popup-close:hover{
+    background:#fff;
+    color:#000;
+}
+
+.behind-episode-list{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+    border-top:1px solid #1d1d1d;
+}
+
+.behind-episode-row{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    padding:14px 0;
+    border-bottom:1px solid #1d1d1d;
+    cursor:pointer;
+    transition:background-color .18s ease, box-shadow .18s ease;
+}
+
+.behind-episode-row:hover{
+    background:#111;
+}
+
+.behind-episode-row.card-marking{
+    animation:cardGreenConfirm .52s ease-out both;
+}
+
+.behind-episode-still,
+.behind-episode-still-placeholder{
+    width:92px;
+    height:52px;
+    object-fit:cover;
+    background:#161616;
+    border:1px solid #222;
+    flex-shrink:0;
+}
+
+.behind-episode-still-placeholder{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.behind-episode-info{
+    flex:1;
+    min-width:0;
+}
+
+.behind-episode-number{
+    color:#aaa;
+    font-size:13px;
+    margin-bottom:4px;
+}
+
+.behind-episode-title{
+    color:#fff;
+    font-size:16px;
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.behind-episode-date{
+    color:#777;
+    font-size:13px;
+    margin-top:5px;
+}
+
+.behind-episode-check{
+    flex-shrink:0;
+    margin-right:4px;
+}
+
+
+/* ---------- Build 10.21 Selected Quality of Life ---------- */
+
+.library-search-box{
+    margin-left:auto;
+    width:260px;
+    max-width:32vw;
+    flex-shrink:0;
+}
+
+.library-search-input{
+    width:100%;
+    height:34px;
+    background:#080808;
+    color:#fff;
+    border:1px solid #222;
+    outline:none;
+    padding:8px 12px;
+    border-radius:5px;
+    font-size:14px;
+    font-family:Arial, Helvetica, sans-serif;
+}
+
+.library-search-input:focus{
+    border-color:#555;
+}
+
+.episode-nav-button{
+    min-width:118px;
+}
+
+
+/* ---------- Build 10.23 App Dialogs + Faster Discover ---------- */
+
+.compact-loading-state{
+    min-height:180px;
+}
+
+.season-loading{
+    padding:14px 16px;
+    color:#777;
+    font-size:14px;
+}
+
+.app-dialog-overlay{
+    position:fixed;
+    inset:0;
+    z-index:500;
+    background:rgba(0,0,0,0.82);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+}
+
+.app-dialog{
+    width:min(460px,calc(100vw - 48px));
+    background:#080808;
+    border:1px solid #222;
+    border-radius:10px;
+    padding:24px;
+    box-shadow:0 22px 80px rgba(0,0,0,0.65);
+}
+
+.app-dialog h2{
+    font-family:"League Gothic", sans-serif;
+    font-size:42px;
+    line-height:0.9;
+    font-weight:400;
+    margin:0 0 16px;
+    color:#fff;
+}
+
+.app-dialog-message{
+    color:#bdbdbd;
+    font-size:14px;
+    line-height:1.5;
+    white-space:pre-line;
+    margin-bottom:22px;
+}
+
+.app-dialog-input{
+    width:100%;
+    background:#000;
+    color:#fff;
+    border:1px solid #333;
+    border-radius:6px;
+    outline:none;
+    padding:12px 13px;
+    font-size:15px;
+    font-family:Arial, Helvetica, sans-serif;
+    margin:0 0 22px;
+}
+
+.app-dialog-input:focus{
+    border-color:#777;
+}
+
+.app-dialog-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+}
+
+.app-dialog-button{
+    border:1px solid #333;
+    border-radius:6px;
+    padding:10px 15px;
+    font-size:14px;
+    font-family:Arial, Helvetica, sans-serif;
+    cursor:pointer;
+}
+
+.app-dialog-button.primary,
+.app-dialog-button.danger{
+    background:#fff;
+    color:#000;
+    border-color:#fff;
+}
+
+.app-dialog-button.secondary{
+    background:#111;
+    color:#aaa;
+}
+
+.app-dialog-button.secondary:hover{
+    color:#fff;
+    border-color:#555;
+}
+
+.app-dialog-button.primary:hover,
+.app-dialog-button.danger:hover{
+    background:#ddd;
+    border-color:#ddd;
+}
+
+
+
+/* ---------- Build 10.24 Discover Hub ---------- */
+
+.discover-hub{
+    padding-bottom:35px;
+}
+
+.discover-section{
+    margin-bottom:34px;
+}
+
+.discover-section-heading{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:14px;
+}
+
+.discover-section-heading h3{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:38px;
+    font-weight:400;
+    line-height:1;
+    text-transform:uppercase;
+}
+
+.discover-carousel-shell{
+    position:relative;
+    overflow:hidden;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+}
+
+.discover-carousel-overlay{
+    position:absolute;
+    inset:0;
+    z-index:50;
+    pointer-events:none;
+}
+
+.discover-row-arrow{
+    position:absolute;
+    top:106px;
+    transform:translateY(-50%);
+    z-index:60;
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    border:1px solid rgba(255,255,255,.3);
+    background:rgba(0,0,0,.74);
+    color:#fff;
+    cursor:pointer;
+    font-size:34px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .18s ease,background .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.discover-row-arrow-left{
+    left:12px;
+}
+
+.discover-row-arrow-right{
+    right:12px;
+}
+
+.discover-carousel-shell:hover .discover-row-arrow,
+.discover-carousel-shell:focus-within .discover-row-arrow{
+    opacity:1;
+    pointer-events:auto;
+}
+
+.discover-row-arrow:hover{
+    background:rgba(0,0,0,.94);
+    border-color:rgba(255,255,255,.6);
+    transform:translateY(-50%) scale(1.04);
+}
+
+.discover-carousel-shell::before,
+.discover-carousel-shell::after{
+    content:"";
+    position:absolute;
+    top:0;
+    height:213px;
+    width:56px;
+    z-index:20;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .18s ease;
+}
+
+.discover-carousel-shell::before{
+    left:0;
+    background:linear-gradient(90deg,#000,rgba(0,0,0,0));
+}
+
+.discover-carousel-shell::after{
+    right:0;
+    background:linear-gradient(270deg,#000,rgba(0,0,0,0));
+}
+
+.discover-carousel-shell:hover::before,
+.discover-carousel-shell:hover::after{
+    opacity:1;
+}
+
+.discover-card-row{
+    display:flex;
+    gap:16px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scroll-behavior:smooth;
+    scroll-snap-type:x proximity;
+    padding:0 0 4px;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    box-sizing:border-box;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+}
+
+.discover-card-row::-webkit-scrollbar{
+    width:0;
+    height:0;
+    display:none;
+}
+
+.discover-card-row::-webkit-scrollbar{
+    display:none;
+}
+
+.discover-card-row{
+    scrollbar-width:none;
+}
+
+.discover-hub-card,
+.discover-card{
+    flex:0 0 142px;
+    width:142px;
+}
+
+.discover-hub-card{
+    background:#080808;
+    color:#fff;
+    border:1px solid #222;
+    text-align:left;
+    cursor:pointer;
+    padding:0;
+    overflow:hidden;
+    min-width:0;
+    font-family:Arial, Helvetica, sans-serif;
+    scroll-snap-align:start;
+    transition:background .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.discover-hub-card:hover{
+    background:#111;
+    border-color:#444;
+    transform:translateY(-2px);
+}
+
+.discover-card-poster{
+    width:100%;
+    aspect-ratio:2 / 3;
+    background:#111;
+    border-bottom:1px solid #222;
+}
+
+.discover-card-poster img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+    pointer-events:none;
+    user-select:none;
+    -webkit-user-drag:none;
+}
+
+.discover-card-placeholder{
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#555;
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:42px;
+}
+
+.discover-card-title{
+    padding:10px 10px 4px;
+    font-size:14px;
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.discover-card-meta{
+    padding:0 10px 10px;
+    color:#888;
+    font-size:12px;
+}
+
+.discover-card-meta span{
+    color:#FFD400;
+    font-weight:bold;
+}
+
+.skeleton-card{
+    height:260px;
+    background:linear-gradient(90deg,#080808,#141414,#080808);
+    background-size:200% 100%;
+    animation:discoverSkeleton 1.2s ease-in-out infinite;
+}
+
+@keyframes discoverSkeleton{
+    0%{
+        background-position:200% 0;
+    }
+    100%{
+        background-position:-200% 0;
+    }
+}
+
+
+/* ---------- Profile Settings ---------- */
+
+.profile-settings-layout{
+    display:grid;
+    grid-template-columns:180px minmax(0,1fr);
+    gap:28px;
+    align-items:start;
+}
+
+.settings-avatar-preview{
+    width:160px;
+    height:160px;
+    border-radius:50%;
+    border:4px solid #fff;
+    background:#050505;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.settings-avatar-preview .profile-avatar-initial{
+    font-size:78px;
+}
+
+.profile-settings-controls{
+    max-width:760px;
+}
+
+.profile-settings-label{
+    display:block;
+    color:#aaa;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:8px;
+}
+
+.profile-settings-label.avatar-label{
+    margin-top:22px;
+}
+
+.profile-settings-input{
+    width:100%;
+    max-width:520px;
+    height:46px;
+    background:#111;
+    color:#fff;
+    border:1px solid #2a2a2a;
+    border-radius:5px;
+    padding:0 13px;
+    font-size:15px;
+    outline:none;
+}
+
+.profile-settings-input:focus{
+    border-color:#666;
+}
+
+.avatar-preset-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,68px);
+    gap:10px;
+    margin-bottom:18px;
+    max-width:760px;
+}
+
+.avatar-preset-button{
+    width:68px;
+    height:68px;
+    border-radius:50%;
+    border:2px solid #292929;
+    background:#050505;
+    color:#fff;
+    padding:0;
+    overflow:hidden;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.avatar-preset-button:hover,
+.avatar-preset-button.active{
+    border-color:#fff;
+}
+
+.avatar-preset-preview,
+.avatar-preset-preview svg{
+    width:100%;
+    height:100%;
+    display:block;
+}
+
+.avatar-initial-option{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:38px;
+}
+
+.profile-settings-buttons{
+    margin-top:4px;
+}
+
+.profile-settings-label.header-label{
+    margin-top:28px;
+}
+
+.settings-header-preview{
+    width:100%;
+    max-width:760px;
+    height:170px;
+    position:relative;
+    isolation:isolate;
+    overflow:hidden;
+    border:1px solid #2a2a2a;
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    padding:24px;
+}
+
+.settings-header-preview-content{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    position:relative;
+    z-index:1;
+    font-size:20px;
+    font-weight:bold;
+}
+
+.settings-header-mini-avatar{
+    width:58px;
+    height:58px;
+    border-radius:50%;
+    border:2px solid #fff;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#080808;
+}
+
+.settings-header-mini-avatar .profile-avatar-initial{
+    font-size:34px;
+}
+
+.profile-header-preset-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(120px,1fr));
+    gap:10px;
+    max-width:760px;
+    margin-bottom:14px;
+}
+
+.profile-header-preset-button{
+    min-height:64px;
+    border:2px solid #292929;
+    color:#fff;
+    cursor:pointer;
+    position:relative;
+    overflow:hidden;
+}
+
+.profile-header-preset-button::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:rgba(0,0,0,.22);
+}
+
+.profile-header-preset-button span{
+    position:relative;
+    z-index:1;
+    font-size:13px;
+    font-weight:bold;
+}
+
+.profile-header-preset-button:hover,
+.profile-header-preset-button.active{
+    border-color:#fff;
+}
+
+.avatar-crop-overlay,
+.profile-header-crop-overlay{
+    position:fixed;
+    inset:0;
+    z-index:5000;
+    background:rgba(0,0,0,.86);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+}
+
+.avatar-crop-dialog{
+    width:min(520px,100%);
+    background:#080808;
+    border:1px solid #2a2a2a;
+    padding:22px;
+}
+
+.avatar-crop-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:18px;
+}
+
+.avatar-crop-header h2{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:40px;
+    font-weight:normal;
+}
+
+.avatar-crop-close{
+    width:36px;
+    height:36px;
+    border:1px solid #333;
+    background:#111;
+    color:#fff;
+    font-size:24px;
+    cursor:pointer;
+}
+
+.avatar-crop-canvas-wrap{
+    width:min(400px,100%);
+    aspect-ratio:1;
+    position:relative;
+    margin:0 auto;
+    overflow:hidden;
+    background:#111;
+    touch-action:none;
+}
+
+.avatar-crop-canvas-wrap canvas{
+    width:100%;
+    height:100%;
+    display:block;
+    cursor:grab;
+}
+
+.avatar-crop-canvas-wrap canvas:active{
+    cursor:grabbing;
+}
+
+.avatar-crop-circle-guide{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    box-shadow:0 0 0 999px rgba(0,0,0,.46);
+    border:2px solid rgba(255,255,255,.85);
+    pointer-events:none;
+}
+
+.avatar-crop-zoom-label{
+    display:block;
+    color:#aaa;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin:18px 0 8px;
+}
+
+.avatar-crop-zoom{
+    width:100%;
+}
+
+.avatar-crop-note{
+    color:#666;
+    font-size:12px;
+    margin-top:10px;
+}
+
+.avatar-crop-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    margin-top:18px;
+}
+
+.profile-header-crop-dialog{
+    width:min(900px,100%);
+    background:#080808;
+    border:1px solid #2a2a2a;
+    padding:22px;
+}
+
+.profile-header-crop-canvas-wrap{
+    width:100%;
+    aspect-ratio:16 / 5;
+    overflow:hidden;
+    background:#111;
+    touch-action:none;
+}
+
+.profile-header-crop-canvas-wrap canvas{
+    width:100%;
+    height:100%;
+    display:block;
+    cursor:grab;
+}
+
+.profile-header-crop-canvas-wrap canvas:active{
+    cursor:grabbing;
+}
+
+@media(max-width:700px){
+    .profile-settings-layout{
+        grid-template-columns:1fr;
+    }
+
+    .settings-avatar-preview{
+        width:130px;
+        height:130px;
+    }
+
+    .profile-header-preset-grid{
+        grid-template-columns:repeat(2,minmax(110px,1fr));
+    }
+
+    .settings-header-preview{
+        height:140px;
+    }
+}
+
+
+/* ---------- Favorites live sorting ---------- */
+
+.favorites-popup-box > .close-popup{
+    margin-top:14px;
+    padding-top:4px;
+    align-self:flex-start;
+}
+
+body.favorite-reordering{
+    cursor:grabbing;
+    user-select:none;
+}
+
+
+/* ---------- Online session ---------- */
+.settings-logout-form{
+    display:inline-flex;
+    margin:0;
+}
+
+.settings-logout-form .settings-action-button{
+    height:100%;
+}
