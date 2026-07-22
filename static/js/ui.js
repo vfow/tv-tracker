@@ -901,6 +901,146 @@ function getLibrarySearchEmptyHTML(query){
 
 
 
+function getWatchlistProgressData(show){
+
+    const watched = Math.max(Number(getWatchedEpisodeCount(show) || 0),0);
+    const knownTotal = Math.max(Number(getTotalEpisodeCount(show) || 0),0);
+    const total = Math.max(knownTotal,watched);
+    const completed = show.status === "finished";
+    const percent = total > 0
+    ? Math.min(100,Math.max(0,completed ? 100 : Math.round((watched / total) * 100)))
+    : 0;
+
+    const label = total > 0
+    ? `${watched} of ${total} watched`
+    : `${watched} watched`;
+
+    return {
+        watched,
+        total,
+        percent,
+        label
+    };
+
+}
+
+
+
+function getWatchlistPosterFallback(show){
+
+    const words = String(show.title || show.name || "TV")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0,2);
+
+    const initials = words
+    .map(word=>word.charAt(0))
+    .join("")
+    .toUpperCase();
+
+    return initials || "TV";
+
+}
+
+
+
+function getWatchlistActionIcon(icon){
+
+    const icons = {
+        check:`
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        `,
+        play:`
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M8.5 6.5v11l9-5.5-9-5.5Z" fill="currentColor"></path>
+            </svg>
+        `,
+        restore:`
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M8 8H4V4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M4.5 8.5A8 8 0 1 1 5 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+            </svg>
+        `,
+        clock:`
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                <path d="M12 8v4.5l3 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        `
+    };
+
+    return icons[icon] || icons.check;
+
+}
+
+
+
+function getWatchlistActionConfig(show,displayFilter,nextEp){
+
+    const title = show.title || "show";
+
+    if(displayFilter === "finished"){
+        return null;
+    }
+
+    if(displayFilter === "paused"){
+        return {
+            action:"resume",
+            icon:"play",
+            label:`Resume ${title}`,
+            disabled:false
+        };
+    }
+
+    if(displayFilter === "plan"){
+        return {
+            action:"start",
+            icon:"play",
+            label:`Start watching ${title}`,
+            disabled:false
+        };
+    }
+
+    if(displayFilter === "dropped"){
+        return {
+            action:"restore",
+            icon:"restore",
+            label:`Restore ${title} to Watching`,
+            disabled:false
+        };
+    }
+
+    if(!nextEp){
+        return null;
+    }
+
+    const isAvailable = Boolean(
+        nextEp.air_date &&
+        isEpisodeAired(nextEp.air_date,nextEp)
+    );
+
+    const releaseDate = nextEp.air_date
+    ? formatAirDate(nextEp.air_date,nextEp)
+    : "";
+
+    return {
+        action:"mark",
+        icon:isAvailable ? "check" : "clock",
+        label:isAvailable
+        ? `Mark ${title} Season ${nextEp.season}, Episode ${nextEp.episode} watched`
+        : releaseDate
+        ? `${title} Season ${nextEp.season}, Episode ${nextEp.episode} is available ${releaseDate}`
+        : `${title} episode release date is unavailable`,
+        disabled:!isAvailable
+    };
+
+}
+
+
+
 function createWatchlistCard(show,options={}){
 
     const displayFilter = options.filter || activeFilter;
@@ -929,74 +1069,141 @@ function createWatchlistCard(show,options={}){
     });
 
     const episodeLine = isCompletedFilter
-    ? `<span class="completed-label">✓ Completed</span>`
+    ? `<span class="completed-label">Completed</span>`
     : isDroppedFilter && droppedStopEpisode
-    ? `Stopped at Season ${droppedStopEpisode.season}, Episode ${droppedStopEpisode.episode}`
+    ? `Stopped after Season ${droppedStopEpisode.season}, Episode ${droppedStopEpisode.episode}`
     : isDroppedFilter
     ? `Dropped`
+    : displayFilter === "plan" && nextEp
+    ? `Start with Season ${nextEp.season}, Episode ${nextEp.episode}`
+    : displayFilter === "paused" && nextEp
+    ? `Next: Season ${nextEp.season}, Episode ${nextEp.episode}`
     : nextEp
     ? `Season ${nextEp.season}, Episode ${nextEp.episode}`
     : getNoNextEpisodeText(show);
 
     const episodeTitle = isDroppedFilter && droppedStopEpisodeData && droppedStopEpisodeData.name
-    ? `"${escapeHTML(droppedStopEpisodeData.name)}"`
+    ? `“${escapeHTML(droppedStopEpisodeData.name)}”`
     : nextEp && nextEp.name
-    ? `"${escapeHTML(nextEp.name)}"`
+    ? `“${escapeHTML(nextEp.name)}”`
     : "";
 
-    const card = document.createElement("div");
-    card.className = "show";
+    const nextEpisodeFuture = Boolean(
+        nextEp &&
+        nextEp.air_date &&
+        !isEpisodeAired(nextEp.air_date,nextEp)
+    );
+
+    const releaseMeta = nextEpisodeFuture
+    ? [
+        formatAirDate(nextEp.air_date,nextEp),
+        getCountdownText(nextEp.air_date,nextEp)
+    ].filter(Boolean).join(" • ")
+    : "";
+
+    const progress = getWatchlistProgressData(show);
+    const action = getWatchlistActionConfig(show,displayFilter,nextEp);
+
+    const card = document.createElement("article");
+    card.className = `show watchlist-card watchlist-card--${escapeHTML(displayFilter)}`;
 
     const posterHTML = show.poster_path
-    ? `<img class="poster" src="https://image.tmdb.org/t/p/w200${show.poster_path}">`
-    : `<div class="poster-placeholder">📺</div>`;
+    ? `<img class="poster" src="https://image.tmdb.org/t/p/w200${show.poster_path}" alt="${escapeHTML(show.title || "Show")} poster" loading="lazy">`
+    : `<div class="poster-placeholder watchlist-poster-placeholder" aria-hidden="true"><span>${escapeHTML(getWatchlistPosterFallback(show))}</span></div>`;
+
+    const actionHTML = action
+    ? `
+        <button
+        type="button"
+        class="check watchlist-action watchlist-action--${escapeHTML(action.action)}"
+        data-watchlist-action="${escapeHTML(action.action)}"
+        aria-label="${escapeHTML(action.label)}"
+        title="${escapeHTML(action.label)}"
+        ${action.disabled ? "disabled" : ""}>
+            ${getWatchlistActionIcon(action.icon)}
+        </button>
+    `
+    : `
+        <div class="watchlist-complete-mark" role="img" aria-label="Completed" title="Completed">
+            ${getWatchlistActionIcon("check")}
+        </div>
+    `;
 
     card.innerHTML = `
 
         ${posterHTML}
 
-        <div class="info">
+        <div class="info watchlist-info">
 
-            <div class="title">
-                ${escapeHTML(show.title)}
+            <div class="watchlist-title-row">
+                <button type="button" class="title watchlist-title-button" aria-label="Open ${escapeHTML(show.title || "show")} details">${escapeHTML(show.title)}</button>
+                ${showNewBadge ? `<span class="new-badge watchlist-new-badge">NEW</span>` : ""}
             </div>
 
-            <div class="episode">
-                ${episodeLine}
-            </div>
+            <div class="episode">${episodeLine}</div>
 
-            <div class="episode-title">
-                ${episodeTitle}
-            </div>
+            ${episodeTitle ? `<div class="episode-title">${episodeTitle}</div>` : ""}
 
-            ${
-            showNewBadge
-            ? `<div class="new-badge">NEW</div>`
-            : ""
-            }
+            ${releaseMeta ? `<div class="watchlist-release-meta">${escapeHTML(releaseMeta)}</div>` : ""}
+
+            <div class="watchlist-progress" aria-label="${escapeHTML(progress.label)}">
+                <div class="watchlist-progress-copy">
+                    <span>${escapeHTML(progress.label)}</span>
+                    <span>${progress.percent}%</span>
+                </div>
+                <div class="watchlist-progress-track" aria-hidden="true">
+                    <span class="watchlist-progress-fill" style="width:${progress.percent}%"></span>
+                </div>
+            </div>
 
         </div>
 
-        ${
-        nextEp
-        ? `<div class="check"></div>`
-        : ""
-        }
+        ${actionHTML}
 
     `;
 
-    card.addEventListener("click",function(){
+    const openDetails = ()=>{
         openShowModal(show.tmdb_id);
-    });
+    };
 
-    const check = card.querySelector(".check");
+    card.addEventListener("click",openDetails);
 
-    if(check){
+    const titleButton = card.querySelector(".watchlist-title-button");
 
-        check.addEventListener("click",async function(event){
+    if(titleButton){
+        titleButton.addEventListener("click",function(event){
             event.stopPropagation();
-            await playCheckSuccessAnimation(this);
-            await markNextEpisode(show.tmdb_id);
+            openDetails();
+        });
+    }
+
+    const actionButton = card.querySelector(".watchlist-action");
+
+    if(actionButton && action && !action.disabled){
+
+        actionButton.addEventListener("click",async function(event){
+
+            event.stopPropagation();
+            this.disabled = true;
+
+            try{
+
+                await playCheckSuccessAnimation(this);
+
+                if(action.action === "mark"){
+                    await markNextEpisode(show.tmdb_id);
+                }else{
+                    await updateShowStatus(show.tmdb_id,"watching");
+                }
+
+            }finally{
+
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+
+            }
+
         });
 
     }
@@ -1004,7 +1211,6 @@ function createWatchlistCard(show,options={}){
     return card;
 
 }
-
 
 
 
