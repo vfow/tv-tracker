@@ -280,17 +280,32 @@ def deltas_conflict(incoming: dict[str, Any], previous: dict[str, Any]) -> bool:
 
 
 def fetch_change_rows(
-    cursor: psycopg.Cursor[Any], since_revision: int
+    cursor: psycopg.Cursor[Any],
+    since_revision: int,
+    limit: int | None = None,
 ) -> list[tuple[int, str, dict[str, Any]]]:
-    cursor.execute(
-        """
-        SELECT revision, operation_id, delta
-        FROM tv_tracker_changes
-        WHERE revision > %s
-        ORDER BY revision ASC
-        """,
-        (since_revision,),
-    )
+    if limit is None:
+        cursor.execute(
+            """
+            SELECT revision, operation_id, delta
+            FROM tv_tracker_changes
+            WHERE revision > %s
+            ORDER BY revision ASC
+            """,
+            (since_revision,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT revision, operation_id, delta
+            FROM tv_tracker_changes
+            WHERE revision > %s
+            ORDER BY revision ASC
+            LIMIT %s
+            """,
+            (since_revision, limit),
+        )
+
     return [
         (int(row[0]), str(row[1]), row[2])
         for row in cursor.fetchall()
@@ -519,6 +534,18 @@ def create_app() -> Flask:
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid revision"}), 400
 
+        raw_limit = request.args.get("limit")
+        if raw_limit is None:
+            change_limit: int | None = None
+        else:
+            try:
+                change_limit = int(raw_limit)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "Invalid change limit"}), 400
+
+            if change_limit < 1 or change_limit > 50:
+                return jsonify({"ok": False, "error": "Invalid change limit"}), 400
+
         if since_revision < 0:
             return jsonify({"ok": False, "error": "Invalid revision"}), 400
 
@@ -539,21 +566,31 @@ def create_app() -> Flask:
                     rows: list[tuple[int, str, dict[str, Any]]] = []
                 else:
                     needs_reset = False
-                    rows = fetch_change_rows(cursor, since_revision)
+                    rows = fetch_change_rows(
+                        cursor, since_revision, change_limit
+                    )
 
         if needs_reset:
             data, revision = read_tracker_data()
             return jsonify({
                 "ok": True,
                 "revision": revision,
+                "serverRevision": revision,
+                "throughRevision": revision,
+                "hasMore": False,
                 "reset": True,
                 "data": data,
                 "changes": [],
             })
 
+        through_revision = rows[-1][0] if rows else since_revision
+
         return jsonify({
             "ok": True,
             "revision": revision,
+            "serverRevision": revision,
+            "throughRevision": through_revision,
+            "hasMore": through_revision < revision,
             "reset": False,
             "changes": serialize_change_rows(rows),
         })

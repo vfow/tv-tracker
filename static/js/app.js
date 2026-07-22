@@ -105,18 +105,38 @@ async function init(){
     await autoUpdateStatuses(false,false);
 
     initializeAutomaticBackupTracking();
-    await saveData();
 
     setupEvents();
 
     renderAll();
     startDataSync();
+    scheduleInitialBackgroundSave();
 
     // Migration metadata sync is intentionally not auto-started.
     // It can slow down search/rendering, and migration work is on hold for now.
 
 }
 
+
+
+function scheduleInitialBackgroundSave(){
+
+    const queueSave = function(){
+        saveData().catch(error=>{
+            console.error("TV Tracker startup save failed",error);
+        });
+    };
+
+    if(typeof requestAnimationFrame === "function"){
+        requestAnimationFrame(function(){
+            setTimeout(queueSave,0);
+        });
+        return;
+    }
+
+    setTimeout(queueSave,0);
+
+}
 
 
 

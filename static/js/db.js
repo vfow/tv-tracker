@@ -16,6 +16,9 @@ const SYNC_IDLE_INTERVAL_MS = 5000;
 const SYNC_ACTIVE_WINDOW_MS = 30000;
 const SYNC_CHANNEL_NAME = "tv-tracker-sync-v1";
 const MAX_SAVE_ATTEMPTS = 3;
+const MAX_SAVE_REQUEST_BYTES = 768 * 1024;
+const MAX_SINGLE_SAVE_REQUEST_BYTES = 2 * 1024 * 1024;
+const SYNC_CHANGE_PAGE_LIMIT = 1;
 const DELETE_VALUE = Symbol("delete-value");
 
 function cloneTrackerData(value){
@@ -204,6 +207,209 @@ function deltaIsEmpty(delta){
         delta.historyOrder === null &&
         Object.keys(delta.stateUpsert).length === 0
     );
+}
+
+
+function createEmptyServerDelta(){
+    return {
+        showsUpsert:{},
+        showsDelete:[],
+        historyUpsert:{},
+        historyDelete:[],
+        historyOrder:null,
+        stateUpsert:{}
+    };
+}
+
+function jsonByteLength(value){
+    const text = JSON.stringify(value);
+
+    if(typeof TextEncoder === "function"){
+        return new TextEncoder().encode(text).byteLength;
+    }
+
+    return unescape(encodeURIComponent(text)).length;
+}
+
+function buildSaveRequestPayload(delta,baseRevision,operationId){
+    return {
+        ...delta,
+        baseRevision:Number(baseRevision || 0),
+        operationId:String(operationId || "")
+    };
+}
+
+function getServerDeltaAtoms(delta){
+    const atoms = [];
+
+    Object.entries(delta.showsUpsert || {}).forEach(([key,value])=>{
+        atoms.push({kind:"map",field:"showsUpsert",key:String(key),value});
+    });
+    (delta.showsDelete || []).forEach(value=>{
+        atoms.push({kind:"array",field:"showsDelete",value:String(value)});
+    });
+    Object.entries(delta.historyUpsert || {}).forEach(([key,value])=>{
+        atoms.push({kind:"map",field:"historyUpsert",key:String(key),value});
+    });
+    (delta.historyDelete || []).forEach(value=>{
+        atoms.push({kind:"array",field:"historyDelete",value:String(value)});
+    });
+    Object.entries(delta.stateUpsert || {}).forEach(([key,value])=>{
+        atoms.push({kind:"map",field:"stateUpsert",key:String(key),value});
+    });
+
+    return atoms;
+}
+
+function addDeltaAtom(delta,atom){
+    if(atom.kind === "map"){
+        delta[atom.field][atom.key] = atom.value;
+        return;
+    }
+
+    delta[atom.field].push(atom.value);
+}
+
+function removeDeltaAtom(delta,atom){
+    if(atom.kind === "map"){
+        delete delta[atom.field][atom.key];
+        return;
+    }
+
+    delta[atom.field].pop();
+}
+
+function takeServerDeltaBatch(delta,baseRevision,operationId){
+    const atoms = getServerDeltaAtoms(delta);
+    const batch = createEmptyServerDelta();
+    const selected = [];
+
+    for(const atom of atoms){
+        addDeltaAtom(batch,atom);
+        const requestBytes = jsonByteLength(
+            buildSaveRequestPayload(batch,baseRevision,operationId)
+        );
+
+        if(requestBytes > MAX_SAVE_REQUEST_BYTES && selected.length > 0){
+            removeDeltaAtom(batch,atom);
+            break;
+        }
+
+        selected.push(atom);
+
+        if(requestBytes > MAX_SINGLE_SAVE_REQUEST_BYTES){
+            throw new Error(
+                "One tracker record is too large to save safely. " +
+                "No data was sent."
+            );
+        }
+    }
+
+    const selectedAllAtoms = selected.length === atoms.length;
+
+    if(selectedAllAtoms && Array.isArray(delta.historyOrder)){
+        batch.historyOrder = delta.historyOrder;
+        const requestBytes = jsonByteLength(
+            buildSaveRequestPayload(batch,baseRevision,operationId)
+        );
+
+        if(requestBytes > MAX_SAVE_REQUEST_BYTES && selected.length > 0){
+            batch.historyOrder = null;
+        }else if(requestBytes > MAX_SINGLE_SAVE_REQUEST_BYTES){
+            throw new Error(
+                "The tracker history order is too large to save safely. " +
+                "No data was sent."
+            );
+        }
+    }
+
+    if(deltaIsEmpty(batch) && Array.isArray(delta.historyOrder)){
+        batch.historyOrder = delta.historyOrder;
+
+        if(
+            jsonByteLength(buildSaveRequestPayload(batch,baseRevision,operationId)) >
+            MAX_SINGLE_SAVE_REQUEST_BYTES
+        ){
+            throw new Error(
+                "The tracker history order is too large to save safely. " +
+                "No data was sent."
+            );
+        }
+    }
+
+    if(deltaIsEmpty(batch)){
+        throw new Error("Could not create a safe tracker save batch.");
+    }
+
+    return batch;
+}
+
+
+function copyServerDeltaForBatching(delta){
+    return {
+        showsUpsert:{...(delta.showsUpsert || {})},
+        showsDelete:[...(delta.showsDelete || [])],
+        historyUpsert:{...(delta.historyUpsert || {})},
+        historyDelete:[...(delta.historyDelete || [])],
+        historyOrder:Array.isArray(delta.historyOrder)
+        ? [...delta.historyOrder]
+        : null,
+        stateUpsert:{...(delta.stateUpsert || {})}
+    };
+}
+
+function removeServerDeltaBatch(remaining,batch){
+    Object.keys(batch.showsUpsert || {}).forEach(key=>{
+        delete remaining.showsUpsert[key];
+    });
+    Object.keys(batch.historyUpsert || {}).forEach(key=>{
+        delete remaining.historyUpsert[key];
+    });
+    Object.keys(batch.stateUpsert || {}).forEach(key=>{
+        delete remaining.stateUpsert[key];
+    });
+
+    const showDeletes = new Set((batch.showsDelete || []).map(String));
+    const historyDeletes = new Set((batch.historyDelete || []).map(String));
+
+    remaining.showsDelete = remaining.showsDelete.filter(
+        value=>!showDeletes.has(String(value))
+    );
+    remaining.historyDelete = remaining.historyDelete.filter(
+        value=>!historyDeletes.has(String(value))
+    );
+
+    if(Array.isArray(batch.historyOrder)){
+        remaining.historyOrder = null;
+    }
+}
+
+function splitServerDeltaIntoBatches(delta,baseRevision,operationId){
+    const remaining = copyServerDeltaForBatching(delta);
+    const batches = [];
+    let index = 0;
+
+    while(!deltaIsEmpty(remaining)){
+        const batchOperationId = operationId + "-" + String(index + 1);
+        const batch = takeServerDeltaBatch(
+            remaining,
+            baseRevision,
+            batchOperationId
+        );
+
+        batches.push({
+            delta:batch,
+            operationId:batchOperationId
+        });
+        removeServerDeltaBatch(remaining,batch);
+        index += 1;
+
+        if(index > 10000){
+            throw new Error("Tracker save exceeded its safe batch limit.");
+        }
+    }
+
+    return batches;
 }
 
 function applyServerDelta(target,delta){
@@ -615,30 +821,61 @@ function sleep(milliseconds){
 }
 
 async function persistSnapshot(snapshot,capturedBase,operationId){
-    let workingSnapshot = mergeTrackerSnapshots(
-        capturedBase || LAST_SAVED_DATA || {shows:{},history:[]},
-        snapshot,
-        LAST_SAVED_DATA || capturedBase || {shows:{},history:[]}
+    const originalBase = cloneTrackerData(
+        capturedBase || LAST_SAVED_DATA || {shows:{},history:[]}
     );
+    let workingSnapshot = mergeTrackerSnapshots(
+        originalBase,
+        snapshot,
+        LAST_SAVED_DATA || originalBase
+    );
+    let batches = [];
+    let batchPosition = 0;
+    let batchGeneration = 0;
     let networkAttempt = 0;
 
     while(true){
-        const baseline = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
-        workingSnapshot = mergeTrackerSnapshots(
-            capturedBase || baseline,
-            workingSnapshot,
-            baseline
-        );
-        capturedBase = baseline;
-        ensureHistoryIds(workingSnapshot);
+        if(batchPosition >= batches.length){
+            const baseline = cloneTrackerData(
+                LAST_SAVED_DATA || {shows:{},history:[]}
+            );
+            workingSnapshot = mergeTrackerSnapshots(
+                originalBase,
+                workingSnapshot,
+                baseline
+            );
+            ensureHistoryIds(workingSnapshot);
 
-        const delta = buildServerDelta(baseline,workingSnapshot);
+            const remainingDelta = buildServerDelta(baseline,workingSnapshot);
 
-        if(deltaIsEmpty(delta)){
-            return true;
+            if(deltaIsEmpty(remainingDelta)){
+                return true;
+            }
+
+            batchGeneration += 1;
+            batches = splitServerDeltaIntoBatches(
+                remainingDelta,
+                SERVER_REVISION,
+                operationId + "-g" + String(batchGeneration)
+            );
+            batchPosition = 0;
         }
 
+        const baseline = cloneTrackerData(
+            LAST_SAVED_DATA || {shows:{},history:[]}
+        );
+        const pendingBatch = batches[batchPosition];
         const requestRevision = SERVER_REVISION;
+        const requestPayload = buildSaveRequestPayload(
+            pendingBatch.delta,
+            requestRevision,
+            pendingBatch.operationId
+        );
+        const requestBytes = jsonByteLength(requestPayload);
+
+        if(requestBytes > MAX_SINGLE_SAVE_REQUEST_BYTES){
+            throw new Error("Tracker save batch exceeded the safe request limit.");
+        }
 
         try{
             const response = await fetch("/api/state",{
@@ -650,35 +887,59 @@ async function persistSnapshot(snapshot,capturedBase,operationId){
                     "Content-Type":"application/json",
                     "X-CSRF-Token":csrfToken()
                 },
-                body:JSON.stringify({
-                    ...delta,
-                    baseRevision:requestRevision,
-                    operationId
-                })
+                body:JSON.stringify(requestPayload)
             });
 
             const payload = await parseAPIResponse(response);
-            const remoteBeforeLocal = cloneTrackerData(baseline);
-            applyChangeList(remoteBeforeLocal,payload.changes);
+            let finalSaved = null;
 
-            let finalSaved = remoteBeforeLocal;
+            if(payload.reset){
+                const full = await fetchFullState();
+                finalSaved = full.data || baseline;
+                payload.revision = full.revision;
+            }else{
+                finalSaved = cloneTrackerData(baseline);
+                applyChangeList(finalSaved,payload.changes);
 
-            if(!payload.duplicate){
-                applyServerDelta(finalSaved,payload.appliedDelta || delta);
+                if(!payload.duplicate){
+                    applyServerDelta(
+                        finalSaved,
+                        payload.appliedDelta || pendingBatch.delta
+                    );
+                }
             }
 
+            workingSnapshot = mergeTrackerSnapshots(
+                baseline,
+                workingSnapshot,
+                finalSaved
+            );
             DATA = mergeTrackerSnapshots(baseline,DATA,finalSaved);
             LAST_SAVED_DATA = cloneTrackerData(finalSaved);
             SERVER_REVISION = Number(payload.revision || SERVER_REVISION);
 
-            if((payload.changes || []).length > 0 || payload.duplicate){
+            if(
+                payload.reset ||
+                (payload.changes || []).length > 0 ||
+                payload.duplicate
+            ){
                 refreshUIAfterRemoteSync();
+            }
+
+            networkAttempt = 0;
+            batchPosition += 1;
+
+            if(payload.reset){
+                batches = [];
+                batchPosition = 0;
             }
 
             broadcastRevision();
             SYNC_FAILURES = 0;
             SYNC_WARNING_SHOWN = false;
-            return true;
+
+            // Give the browser a chance to paint and handle input between batches.
+            await sleep(0);
         }catch(error){
             if(error && error.status === 409){
                 const remoteResult = await getRemoteSnapshotFromConflict(
@@ -695,7 +956,9 @@ async function persistSnapshot(snapshot,capturedBase,operationId){
                 DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
                 LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
                 SERVER_REVISION = Number(remoteResult.revision || SERVER_REVISION);
-                capturedBase = remoteSnapshot;
+                batches = [];
+                batchPosition = 0;
+                networkAttempt = 0;
                 refreshUIAfterRemoteSync();
                 continue;
             }
@@ -834,36 +1097,66 @@ async function syncFromServer(reason="poll",force=false){
             return true;
         }
 
-        const response = await fetch(
-            "/api/changes?since=" + encodeURIComponent(SERVER_REVISION),
-            {
-                method:"GET",
-                credentials:"same-origin",
-                cache:"no-store",
-                headers:{"Accept":"application/json"}
-            }
-        );
-        const payload = await parseAPIResponse(response);
         const baseline = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
-        let remoteSnapshot = null;
+        let remoteSnapshot = cloneTrackerData(baseline);
+        let nextRevision = SERVER_REVISION;
+        let targetRevision = remoteRevision;
+        let safetyCounter = 0;
 
-        if(payload.reset){
-            remoteSnapshot = payload.data || null;
-            if(!remoteSnapshot){
-                const full = await fetchFullState();
-                remoteSnapshot = full.data;
-                payload.revision = full.revision;
+        while(nextRevision < targetRevision){
+            const response = await fetch(
+                "/api/changes?since=" + encodeURIComponent(nextRevision) +
+                "&limit=" + encodeURIComponent(SYNC_CHANGE_PAGE_LIMIT),
+                {
+                    method:"GET",
+                    credentials:"same-origin",
+                    cache:"no-store",
+                    headers:{"Accept":"application/json"}
+                }
+            );
+            const payload = await parseAPIResponse(response);
+
+            if(payload.reset){
+                remoteSnapshot = payload.data || null;
+
+                if(!remoteSnapshot){
+                    const full = await fetchFullState();
+                    remoteSnapshot = full.data;
+                    nextRevision = full.revision;
+                }else{
+                    nextRevision = Number(payload.revision || targetRevision);
+                }
+
+                break;
             }
-        }else{
-            remoteSnapshot = cloneTrackerData(baseline);
+
             applyChangeList(remoteSnapshot,payload.changes);
+
+            const advancedRevision = Number(
+                payload.throughRevision || payload.revision || nextRevision
+            );
+
+            if(advancedRevision <= nextRevision){
+                throw new Error("Synchronization did not advance to a newer revision.");
+            }
+
+            nextRevision = advancedRevision;
+            targetRevision = Math.max(
+                targetRevision,
+                Number(payload.serverRevision || targetRevision)
+            );
+            safetyCounter += 1;
+
+            if(safetyCounter > 10000){
+                throw new Error("Synchronization exceeded its safe page limit.");
+            }
         }
 
         if(remoteSnapshot){
             ensureHistoryIds(remoteSnapshot);
             DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
             LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
-            SERVER_REVISION = Number(payload.revision || remoteRevision);
+            SERVER_REVISION = Number(nextRevision || targetRevision);
             refreshUIAfterRemoteSync();
         }
 
