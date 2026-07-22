@@ -47,6 +47,7 @@ var lastCompatibleImportPreview = null;
 var lastCompatibleCSVPreview = null;
 var metadataSyncRunning = false;
 var networkMetadataSyncRunning = false;
+var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 var automaticBackupTimer = null;
 var automaticBackupInFlight = false;
@@ -58,6 +59,139 @@ const FALLBACK_RELEASE_HOUR = 9;
 const TVMAZE_MAX_DATE_DIFF_DAYS = 1;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
+
+
+function getAdminAccountUsername(){
+    return String(adminAccountState.username || "");
+}
+
+async function loadAdminAccountIntoSettings(force=false){
+    if(adminAccountState.loading){
+        return;
+    }
+
+    if(adminAccountState.loaded && !force){
+        const existingInput = document.getElementById("admin-username-input");
+        if(existingInput && existingInput.dataset.userEdited !== "true"){
+            existingInput.value = adminAccountState.username;
+        }
+        return;
+    }
+
+    adminAccountState.loading = true;
+    adminAccountState.error = "";
+
+    try{
+        const response = await fetch("/api/admin/account",{
+            method:"GET",
+            credentials:"same-origin",
+            cache:"no-store",
+            headers:{"Accept":"application/json"}
+        });
+        const payload = await parseAPIResponse(response);
+        adminAccountState.username = String(payload.username || "");
+        adminAccountState.loaded = true;
+
+        const input = document.getElementById("admin-username-input");
+        if(input && input.dataset.userEdited !== "true"){
+            input.value = adminAccountState.username;
+        }
+        const status = document.getElementById("admin-account-status");
+        if(status){
+            status.textContent = "";
+        }
+    }catch(error){
+        console.error("Could not load admin account",error);
+        adminAccountState.error = error && error.message
+        ? error.message
+        : "Could not load the admin account";
+        const status = document.getElementById("admin-account-status");
+        if(status){
+            status.textContent = adminAccountState.error;
+        }
+    }finally{
+        adminAccountState.loading = false;
+    }
+}
+
+async function saveAdminAccountChanges(){
+    const usernameInput = document.getElementById("admin-username-input");
+    const currentPasswordInput = document.getElementById("admin-current-password-input");
+    const newPasswordInput = document.getElementById("admin-new-password-input");
+    const confirmPasswordInput = document.getElementById("admin-confirm-password-input");
+    const saveButton = document.getElementById("save-admin-account");
+    const status = document.getElementById("admin-account-status");
+
+    if(!usernameInput || !currentPasswordInput || !newPasswordInput || !confirmPasswordInput){
+        return;
+    }
+
+    const username = usernameInput.value.trim();
+    const currentPassword = currentPasswordInput.value;
+    const newPassword = newPasswordInput.value;
+    const confirmPassword = confirmPasswordInput.value;
+
+    if(!username){
+        showToast("Admin username cannot be blank");
+        usernameInput.focus();
+        return;
+    }
+    if(!currentPassword){
+        showToast("Enter your current password");
+        currentPasswordInput.focus();
+        return;
+    }
+    if(newPassword !== confirmPassword){
+        showToast("New passwords do not match");
+        confirmPasswordInput.focus();
+        return;
+    }
+    if(newPassword && newPassword.length < 8){
+        showToast("New password must contain at least 8 characters");
+        newPasswordInput.focus();
+        return;
+    }
+
+    if(saveButton){
+        saveButton.disabled = true;
+    }
+    if(status){
+        status.textContent = "Saving account changes...";
+    }
+
+    try{
+        const response = await fetch("/api/admin/account",{
+            method:"POST",
+            credentials:"same-origin",
+            cache:"no-store",
+            headers:{
+                "Accept":"application/json",
+                "Content-Type":"application/json",
+                "X-CSRF-Token":csrfToken()
+            },
+            body:JSON.stringify({
+                username,
+                currentPassword,
+                newPassword,
+                confirmPassword
+            })
+        });
+        await parseAPIResponse(response);
+        location.assign("/login?changed=1");
+    }catch(error){
+        console.error("Could not update admin account",error);
+        const message = typeof friendlyRequestError === "function"
+        ? friendlyRequestError(error,"Could not update the admin account")
+        : (error && error.message ? error.message : "Could not update the admin account");
+        if(status){
+            status.textContent = message;
+        }
+        showToast(message);
+        if(saveButton){
+            saveButton.disabled = false;
+        }
+    }
+}
 
 
 function waitForNextPaint(){
@@ -6269,6 +6403,70 @@ function getBackupSummary(){
 
 
 
+async function prepareAndCommitTrackerData(data,backupTemplate=null,options={}){
+    const previousData = DATA;
+    const shouldUpdateStatuses = options && options.updateStatuses === true;
+
+    try{
+        DATA = JSON.parse(JSON.stringify(data || {}));
+        normalizeExistingData();
+
+        if(shouldUpdateStatuses){
+            await autoUpdateStatuses(false,false);
+        }
+
+        const preparedData = JSON.parse(JSON.stringify(DATA));
+        DATA = previousData;
+        return await commitTrackerDataTransactionally(preparedData,backupTemplate);
+    }catch(error){
+        DATA = previousData;
+        throw error;
+    }
+}
+
+
+async function commitTrackerDataTransactionally(data,backupTemplate=null){
+    const replacement = JSON.parse(JSON.stringify(data || {}));
+    ensureHistoryIds(replacement);
+
+    const backup = backupTemplate && typeof backupTemplate === "object"
+    ? JSON.parse(JSON.stringify(backupTemplate))
+    : {
+        app:"TV Tracker",
+        backupType:"native-app-backup",
+        backupVersion:2,
+        schemaVersion:4,
+        exportedAt:new Date().toISOString(),
+        summary:null,
+        data:null
+    };
+
+    backup.data = replacement;
+    backup.summary = {
+        shows:Object.keys(replacement.shows || {}).length,
+        historyEntries:Array.isArray(replacement.history) ? replacement.history.length : 0,
+        favorites:replacement.profile && Array.isArray(replacement.profile.favorite_shows)
+        ? replacement.profile.favorite_shows.length
+        : 0
+    };
+
+    const response = await fetch("/api/backup/import",{
+        method:"POST",
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:{
+            "Accept":"application/json",
+            "Content-Type":"application/json",
+            "X-CSRF-Token":csrfToken()
+        },
+        body:JSON.stringify(backup)
+    });
+    const payload = await parseAPIResponse(response);
+    adoptTransactionalTrackerData(replacement,payload.revision);
+    return payload;
+}
+
+
 function getNativeBackupObject(){
 
     ensureProfileData();
@@ -6276,7 +6474,8 @@ function getNativeBackupObject(){
     return {
         app:"TV Tracker",
         backupType:"native-app-backup",
-        backupVersion:1,
+        backupVersion:2,
+        schemaVersion:4,
         exportedAt:new Date().toISOString(),
         summary:getBackupSummary(),
         data:JSON.parse(JSON.stringify(DATA))
@@ -6343,6 +6542,7 @@ function importNativeBackupJSON(){
                 title:"Import App Backup JSON",
                 message:[
                     "This will replace your current tracker data.",
+                    "The server validates the complete backup before changing anything.",
                     "",
                     "Current data:",
                     `Shows: ${Number(currentSummary.shows).toLocaleString()}`,
@@ -6365,19 +6565,24 @@ function importNativeBackupJSON(){
                 return;
             }
 
-            DATA = JSON.parse(JSON.stringify(backup.data));
+            showToast("Validating and importing backup...");
 
-            normalizeExistingData();
-            await autoUpdateStatuses(false,false);
-            await saveData();
-
+            await prepareAndCommitTrackerData(
+                backup.data,
+                backup,
+                {updateStatuses:true}
+            );
+            initializeAutomaticBackupTracking();
             renderAll();
             showToast("App backup imported");
 
         }catch(error){
 
             console.error(error);
-            showToast("Could not import backup");
+            const message = typeof friendlyRequestError === "function"
+            ? friendlyRequestError(error,"Could not import backup")
+            : (error && error.message ? error.message : "Could not import backup");
+            showToast(message);
 
         }
 
@@ -6386,7 +6591,6 @@ function importNativeBackupJSON(){
     input.click();
 
 }
-
 
 
 function getEmptyTrackerData(){
@@ -6443,7 +6647,7 @@ async function resetTrackerData(){
         return;
     }
 
-    DATA = getEmptyTrackerData();
+    const replacementData = getEmptyTrackerData();
 
     pendingShow = null;
     selectedShowId = null;
@@ -6452,8 +6656,8 @@ async function resetTrackerData(){
     lastCompatibleImportPreview = null;
     lastCompatibleCSVPreview = null;
 
-    normalizeExistingData();
-    await saveData();
+    await prepareAndCommitTrackerData(replacementData);
+    initializeAutomaticBackupTracking();
 
     renderAll();
     showToast("Tracker data reset");
@@ -6494,6 +6698,17 @@ function validateNativeBackupObject(backup){
         return {valid:false,message:"This is not a TV Tracker app backup"};
     }
 
+    const backupVersion = Number(backup.backupVersion || 1);
+    const schemaVersion = Number(backup.schemaVersion || 1);
+
+    if(![1,2].includes(backupVersion)){
+        return {valid:false,message:"This backup version is not supported"};
+    }
+
+    if(!Number.isFinite(schemaVersion) || schemaVersion < 1 || schemaVersion > 4){
+        return {valid:false,message:"This backup was created by an unsupported TV Tracker version"};
+    }
+
     if(!backup.data || typeof backup.data !== "object"){
         return {valid:false,message:"Backup is missing app data"};
     }
@@ -6518,17 +6733,34 @@ function validateNativeBackupObject(backup){
     ? backup.data.history
     : [];
 
+    const duplicateIds = new Set();
+    const seenIds = new Set();
+    history.forEach(entry=>{
+        const id = entry && entry.id ? String(entry.id) : "";
+        if(id && seenIds.has(id)){
+            duplicateIds.add(id);
+        }
+        if(id){
+            seenIds.add(id);
+        }
+    });
+
+    if(duplicateIds.size > 0){
+        return {valid:false,message:"Backup contains duplicate History identifiers"};
+    }
+
     return {
         valid:true,
         summary:{
             shows:Object.keys(backup.data.shows).length,
             historyEntries:history.length,
-            favorites:favorites.length
+            favorites:favorites.length,
+            backupVersion:backupVersion,
+            schemaVersion:schemaVersion
         }
     };
 
 }
-
 
 
 function getLastCompatibleImportPreview(){
@@ -7356,16 +7588,17 @@ function importCompatibleBackupJSON(){
 
             const importResult = await buildDataFromCompatibleJSON(parsed,file.name);
 
-            DATA = importResult.data;
-
             pendingShow = null;
             selectedShowId = null;
             expandedSeasons = {};
             expandedUpcomingBatches = {};
 
-            normalizeExistingData();
-            await autoUpdateStatuses(false,false);
-            await saveData();
+            await prepareAndCommitTrackerData(
+                importResult.data,
+                null,
+                {updateStatuses:true}
+            );
+            initializeAutomaticBackupTracking();
 
             lastCompatibleImportPreview = importResult.preview;
 
@@ -7392,7 +7625,11 @@ function importCompatibleBackupJSON(){
         }catch(error){
 
             console.error(error);
-            showToast(error && error.message ? error.message : "Could not import compatible JSON");
+            showToast(
+                typeof friendlyRequestError === "function"
+                ? friendlyRequestError(error,"Could not import compatible JSON")
+                : (error && error.message ? error.message : "Could not import compatible JSON")
+            );
 
         }
 

@@ -20,7 +20,7 @@
         button{width:100%;min-height:46px;margin-top:24px;border:1px solid #fff;border-radius:0;background:#fff;color:#000;padding:13px;font-weight:700;cursor:pointer}
         button:hover{background:#d8d8d8}
         button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:3px}
-        .error{margin:0 0 16px;padding:10px 12px;border:1px solid #632626;background:#210d0d;color:#ffb8b8;font-size:14px}
+        .error{margin:0 0 16px;padding:10px 12px;border:1px solid #632626;background:#210d0d;color:#ffb8b8;font-size:14px}.notice{margin:0 0 16px;padding:10px 12px;border:1px solid #285c39;background:#0d2114;color:#b8ffd0;font-size:14px}
         @media (max-width:480px){
             body{place-items:center stretch}
             main{padding:24px 20px}
@@ -33,6 +33,7 @@
 <main>
     <h1>TV TRACKER</h1>
     <p>Private access</p>
+    {% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="post" action="{{ url_for('login_post') }}" autocomplete="on">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -37,6 +37,38 @@ function redirectToLogin(){
     location.assign("/login?next=" + next);
 }
 
+function friendlyRequestError(error,fallback="Request failed"){
+    if(typeof navigator !== "undefined" && navigator.onLine === false){
+        return "You are offline. Reconnect and try again.";
+    }
+
+    if(error && error.status === 401){
+        return "Your login session has expired.";
+    }
+
+    const code = error && error.payload ? String(error.payload.code || "") : "";
+    if(code === "database_unavailable"){
+        return "The database is temporarily unavailable. Try again shortly.";
+    }
+    if(code === "invalid_backup"){
+        return error.message || "The backup file is invalid.";
+    }
+    if(code === "import_failed"){
+        return error.message || "The backup import failed. No data was changed.";
+    }
+    if(code === "upload_too_large"){
+        return "The selected file is too large to upload.";
+    }
+    if(error && error.status === 409){
+        return error.message || "Another device changed the same tracker data.";
+    }
+    if(error instanceof TypeError){
+        return "Could not reach the TV Tracker server. Check your connection.";
+    }
+
+    return error && error.message ? error.message : fallback;
+}
+
 async function parseAPIResponse(response){
     if(response.status === 401){
         redirectToLogin();
@@ -1252,6 +1284,18 @@ async function persistDirtySave(options,operationId){
     }
 }
 
+function adoptTransactionalTrackerData(data,revision){
+    const replacement = cloneTrackerData(data || {shows:{},history:[]});
+    ensureHistoryIds(replacement);
+    DATA = replacement;
+    LAST_SAVED_DATA = cloneTrackerData(replacement);
+    SERVER_REVISION = Number(revision || SERVER_REVISION);
+    broadcastRevision();
+    SYNC_FAILURES = 0;
+    SYNC_WARNING_SHOWN = false;
+    return DATA;
+}
+
 function saveData(options={}){
     const dirtySave = dirtySaveHasWork(options);
     const operationId = createOperationId();
@@ -1279,7 +1323,7 @@ function saveData(options={}){
             console.error("TV Tracker could not save online data",error);
 
             if(typeof showToast === "function"){
-                showToast("Could not save online. Check your connection.");
+                showToast(friendlyRequestError(error,"Could not save online."));
             }
 
             return false;
@@ -1332,7 +1376,7 @@ function noteSyncFailure(error){
     if(SYNC_FAILURES >= 3 && !SYNC_WARNING_SHOWN){
         SYNC_WARNING_SHOWN = true;
         if(typeof showToast === "function"){
-            showToast("Sync is temporarily unavailable. Retrying automatically.");
+            showToast(friendlyRequestError(error,"Sync is temporarily unavailable. Retrying automatically."));
         }
     }
 }

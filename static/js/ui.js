@@ -4552,6 +4552,37 @@ function renderSettings(){
 
             </div>
 
+            <div class="settings-section admin-account-section">
+
+                <div class="settings-section-header">
+                    <h2>ADMIN ACCOUNT</h2>
+                    <p>Change the private login username or password. Saving signs out every logged-in device.</p>
+                </div>
+
+                <form class="admin-account-form" id="admin-account-form" autocomplete="on">
+                <div class="admin-account-grid">
+                    <label class="profile-settings-label" for="admin-username-input">Admin Username</label>
+                    <input class="profile-settings-input" id="admin-username-input" type="text" maxlength="80" autocomplete="username" value="${escapeHTML(getAdminAccountUsername())}" placeholder="Loading account...">
+
+                    <label class="profile-settings-label" for="admin-current-password-input">Current Password</label>
+                    <input class="profile-settings-input" id="admin-current-password-input" type="password" autocomplete="current-password">
+
+                    <label class="profile-settings-label" for="admin-new-password-input">New Password</label>
+                    <input class="profile-settings-input" id="admin-new-password-input" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current password">
+
+                    <label class="profile-settings-label" for="admin-confirm-password-input">Confirm New Password</label>
+                    <input class="profile-settings-input" id="admin-confirm-password-input" type="password" minlength="8" autocomplete="new-password">
+                </div>
+
+                <p class="settings-small-note admin-account-status" id="admin-account-status" aria-live="polite"></p>
+
+                <div class="settings-button-list">
+                    <button class="settings-action-button" id="save-admin-account" type="submit">Save Account Changes</button>
+                </div>
+                </form>
+
+            </div>
+
             <div class="settings-section">
 
                 <div class="settings-section-header">
@@ -4669,6 +4700,23 @@ function renderSettings(){
         profileSettingsDraft.username = usernameInput.value;
         saveProfileSettings(profileSettingsDraft);
     });
+
+    const adminUsernameInput = document.getElementById("admin-username-input");
+    if(adminUsernameInput){
+        adminUsernameInput.addEventListener("input",function(){
+            this.dataset.userEdited = "true";
+        });
+    }
+
+    const adminAccountForm = document.getElementById("admin-account-form");
+    if(adminAccountForm){
+        adminAccountForm.addEventListener("submit",function(event){
+            event.preventDefault();
+            saveAdminAccountChanges();
+        });
+    }
+
+    loadAdminAccountIntoSettings();
 
     document.getElementById("export-native-backup-button").addEventListener("click",exportNativeBackupJSON);
     document.getElementById("import-native-backup-button").addEventListener("click",importNativeBackupJSON);

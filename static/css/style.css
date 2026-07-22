@@ -4028,3 +4028,35 @@ body.favorite-reordering{
 .settings-logout-form .settings-action-button{
     height:100%;
 }
+
+/* ---------- Phase 4 Admin Account ---------- */
+.admin-account-grid{
+    display:grid;
+    grid-template-columns:minmax(150px,190px) minmax(260px,520px);
+    gap:12px 18px;
+    align-items:center;
+    max-width:760px;
+}
+
+.admin-account-grid .profile-settings-label{
+    margin:0;
+}
+
+.admin-account-grid .profile-settings-input{
+    max-width:none;
+}
+
+.admin-account-status{
+    min-height:20px;
+}
+
+@media(max-width:800px){
+    .admin-account-grid{
+        grid-template-columns:1fr;
+        gap:7px;
+    }
+
+    .admin-account-grid .profile-settings-label:not(:first-child){
+        margin-top:10px;
+    }
+}

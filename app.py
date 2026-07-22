@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import hmac
 import json
 import os
@@ -21,6 +22,7 @@ from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from flask import (
     Flask,
     Response,
+    g,
     abort,
     jsonify,
     redirect,
@@ -34,13 +36,20 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 APP_NAME = "TV Tracker"
+BACKUP_VERSION = 2
+SCHEMA_VERSION = 4
+SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
 PASSWORD_HASHER = PasswordHasher()
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
-LOGIN_ATTEMPTS: dict[str, deque[float]] = defaultdict(deque)
-LOGIN_LOCK = threading.Lock()
+ACCOUNT_CHANGE_WINDOW_SECONDS = 60 * 60
+ACCOUNT_CHANGE_MAX_ATTEMPTS = 5
+ADMIN_ACCOUNT_CACHE_TTL_SECONDS = 2.0
+ADMIN_ACCOUNT_CACHE: dict[str, Any] | None = None
+ADMIN_ACCOUNT_CACHE_AT = 0.0
+ADMIN_ACCOUNT_LOCK = threading.Lock()
 SYNC_WINDOW_SECONDS = 60
 SYNC_MAX_REQUESTS = 180
 SYNC_REQUESTS: dict[str, deque[float]] = defaultdict(deque)
@@ -103,8 +112,32 @@ def ensure_schema() -> None:
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS tv_tracker_admin (
+        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
+        username TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        session_version BIGINT NOT NULL DEFAULT 1,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_security_events (
+        event_id BIGSERIAL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        client_key TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_schema_meta (
+        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
+        schema_version INTEGER NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE INDEX IF NOT EXISTS tv_tracker_changes_created_at_idx
     ON tv_tracker_changes (created_at);
+
+    CREATE INDEX IF NOT EXISTS tv_tracker_security_events_lookup_idx
+    ON tv_tracker_security_events (event_type, client_key, created_at);
 
     INSERT INTO tv_tracker_meta (singleton_id, revision)
     VALUES (1, 0)
@@ -114,6 +147,32 @@ def ensure_schema() -> None:
     with database_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(statements)
+            cursor.execute(
+                "SELECT 1 FROM tv_tracker_admin WHERE singleton_id = 1"
+            )
+            if cursor.fetchone() is None:
+                bootstrap_username = required_env("APP_USERNAME")
+                bootstrap_password_hash = required_env("APP_PASSWORD_HASH")
+                cursor.execute(
+                    """
+                    INSERT INTO tv_tracker_admin
+                    (singleton_id, username, password_hash, session_version)
+                    VALUES (1, %s, %s, 1)
+                    """,
+                    (bootstrap_username, bootstrap_password_hash),
+                )
+
+            cursor.execute(
+                """
+                INSERT INTO tv_tracker_schema_meta
+                (singleton_id, schema_version, updated_at)
+                VALUES (1, %s, NOW())
+                ON CONFLICT (singleton_id) DO UPDATE
+                SET schema_version = EXCLUDED.schema_version,
+                    updated_at = NOW()
+                """,
+                (SCHEMA_VERSION,),
+            )
         connection.commit()
 
 
@@ -184,16 +243,92 @@ def check_csrf() -> None:
         abort(403)
 
 
+def invalidate_admin_account_cache() -> None:
+    global ADMIN_ACCOUNT_CACHE, ADMIN_ACCOUNT_CACHE_AT
+    with ADMIN_ACCOUNT_LOCK:
+        ADMIN_ACCOUNT_CACHE = None
+        ADMIN_ACCOUNT_CACHE_AT = 0.0
+
+
+def read_admin_account(*, force: bool = False) -> dict[str, Any]:
+    global ADMIN_ACCOUNT_CACHE, ADMIN_ACCOUNT_CACHE_AT
+    request_cached = getattr(g, "tv_tracker_admin", None)
+    if request_cached is not None and not force:
+        return request_cached
+
+    now = time.monotonic()
+    with ADMIN_ACCOUNT_LOCK:
+        if (
+            not force
+            and ADMIN_ACCOUNT_CACHE is not None
+            and now - ADMIN_ACCOUNT_CACHE_AT < ADMIN_ACCOUNT_CACHE_TTL_SECONDS
+        ):
+            account = dict(ADMIN_ACCOUNT_CACHE)
+            g.tv_tracker_admin = account
+            return account
+
+    with database_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT username, password_hash, session_version, updated_at
+                FROM tv_tracker_admin
+                WHERE singleton_id = 1
+                """
+            )
+            row = cursor.fetchone()
+
+    if row is None:
+        raise RuntimeError("The admin account is not initialized")
+
+    account = {
+        "username": str(row[0]),
+        "password_hash": str(row[1]),
+        "session_version": int(row[2]),
+        "updated_at": row[3],
+    }
+
+    with ADMIN_ACCOUNT_LOCK:
+        ADMIN_ACCOUNT_CACHE = dict(account)
+        ADMIN_ACCOUNT_CACHE_AT = now
+
+    g.tv_tracker_admin = account
+    return account
+
+
 def authenticated() -> bool:
-    return session.get("authenticated") is True
+    if session.get("authenticated") is not True:
+        return False
+
+    account = read_admin_account()
+    stored_version = session.get("session_version")
+
+    # Phase 3 sessions had no version. They may be upgraded only while the
+    # migrated admin account is still at its initial version. After the first
+    # username/password change, dormant pre-Phase-4 sessions must be rejected.
+    if stored_version is None:
+        if account["session_version"] != 1:
+            return False
+        session["session_version"] = 1
+        return True
+
+    try:
+        return int(stored_version) == account["session_version"]
+    except (TypeError, ValueError):
+        return False
 
 
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not authenticated():
+            session.clear()
             if request.path.startswith("/api/"):
-                return jsonify({"ok": False, "error": "Authentication required"}), 401
+                return jsonify({
+                    "ok": False,
+                    "error": "Authentication required",
+                    "code": "session_expired",
+                }), 401
             return redirect(url_for("login", next=request.full_path.rstrip("?")))
         return view(*args, **kwargs)
 
@@ -204,25 +339,75 @@ def client_key() -> str:
     return request.remote_addr or "unknown"
 
 
-def login_is_limited(key: str) -> bool:
-    now = time.monotonic()
-    cutoff = now - LOGIN_WINDOW_SECONDS
+def security_event_count(event_type: str, key: str, window_seconds: int) -> int:
+    with database_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM tv_tracker_security_events
+                WHERE created_at < NOW() - INTERVAL '2 days'
+                """
+            )
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM tv_tracker_security_events
+                WHERE event_type = %s
+                  AND client_key = %s
+                  AND created_at >= NOW() - (%s * INTERVAL '1 second')
+                """,
+                (event_type, key, window_seconds),
+            )
+            row = cursor.fetchone()
+        connection.commit()
+    return int(row[0] if row else 0)
 
-    with LOGIN_LOCK:
-        attempts = LOGIN_ATTEMPTS[key]
-        while attempts and attempts[0] < cutoff:
-            attempts.popleft()
-        return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+def record_security_event(event_type: str, key: str) -> None:
+    with database_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO tv_tracker_security_events
+                (event_type, client_key, created_at)
+                VALUES (%s, %s, NOW())
+                """,
+                (event_type, key),
+            )
+        connection.commit()
+
+
+def clear_security_events(event_type: str, key: str) -> None:
+    with database_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM tv_tracker_security_events
+                WHERE event_type = %s AND client_key = %s
+                """,
+                (event_type, key),
+            )
+        connection.commit()
+
+
+def login_is_limited(key: str) -> bool:
+    return security_event_count(
+        "login_failure", key, LOGIN_WINDOW_SECONDS
+    ) >= LOGIN_MAX_ATTEMPTS
 
 
 def record_login_failure(key: str) -> None:
-    with LOGIN_LOCK:
-        LOGIN_ATTEMPTS[key].append(time.monotonic())
+    record_security_event("login_failure", key)
 
 
 def clear_login_failures(key: str) -> None:
-    with LOGIN_LOCK:
-        LOGIN_ATTEMPTS.pop(key, None)
+    clear_security_events("login_failure", key)
+
+
+def account_change_is_limited(key: str) -> bool:
+    return security_event_count(
+        "account_change_attempt", key, ACCOUNT_CHANGE_WINDOW_SECONDS
+    ) >= ACCOUNT_CHANGE_MAX_ATTEMPTS
 
 
 def sync_request_is_limited(key: str) -> bool:
@@ -373,6 +558,299 @@ def merge_history_order(
     return merged
 
 
+class BackupValidationError(ValueError):
+    pass
+
+
+def json_clone(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def backup_int(value: Any, field: str, *, minimum: int | None = None) -> int:
+    if isinstance(value, bool):
+        raise BackupValidationError(f"{field} must be a number")
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise BackupValidationError(f"{field} must be a number") from None
+    if minimum is not None and number < minimum:
+        raise BackupValidationError(f"{field} is outside the supported range")
+    return number
+
+
+def generated_history_id(entry: dict[str, Any], index: int) -> str:
+    signature = "|".join([
+        str(entry.get("tmdb_id") or entry.get("show_id") or ""),
+        str(entry.get("season") or 0),
+        str(entry.get("episode") or 0),
+        str(entry.get("watched_at") or entry.get("date") or ""),
+        str(index),
+    ])
+    digest = hashlib.sha256(signature.encode("utf-8")).hexdigest()[:28]
+    return f"legacy-{digest}"
+
+
+def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
+    if not show_id or len(show_id) > 160:
+        raise BackupValidationError("A show has an invalid identifier")
+    if not isinstance(raw_show, dict):
+        raise BackupValidationError(f"Show {show_id} is malformed")
+
+    show = json_clone(raw_show)
+    title = show.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise BackupValidationError(f"Show {show_id} is missing a title")
+    if len(title) > 500:
+        raise BackupValidationError(f"Show {show_id} has an invalid title")
+
+    tmdb_id = show.get("tmdb_id", show_id)
+    if isinstance(tmdb_id, (dict, list, bool)) or str(tmdb_id).strip() == "":
+        raise BackupValidationError(f"Show {show_id} has an invalid TMDB identifier")
+    show["tmdb_id"] = tmdb_id
+
+    if "status" in show:
+        if not isinstance(show.get("status"), str):
+            raise BackupValidationError(f"Show {show_id} has an invalid status")
+        supported_statuses = {
+            "watching", "paused", "finished", "completed", "plan", "dropped"
+        }
+        if show["status"] not in supported_statuses:
+            raise BackupValidationError(f"Show {show_id} has an unsupported status")
+
+    watched = show.get("episodes_watched", {})
+    if watched is None:
+        watched = {}
+    if not isinstance(watched, dict):
+        raise BackupValidationError(f"Show {show_id} has invalid watched episodes")
+    for season_key, episode_values in watched.items():
+        if not isinstance(episode_values, list):
+            raise BackupValidationError(
+                f"Show {show_id}, season {season_key} has invalid watched episodes"
+            )
+        for episode_value in episode_values:
+            backup_int(
+                episode_value,
+                f"Show {show_id}, season {season_key} episode",
+                minimum=0,
+            )
+
+    for object_field in ("season_details", "seasons", "episode_details"):
+        if object_field in show and show[object_field] is not None:
+            if not isinstance(show[object_field], dict):
+                raise BackupValidationError(
+                    f"Show {show_id} has invalid {object_field.replace('_', ' ')}"
+                )
+
+    return show
+
+
+def validate_history_record(
+    raw_entry: Any,
+    index: int,
+    seen_ids: set[str],
+) -> tuple[str, dict[str, Any]]:
+    if not isinstance(raw_entry, dict):
+        raise BackupValidationError(f"History entry {index + 1} is malformed")
+
+    entry = json_clone(raw_entry)
+    show_id = entry.get("tmdb_id", entry.get("show_id"))
+    if show_id is None or isinstance(show_id, (dict, list, bool)):
+        raise BackupValidationError(
+            f"History entry {index + 1} is missing its show identifier"
+        )
+    entry["tmdb_id"] = show_id
+    entry["season"] = backup_int(
+        entry.get("season"), f"History entry {index + 1} season", minimum=0
+    )
+    entry["episode"] = backup_int(
+        entry.get("episode"), f"History entry {index + 1} episode", minimum=0
+    )
+
+    for text_field in ("watched_at", "date", "title", "episode_name"):
+        if text_field in entry and entry[text_field] is not None:
+            if not isinstance(entry[text_field], str):
+                raise BackupValidationError(
+                    f"History entry {index + 1} has invalid {text_field}"
+                )
+
+    explicit_id = str(entry.get("id") or "").strip()
+    entry_id = explicit_id or generated_history_id(entry, index)
+    if len(entry_id) > 240:
+        raise BackupValidationError(f"History entry {index + 1} has an invalid ID")
+    if entry_id in seen_ids:
+        raise BackupValidationError(f"Duplicate History ID: {entry_id}")
+    seen_ids.add(entry_id)
+    entry["id"] = entry_id
+    return entry_id, entry
+
+
+def validate_and_normalize_backup(backup: Any) -> tuple[dict[str, Any], dict[str, int]]:
+    if not isinstance(backup, dict):
+        raise BackupValidationError("Invalid app backup file")
+    if backup.get("app") != APP_NAME or backup.get("backupType") != "native-app-backup":
+        raise BackupValidationError("This is not a TV Tracker app backup")
+
+    version = backup_int(backup.get("backupVersion", 1), "Backup version", minimum=1)
+    if version not in SUPPORTED_BACKUP_VERSIONS:
+        raise BackupValidationError("This backup version is not supported")
+
+    schema_version = backup.get("schemaVersion", 1)
+    schema_version = backup_int(schema_version, "Schema version", minimum=1)
+    if schema_version > SCHEMA_VERSION:
+        raise BackupValidationError(
+            "This backup was created by a newer TV Tracker version"
+        )
+
+    raw_data = backup.get("data")
+    if not isinstance(raw_data, dict):
+        raise BackupValidationError("Backup is missing app data")
+
+    raw_shows = raw_data.get("shows")
+    raw_history = raw_data.get("history", [])
+    raw_profile = raw_data.get("profile", {})
+
+    if not isinstance(raw_shows, dict):
+        raise BackupValidationError("Backup is missing shows data")
+    if len(raw_shows) > 10000:
+        raise BackupValidationError("Backup contains too many shows")
+    if not isinstance(raw_history, list):
+        raise BackupValidationError("Backup history data is invalid")
+    if len(raw_history) > 500000:
+        raise BackupValidationError("Backup contains too many History entries")
+    if not isinstance(raw_profile, dict):
+        raise BackupValidationError("Backup profile data is invalid")
+
+    favorites = raw_profile.get("favorite_shows", [])
+    if favorites is not None and not isinstance(favorites, list):
+        raise BackupValidationError("Backup favorites data is invalid")
+    favorites = favorites or []
+    if len(favorites) > 8:
+        raise BackupValidationError("Backup contains more than 8 favorite shows")
+    normalized_favorites: list[str] = []
+    for favorite in favorites:
+        if isinstance(favorite, (dict, list, bool)) or not str(favorite).strip():
+            raise BackupValidationError("Backup favorites data is invalid")
+        favorite_id = str(favorite)
+        if favorite_id not in normalized_favorites:
+            normalized_favorites.append(favorite_id)
+
+    for profile_field in (
+        "username", "avatar_type", "avatar_preset", "avatar_data",
+        "header_type", "header_preset", "header_image",
+    ):
+        if profile_field in raw_profile and raw_profile[profile_field] is not None:
+            if not isinstance(raw_profile[profile_field], str):
+                raise BackupValidationError(
+                    f"Backup profile field {profile_field} is invalid"
+                )
+
+    shows: dict[str, Any] = {}
+    for raw_show_id, raw_show in raw_shows.items():
+        show_id = str(raw_show_id).strip()
+        shows[show_id] = validate_show_record(show_id, raw_show)
+
+    history: list[dict[str, Any]] = []
+    seen_history_ids: set[str] = set()
+    for index, raw_entry in enumerate(raw_history):
+        _, entry = validate_history_record(raw_entry, index, seen_history_ids)
+        history.append(entry)
+
+    data = json_clone(raw_data)
+    data["shows"] = shows
+    data["history"] = history
+    data["profile"] = json_clone(raw_profile)
+    data["profile"]["favorite_shows"] = normalized_favorites
+
+    summary = {
+        "shows": len(shows),
+        "historyEntries": len(history),
+        "favorites": len(normalized_favorites),
+        "backupVersion": version,
+        "schemaVersion": schema_version,
+    }
+    return data, summary
+
+
+def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
+    shows = data.get("shows") or {}
+    history = data.get("history") or []
+    state = {
+        str(key): value
+        for key, value in data.items()
+        if key not in {"shows", "history", "history_order"}
+    }
+    history_order = [str(entry["id"]) for entry in history]
+
+    with database_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT revision FROM tv_tracker_meta "
+                "WHERE singleton_id = 1 FOR UPDATE"
+            )
+            row = cursor.fetchone()
+            revision = int(row[0] if row else 0) + 1
+
+            cursor.execute("DELETE FROM tv_tracker_changes")
+            cursor.execute("DELETE FROM tv_tracker_shows")
+            cursor.execute("DELETE FROM tv_tracker_history")
+            cursor.execute("DELETE FROM tv_tracker_state")
+
+            if shows:
+                cursor.executemany(
+                    """
+                    INSERT INTO tv_tracker_shows (show_id, data, updated_at)
+                    VALUES (%s, %s, NOW())
+                    """,
+                    [
+                        (str(show_id), Jsonb(show_data))
+                        for show_id, show_data in shows.items()
+                    ],
+                )
+
+            if history:
+                cursor.executemany(
+                    """
+                    INSERT INTO tv_tracker_history (entry_id, data, updated_at)
+                    VALUES (%s, %s, NOW())
+                    """,
+                    [
+                        (str(entry["id"]), Jsonb(entry))
+                        for entry in history
+                    ],
+                )
+
+            if state:
+                cursor.executemany(
+                    """
+                    INSERT INTO tv_tracker_state (state_key, data, updated_at)
+                    VALUES (%s, %s, NOW())
+                    """,
+                    [
+                        (state_key, Jsonb(state_data))
+                        for state_key, state_data in state.items()
+                    ],
+                )
+
+            cursor.execute(
+                """
+                INSERT INTO tv_tracker_state (state_key, data, updated_at)
+                VALUES ('history_order', %s, NOW())
+                """,
+                (Jsonb(history_order),),
+            )
+            cursor.execute(
+                """
+                UPDATE tv_tracker_meta
+                SET revision = %s, updated_at = NOW()
+                WHERE singleton_id = 1
+                """,
+                (revision,),
+            )
+        connection.commit()
+
+    return revision
+
+
 def safe_next_url(value: str | None) -> str:
     candidate = str(value or "")
     if candidate.startswith("/") and not candidate.startswith("//"):
@@ -466,11 +944,17 @@ def create_app() -> Flask:
     def login():
         if authenticated():
             return redirect("/")
+        notice = (
+            "Admin account updated. Sign in again."
+            if request.args.get("changed") == "1"
+            else ""
+        )
         return render_template(
             "login.html",
             csrf_token=session["csrf_token"],
             next_url=safe_next_url(request.args.get("next")),
             error="",
+            notice=notice,
         )
 
     @app.post("/login")
@@ -484,17 +968,19 @@ def create_app() -> Flask:
                 csrf_token=session["csrf_token"],
                 next_url=safe_next_url(request.form.get("next")),
                 error="Too many failed attempts. Try again later.",
+                notice="",
             ), 429
 
         username = str(request.form.get("username", ""))
         password = str(request.form.get("password", ""))
-        expected_username = required_env("APP_USERNAME")
-        password_hash = required_env("APP_PASSWORD_HASH")
-        valid_username = hmac.compare_digest(username, expected_username)
+        account = read_admin_account()
+        valid_username = hmac.compare_digest(username, account["username"])
         valid_password = False
 
         try:
-            valid_password = PASSWORD_HASHER.verify(password_hash, password)
+            valid_password = PASSWORD_HASHER.verify(
+                account["password_hash"], password
+            )
         except (VerifyMismatchError, InvalidHashError):
             valid_password = False
 
@@ -505,12 +991,14 @@ def create_app() -> Flask:
                 csrf_token=session["csrf_token"],
                 next_url=safe_next_url(request.form.get("next")),
                 error="Invalid username or password.",
+                notice="",
             ), 401
 
         clear_login_failures(key)
         destination = safe_next_url(request.form.get("next"))
         session.clear()
         session["authenticated"] = True
+        session["session_version"] = account["session_version"]
         session["csrf_token"] = os.urandom(32).hex()
         session.permanent = True
         return redirect(destination)
@@ -534,7 +1022,160 @@ def create_app() -> Flask:
     @app.get("/api/health")
     @login_required
     def health():
-        return jsonify({"ok": True, "app": APP_NAME})
+        with database_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                database_ok = cursor.fetchone() == (1,)
+                cursor.execute(
+                    "SELECT schema_version FROM tv_tracker_schema_meta "
+                    "WHERE singleton_id = 1"
+                )
+                row = cursor.fetchone()
+                schema_version = int(row[0] if row else 0)
+
+        healthy = database_ok and schema_version == SCHEMA_VERSION
+        response = jsonify({
+            "ok": healthy,
+            "app": APP_NAME,
+            "database": database_ok,
+            "schemaVersion": schema_version,
+        })
+        return (response, 200 if healthy else 503)
+
+    @app.get("/api/admin/account")
+    @login_required
+    def get_admin_account():
+        account = read_admin_account()
+        return jsonify({
+            "ok": True,
+            "username": account["username"],
+        })
+
+    @app.post("/api/admin/account")
+    @login_required
+    def update_admin_account():
+        check_csrf()
+        key = client_key()
+
+        if account_change_is_limited(key):
+            return jsonify({
+                "ok": False,
+                "error": "Too many account-change attempts. Try again later.",
+                "code": "account_rate_limited",
+            }), 429
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({
+                "ok": False,
+                "error": "Invalid account request",
+                "code": "invalid_account_request",
+            }), 400
+
+        record_security_event("account_change_attempt", key)
+        current_password = str(payload.get("currentPassword") or "")
+        requested_username = str(payload.get("username") or "").strip()
+        new_password = str(payload.get("newPassword") or "")
+        confirm_password = str(payload.get("confirmPassword") or "")
+        account = read_admin_account()
+
+        if not current_password:
+            return jsonify({
+                "ok": False,
+                "error": "Enter your current password",
+                "code": "current_password_required",
+            }), 400
+
+        try:
+            valid_current_password = PASSWORD_HASHER.verify(
+                account["password_hash"], current_password
+            )
+        except (VerifyMismatchError, InvalidHashError):
+            valid_current_password = False
+
+        if not valid_current_password:
+            return jsonify({
+                "ok": False,
+                "error": "Current password is incorrect",
+                "code": "invalid_current_password",
+            }), 400
+
+        if not requested_username:
+            return jsonify({
+                "ok": False,
+                "error": "Admin username cannot be blank",
+                "code": "invalid_username",
+            }), 400
+        if len(requested_username) > 80:
+            return jsonify({
+                "ok": False,
+                "error": "Admin username is too long",
+                "code": "invalid_username",
+            }), 400
+
+        changing_password = bool(new_password or confirm_password)
+        if changing_password:
+            if new_password != confirm_password:
+                return jsonify({
+                    "ok": False,
+                    "error": "New passwords do not match",
+                    "code": "password_mismatch",
+                }), 400
+            if len(new_password) < 8:
+                return jsonify({
+                    "ok": False,
+                    "error": "New password must contain at least 8 characters",
+                    "code": "password_too_short",
+                }), 400
+
+        username_changed = not hmac.compare_digest(
+            requested_username, account["username"]
+        )
+        password_changed = changing_password
+
+        if not username_changed and not password_changed:
+            return jsonify({
+                "ok": False,
+                "error": "No account changes were entered",
+                "code": "no_account_changes",
+            }), 400
+
+        next_password_hash = (
+            PASSWORD_HASHER.hash(new_password)
+            if password_changed
+            else account["password_hash"]
+        )
+
+        with database_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE tv_tracker_admin
+                    SET username = %s,
+                        password_hash = %s,
+                        session_version = session_version + 1,
+                        updated_at = NOW()
+                    WHERE singleton_id = 1
+                    RETURNING session_version
+                    """,
+                    (requested_username, next_password_hash),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+
+        if row is None:
+            return jsonify({
+                "ok": False,
+                "error": "Admin account could not be updated",
+                "code": "account_update_failed",
+            }), 500
+
+        invalidate_admin_account_cache()
+        session.clear()
+        return jsonify({
+            "ok": True,
+            "reauthenticate": True,
+        })
 
     @app.get("/api/state")
     @login_required
@@ -863,7 +1504,8 @@ def create_app() -> Flask:
         backup = {
             "app": APP_NAME,
             "backupType": "native-app-backup",
-            "backupVersion": 1,
+            "backupVersion": BACKUP_VERSION,
+            "schemaVersion": SCHEMA_VERSION,
             "exportedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "summary": {
                 "shows": len(shows),
@@ -880,6 +1522,37 @@ def create_app() -> Flask:
             'attachment; filename="tv-tracker-online-backup.json"'
         )
         return response
+
+    @app.post("/api/backup/import")
+    @login_required
+    def import_backup():
+        check_csrf()
+        backup = request.get_json(silent=True)
+
+        try:
+            data, summary = validate_and_normalize_backup(backup)
+        except BackupValidationError as error:
+            return jsonify({
+                "ok": False,
+                "error": str(error),
+                "code": "invalid_backup",
+            }), 400
+
+        try:
+            revision = replace_tracker_data_transactionally(data)
+        except Exception:
+            app.logger.exception("Transactional backup import failed")
+            return jsonify({
+                "ok": False,
+                "error": "The backup could not be imported. No data was changed.",
+                "code": "import_failed",
+            }), 503
+
+        return jsonify({
+            "ok": True,
+            "revision": revision,
+            "summary": summary,
+        })
 
     @app.get("/api/tmdb/<path:tmdb_path>")
     @login_required
@@ -929,9 +1602,27 @@ def create_app() -> Flask:
         except (URLError, TimeoutError):
             return jsonify({"ok": False, "error": "TMDB is unavailable"}), 502
 
+    @app.errorhandler(psycopg.Error)
+    def database_error(error):
+        app.logger.error(
+            "Database request failed",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "ok": False,
+                "error": "The database is temporarily unavailable",
+                "code": "database_unavailable",
+            }), 503
+        return "Database temporarily unavailable", 503
+
     @app.errorhandler(413)
     def body_too_large(_error):
-        return jsonify({"ok": False, "error": "Upload is too large"}), 413
+        return jsonify({
+            "ok": False,
+            "error": "Upload is too large",
+            "code": "upload_too_large",
+        }), 413
 
     @app.errorhandler(403)
     def forbidden(_error):
