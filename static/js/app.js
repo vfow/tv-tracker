@@ -3366,7 +3366,9 @@ function isCaughtUp(show){
     const today = new Date();
     today.setHours(0,0,0,0);
 
-    const airDate = makeLocalDate(nextEp.air_date);
+    const airDate = makeLocalDate(
+        getEpisodeCalendarDateString(nextEp.air_date,nextEp)
+    );
 
     if(!airDate){
         return false;
@@ -3663,19 +3665,49 @@ function getEpisodeExactTimestamp(episodeInfo){
 
 
 
+function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
+
+    const tmdbAirDate = String(airDateString || "");
+    const tvmazeAirDate = episodeInfo
+    ? String(episodeInfo.tvmaze_airdate || episodeInfo.airdate || "")
+    : "";
+
+    /*
+    TMDB and TVmaze sometimes disagree by one calendar day for streaming
+    releases. When TVmaze passed the existing safety check, use its explicit
+    airdate for calendar display and schedule grouping. Keep TMDB as the
+    fallback so shows without TVmaze metadata still work normally.
+    */
+    if(
+        tvmazeAirDate &&
+        isTrustedTVmazeEpisodeDate(
+            tmdbAirDate,
+            tvmazeAirDate,
+            getEpisodeExactTimestamp(episodeInfo)
+        )
+    ){
+        return tvmazeAirDate;
+    }
+
+    return tmdbAirDate || tvmazeAirDate;
+
+}
+
+
+
 function makeEpisodeReleaseDate(airDateString,episodeInfo=null){
 
-    const baseDateString =
-    airDateString ||
-    (episodeInfo && episodeInfo.tvmaze_airdate ? episodeInfo.tvmaze_airdate : "");
+    const baseDateString = getEpisodeCalendarDateString(
+        airDateString,
+        episodeInfo
+    );
 
     const baseDate = makeLocalDate(baseDateString);
 
     /*
-    TMDB air_date is a calendar date, not a timezone timestamp.
-    Keep that calendar day locked so a Friday release never becomes Thursday
-    because of UTC/browser timezone conversion. TVmaze may provide the time,
-    but it must not move the TMDB calendar date.
+    The calendar day comes from the trusted episode-date helper above.
+    TVmaze may also provide an exact timestamp; use its local clock time while
+    keeping the chosen schedule day stable for display and grouping.
     */
     const exactTimestamp = getEpisodeExactTimestamp(episodeInfo);
 
@@ -3923,9 +3955,11 @@ function getUpcomingShows(){
             return aRelease - bRelease;
         }
 
-        const dateCompare = compareDateStrings(
+        const dateCompare = compareEpisodeCalendarDates(
             a.episode.air_date,
-            b.episode.air_date
+            a.episode,
+            b.episode.air_date,
+            b.episode
         );
 
         if(dateCompare !== 0){
@@ -3983,7 +4017,7 @@ function getUpcomingScheduleItems(show){
 
     if(missedEpisode){
 
-        const group = getUpcomingGroup(missedEpisode.air_date);
+        const group = getUpcomingGroup(missedEpisode.air_date,missedEpisode);
 
         if(group){
 
@@ -4026,7 +4060,7 @@ function getUpcomingScheduleItems(show){
             return;
         }
 
-        const group = getUpcomingGroup(ep.air_date);
+        const group = getUpcomingGroup(ep.air_date,ep);
 
         if(!group){
             return;
@@ -4142,7 +4176,7 @@ function getFutureScheduleEpisodes(show){
 
         if(isEpisodeAired(airDate,sourceEpisode)){
 
-            const dayDifference = getDayDiffFromToday(airDate);
+            const dayDifference = getDayDiffFromToday(airDate,sourceEpisode);
 
             // Keep a newly released episode visible in its real schedule group
             // even when the user still has older episodes in CATCH UP.
@@ -4240,7 +4274,12 @@ function getFutureScheduleEpisodes(show){
             return aRelease - bRelease;
         }
 
-        const dateCompare = compareDateStrings(a.air_date,b.air_date);
+        const dateCompare = compareEpisodeCalendarDates(
+            a.air_date,
+            a,
+            b.air_date,
+            b
+        );
 
         if(dateCompare !== 0){
             return dateCompare;
@@ -4335,7 +4374,12 @@ function getBehindEpisodes(show,currentEpisode){
 
     episodes.sort((a,b)=>{
 
-        const dateCompare = compareDateStrings(a.air_date,b.air_date);
+        const dateCompare = compareEpisodeCalendarDates(
+            a.air_date,
+            a,
+            b.air_date,
+            b
+        );
 
         if(dateCompare !== 0){
             return dateCompare;
@@ -4447,9 +4491,20 @@ function compareDateStrings(dateA,dateB){
 
 
 
-function getUpcomingGroup(airDateString){
+function compareEpisodeCalendarDates(dateA,episodeA,dateB,episodeB){
 
-    const diffDays = getDayDiffFromToday(airDateString);
+    return compareDateStrings(
+        getEpisodeCalendarDateString(dateA,episodeA),
+        getEpisodeCalendarDateString(dateB,episodeB)
+    );
+
+}
+
+
+
+function getUpcomingGroup(airDateString,episodeInfo=null){
+
+    const diffDays = getDayDiffFromToday(airDateString,episodeInfo);
 
     if(diffDays === null){
         return null;
@@ -4475,7 +4530,9 @@ function getUpcomingGroup(airDateString){
         return "This Week";
     }
 
-    const airDate = makeLocalDate(airDateString);
+    const airDate = makeLocalDate(
+        getEpisodeCalendarDateString(airDateString,episodeInfo)
+    );
 
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -4498,7 +4555,7 @@ function getUpcomingGroup(airDateString){
 
 function getUpcomingTimeLabel(airDateString,episodeInfo=null){
 
-    const diffDays = getDayDiffFromToday(airDateString);
+    const diffDays = getDayDiffFromToday(airDateString,episodeInfo);
 
     if(diffDays === null){
         return "";
@@ -4556,9 +4613,11 @@ function getEpisodeReleaseTimeText(airDateString,episodeInfo=null){
 
 
 
-function getDayDiffFromToday(dateString){
+function getDayDiffFromToday(dateString,episodeInfo=null){
 
-    const date = makeLocalDate(dateString);
+    const date = makeLocalDate(
+        getEpisodeCalendarDateString(dateString,episodeInfo)
+    );
 
     if(!date){
         return null;
@@ -4593,7 +4652,7 @@ function isNewUpcomingEpisode(show,episode){
         return false;
     }
 
-    const diffDays = getDayDiffFromToday(episode.air_date);
+    const diffDays = getDayDiffFromToday(episode.air_date,episode);
 
     if(diffDays === null || diffDays < 0 || diffDays > 4){
         return false;
@@ -4857,12 +4916,14 @@ function getNoNextEpisodeText(show){
 
 
 
-function getCountdownText(airDateString){
+function getCountdownText(airDateString,episodeInfo=null){
 
     const today = new Date();
     today.setHours(0,0,0,0);
 
-    const airDate = makeLocalDate(airDateString);
+    const airDate = makeLocalDate(
+        getEpisodeCalendarDateString(airDateString,episodeInfo)
+    );
 
     if(!airDate){
         return "";
@@ -4890,13 +4951,18 @@ function getCountdownText(airDateString){
 
 
 
-function formatAirDate(dateString){
+function formatAirDate(dateString,episodeInfo=null){
 
-    if(!dateString){
+    const calendarDate = getEpisodeCalendarDateString(
+        dateString,
+        episodeInfo
+    );
+
+    if(!calendarDate){
         return "";
     }
 
-    const date = makeLocalDate(dateString);
+    const date = makeLocalDate(calendarDate);
 
     if(!date){
         return "";

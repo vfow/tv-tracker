@@ -1336,7 +1336,7 @@ function isRecentlyAvailableEpisode(episode){
         return false;
     }
 
-    const diffDays = getDayDiffFromToday(episode.air_date);
+    const diffDays = getDayDiffFromToday(episode.air_date,episode);
 
     return diffDays !== null && diffDays >= 0 && diffDays <= 4;
 
@@ -2078,7 +2078,7 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
                     E${ep.episode_number} — "${escapeHTML(ep.name || "Untitled Episode")}"
                 </div>
                 <div class="episode-date">
-                    ${ep.air_date ? escapeHTML(formatAirDate(ep.air_date)) : "Unknown"}
+                    ${ep.air_date ? escapeHTML(formatAirDate(ep.air_date,ep)) : "Unknown"}
                 </div>
             </div>
         `;
@@ -2444,7 +2444,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const airDateText = episodeData.air_date
-    ? formatAirDate(episodeData.air_date)
+    ? formatAirDate(episodeData.air_date,episodeData)
     : "Unknown";
 
     const releaseTimeText = episodeData.air_date
