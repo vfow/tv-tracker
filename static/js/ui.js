@@ -2291,7 +2291,7 @@ function renderDiscoverShowModal(show){
 
 
             <div class="modal-section">
-                <h3>Synopsis</h3>
+                <h3 class="modal-section-heading">Synopsis</h3>
                 <div class="modal-overview">
                     ${escapeHTML(show.overview || "No overview available.")}
                 </div>
@@ -2300,7 +2300,7 @@ function renderDiscoverShowModal(show){
 
 
             <div class="modal-section">
-                <h3>Details</h3>
+                <h3 class="modal-section-heading">Details</h3>
                 <div class="modal-overview">
                     Status: ${escapeHTML(show.tmdb_status || "Unknown")}<br>
                     Seasons: ${show.number_of_seasons || 0}<br>
@@ -2655,7 +2655,7 @@ function renderShowModal(show){
 
             <div class="modal-section">
 
-                <h3>Synopsis</h3>
+                <h3 class="modal-section-heading">Synopsis</h3>
 
                 <div class="modal-overview">
                     ${escapeHTML(show.overview || "No overview available.")}

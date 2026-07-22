@@ -573,6 +573,11 @@ body{
     font-size:18px;
 }
 
+.modal-section h3.modal-section-heading{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-weight:400;
+}
+
 
 .modal-overview{
     color:#aaa;
