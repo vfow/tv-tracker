@@ -65,6 +65,61 @@ function playCheckSuccessAnimation(element){
 
 
 
+function updateShellTitle(){
+
+    const title = document.getElementById("mobile-page-title");
+
+    if(!title){
+        return;
+    }
+
+    const pageTitles = {
+        discover:"Discover",
+        profile:"Profile",
+        settings:"Settings"
+    };
+
+    const showTabTitles = {
+        watchlist:"Watchlist",
+        upcoming:"Upcoming",
+        history:"History"
+    };
+
+    title.textContent = activePage === "shows"
+    ? (showTabTitles[activeShowsTab] || "Shows")
+    : (pageTitles[activePage] || "TV Tracker");
+
+}
+
+
+
+function closeMobileNavigation(){
+
+    if(window.innerWidth >= 992){
+        return;
+    }
+
+    if(window.TVTrackerShell){
+        window.TVTrackerShell.closeNavigation();
+        return;
+    }
+
+    const sidebar = document.getElementById("app-sidebar");
+
+    if(!sidebar || !window.bootstrap || !window.bootstrap.Offcanvas){
+        return;
+    }
+
+    const offcanvas = window.bootstrap.Offcanvas.getInstance(sidebar);
+
+    if(offcanvas){
+        offcanvas.hide();
+    }
+
+}
+
+
+
 function showPage(page){
 
     activePage = page;
@@ -77,15 +132,27 @@ function showPage(page){
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".sidebar button").forEach(button=>{
-        button.classList.remove("active");
+    document.querySelectorAll(".sidebar button[data-page]").forEach(button=>{
+        const isActive = button.dataset.page === page;
+        button.classList.toggle("active",isActive);
+
+        if(isActive){
+            button.setAttribute("aria-current","page");
+        }else{
+            button.removeAttribute("aria-current");
+        }
     });
 
-    document.getElementById(page + "-page").classList.add("active-page");
+    const pageElement = document.getElementById(page + "-page");
 
-    document.querySelector(`.sidebar button[data-page="${page}"]`)
-    .classList.add("active");
+    if(!pageElement){
+        return;
+    }
 
+    pageElement.classList.add("active-page");
+
+    updateShellTitle();
+    closeMobileNavigation();
     renderAll();
 
 }
@@ -119,6 +186,8 @@ function renderAll(){
 
 
 function renderShowsPage(){
+
+    updateShellTitle();
 
     const filters = document.querySelector(".filters");
 

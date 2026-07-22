@@ -122,7 +122,7 @@ async function init(){
 
 function setupEvents(){
 
-    document.querySelectorAll(".sidebar button").forEach(button=>{
+    document.querySelectorAll(".sidebar button[data-page]").forEach(button=>{
 
         button.addEventListener("click",function(){
             showPage(this.dataset.page);
@@ -144,6 +144,7 @@ function setupEvents(){
 
             activeShowsTab = this.dataset.tab;
 
+            updateShellTitle();
             renderShowsPage();
 
         });
