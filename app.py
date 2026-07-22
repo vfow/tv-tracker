@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hmac
 import json
 import os
@@ -428,6 +429,36 @@ def create_app() -> Flask:
 
         if request.path.startswith("/api/") or request.path in {"/", "/login"}:
             response.headers["Cache-Control"] = "no-store"
+        elif request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+        accepts_gzip = "gzip" in request.headers.get("Accept-Encoding", "").lower()
+        compressible = response.mimetype in {
+            "application/json",
+            "text/css",
+            "text/html",
+            "text/javascript",
+            "application/javascript",
+            "image/svg+xml",
+        }
+
+        if (
+            accepts_gzip
+            and compressible
+            and response.status_code == 200
+            and not response.headers.get("Content-Encoding")
+            and not response.direct_passthrough
+        ):
+            body = response.get_data()
+
+            if len(body) >= 2048:
+                compressed = gzip.compress(body, compresslevel=4)
+
+                if len(compressed) < len(body):
+                    response.set_data(compressed)
+                    response.headers["Content-Encoding"] = "gzip"
+                    response.headers["Content-Length"] = str(len(compressed))
+                    response.headers.add("Vary", "Accept-Encoding")
 
         return response
 

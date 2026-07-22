@@ -1,7 +1,7 @@
 var historyVisibleLimit = 40;
 const HISTORY_BATCH_SIZE = 40;
 
-const CHECK_SUCCESS_ANIMATION_MS = 520;
+const CHECK_SUCCESS_ANIMATION_MS = 220;
 
 var profileSettingsDraft = null;
 var avatarCropState = null;
@@ -1080,6 +1080,7 @@ function createWatchlistCard(show,options={}){
 
     const card = document.createElement("article");
     card.className = `show watchlist-card watchlist-card--${escapeHTML(displayFilter)}`;
+    card.dataset.showId = String(show.tmdb_id || show.id || "");
 
     const posterHTML = show.poster_path
     ? `<img class="poster" src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="${escapeHTML(show.title || "Show")} poster" loading="lazy">`
@@ -1153,7 +1154,7 @@ function createWatchlistCard(show,options={}){
 
             try{
 
-                await playCheckSuccessAnimation(this);
+                playCheckSuccessAnimation(this);
 
                 if(action.action === "mark"){
                     await markNextEpisode(show.tmdb_id);
@@ -1180,31 +1181,19 @@ function createWatchlistCard(show,options={}){
 
 
 
-function renderWatchlist(){
-
-    renderLibrarySearchControl();
-
-    const list = document.getElementById("show-list");
-
-    list.innerHTML = "";
-
+function getWatchlistShowsForCurrentView(){
     const query = getLibrarySearchQuery();
-
     let shows;
 
     if(query){
-
         shows = Object.values(DATA.shows)
         .filter(show=>filterShow(show))
         .filter(show=>libraryShowMatchesSearch(show,query))
         .sort((a,b)=>sortLibrarySearchResults(a,b,query));
-
     }else{
-
         shows = Object.values(DATA.shows)
         .filter(show=>filterShow(show))
         .sort((a,b)=>{
-
             const activityA = a.last_activity_at || a.date_added || "";
             const activityB = b.last_activity_at || b.date_added || "";
             const timeA = new Date(activityA).getTime();
@@ -1221,28 +1210,138 @@ function renderWatchlist(){
                 undefined,
                 {sensitivity:"base"}
             );
-
         });
-
     }
 
-    if(shows.length === 0){
+    return {shows,query};
+}
 
+function renderWatchlist(){
+    renderLibrarySearchControl();
+
+    const list = document.getElementById("show-list");
+    list.innerHTML = "";
+
+    const view = getWatchlistShowsForCurrentView();
+    const shows = view.shows;
+    const query = view.query;
+
+    if(shows.length === 0){
         const empty = document.createElement("div");
         empty.innerHTML = query ? getLibrarySearchEmptyHTML(query) : getWatchlistEmptyHTML();
         list.appendChild(empty.firstElementChild);
         return;
-
     }
 
-    shows.forEach(show=>{
-        list.appendChild(
-            createWatchlistCard(show)
-        );
-    });
-
+    const fragment = document.createDocumentFragment();
+    shows.forEach(show=>fragment.appendChild(createWatchlistCard(show)));
+    list.appendChild(fragment);
 }
 
+function refreshWatchlistShows(showIds){
+    if(
+        activePage !== "shows" ||
+        activeShowsTab !== "watchlist"
+    ){
+        return;
+    }
+
+    const list = document.getElementById("show-list");
+
+    if(!list){
+        return;
+    }
+
+    renderLibrarySearchControl();
+
+    const view = getWatchlistShowsForCurrentView();
+    const shows = view.shows;
+    const dirtyIds = new Set((showIds || []).map(String));
+
+    if(shows.length === 0){
+        renderWatchlist();
+        return;
+    }
+
+    const existingCards = new Map();
+    list.querySelectorAll(".watchlist-card[data-show-id]").forEach(card=>{
+        existingCards.set(String(card.dataset.showId),card);
+    });
+
+    const fragment = document.createDocumentFragment();
+
+    shows.forEach(show=>{
+        const id = String(show.tmdb_id || show.id || "");
+        let card = existingCards.get(id) || null;
+
+        if(!card || dirtyIds.has(id)){
+            card = createWatchlistCard(show);
+        }
+
+        fragment.appendChild(card);
+        existingCards.delete(id);
+    });
+
+    list.replaceChildren(fragment);
+}
+
+function refreshInterfaceForDataChanges(change={}){
+    const showIds = Array.from(new Set((change.showIds || []).map(String)));
+    const historyChanged = change.historyChanged === true;
+    const stateChanged = change.stateChanged === true;
+
+    if(activePage === "shows"){
+        if(activeShowsTab === "watchlist"){
+            if(showIds.length > 0){
+                refreshWatchlistShows(showIds);
+            }else if(stateChanged){
+                renderWatchlist();
+            }
+        }else if(activeShowsTab === "history"){
+            if(historyChanged || showIds.length > 0){
+                renderHistory();
+            }
+        }else if(activeShowsTab === "upcoming"){
+            if(showIds.length > 0 || historyChanged){
+                renderUpcoming(false);
+            }
+        }
+    }else if(activePage === "profile"){
+        if(historyChanged || stateChanged || showIds.length > 0){
+            renderProfile();
+        }
+    }else if(activePage === "settings"){
+        if(stateChanged){
+            renderSettings();
+        }
+    }else if(activePage === "discover" && showIds.length > 0){
+        updateTrackedLabels();
+    }
+
+    const selectedId = typeof selectedShowId !== "undefined" && selectedShowId
+    ? String(selectedShowId)
+    : "";
+    const selectedChanged = selectedId && showIds.includes(selectedId);
+
+    if(selectedChanged && selectedEpisodeContext){
+        const show = DATA.shows && DATA.shows[selectedId];
+        if(show){
+            renderEpisodeModal(
+                show,
+                selectedEpisodeContext.season,
+                selectedEpisodeContext.episode,
+                selectedEpisodeContext
+            );
+        }
+    }else if(selectedChanged){
+        const show = DATA.shows && DATA.shows[selectedId];
+        if(show){
+            renderShowModalPreservingScroll(show);
+        }else if(typeof closeShowModal === "function"){
+            closeShowModal();
+        }
+    }
+}
 
 
 async function renderUpcoming(startBackgroundRefresh=true){
@@ -1447,7 +1546,7 @@ async function renderUpcoming(startBackgroundRefresh=true){
                 check.addEventListener("click",async function(event){
 
                     event.stopPropagation();
-                    await playCheckSuccessAnimation(this);
+                    playCheckSuccessAnimation(this);
 
                     await updateEpisodeWatched(
                         Number(this.dataset.show),
@@ -1853,7 +1952,7 @@ function openBehindEpisodesPopup(showId,episodes){
 
             event.stopPropagation();
 
-            await playCheckSuccessAnimation(this);
+            playCheckSuccessAnimation(this);
 
             await updateEpisodeWatched(
                 this.dataset.show,
@@ -2099,6 +2198,19 @@ function getShowMetaHTML(show,year,genres,ratingHTML){
 
 }
 
+function renderDiscoverShowModalPreservingScroll(show){
+    const modalBox = document.querySelector("#show-modal .show-modal");
+    const scrollTop = modalBox ? modalBox.scrollTop : 0;
+
+    renderDiscoverShowModal(show);
+
+    if(modalBox){
+        requestAnimationFrame(()=>{
+            modalBox.scrollTop = scrollTop;
+        });
+    }
+}
+
 function renderDiscoverShowModal(show){
 
     const modal = document.getElementById("show-modal");
@@ -2221,17 +2333,7 @@ function renderDiscoverShowModal(show){
     document.querySelectorAll(".discover-season-header").forEach(header=>{
 
         header.addEventListener("click",function(){
-
-            const season = this.dataset.season;
-
-            if(!expandedSeasons[previewKey]){
-                expandedSeasons[previewKey] = {};
-            }
-
-            expandedSeasons[previewKey][String(season)] = !expandedSeasons[previewKey][String(season)];
-
-            renderDiscoverShowModal(show);
-
+            toggleDiscoverPreviewSeason(show,Number(this.dataset.season));
         });
 
     });
@@ -2249,7 +2351,7 @@ function renderDiscoverShowModal(show){
             this.disabled = true;
 
             try{
-                await playCheckSuccessAnimation(this);
+                playCheckSuccessAnimation(this);
                 await addDiscoverSeasonAsWatched(
                     show.tmdb_id,
                     Number(this.dataset.season)
@@ -2279,7 +2381,7 @@ function renderDiscoverShowModal(show){
             this.disabled = true;
 
             try{
-                await playCheckSuccessAnimation(this);
+                playCheckSuccessAnimation(this);
                 await addDiscoverEpisodeAsWatched(
                     show.tmdb_id,
                     Number(this.dataset.season),
@@ -2451,6 +2553,19 @@ function discoverAddButtonHTML(show,status,label){
 
 
 
+function renderShowModalPreservingScroll(show){
+    const modalBox = document.querySelector("#show-modal .show-modal");
+    const scrollTop = modalBox ? modalBox.scrollTop : 0;
+
+    renderShowModal(show);
+
+    if(modalBox){
+        requestAnimationFrame(()=>{
+            modalBox.scrollTop = scrollTop;
+        });
+    }
+}
+
 function renderShowModal(show){
 
     const modal = document.getElementById("show-modal");
@@ -2605,7 +2720,7 @@ function renderShowModal(show){
             event.stopPropagation();
 
             if(!this.classList.contains("checked")){
-                await playCheckSuccessAnimation(this);
+                playCheckSuccessAnimation(this);
             }
 
             await markSeasonWatched(
@@ -2626,7 +2741,7 @@ function renderShowModal(show){
             const currentlyWatched = this.dataset.watched === "true";
 
             if(!currentlyWatched){
-                await playCheckSuccessAnimation(this);
+                playCheckSuccessAnimation(this);
             }
 
             await updateEpisodeWatched(
@@ -3175,9 +3290,7 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
     : null;
 
     if(!episodeList || episodeList.length === 0){
-
-        return "";
-
+        return `<div class="season-loading">Loading episode list...</div>`;
     }
 
     let html = "";

@@ -198,6 +198,125 @@ function buildServerDelta(previous,current){
     };
 }
 
+
+function normalizeDirtySaveOptions(options){
+    const source = options && typeof options === "object" ? options : {};
+    const uniqueStrings = values=>Array.from(new Set(
+        (Array.isArray(values) ? values : [])
+        .map(value=>String(value || ""))
+        .filter(Boolean)
+    ));
+
+    return {
+        showIds:uniqueStrings(source.showIds),
+        showDeleteIds:uniqueStrings(source.showDeleteIds),
+        historyUpsertIds:uniqueStrings(source.historyUpsertIds),
+        historyDeleteIds:uniqueStrings(source.historyDeleteIds),
+        stateKeys:uniqueStrings(source.stateKeys),
+        historyOrder:source.historyOrder === true
+    };
+}
+
+function dirtySaveHasWork(options){
+    const dirty = normalizeDirtySaveOptions(options);
+    return (
+        dirty.showIds.length > 0 ||
+        dirty.showDeleteIds.length > 0 ||
+        dirty.historyUpsertIds.length > 0 ||
+        dirty.historyDeleteIds.length > 0 ||
+        dirty.stateKeys.length > 0 ||
+        dirty.historyOrder
+    );
+}
+
+function findHistoryEntriesById(data,requestedIds){
+    const wanted = new Set((requestedIds || []).map(String));
+    const found = new Map();
+
+    if(wanted.size === 0){
+        return found;
+    }
+
+    (Array.isArray(data && data.history) ? data.history : []).some((entry,index)=>{
+        if(!entry || typeof entry !== "object"){
+            return false;
+        }
+
+        const id = createHistoryId(entry,index);
+        entry.id = id;
+
+        if(wanted.has(id)){
+            found.set(id,entry);
+        }
+
+        return found.size === wanted.size;
+    });
+
+    return found;
+}
+
+function buildDirtyServerDelta(current,options){
+    const data = current || {shows:{},history:[]};
+    const dirty = normalizeDirtySaveOptions(options);
+    const baseline = LAST_SAVED_DATA || {shows:{},history:[]};
+    const delta = createEmptyServerDelta();
+    const currentShows = data.shows || {};
+    const baselineShows = baseline.shows || {};
+
+    dirty.showIds.forEach(id=>{
+        if(Object.prototype.hasOwnProperty.call(currentShows,id)){
+            // The caller already identified this record as dirty. Avoid serializing
+            // the full show twice merely to prove that it changed.
+            delta.showsUpsert[id] = currentShows[id];
+        }else if(Object.prototype.hasOwnProperty.call(baselineShows,id)){
+            delta.showsDelete.push(id);
+        }
+    });
+
+    dirty.showDeleteIds.forEach(id=>{
+        if(!delta.showsDelete.includes(id)){
+            delta.showsDelete.push(id);
+        }
+        delete delta.showsUpsert[id];
+    });
+
+    const currentHistory = findHistoryEntriesById(data,dirty.historyUpsertIds);
+    const baselineHistory = findHistoryEntriesById(baseline,dirty.historyUpsertIds);
+
+    dirty.historyUpsertIds.forEach(id=>{
+        if(currentHistory.has(id)){
+            delta.historyUpsert[id] = currentHistory.get(id);
+        }else if(baselineHistory.has(id)){
+            delta.historyDelete.push(id);
+        }
+    });
+
+    dirty.historyDeleteIds.forEach(id=>{
+        if(!delta.historyDelete.includes(id)){
+            delta.historyDelete.push(id);
+        }
+        delete delta.historyUpsert[id];
+    });
+
+    dirty.stateKeys.forEach(key=>{
+        const currentHas = Object.prototype.hasOwnProperty.call(data,key);
+        const baselineHas = Object.prototype.hasOwnProperty.call(baseline,key);
+        const currentValue = currentHas ? data[key] : null;
+        const baselineValue = baselineHas ? baseline[key] : undefined;
+
+        if(!baselineHas || !jsonEqual(baselineValue,currentValue)){
+            delta.stateUpsert[key] = currentValue;
+        }
+    });
+
+    if(dirty.historyOrder){
+        delta.historyOrder = (Array.isArray(data.history) ? data.history : [])
+        .map((entry,index)=>createHistoryId(entry,index));
+    }
+
+    return delta;
+}
+
 function deltaIsEmpty(delta){
     return (
         Object.keys(delta.showsUpsert).length === 0 &&
@@ -754,40 +873,86 @@ function restoreUIState(state){
     });
 }
 
-function refreshUIAfterRemoteSync(){
+function collectChangedRecordSummary(changes){
+    const summary = {
+        showIds:new Set(),
+        historyChanged:false,
+        stateChanged:false,
+        reset:false
+    };
+
+    (Array.isArray(changes) ? changes : []).forEach(change=>{
+        const delta = change && change.delta ? change.delta : null;
+
+        if(!delta){
+            return;
+        }
+
+        Object.keys(delta.showsUpsert || {}).forEach(id=>summary.showIds.add(String(id)));
+        (delta.showsDelete || []).forEach(id=>summary.showIds.add(String(id)));
+
+        if(
+            Object.keys(delta.historyUpsert || {}).length > 0 ||
+            (delta.historyDelete || []).length > 0 ||
+            Array.isArray(delta.historyOrder)
+        ){
+            summary.historyChanged = true;
+        }
+
+        if(Object.keys(delta.stateUpsert || {}).length > 0){
+            summary.stateChanged = true;
+        }
+    });
+
+    return summary;
+}
+
+function refreshUIAfterRemoteSync(changes=null,forceFull=false){
     if(typeof renderAll !== "function"){
         return;
     }
 
     const state = captureUIState();
-    renderAll();
+    const summary = collectChangedRecordSummary(changes);
+    const canTarget = !forceFull && Array.isArray(changes) && changes.length > 0;
 
-    if(
-        typeof selectedEpisodeContext !== "undefined" &&
-        selectedEpisodeContext
-    ){
-        const context = selectedEpisodeContext;
-        const show = context.discoverPreview
-        ? (typeof discoverPreviewShow !== "undefined" ? discoverPreviewShow : null)
-        : (DATA.shows && DATA.shows[String(context.showId)]);
+    if(canTarget && typeof refreshInterfaceForDataChanges === "function"){
+        refreshInterfaceForDataChanges({
+            showIds:Array.from(summary.showIds),
+            historyChanged:summary.historyChanged,
+            stateChanged:summary.stateChanged,
+            remote:true
+        });
+    }else{
+        renderAll();
 
-        if(show && typeof renderEpisodeModal === "function"){
-            renderEpisodeModal(show,context.season,context.episode,context);
+        if(
+            typeof selectedEpisodeContext !== "undefined" &&
+            selectedEpisodeContext
+        ){
+            const context = selectedEpisodeContext;
+            const show = context.discoverPreview
+            ? (typeof discoverPreviewShow !== "undefined" ? discoverPreviewShow : null)
+            : (DATA.shows && DATA.shows[String(context.showId)]);
+
+            if(show && typeof renderEpisodeModal === "function"){
+                renderEpisodeModal(show,context.season,context.episode,context);
+            }
+        }else if(
+            typeof selectedShowId !== "undefined" &&
+            selectedShowId &&
+            DATA.shows &&
+            DATA.shows[String(selectedShowId)] &&
+            typeof renderShowModal === "function"
+        ){
+            renderShowModal(DATA.shows[String(selectedShowId)]);
+        }else if(
+            typeof discoverPreviewShow !== "undefined" &&
+            discoverPreviewShow &&
+            typeof updateTrackedLabels === "function"
+        ){
+            updateTrackedLabels();
         }
-    }else if(
-        typeof selectedShowId !== "undefined" &&
-        selectedShowId &&
-        DATA.shows &&
-        DATA.shows[String(selectedShowId)] &&
-        typeof renderShowModal === "function"
-    ){
-        renderShowModal(DATA.shows[String(selectedShowId)]);
-    }else if(
-        typeof discoverPreviewShow !== "undefined" &&
-        discoverPreviewShow &&
-        typeof updateTrackedLabels === "function"
-    ){
-        updateTrackedLabels();
     }
 
     restoreUIState(state);
@@ -923,7 +1088,7 @@ async function persistSnapshot(snapshot,capturedBase,operationId){
                 (payload.changes || []).length > 0 ||
                 payload.duplicate
             ){
-                refreshUIAfterRemoteSync();
+                refreshUIAfterRemoteSync(payload.changes || null,!!payload.reset);
             }
 
             networkAttempt = 0;
@@ -959,7 +1124,7 @@ async function persistSnapshot(snapshot,capturedBase,operationId){
                 batches = [];
                 batchPosition = 0;
                 networkAttempt = 0;
-                refreshUIAfterRemoteSync();
+                refreshUIAfterRemoteSync(error.payload && error.payload.changes,false);
                 continue;
             }
 
@@ -974,18 +1139,142 @@ async function persistSnapshot(snapshot,capturedBase,operationId){
     }
 }
 
-function saveData(){
-    ensureHistoryIds(DATA);
-    const snapshot = cloneTrackerData(DATA);
-    const capturedBase = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
+async function persistDirtySave(options,operationId){
+    const dirty = normalizeDirtySaveOptions(options);
+    let attempts = 0;
+
+    while(true){
+        const delta = buildDirtyServerDelta(DATA,dirty);
+
+        if(deltaIsEmpty(delta)){
+            return true;
+        }
+
+        const batches = splitServerDeltaIntoBatches(
+            delta,
+            SERVER_REVISION,
+            operationId + "-dirty"
+        );
+
+        try{
+            for(const pendingBatch of batches){
+                const requestPayload = buildSaveRequestPayload(
+                    pendingBatch.delta,
+                    SERVER_REVISION,
+                    pendingBatch.operationId
+                );
+
+                if(jsonByteLength(requestPayload) > MAX_SINGLE_SAVE_REQUEST_BYTES){
+                    throw new Error("Tracker save batch exceeded the safe request limit.");
+                }
+
+                const response = await fetch("/api/state",{
+                    method:"PATCH",
+                    credentials:"same-origin",
+                    cache:"no-store",
+                    headers:{
+                        "Accept":"application/json",
+                        "Content-Type":"application/json",
+                        "X-CSRF-Token":csrfToken()
+                    },
+                    body:JSON.stringify(requestPayload)
+                });
+                const payload = await parseAPIResponse(response);
+
+                if(payload.reset){
+                    const full = await fetchFullState();
+                    const oldBaseline = LAST_SAVED_DATA || {shows:{},history:[]};
+                    DATA = mergeTrackerSnapshots(oldBaseline,DATA,full.data || oldBaseline);
+                    LAST_SAVED_DATA = cloneTrackerData(full.data || oldBaseline);
+                    SERVER_REVISION = Number(full.revision || payload.revision || SERVER_REVISION);
+                    refreshUIAfterRemoteSync(null,true);
+                    throw Object.assign(new Error("Synchronization reset required"),{retryDirty:true});
+                }
+
+                if((payload.changes || []).length > 0){
+                    if(!LAST_SAVED_DATA){
+                        LAST_SAVED_DATA = {shows:{},history:[]};
+                    }
+                    applyChangeList(LAST_SAVED_DATA,payload.changes);
+                    applyChangeList(DATA,payload.changes);
+                    refreshUIAfterRemoteSync(payload.changes,false);
+                }
+
+                if(!LAST_SAVED_DATA){
+                    LAST_SAVED_DATA = {shows:{},history:[]};
+                }
+
+                if(!payload.duplicate){
+                    applyServerDelta(
+                        LAST_SAVED_DATA,
+                        payload.appliedDelta || pendingBatch.delta
+                    );
+                }
+
+                SERVER_REVISION = Number(payload.revision || SERVER_REVISION);
+                broadcastRevision();
+                SYNC_FAILURES = 0;
+                SYNC_WARNING_SHOWN = false;
+                await sleep(0);
+            }
+
+            return true;
+        }catch(error){
+            if(error && error.retryDirty){
+                attempts += 1;
+            }else if(error && error.status === 409){
+                const baseline = LAST_SAVED_DATA || {shows:{},history:[]};
+                const remoteResult = await getRemoteSnapshotFromConflict(
+                    error.payload || {},
+                    baseline
+                );
+                const remoteSnapshot = remoteResult.data || baseline;
+
+                DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
+                LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
+                SERVER_REVISION = Number(remoteResult.revision || SERVER_REVISION);
+                refreshUIAfterRemoteSync(error.payload && error.payload.changes,false);
+                attempts += 1;
+            }else{
+                attempts += 1;
+
+                if(attempts >= MAX_SAVE_ATTEMPTS || (error && error.status)){
+                    throw error;
+                }
+
+                await sleep(attempts === 1 ? 500 : 1500);
+            }
+
+            if(attempts >= MAX_SAVE_ATTEMPTS){
+                throw error;
+            }
+        }
+    }
+}
+
+function saveData(options={}){
+    const dirtySave = dirtySaveHasWork(options);
     const operationId = createOperationId();
+    let snapshot = null;
+    let capturedBase = null;
+    let dirtyOptions = null;
+
+    if(dirtySave){
+        dirtyOptions = normalizeDirtySaveOptions(options);
+    }else{
+        ensureHistoryIds(DATA);
+        snapshot = cloneTrackerData(DATA);
+        capturedBase = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
+    }
 
     SAVE_CHAIN = SAVE_CHAIN
     .catch(()=>false)
     .then(async()=>{
         SAVE_IN_FLIGHT += 1;
         try{
-            return await persistSnapshot(snapshot,capturedBase,operationId);
+            return dirtySave
+            ? await persistDirtySave(dirtyOptions,operationId)
+            : await persistSnapshot(snapshot,capturedBase,operationId);
         }catch(error){
             console.error("TV Tracker could not save online data",error);
 
@@ -1090,7 +1379,7 @@ async function syncFromServer(reason="poll",force=false){
                 DATA = mergeTrackerSnapshots(baseline,DATA,full.data);
                 LAST_SAVED_DATA = cloneTrackerData(full.data);
                 SERVER_REVISION = full.revision;
-                refreshUIAfterRemoteSync();
+                refreshUIAfterRemoteSync(null,true);
             }
 
             noteSyncSuccess();
@@ -1099,6 +1388,7 @@ async function syncFromServer(reason="poll",force=false){
 
         const baseline = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
         let remoteSnapshot = cloneTrackerData(baseline);
+        const receivedChanges = [];
         let nextRevision = SERVER_REVISION;
         let targetRevision = remoteRevision;
         let safetyCounter = 0;
@@ -1131,6 +1421,7 @@ async function syncFromServer(reason="poll",force=false){
             }
 
             applyChangeList(remoteSnapshot,payload.changes);
+            receivedChanges.push(...(Array.isArray(payload.changes) ? payload.changes : []));
 
             const advancedRevision = Number(
                 payload.throughRevision || payload.revision || nextRevision
@@ -1157,7 +1448,7 @@ async function syncFromServer(reason="poll",force=false){
             DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
             LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
             SERVER_REVISION = Number(nextRevision || targetRevision);
-            refreshUIAfterRemoteSync();
+            refreshUIAfterRemoteSync(receivedChanges,false);
         }
 
         noteSyncSuccess();

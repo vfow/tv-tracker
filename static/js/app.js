@@ -60,6 +60,84 @@ const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
 
+function waitForNextPaint(){
+    return new Promise(resolve=>{
+        if(typeof requestAnimationFrame === "function"){
+            requestAnimationFrame(()=>resolve());
+        }else{
+            setTimeout(resolve,0);
+        }
+    });
+}
+
+function prepareModalForOpen(type){
+    const modal = document.getElementById("show-modal");
+    const content = document.getElementById("show-modal-content");
+
+    if(!modal || !content){
+        return;
+    }
+
+    modal.classList.toggle("show-detail-overlay",type === "show");
+    modal.classList.toggle("episode-detail-overlay",type === "episode");
+    modal.classList.add("modal-preparing");
+    content.innerHTML = "";
+    modal.style.display = "flex";
+}
+
+async function revealPreparedModal(){
+    const modal = document.getElementById("show-modal");
+
+    if(!modal){
+        return;
+    }
+
+    await waitForNextPaint();
+    await waitForNextPaint();
+    modal.classList.remove("modal-preparing");
+}
+
+function refreshAfterLocalShowChange(showId,historyChanged=false,stateChanged=false){
+    if(typeof refreshInterfaceForDataChanges !== "function"){
+        renderAll();
+        return;
+    }
+
+    refreshInterfaceForDataChanges({
+        showIds:[String(showId)],
+        historyChanged:historyChanged === true,
+        stateChanged:stateChanged === true,
+        remote:false
+    });
+}
+
+function historyEntryIds(entries){
+    return (Array.isArray(entries) ? entries : [])
+    .map(entry=>entry && entry.id ? String(entry.id) : "")
+    .filter(Boolean);
+}
+
+async function saveShowMutation(showId,addedEntries=[],deletedHistoryIds=[]){
+    return saveData({
+        showIds:[String(showId)],
+        historyUpsertIds:historyEntryIds(addedEntries),
+        historyDeleteIds:(deletedHistoryIds || []).map(String)
+    });
+}
+
+function getHistoryIdsForSeason(showId,seasonNumber){
+    return (Array.isArray(DATA.history) ? DATA.history : [])
+    .filter(entry=>{
+        return (
+            String(entry.tmdb_id) === String(showId) &&
+            Number(entry.season) === Number(seasonNumber)
+        );
+    })
+    .map(entry=>String(entry.id || ""))
+    .filter(Boolean);
+}
+
+
 
 
 function isMainSeasonNumber(seasonNumber){
@@ -91,7 +169,6 @@ function hasFutureScheduledEpisode(show){
 
 
 async function init(){
-
     await initDatabase();
 
     const saved = await getStoredData();
@@ -101,44 +178,63 @@ async function init(){
     }
 
     normalizeExistingData();
-
-    await autoUpdateStatuses(false,false);
-
     initializeAutomaticBackupTracking();
-
     setupEvents();
-
     renderAll();
     startDataSync();
-    scheduleInitialBackgroundSave();
+    scheduleInitialBackgroundMaintenance();
 
     // Migration metadata sync is intentionally not auto-started.
     // It can slow down search/rendering, and migration work is on hold for now.
-
 }
 
+function scheduleInitialBackgroundMaintenance(){
+    const runMaintenance = async function(){
+        try{
+            const before = new Map(
+                Object.entries(DATA.shows || {}).map(([id,show])=>[
+                    String(id),
+                    JSON.stringify([
+                        show.status || "",
+                        show.completed_at || "",
+                        show.was_unreleased_when_added === true
+                    ])
+                ])
+            );
 
+            await autoUpdateStatuses(false,false);
 
-function scheduleInitialBackgroundSave(){
+            const changedShowIds = Object.entries(DATA.shows || {})
+            .filter(([id,show])=>{
+                return before.get(String(id)) !== JSON.stringify([
+                    show.status || "",
+                    show.completed_at || "",
+                    show.was_unreleased_when_added === true
+                ]);
+            })
+            .map(([id])=>String(id));
 
-    const queueSave = function(){
-        saveData().catch(error=>{
-            console.error("TV Tracker startup save failed",error);
-        });
+            if(changedShowIds.length > 0){
+                refreshInterfaceForDataChanges({
+                    showIds:changedShowIds,
+                    historyChanged:false,
+                    stateChanged:false,
+                    remote:false
+                });
+                await saveData({showIds:changedShowIds});
+            }
+        }catch(error){
+            console.error("TV Tracker startup maintenance failed",error);
+        }
     };
 
-    if(typeof requestAnimationFrame === "function"){
-        requestAnimationFrame(function(){
-            setTimeout(queueSave,0);
-        });
+    if(typeof requestIdleCallback === "function"){
+        requestIdleCallback(()=>runMaintenance(),{timeout:10000});
         return;
     }
 
-    setTimeout(queueSave,0);
-
+    setTimeout(runMaintenance,6000);
 }
-
-
 
 
 function setupEvents(){
@@ -1497,7 +1593,6 @@ function createShowObject(details,status){
 
 
 async function openDiscoverShowModal(searchShow){
-
     if(!searchShow || !searchShow.id){
         return;
     }
@@ -1511,40 +1606,22 @@ async function openDiscoverShowModal(searchShow){
 
     selectedShowId = null;
     discoverPreviewShow = null;
-
-    const modal = document.getElementById("show-modal");
-    const content = document.getElementById("show-modal-content");
-
-    modal.classList.remove("episode-detail-overlay");
-    modal.classList.remove("show-detail-overlay");
-    modal.style.display = "flex";
-
-    content.innerHTML = `
-        <div class="modal-body">
-            <div class="empty-state compact-loading-state">
-                <h2>Loading show details...</h2>
-            </div>
-        </div>
-    `;
+    prepareModalForOpen("show");
 
     try{
-
         const details = await tmdbGetShowDetails(searchShow.id);
         const showObject = createShowObject(details,"plan");
 
         discoverPreviewShow = showObject;
 
         const previewKey = "discover-" + String(showObject.tmdb_id || "preview");
-
-        if(!expandedSeasons[previewKey]){
-            expandedSeasons[previewKey] = {"1":true};
-        }
+        expandedSeasons[previewKey] = {"1":true};
 
         renderDiscoverShowModal(showObject);
-        loadDiscoverPreviewSeasons(showObject);
-
+        await revealPreparedModal();
+        loadDiscoverPreviewSeason(showObject,1);
     }catch(error){
-
+        const content = document.getElementById("show-modal-content");
         content.innerHTML = `
             <div class="modal-body">
                 <div class="empty-state">
@@ -1552,66 +1629,57 @@ async function openDiscoverShowModal(searchShow){
                 </div>
             </div>
         `;
-
+        await revealPreparedModal();
         showToast(error.message || "Network error");
-
     }
-
 }
 
-
-
-async function loadDiscoverPreviewSeasons(show){
-
+async function loadDiscoverPreviewSeason(show,seasonNumber){
     if(!show || !canUseTMDBShow(show)){
         return;
     }
 
     const previewId = String(show.tmdb_id);
-    let lastRenderTime = 0;
-
-    const renderIfCurrent = function(force=false){
-
-        if(!discoverPreviewShow || String(discoverPreviewShow.tmdb_id) !== previewId){
-            return;
-        }
-
-        const now = Date.now();
-
-        if(!force && now - lastRenderTime < 250){
-            return;
-        }
-
-        lastRenderTime = now;
-        renderDiscoverShowModal(show);
-
-    };
 
     try{
+        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
 
-        await ensureSeasonLoaded(show,1,false,{skipSave:true});
-        renderIfCurrent(true);
-
-        await ensureAllSeasonsLoaded(show,false,{
-            startSeason:2,
-            skipSave:true,
-            concurrency:6,
-            onSeasonLoaded:function(){
-                renderIfCurrent(false);
-            }
-        });
-
-        renderIfCurrent(true);
-
-    }catch(error){
-
-        if(discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === previewId){
-            showToast("Some season data could not load");
-            renderDiscoverShowModal(show);
+        if(
+            discoverPreviewShow &&
+            String(discoverPreviewShow.tmdb_id) === previewId
+        ){
+            renderDiscoverShowModalPreservingScroll(show);
         }
+    }catch(error){
+        if(
+            discoverPreviewShow &&
+            String(discoverPreviewShow.tmdb_id) === previewId
+        ){
+            showToast("Could not load that season");
+            renderDiscoverShowModalPreservingScroll(show);
+        }
+    }
+}
 
+async function toggleDiscoverPreviewSeason(show,seasonNumber){
+    if(!show || !Number.isFinite(Number(seasonNumber))){
+        return;
     }
 
+    const previewKey = "discover-" + String(show.tmdb_id || "preview");
+
+    if(!expandedSeasons[previewKey]){
+        expandedSeasons[previewKey] = {};
+    }
+
+    const key = String(seasonNumber);
+    const willOpen = !expandedSeasons[previewKey][key];
+    expandedSeasons[previewKey][key] = willOpen;
+    renderDiscoverShowModalPreservingScroll(show);
+
+    if(willOpen && !seasonDataAlreadyLoaded(show,seasonNumber,false)){
+        await loadDiscoverPreviewSeason(show,seasonNumber);
+    }
 }
 
 
@@ -1639,7 +1707,6 @@ async function addDiscoverPreviewShow(status){
 
 
 async function addDiscoverSeasonAsWatched(showId,season){
-
     const show = discoverPreviewShow;
     const seasonNumber = Number(season);
 
@@ -1652,7 +1719,6 @@ async function addDiscoverSeasonAsWatched(showId,season){
     }
 
     try{
-
         await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
 
         const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(
@@ -1668,39 +1734,33 @@ async function addDiscoverSeasonAsWatched(showId,season){
         show.status = "watching";
         show.was_unreleased_when_added = false;
         show.completed_at = "";
-
         DATA.shows[String(show.tmdb_id)] = show;
 
         markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
-        addHistoryEntries(show,newlyMarkedEpisodes);
-
-        await saveData();
+        const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
 
         discoverPreviewShow = null;
         selectedShowId = String(show.tmdb_id);
         selectedEpisodeContext = null;
         expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
 
-        renderAll();
-        renderShowModal(show);
+        refreshAfterLocalShowChange(show.tmdb_id,true);
+        renderShowModalPreservingScroll(show);
         showToast(
             "Marked " + newlyMarkedEpisodes.length +
             (newlyMarkedEpisodes.length === 1 ? " episode" : " episodes") +
             " watched in Season " + seasonNumber
         );
 
+        await waitForNextPaint();
+        await saveShowMutation(show.tmdb_id,addedEntries,[]);
     }catch(error){
-
         showToast(error.message || "Could not log season");
-
     }
-
 }
 
 
-
 async function addDiscoverEpisodeAsWatched(showId,season,episode){
-
     const show = discoverPreviewShow;
     const seasonNumber = Number(season);
     const episodeNumber = Number(episode);
@@ -1715,7 +1775,6 @@ async function addDiscoverEpisodeAsWatched(showId,season,episode){
     }
 
     try{
-
         for(let seasonToLoad = 1; seasonToLoad <= seasonNumber; seasonToLoad++){
             await ensureSeasonLoaded(show,seasonToLoad,false,{skipSave:true});
         }
@@ -1736,35 +1795,30 @@ async function addDiscoverEpisodeAsWatched(showId,season,episode){
         show.status = "watching";
         show.was_unreleased_when_added = false;
         show.completed_at = "";
-
         DATA.shows[String(show.tmdb_id)] = show;
 
         markEpAndPrevious(show.tmdb_id,seasonNumber,episodeNumber);
-        addHistoryEntries(show,newlyMarkedEpisodes);
-
-        await saveData();
+        const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
 
         discoverPreviewShow = null;
         selectedShowId = String(show.tmdb_id);
         selectedEpisodeContext = null;
         expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
 
-        renderAll();
-        renderShowModal(show);
+        refreshAfterLocalShowChange(show.tmdb_id,true);
+        renderShowModalPreservingScroll(show);
         showToast(
             newlyMarkedEpisodes.length > 0
             ? getWatchedMessage(show,newlyMarkedEpisodes)
             : show.title + " added to Watching"
         );
 
+        await waitForNextPaint();
+        await saveShowMutation(show.tmdb_id,addedEntries,[]);
     }catch(error){
-
         showToast(error.message || "Could not add and mark episode");
-
     }
-
 }
-
 
 
 async function handleAddShowClick(searchShow){
@@ -1820,15 +1874,22 @@ async function savePreparedShow(showObject,status){
 
     showObject.status = normalizeStatusForShow(showObject,status);
 
+    let completedHistoryEntries = [];
+
     if(showObject.status === "finished"){
-        await completeShow(showObject);
+        completedHistoryEntries = await completeShow(showObject);
     }else{
         showObject.completed_at = "";
     }
 
     DATA.shows[String(showObject.tmdb_id)] = showObject;
 
-    await saveData();
+    refreshAfterLocalShowChange(
+        showObject.tmdb_id,
+        completedHistoryEntries.length > 0
+    );
+    await waitForNextPaint();
+    await saveShowMutation(showObject.tmdb_id,completedHistoryEntries,[]);
 
     closeStatusPopup();
 
@@ -1849,8 +1910,6 @@ async function savePreparedShow(showObject,status){
         showToast(showObject.title + " added!");
 
     }
-
-    renderAll();
 
 }
 
@@ -2522,7 +2581,6 @@ async function loadSeasonData(show,seasonNumber){
 
 
 async function openShowModal(showId){
-
     selectedEpisodeContext = null;
     selectedShowId = String(showId);
 
@@ -2532,32 +2590,11 @@ async function openShowModal(showId){
         return;
     }
 
-    const modal = document.getElementById("show-modal");
-    modal.classList.remove("episode-detail-overlay");
-    modal.classList.add("show-detail-overlay");
-    modal.style.display = "flex";
-
-    document.getElementById("show-modal-content").innerHTML = `
-        <div class="modal-body">
-            <div class="empty-state">
-                <h2>Loading episodes...</h2>
-                <p>Fetching season data from TMDB.</p>
-            </div>
-        </div>
-    `;
-
-    await ensureAllSeasonsLoaded(show);
-
-    await saveData();
-
-    expandedSeasons[selectedShowId] = {};
-
+    prepareModalForOpen("show");
+    expandedSeasons[selectedShowId] = expandedSeasons[selectedShowId] || {};
     renderShowModal(show);
-
+    await revealPreparedModal();
 }
-
-
-
 
 
 function closeShowModal(){
@@ -2569,6 +2606,7 @@ function closeShowModal(){
     const modal = document.getElementById("show-modal");
     modal.classList.remove("episode-detail-overlay");
     modal.classList.remove("show-detail-overlay");
+    modal.classList.remove("modal-preparing");
     modal.style.display = "none";
 
     document.getElementById("show-modal-content").innerHTML = "";
@@ -2579,7 +2617,6 @@ function closeShowModal(){
 
 
 async function openEpisodeModal(showId,season,episode,options={}){
-
     const id = String(showId);
     const show = DATA.shows[id];
 
@@ -2594,10 +2631,7 @@ async function openEpisodeModal(showId,season,episode,options={}){
         return;
     }
 
-    const backToShow =
-    typeof options === "object"
-    ? !!options.backToShow
-    : !!options;
+    const backToShow = typeof options === "object" ? !!options.backToShow : !!options;
 
     selectedShowId = id;
     selectedEpisodeContext = {
@@ -2607,36 +2641,22 @@ async function openEpisodeModal(showId,season,episode,options={}){
         backToShow:backToShow
     };
 
-    const modal = document.getElementById("show-modal");
-    const content = document.getElementById("show-modal-content");
-
-    modal.classList.remove("show-detail-overlay");
-    modal.classList.add("episode-detail-overlay");
-    modal.style.display = "flex";
-
-    content.innerHTML = `
-        <div class="modal-body">
-            <div class="empty-state">
-                <h2>Loading episode...</h2>
-            </div>
-        </div>
-    `;
+    prepareModalForOpen("episode");
 
     const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
+    const neededLoad = !seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh);
 
-    await ensureSeasonLoaded(show,seasonNumber,forceRefresh);
-
-    await saveData();
-
+    await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
     renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+    await revealPreparedModal();
 
+    if(neededLoad){
+        saveData({showIds:[id]});
+    }
 }
 
 
-
-
 async function openDiscoverEpisodeModal(showId,season,episode){
-
     const show = discoverPreviewShow;
 
     if(!show || String(show.tmdb_id) !== String(showId)){
@@ -2659,31 +2679,12 @@ async function openDiscoverEpisodeModal(showId,season,episode){
         discoverPreview:true
     };
 
-    const modal = document.getElementById("show-modal");
-    const content = document.getElementById("show-modal-content");
-
-    modal.classList.remove("show-detail-overlay");
-    modal.classList.add("episode-detail-overlay");
-    modal.style.display = "flex";
-
-    content.innerHTML = `
-        <div class="modal-body">
-            <div class="empty-state">
-                <h2>Loading episode...</h2>
-            </div>
-        </div>
-    `;
-
+    prepareModalForOpen("episode");
     const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
-
-    await ensureSeasonLoaded(show,seasonNumber,forceRefresh);
-
+    await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
     renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
-
+    await revealPreparedModal();
 }
-
-
-
 
 
 async function removeShow(showId){
@@ -2706,19 +2707,31 @@ async function removeShow(showId){
         return;
     }
 
-    delete DATA.shows[String(showId)];
+    const id = String(showId);
+    const deletedHistoryIds = (Array.isArray(DATA.history) ? DATA.history : [])
+    .filter(entry=>String(entry.tmdb_id) === id)
+    .map(entry=>String(entry.id || ""))
+    .filter(Boolean);
 
-    DATA.history = DATA.history.filter(entry=>{
-        return String(entry.tmdb_id) !== String(showId);
-     });
-
-await saveData();
+    delete DATA.shows[id];
+    DATA.history = (Array.isArray(DATA.history) ? DATA.history : []).filter(entry=>{
+        return String(entry.tmdb_id) !== id;
+    });
 
     closeShowModal();
-
-    renderAll();
-
+    refreshInterfaceForDataChanges({
+        showIds:[id],
+        historyChanged:deletedHistoryIds.length > 0,
+        stateChanged:false,
+        remote:false
+    });
     showToast(show.title + " removed");
+
+    await waitForNextPaint();
+    await saveData({
+        showDeleteIds:[id],
+        historyDeleteIds:deletedHistoryIds
+    });
 
 }
 
@@ -2727,7 +2740,6 @@ await saveData();
 
 
 async function toggleSeason(showId,seasonNumber){
-
     const id = String(showId);
     const show = DATA.shows[id];
 
@@ -2740,169 +2752,114 @@ async function toggleSeason(showId,seasonNumber){
     }
 
     const key = String(seasonNumber);
-
     const willOpen = !expandedSeasons[id][key];
-
     expandedSeasons[id][key] = willOpen;
+    renderShowModalPreservingScroll(show);
 
-    if(willOpen){
-
-        await ensureSeasonLoaded(show,seasonNumber);
-
+    if(willOpen && !seasonDataAlreadyLoaded(show,seasonNumber,false)){
+        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
+        renderShowModalPreservingScroll(show);
+        saveData({showIds:[id]});
     }
-
-    renderShowModal(show);
-
 }
 
 
-
-
-
 async function updateShowStatus(showId,status){
-
-    const show = DATA.shows[String(showId)];
+    const id = String(showId);
+    const show = DATA.shows[id];
 
     if(!show){
         return;
     }
 
     if(!isStatusAllowedForShow(show,status)){
-
         showToast("This status is not available for this show");
         return;
-
     }
+
+    let addedEntries = [];
 
     if(status === "finished"){
-
-        await completeShow(show);
-
+        addedEntries = await completeShow(show);
     }else{
-
         show.status = status;
         show.completed_at = "";
-
     }
 
-    await saveData();
-
-    renderAll();
-
-    if(selectedShowId === String(showId)){
-        renderShowModal(show);
-    }
-
+    refreshAfterLocalShowChange(id,addedEntries.length > 0);
     showToast("Status updated");
-
+    await waitForNextPaint();
+    await saveShowMutation(id,addedEntries,[]);
 }
 
 
-
-
 async function updateEpisodeWatched(showId,season,episode,isWatched){
-
-    const show = DATA.shows[String(showId)];
+    const id = String(showId);
+    const show = DATA.shows[id];
 
     if(!show){
         return;
     }
 
-    await ensureSeasonLoaded(show,season);
+    await ensureSeasonLoaded(show,season,false,{skipSave:true});
 
     const episodeData = getEpisodeData(show,season,episode);
 
     if(isWatched && !isEpisodeAired(episodeData.air_date,episodeData)){
-
         showToast("This episode has not aired yet");
         return;
-
     }
 
     let newlyMarkedEpisodes = [];
+    let addedEntries = [];
+    let deletedHistoryIds = [];
 
     if(isWatched){
-
-        newlyMarkedEpisodes = await getEpisodesToBeMarked(
-            show,
-            season,
-            episode
-        );
+        newlyMarkedEpisodes = await getEpisodesToBeMarked(show,season,episode);
 
         if(newlyMarkedEpisodes.length === 0){
             showToast("No aired episodes to log");
             return;
         }
 
-        markEpAndPrevious(showId,season,episode);
-
-        addHistoryEntries(show,newlyMarkedEpisodes);
-
+        markEpAndPrevious(id,season,episode);
+        addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
     }else{
-
-        if(
-            show.episodes_watched &&
-            show.episodes_watched[String(season)]
-        ){
-
+        if(show.episodes_watched && show.episodes_watched[String(season)]){
             show.episodes_watched[String(season)] =
             show.episodes_watched[String(season)].filter(ep=>ep !== episode);
-
         }
 
-        removeHistoryEntry(showId,season,episode);
+        deletedHistoryIds = removeHistoryEntry(id,season,episode);
         updateShowLastWatchedFromHistory(show);
-
     }
 
-    await saveData();
-
-    renderAll();
-
-    if(
-        selectedEpisodeContext &&
-        selectedEpisodeContext.showId === String(showId)
-    ){
-        renderEpisodeModal(
-            show,
-            selectedEpisodeContext.season,
-            selectedEpisodeContext.episode,
-            selectedEpisodeContext
-        );
-    }else if(selectedShowId === String(showId)){
-        renderShowModal(show);
-    }
+    refreshAfterLocalShowChange(id,true);
 
     if(isWatched){
         showToast(getWatchedMessage(show,newlyMarkedEpisodes));
     }
 
+    await waitForNextPaint();
+    await saveShowMutation(id,addedEntries,deletedHistoryIds);
 }
 
 
-
-
-
 async function markSeasonWatched(showId,seasonNumber){
-
-    const show = DATA.shows[String(showId)];
+    const id = String(showId);
+    const show = DATA.shows[id];
 
     if(!show){
         return;
     }
 
-    await ensureSeasonLoaded(show,seasonNumber);
+    await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
 
-    const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(
-        show,
-        seasonNumber
-    );
+    const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(show,seasonNumber);
 
     if(airedEpisodeNumbers.length === 0){
-
         showToast("No aired episodes to log");
         return;
-
     }
 
     const seasonIsFullyWatched = isSeasonFullyWatched(
@@ -2912,7 +2869,6 @@ async function markSeasonWatched(showId,seasonNumber){
     );
 
     if(seasonIsFullyWatched){
-
         const confirmed = await showAppConfirm({
             title:"Mark Season Unwatched",
             message:
@@ -2928,72 +2884,42 @@ async function markSeasonWatched(showId,seasonNumber){
             return;
         }
 
-        const watchedEpisodes =
-        show.episodes_watched &&
-        Array.isArray(show.episodes_watched[String(seasonNumber)])
-        ? show.episodes_watched[String(seasonNumber)]
-        : [];
-
+        const deletedHistoryIds = getHistoryIdsForSeason(id,seasonNumber);
         delete show.episodes_watched[String(seasonNumber)];
-
         DATA.history = (Array.isArray(DATA.history) ? DATA.history : []).filter(entry=>{
             return !(
-                String(entry.tmdb_id) === String(showId) &&
+                String(entry.tmdb_id) === id &&
                 Number(entry.season) === Number(seasonNumber)
             );
         });
-
         updateShowLastWatchedFromHistory(show);
 
-        await saveData();
-
-        renderAll();
-
-        if(selectedShowId === String(showId)){
-            renderShowModal(show);
-        }
-
-        showToast(
-            "Marked Season " + seasonNumber + " as unwatched"
-        );
-
+        refreshAfterLocalShowChange(id,true);
+        showToast("Marked Season " + seasonNumber + " as unwatched");
+        await waitForNextPaint();
+        await saveShowMutation(id,[],deletedHistoryIds);
         return;
-
     }
 
-    const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(
-        show,
-        seasonNumber
-    );
+    const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(show,seasonNumber);
 
     if(newlyMarkedEpisodes.length === 0){
-
         showToast("No aired episodes to log");
         return;
-
     }
 
     markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
-    addHistoryEntries(show,newlyMarkedEpisodes);
+    const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
 
     if(show.status === "plan"){
         show.status = "watching";
     }
 
-    await saveData();
-
-    renderAll();
-
-    if(selectedShowId === String(showId)){
-        renderShowModal(show);
-    }
-
-    showToast(
-        "Marked aired episodes in Season " + seasonNumber
-    );
-
+    refreshAfterLocalShowChange(id,true);
+    showToast("Marked aired episodes in Season " + seasonNumber);
+    await waitForNextPaint();
+    await saveShowMutation(id,addedEntries,[]);
 }
-
 
 
 function getWatchedMessage(show,episodes){
@@ -3222,7 +3148,7 @@ function markEpisodesWatchedInSeason(show,seasonNumber,episodes){
 async function completeShow(show){
 
     if(!show){
-        return;
+        return [];
     }
 
     await ensureAllSeasonsLoaded(show);
@@ -3249,10 +3175,12 @@ async function completeShow(show){
         show.episodes_watched[seasonKey].sort((a,b)=>a-b);
     });
 
-    addHistoryEntries(show,newlyMarkedEpisodes);
+    const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
 
     show.status = "finished";
     show.completed_at = new Date().toISOString();
+
+    return addedEntries;
 
 }
 
@@ -3316,8 +3244,8 @@ function getAllAiredUnwatchedEpisodes(show){
 
 
 async function markNextEpisode(showId){
-
-    const show = DATA.shows[String(showId)];
+    const id = String(showId);
+    const show = DATA.shows[id];
 
     if(!show){
         return;
@@ -3326,25 +3254,18 @@ async function markNextEpisode(showId){
     let nextEp = getNextEpisode(show);
 
     if(!nextEp){
-
         showToast("All episodes watched!");
         return;
-
     }
 
     if(nextEp.needsLoad){
-
-        await ensureSeasonLoaded(show,nextEp.season);
-
+        await ensureSeasonLoaded(show,nextEp.season,false,{skipSave:true});
         nextEp = getNextEpisode(show);
 
         if(!nextEp || nextEp.needsLoad){
-
             showToast("Could not load episode data");
             return;
-
         }
-
     }
 
     const newlyMarkedEpisodes = await getEpisodesToBeMarked(
@@ -3358,24 +3279,14 @@ async function markNextEpisode(showId){
         return;
     }
 
-    markEpAndPrevious(showId,nextEp.season,nextEp.episode);
+    markEpAndPrevious(id,nextEp.season,nextEp.episode);
+    const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
 
-    addHistoryEntries(show,newlyMarkedEpisodes);
-
-    await saveData();
-
-    renderAll();
-
-    if(selectedShowId === String(showId)){
-        renderShowModal(show);
-    }
-
+    refreshAfterLocalShowChange(id,true);
     showToast(getWatchedMessage(show,newlyMarkedEpisodes));
-
+    await waitForNextPaint();
+    await saveShowMutation(id,addedEntries,[]);
 }
-
-
-
 
 
 function seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh=false){
@@ -3461,7 +3372,7 @@ async function ensureSeasonLoaded(show,seasonNumber,forceRefresh=false,options={
     applyTVmazeEpisodesToShow(show);
 
     if(!options.skipSave){
-        await saveData();
+        await saveData({showIds:[String(show.tmdb_id)]});
     }
 
 }
@@ -3738,7 +3649,7 @@ async function getEpisodesToBeMarked(show,targetSeason,targetEpisode){
 
     for(let s = 1; s <= targetSeason; s++){
 
-        await ensureSeasonLoaded(show,s);
+        await ensureSeasonLoaded(show,s,false,{skipSave:true});
 
         const watchedEpisodes = show.episodes_watched[String(s)] || [];
 
@@ -3846,26 +3757,29 @@ function addHistoryEntries(show,episodes){
 
 
 function removeHistoryEntry(showId,season,episode){
-
     if(!DATA.history || !Array.isArray(DATA.history)){
         DATA.history = [];
-        return;
+        return [];
     }
 
-    DATA.history = DATA.history.filter(entry=>{
+    const removedIds = [];
 
-        return !(
+    DATA.history = DATA.history.filter(entry=>{
+        const matches = (
             String(entry.tmdb_id) === String(showId) &&
             Number(entry.season) === Number(season) &&
             Number(entry.episode) === Number(episode)
         );
 
+        if(matches && entry.id){
+            removedIds.push(String(entry.id));
+        }
+
+        return !matches;
     });
 
+    return removedIds;
 }
-
-
-
 
 
 function getEpisodeData(show,season,episode){
@@ -5676,9 +5590,15 @@ async function saveProfileSettings(settings){
     DATA.profile.header_preset = headerPreset;
     DATA.profile.header_image = headerImage;
 
-    await saveData();
+    refreshInterfaceForDataChanges({
+        showIds:[],
+        historyChanged:false,
+        stateChanged:true,
+        remote:false
+    });
     showToast("Profile saved");
-    renderAll();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
 }
 
@@ -5971,10 +5891,10 @@ async function addFavoriteShow(showId){
 
     DATA.profile.favorite_shows.push(id);
 
-    await saveData();
-
     renderAll();
     renderFavoritesPopup();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
 }
 
@@ -5990,10 +5910,10 @@ async function removeFavoriteShow(showId){
         return String(item) !== id;
     });
 
-    await saveData();
-
     renderAll();
     renderFavoritesPopup();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
 }
 
@@ -6020,10 +5940,10 @@ async function moveFavoriteShow(showId,direction){
     DATA.profile.favorite_shows[index] = DATA.profile.favorite_shows[newIndex];
     DATA.profile.favorite_shows[newIndex] = temp;
 
-    await saveData();
-
     renderAll();
     renderFavoritesPopup();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
 }
 
@@ -6053,10 +5973,10 @@ async function reorderFavoriteShows(draggedShowId,targetShowId){
 
     DATA.profile.favorite_shows = favorites;
 
-    await saveData();
-
     renderAll();
     renderFavoritesPopup();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
 }
 
@@ -6094,9 +6014,9 @@ async function saveFavoriteShowsOrder(showIds){
 
     DATA.profile.favorite_shows = uniqueRequested;
 
-    await saveData();
-
     renderAll();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
 
     return true;
 
