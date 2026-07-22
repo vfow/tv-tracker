@@ -11,50 +11,13 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/favicon.svg') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/foundation.css', v='1.2.0') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/foundation.css', v='1.2.1') }}">
 </head>
 
 <body class="app-shell">
 
-<header class="mobile-app-bar d-lg-none" aria-label="Application header">
-    <button
-        class="mobile-menu-button"
-        type="button"
-        data-bs-toggle="offcanvas"
-        data-bs-target="#app-sidebar"
-        aria-controls="app-sidebar"
-        aria-label="Open navigation"
-    >
-        <span class="mobile-menu-icon" aria-hidden="true"></span>
-    </button>
-
-    <div class="mobile-app-copy">
-        <span class="mobile-app-name">TV Tracker</span>
-        <span class="mobile-page-title" id="mobile-page-title">Watchlist</span>
-    </div>
-</header>
-
-<aside
-    class="sidebar offcanvas-lg offcanvas-start"
-    id="app-sidebar"
-    tabindex="-1"
-    aria-labelledby="app-sidebar-title"
->
-    <div class="sidebar-header">
-        <div class="sidebar-brand">
-            <span class="sidebar-brand-kicker">Private library</span>
-            <span class="sidebar-brand-title" id="app-sidebar-title">TV TRACKER</span>
-        </div>
-
-        <button
-            class="sidebar-close btn-close btn-close-white d-lg-none"
-            type="button"
-            data-bs-dismiss="offcanvas"
-            aria-label="Close navigation"
-        ></button>
-    </div>
-
-    <nav class="sidebar-nav" aria-label="Primary navigation">
+<aside class="sidebar d-none d-lg-flex" id="app-sidebar">
+    <nav class="sidebar-nav app-primary-nav" aria-label="Primary navigation">
         <button class="active" data-page="shows" aria-current="page">
             SHOWS
         </button>
@@ -73,8 +36,12 @@
     </nav>
 </aside>
 
-
-
+<nav class="mobile-bottom-nav app-primary-nav d-lg-none" aria-label="Primary navigation">
+    <button class="active" data-page="shows" aria-current="page">SHOWS</button>
+    <button data-page="discover">DISCOVER</button>
+    <button data-page="profile">PROFILE</button>
+    <button data-page="settings">SETTINGS</button>
+</nav>
 
 <section class="main">
 
@@ -104,25 +71,27 @@
 
     <div class="filters">
 
-        <button class="active" data-filter="watching">
-            Watching
-        </button>
+        <div class="status-filter-track">
+            <button class="active" data-filter="watching">
+                Watching
+            </button>
 
-        <button data-filter="paused">
-            Paused
-        </button>
+            <button data-filter="paused">
+                Paused
+            </button>
 
-        <button data-filter="finished">
-            Completed
-        </button>
+            <button data-filter="finished">
+                Completed
+            </button>
 
-        <button data-filter="plan">
-            Plan To Watch
-        </button>
+            <button data-filter="plan">
+                Plan To Watch
+            </button>
 
-        <button data-filter="dropped">
-            Dropped
-        </button>
+            <button data-filter="dropped">
+                Dropped
+            </button>
+        </div>
 
     </div>
 
@@ -283,8 +252,8 @@
 <script src="{{ url_for('static', filename='js/config.js') }}"></script>
 <script src="{{ url_for('static', filename='js/db.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tmdb.js') }}"></script>
-<script src="{{ url_for('static', filename='js/ui.js', v='1.2.0') }}"></script>
-<script src="{{ url_for('static', filename='js/app.js', v='1.2.0') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js', v='1.2.1') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js', v='1.2.1') }}"></script>
 
 </body>
 </html>

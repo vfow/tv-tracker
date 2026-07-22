@@ -122,7 +122,7 @@ async function init(){
 
 function setupEvents(){
 
-    document.querySelectorAll(".sidebar button[data-page]").forEach(button=>{
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
 
         button.addEventListener("click",function(){
             showPage(this.dataset.page);

@@ -132,7 +132,7 @@ function showPage(page){
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".sidebar button[data-page]").forEach(button=>{
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
         const isActive = button.dataset.page === page;
         button.classList.toggle("active",isActive);
 
