@@ -1483,6 +1483,8 @@ async function openDiscoverShowModal(searchShow){
     const modal = document.getElementById("show-modal");
     const content = document.getElementById("show-modal-content");
 
+    modal.classList.remove("episode-detail-overlay");
+    modal.classList.remove("show-detail-overlay");
     modal.style.display = "flex";
 
     content.innerHTML = `
@@ -2372,6 +2374,7 @@ async function openShowModal(showId){
 
     const modal = document.getElementById("show-modal");
     modal.classList.remove("episode-detail-overlay");
+    modal.classList.add("show-detail-overlay");
     modal.style.display = "flex";
 
     document.getElementById("show-modal-content").innerHTML = `
@@ -2405,6 +2408,7 @@ function closeShowModal(){
 
     const modal = document.getElementById("show-modal");
     modal.classList.remove("episode-detail-overlay");
+    modal.classList.remove("show-detail-overlay");
     modal.style.display = "none";
 
     document.getElementById("show-modal-content").innerHTML = "";
@@ -2446,6 +2450,7 @@ async function openEpisodeModal(showId,season,episode,options={}){
     const modal = document.getElementById("show-modal");
     const content = document.getElementById("show-modal-content");
 
+    modal.classList.remove("show-detail-overlay");
     modal.classList.add("episode-detail-overlay");
     modal.style.display = "flex";
 
@@ -2497,6 +2502,7 @@ async function openDiscoverEpisodeModal(showId,season,episode){
     const modal = document.getElementById("show-modal");
     const content = document.getElementById("show-modal-content");
 
+    modal.classList.remove("show-detail-overlay");
     modal.classList.add("episode-detail-overlay");
     modal.style.display = "flex";
 

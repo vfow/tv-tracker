@@ -1561,3 +1561,146 @@ Only the approved non-structural corrections remain below.
         margin:0;
     }
 }
+
+/* ---------- TV Tracker 1.2.2e: History + modal + image-quality update ---------- */
+
+/* Preserve the current View X more dimensions; restore only its original blue color. */
+.upcoming-batch-button{
+    border-color:#1d6fd1;
+    background:#0b4a8f;
+    color:#dbeafe;
+}
+
+.upcoming-batch-button:hover{
+    border-color:#2f75ff;
+    background:#1262b8;
+    color:#fff;
+}
+
+/* Keep tracked show details inside the content area instead of underneath the sidebar. */
+@media (min-width:992px){
+    .show-modal-overlay.show-detail-overlay{
+        right:0;
+        left:var(--tt-sidebar-width);
+        width:auto;
+        padding:24px;
+    }
+
+    .show-modal-overlay.show-detail-overlay .show-modal{
+        width:min(1100px,calc(100vw - var(--tt-sidebar-width) - 48px));
+        height:min(850px,calc(100dvh - 48px));
+        max-height:calc(100dvh - 48px);
+        margin:0;
+    }
+}
+
+/* Finish History without altering the approved desktop presentation. */
+@media (max-width:767.98px){
+    #show-list:has(.history-group){
+        padding-bottom:calc(var(--tt-mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
+    }
+
+    .history-group{
+        margin-bottom:22px;
+    }
+
+    .history-entry-card{
+        min-height:116px;
+        display:grid;
+        grid-template-columns:96px minmax(0,1fr);
+        grid-template-areas:
+            "history-image history-info"
+            "history-image history-time";
+        align-items:center;
+        column-gap:16px;
+        row-gap:6px;
+        flex-wrap:nowrap;
+        padding:16px 20px;
+    }
+
+    .history-still,
+    .history-still-placeholder{
+        grid-area:history-image;
+        width:96px;
+        height:54px;
+        border-radius:8px;
+    }
+
+    .history-entry-card .info{
+        grid-area:history-info;
+        align-self:end;
+        min-width:0;
+    }
+
+    .history-entry-card .title{
+        display:-webkit-box;
+        overflow:hidden;
+        font-size:18px;
+        line-height:1.2;
+        overflow-wrap:anywhere;
+        -webkit-box-orient:vertical;
+        -webkit-line-clamp:2;
+    }
+
+    .history-episode-line{
+        margin-top:4px;
+        overflow:hidden;
+        color:#aaa;
+        font-size:15px;
+        line-height:1.35;
+        overflow-wrap:anywhere;
+    }
+
+    .history-time{
+        grid-area:history-time;
+        align-self:start;
+        justify-self:start;
+        width:auto;
+        margin:0;
+        padding:0;
+        color:#888;
+        font-size:14px;
+        line-height:1.2;
+        white-space:nowrap;
+    }
+}
+
+@media (max-width:419.98px){
+    .history-entry-card{
+        min-height:108px;
+        grid-template-columns:82px minmax(0,1fr);
+        column-gap:12px;
+        padding:14px 16px;
+    }
+
+    .history-still,
+    .history-still-placeholder{
+        width:82px;
+        height:48px;
+    }
+
+    .history-entry-card .title{
+        font-size:17px;
+    }
+
+    .history-episode-line,
+    .history-time{
+        font-size:13px;
+    }
+}
+
+@media (max-width:991.98px){
+    .show-modal-overlay.show-detail-overlay{
+        inset:0;
+        width:100vw;
+        padding:0;
+    }
+
+    .show-modal-overlay.show-detail-overlay .show-modal{
+        width:100%;
+        height:100dvh;
+        max-height:none;
+        margin:0;
+    }
+}
+
