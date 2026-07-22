@@ -1232,91 +1232,6 @@ function renderWatchlist(){
 
 
 
-function getUpcomingCalendarDate(airDateString,episodeInfo=null){
-
-    const calendarDateString = getEpisodeCalendarDateString(
-        airDateString,
-        episodeInfo
-    );
-
-    return makeLocalDate(calendarDateString);
-
-}
-
-
-
-function formatUpcomingCalendarDate(airDateString,episodeInfo=null,options={}){
-
-    const date = getUpcomingCalendarDate(airDateString,episodeInfo);
-
-    if(!date){
-        return "";
-    }
-
-    const currentYear = new Date().getFullYear();
-    const includeYear = options.includeYear === true || date.getFullYear() !== currentYear;
-
-    return date.toLocaleDateString(undefined,{
-        weekday:options.longWeekday ? "long" : "short",
-        month:options.longMonth ? "long" : "short",
-        day:"numeric",
-        ...(includeYear ? {year:"numeric"} : {})
-    });
-
-}
-
-
-
-function getUpcomingGroupMeta(groupName,groupItems){
-
-    const firstEpisode = groupItems?.[0]?.episode || null;
-
-    if(
-        firstEpisode &&
-        ["Yesterday","Today","Tomorrow"].includes(groupName)
-    ){
-        return formatUpcomingCalendarDate(
-            firstEpisode.air_date,
-            firstEpisode,
-            {longWeekday:true,longMonth:true}
-        );
-    }
-
-    if(groupName === "Catch Up"){
-        return "Earlier unwatched episodes";
-    }
-
-    if(groupName === "This Week"){
-        return "Releases in the next 7 days";
-    }
-
-    if(groupName === "This Month"){
-        return "Releases later this month";
-    }
-
-    if(groupName === "Later"){
-        return "Later scheduled releases";
-    }
-
-    return "";
-
-}
-
-
-
-function getUpcomingEpisodeAriaLabel(show,episode,prefix="Open"){
-
-    const showTitle = show?.title || "show";
-    const season = Number(episode?.season_number || 0);
-    const episodeNumber = Number(episode?.episode_number || 0);
-    const episodeTitle = episode?.name || "Untitled Episode";
-
-    return `${prefix} ${showTitle}, season ${season}, episode ${episodeNumber}, ${episodeTitle}`;
-
-}
-
-
-
 async function renderUpcoming(startBackgroundRefresh=true){
 
     const list = document.getElementById("show-list");
@@ -1328,9 +1243,9 @@ async function renderUpcoming(startBackgroundRefresh=true){
     if(upcoming.length === 0){
 
         list.innerHTML = `
-            <div class="empty-state upcoming-empty-state">
+            <div class="empty-state">
                 <h2>Your schedule is clear.</h2>
-                <p>Missed episodes and future releases with confirmed dates will appear here.</p>
+                <p>Missed episodes and future releases with real dates will appear here.</p>
             </div>
         `;
 
@@ -1352,8 +1267,6 @@ async function renderUpcoming(startBackgroundRefresh=true){
         "Later"
     ];
 
-    const fragment = document.createDocumentFragment();
-
     groupOrder.forEach(groupName=>{
 
         const groupItems = upcoming.filter(item=>{
@@ -1364,19 +1277,13 @@ async function renderUpcoming(startBackgroundRefresh=true){
             return;
         }
 
-        const groupBox = document.createElement("section");
-        groupBox.className = `upcoming-group upcoming-group--${groupName.toLowerCase().replace(/\s+/g,"-")}`;
-        groupBox.setAttribute("aria-labelledby",`upcoming-${groupName.toLowerCase().replace(/\s+/g,"-")}-title`);
-
-        const groupMeta = getUpcomingGroupMeta(groupName,groupItems);
+        const groupBox = document.createElement("div");
+        groupBox.className = "upcoming-group";
 
         groupBox.innerHTML = `
-            <header class="upcoming-group-header">
-                <h2 class="upcoming-group-title" id="upcoming-${groupName.toLowerCase().replace(/\s+/g,"-")}-title">
-                    ${escapeHTML(groupName)}
-                </h2>
-                ${groupMeta ? `<div class="upcoming-group-meta">${escapeHTML(groupMeta)}</div>` : ""}
-            </header>
+            <div class="upcoming-group-title">
+                ${escapeHTML(groupName)}
+            </div>
         `;
 
         const displayItems = prepareUpcomingDisplayItems(groupItems);
@@ -1387,6 +1294,23 @@ async function renderUpcoming(startBackgroundRefresh=true){
             const show = item.show;
             const ep = item.episode;
             const extraEpisodes = display.extraEpisodes || [];
+
+            const card = document.createElement("div");
+            card.className = "show upcoming-entry-card";
+
+            const imagePath =
+            ep.still_path ||
+            show.poster_path ||
+            "";
+
+            const imageHTML = imagePath
+            ? `<img class="upcoming-still" loading="lazy" src="https://image.tmdb.org/t/p/w300${imagePath}">`
+            : `<div class="upcoming-still-placeholder">📺</div>`;
+
+            const regularBehindText =
+            !display.isBatch && item.behindCount > 0
+            ? `${item.behindCount} more episode${item.behindCount === 1 ? "" : "s"} behind`
+            : "";
 
             // A row can cross from future to available while it is already
             // displayed as a Today schedule item. Do not rely only on ep.type.
@@ -1400,38 +1324,13 @@ async function renderUpcoming(startBackgroundRefresh=true){
                 isRecentlyAvailableEpisode(ep)
             );
 
-            const card = document.createElement("article");
-            card.className = `show upcoming-entry-card ${canLog ? "upcoming-entry-card--available" : "upcoming-entry-card--scheduled"}`;
-            card.tabIndex = 0;
-            card.setAttribute("role","button");
-            card.setAttribute("aria-label",getUpcomingEpisodeAriaLabel(show,ep));
-
-            const imagePath =
-            ep.still_path ||
-            show.poster_path ||
-            "";
-
-            const posterFallback = getWatchlistPosterFallback(show);
-            const imageHTML = imagePath
-            ? `<img class="upcoming-still" loading="lazy" src="https://image.tmdb.org/t/p/w300${imagePath}" alt="${escapeHTML(show.title || "TV show")}">`
-            : `<div class="upcoming-still-placeholder" aria-hidden="true">${escapeHTML(posterFallback)}</div>`;
-
-            const regularBehindText =
-            !display.isBatch && item.behindCount > 0
-            ? `${item.behindCount} earlier episode${item.behindCount === 1 ? "" : "s"}`
-            : "";
-
             const batchOpen =
             display.batchKey &&
             expandedUpcomingBatches[display.batchKey];
 
             const batchButtonHTML = display.isBatch
             ? `
-                <button
-                class="upcoming-batch-button"
-                type="button"
-                data-batch="${escapeHTML(display.batchKey)}"
-                aria-expanded="${batchOpen ? "true" : "false"}">
+                <button class="upcoming-batch-button" data-batch="${escapeHTML(display.batchKey)}">
                     ${batchOpen ? "Hide episodes ▴" : `View ${extraEpisodes.length} more ▾`}
                 </button>
             `
@@ -1441,90 +1340,58 @@ async function renderUpcoming(startBackgroundRefresh=true){
             ? renderUpcomingBatchEpisodesHTML(show,extraEpisodes)
             : "";
 
-            const calendarLabel = formatUpcomingCalendarDate(ep.air_date,ep);
-
             card.innerHTML = `
 
                 ${imageHTML}
 
-                <div class="info upcoming-entry-info">
+                <div class="info">
 
-                    <div class="upcoming-title-row">
-                        <div class="title">
-                            ${escapeHTML(show.title)}
-                        </div>
-                        ${displayIsNew ? `<div class="new-badge upcoming-new-badge">NEW</div>` : ""}
+                    <div class="title">
+                        ${escapeHTML(show.title)}
                     </div>
 
                     <div class="upcoming-episode-line">
-                        <span class="upcoming-episode-number">S${ep.season_number}E${String(ep.episode_number).padStart(2,"0")}</span>
-                        <span class="upcoming-episode-title">${escapeHTML(ep.name || "Untitled Episode")}</span>
+                        S${ep.season_number}E${String(ep.episode_number).padStart(2,"0")} — ${escapeHTML(ep.name || "Untitled Episode")}
                     </div>
 
-                    <div class="upcoming-inline-actions">
-                        ${
-                        regularBehindText
-                        ? `<button class="upcoming-behind" type="button">${escapeHTML(regularBehindText)}</button>`
-                        : ""
-                        }
-                        ${batchButtonHTML}
-                    </div>
+                    ${
+                    regularBehindText
+                    ? `<button class="upcoming-behind" type="button">${escapeHTML(regularBehindText)}</button>`
+                    : ""
+                    }
+
+                    ${batchButtonHTML}
+
+                    ${
+                    displayIsNew
+                    ? `<div class="new-badge">NEW</div>`
+                    : ""
+                    }
+
+                    ${batchListHTML}
 
                 </div>
 
-                <div class="upcoming-date-block">
-                    <div class="upcoming-calendar-date">${escapeHTML(calendarLabel)}</div>
-                    <div class="upcoming-relative-time">${escapeHTML(item.timeLabel)}</div>
+                <div class="upcoming-time">
+                    ${escapeHTML(item.timeLabel)}
                 </div>
 
                 ${
                 canLog
-                ? `<button class="check upcoming-check" type="button" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}" aria-label="${escapeHTML(getUpcomingEpisodeAriaLabel(show,ep,"Mark watched:"))}" title="Mark episode watched"></button>`
+                ? `<div class="check upcoming-check" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}"></div>`
                 : ""
                 }
 
-                ${batchListHTML}
-
             `;
 
-            const openEpisode = ()=>{
+            card.addEventListener("click",function(){
                 openEpisodeModal(
                     show.tmdb_id,
                     ep.season_number,
                     ep.episode_number,
                     {backToShow:false}
                 );
-            };
-
-            card.addEventListener("click",openEpisode);
-
-            card.addEventListener("keydown",function(event){
-
-                if(event.target !== card || !["Enter"," "].includes(event.key)){
-                    return;
-                }
-
-                event.preventDefault();
-                openEpisode();
-
             });
-
-            const behindButton = card.querySelector(".upcoming-behind");
-
-            if(behindButton){
-
-                behindButton.addEventListener("click",function(event){
-
-                    event.stopPropagation();
-
-                    openBehindEpisodesPopup(
-                        show.tmdb_id,
-                        getCatchUpEpisodesForPopup(ep,item.behindEpisodes || [])
-                    );
-
-                });
-
-            }
 
             const batchButton = card.querySelector(".upcoming-batch-button");
 
@@ -1546,31 +1413,16 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
             card.querySelectorAll(".upcoming-batch-row").forEach(row=>{
 
-                const openBatchEpisode = ()=>{
-                    openEpisodeModal(
-                        row.dataset.show,
-                        Number(row.dataset.season),
-                        Number(row.dataset.episode),
-                        {backToShow:false}
-                    );
-                };
-
                 row.addEventListener("click",function(event){
 
                     event.stopPropagation();
-                    openBatchEpisode();
 
-                });
-
-                row.addEventListener("keydown",function(event){
-
-                    if(event.target !== row || !["Enter"," "].includes(event.key)){
-                        return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openBatchEpisode();
+                    openEpisodeModal(
+                        this.dataset.show,
+                        Number(this.dataset.season),
+                        Number(this.dataset.episode),
+                        {backToShow:false}
+                    );
 
                 });
 
@@ -1601,17 +1453,16 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
         });
 
-        fragment.appendChild(groupBox);
+        list.appendChild(groupBox);
 
     });
-
-    list.appendChild(fragment);
 
     if(startBackgroundRefresh){
         refreshUpcomingDataInBackground();
     }
 
 }
+
 
 
 function prepareUpcomingDisplayItems(groupItems){
@@ -1750,43 +1601,30 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
         show.poster_path ||
         "";
 
-        const posterFallback = getWatchlistPosterFallback(show);
         const imageHTML = imagePath
-        ? `<img class="upcoming-batch-still" loading="lazy" src="https://image.tmdb.org/t/p/w300${imagePath}" alt="${escapeHTML(show.title || "TV show")}">`
-        : `<div class="upcoming-batch-still-placeholder" aria-hidden="true">${escapeHTML(posterFallback)}</div>`;
-
-        const calendarLabel = formatUpcomingCalendarDate(ep.air_date,ep);
-        const ariaLabel = getUpcomingEpisodeAriaLabel(show,ep);
+        ? `<img class="upcoming-batch-still" loading="lazy" src="https://image.tmdb.org/t/p/w300${imagePath}">`
+        : `<div class="upcoming-batch-still-placeholder">📺</div>`;
 
         html += `
-            <div
-            class="upcoming-batch-row"
-            data-show="${show.tmdb_id}"
-            data-season="${ep.season_number}"
-            data-episode="${ep.episode_number}"
-            role="button"
-            tabindex="0"
-            aria-label="${escapeHTML(ariaLabel)}">
+            <div class="upcoming-batch-row" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}">
 
                 ${imageHTML}
 
                 <div class="upcoming-batch-info">
 
                     <div class="upcoming-batch-episode">
-                        <span class="upcoming-episode-number">S${ep.season_number}E${String(ep.episode_number).padStart(2,"0")}</span>
-                        <span class="upcoming-episode-title">${escapeHTML(ep.name || "Untitled Episode")}</span>
+                        S${ep.season_number}E${String(ep.episode_number).padStart(2,"0")} — ${escapeHTML(ep.name || "Untitled Episode")}
                     </div>
 
                     <div class="upcoming-batch-date">
-                        <span>${escapeHTML(calendarLabel)}</span>
-                        <span>${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep))}</span>
+                        ${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep))}
                     </div>
 
                 </div>
 
                 ${
                 canLog
-                ? `<button class="check upcoming-batch-check" type="button" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}" aria-label="${escapeHTML(getUpcomingEpisodeAriaLabel(show,ep,"Mark watched:"))}" title="Mark episode watched"></button>`
+                ? `<div class="check upcoming-batch-check" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}"></div>`
                 : ""
                 }
 
@@ -1800,6 +1638,11 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
     return html;
 
 }
+
+
+
+
+
 
 
 function getCatchUpEpisodesForPopup(currentEpisode,behindEpisodes){
