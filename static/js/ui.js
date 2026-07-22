@@ -1094,7 +1094,7 @@ function createWatchlistCard(show,options={}){
         aria-label="${escapeHTML(action.label)}"
         title="${escapeHTML(action.label)}"
         ${action.disabled ? "disabled" : ""}>
-            ${getWatchlistActionIcon(action.icon)}
+            ${action.action === "mark" ? "" : getWatchlistActionIcon(action.icon)}
         </button>
     `
     : `
@@ -1282,7 +1282,7 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
         groupBox.innerHTML = `
             <div class="upcoming-group-title">
-                ${escapeHTML(groupName)}
+                ${escapeHTML(groupName.trim())}
             </div>
         `;
 
@@ -2088,6 +2088,13 @@ function getShowMetaHTML(show,year,genres,ratingHTML){
 
 function renderDiscoverShowModal(show){
 
+    const modal = document.getElementById("show-modal");
+
+    if(modal){
+        modal.classList.remove("episode-detail-overlay");
+        modal.classList.add("show-detail-overlay");
+    }
+
     const content = document.getElementById("show-modal-content");
 
     const year = show.first_air_date
@@ -2216,6 +2223,35 @@ function renderDiscoverShowModal(show){
 
     });
 
+    document.querySelectorAll(".discover-preview-check-button").forEach(button=>{
+
+        button.addEventListener("click",async function(event){
+
+            event.stopPropagation();
+
+            if(this.disabled){
+                return;
+            }
+
+            this.disabled = true;
+
+            try{
+                await playCheckSuccessAnimation(this);
+                await addDiscoverEpisodeAsWatched(
+                    show.tmdb_id,
+                    Number(this.dataset.season),
+                    Number(this.dataset.episode)
+                );
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
+
+        });
+
+    });
+
     document.querySelectorAll(".discover-episode-row").forEach(row=>{
 
         row.addEventListener("click",async function(){
@@ -2308,9 +2344,11 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
 
     episodeList.forEach(ep=>{
 
+        const aired = isEpisodeAired(ep.air_date,ep);
+
         html += `
             <div
-            class="episode-row discover-episode-row ${isEpisodeAired(ep.air_date,ep) ? "" : "future"}"
+            class="episode-row discover-episode-row ${aired ? "" : "future"}"
             data-season="${seasonNumber}"
             data-episode="${ep.episode_number}">
                 <div class="episode-name">
@@ -2319,6 +2357,15 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
                 <div class="episode-date">
                     ${ep.air_date ? escapeHTML(formatAirDate(ep.air_date,ep)) : "Unknown"}
                 </div>
+                <button
+                type="button"
+                class="episode-check-button discover-preview-check-button"
+                data-season="${seasonNumber}"
+                data-episode="${ep.episode_number}"
+                aria-label="${aired ? `Add ${escapeHTML(show.title || "show")} and mark watched through Season ${seasonNumber}, Episode ${ep.episode_number}` : "Episode has not aired yet"}"
+                title="${aired ? "Add show and mark watched through this episode" : "Not aired yet"}"
+                ${aired ? "" : "disabled"}>
+                </button>
             </div>
         `;
 
@@ -2801,7 +2848,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
                 ${
                 canToggle
-                ? `<button class="episode-detail-action-button primary" id="episode-toggle-watched-button">
+                ? `<button class="episode-detail-action-button ${isWatched ? "primary" : ""}" id="episode-toggle-watched-button">
                     ${isWatched ? "Mark Unwatched" : "Mark Watched"}
                 </button>`
                 : ""

@@ -1606,6 +1606,73 @@ async function addDiscoverPreviewShow(status){
 
 
 
+async function addDiscoverEpisodeAsWatched(showId,season,episode){
+
+    const show = discoverPreviewShow;
+    const seasonNumber = Number(season);
+    const episodeNumber = Number(episode);
+
+    if(
+        !show ||
+        String(show.tmdb_id) !== String(showId) ||
+        !Number.isFinite(seasonNumber) ||
+        !Number.isFinite(episodeNumber)
+    ){
+        return;
+    }
+
+    try{
+
+        for(let seasonToLoad = 1; seasonToLoad <= seasonNumber; seasonToLoad++){
+            await ensureSeasonLoaded(show,seasonToLoad,false,{skipSave:true});
+        }
+
+        const episodeData = getEpisodeData(show,seasonNumber,episodeNumber);
+
+        if(!isEpisodeAired(episodeData.air_date,episodeData)){
+            showToast("This episode has not aired yet");
+            return;
+        }
+
+        const newlyMarkedEpisodes = await getEpisodesToBeMarked(
+            show,
+            seasonNumber,
+            episodeNumber
+        );
+
+        show.status = "watching";
+        show.was_unreleased_when_added = false;
+        show.completed_at = "";
+
+        DATA.shows[String(show.tmdb_id)] = show;
+
+        markEpAndPrevious(show.tmdb_id,seasonNumber,episodeNumber);
+        addHistoryEntries(show,newlyMarkedEpisodes);
+
+        await saveData();
+
+        discoverPreviewShow = null;
+        selectedShowId = String(show.tmdb_id);
+        selectedEpisodeContext = null;
+        expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
+
+        renderAll();
+        renderShowModal(show);
+        showToast(
+            newlyMarkedEpisodes.length > 0
+            ? getWatchedMessage(show,newlyMarkedEpisodes)
+            : show.title + " added to Watching"
+        );
+
+    }catch(error){
+
+        showToast(error.message || "Could not add and mark episode");
+
+    }
+
+}
+
+
 
 async function handleAddShowClick(searchShow){
 
