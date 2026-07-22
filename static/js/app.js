@@ -110,6 +110,7 @@ async function init(){
     setupEvents();
 
     renderAll();
+    startDataSync();
 
     // Migration metadata sync is intentionally not auto-started.
     // It can slow down search/rendering, and migration work is on hold for now.
