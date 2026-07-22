@@ -267,6 +267,8 @@ function normalizeExistingData(){
     ensureMetadataSyncData();
     ensureNetworkMetadataSyncData();
 
+    const latestHistoryByShow = getLatestHistoryTimestampMap();
+
     Object.values(DATA.shows).forEach(show=>{
 
         if(!show.episodes_watched){
@@ -341,6 +343,14 @@ function normalizeExistingData(){
 
         syncNextEpisodeFromTMDB(show);
         normalizeEpisodeReleaseFields(show);
+
+        const latestWatchedAt = latestHistoryByShow.get(String(show.tmdb_id)) || "";
+
+        if(latestWatchedAt){
+            setShowActivityFromTimestamp(show,latestWatchedAt);
+        }else{
+            updateShowLastWatchedFromHistory(show,{preserveLegacyDate:true});
+        }
 
     });
 
@@ -1442,6 +1452,7 @@ function createShowObject(details,status){
         episodes_watched:{},
         notes:"",
         last_watched:"",
+        last_activity_at:"",
         date_added:new Date().toISOString(),
         number_of_seasons:details.number_of_seasons || 0,
         number_of_episodes:details.number_of_episodes || 0,
@@ -1599,6 +1610,67 @@ async function addDiscoverPreviewShow(status){
     }catch(error){
 
         showToast(error.message || "Network error");
+
+    }
+
+}
+
+
+
+async function addDiscoverSeasonAsWatched(showId,season){
+
+    const show = discoverPreviewShow;
+    const seasonNumber = Number(season);
+
+    if(
+        !show ||
+        String(show.tmdb_id) !== String(showId) ||
+        !Number.isFinite(seasonNumber)
+    ){
+        return;
+    }
+
+    try{
+
+        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
+
+        const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(
+            show,
+            seasonNumber
+        );
+
+        if(newlyMarkedEpisodes.length === 0){
+            showToast("No aired episodes to log");
+            return;
+        }
+
+        show.status = "watching";
+        show.was_unreleased_when_added = false;
+        show.completed_at = "";
+
+        DATA.shows[String(show.tmdb_id)] = show;
+
+        markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
+        addHistoryEntries(show,newlyMarkedEpisodes);
+
+        await saveData();
+
+        discoverPreviewShow = null;
+        selectedShowId = String(show.tmdb_id);
+        selectedEpisodeContext = null;
+        expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
+
+        renderAll();
+        renderShowModal(show);
+        showToast(
+            "Marked " + newlyMarkedEpisodes.length +
+            (newlyMarkedEpisodes.length === 1 ? " episode" : " episodes") +
+            " watched in Season " + seasonNumber
+        );
+
+    }catch(error){
+
+        showToast(error.message || "Could not log season");
 
     }
 
@@ -2758,6 +2830,7 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
         }
 
         removeHistoryEntry(showId,season,episode);
+        updateShowLastWatchedFromHistory(show);
 
     }
 
@@ -2799,15 +2872,10 @@ async function markSeasonWatched(showId,seasonNumber){
 
     await ensureSeasonLoaded(show,seasonNumber);
 
-    const seasonList =
-    show._episode_list &&
-    Array.isArray(show._episode_list[String(seasonNumber)])
-    ? show._episode_list[String(seasonNumber)]
-    : [];
-
-    const airedEpisodeNumbers = seasonList
-    .filter(ep=>isEpisodeAired(ep.air_date,ep))
-    .map(ep=>Number(ep.episode_number));
+    const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(
+        show,
+        seasonNumber
+    );
 
     if(airedEpisodeNumbers.length === 0){
 
@@ -2816,34 +2884,42 @@ async function markSeasonWatched(showId,seasonNumber){
 
     }
 
-    if(!show.episodes_watched){
-        show.episodes_watched = {};
-    }
-
-    if(!show.episodes_watched[String(seasonNumber)]){
-        show.episodes_watched[String(seasonNumber)] = [];
-    }
-
-    const watchedEpisodes = show.episodes_watched[String(seasonNumber)] || [];
-
-    const seasonIsFullyWatched = airedEpisodeNumbers.every(episodeNumber=>{
-        return watchedEpisodes.includes(episodeNumber);
-    });
+    const seasonIsFullyWatched = isSeasonFullyWatched(
+        show,
+        seasonNumber,
+        airedEpisodeNumbers
+    );
 
     if(seasonIsFullyWatched){
 
-        const airedSet = new Set(airedEpisodeNumbers);
-
-        show.episodes_watched[String(seasonNumber)] = watchedEpisodes.filter(episodeNumber=>{
-            return !airedSet.has(Number(episodeNumber));
+        const confirmed = await showAppConfirm({
+            title:"Mark Season Unwatched",
+            message:
+            "Mark every watched episode in Season " +
+            seasonNumber +
+            " as unwatched? This will remove those entries from History.",
+            confirmLabel:"Mark Unwatched",
+            cancelLabel:"Cancel",
+            danger:true
         });
 
-        if(show.episodes_watched[String(seasonNumber)].length === 0){
-            delete show.episodes_watched[String(seasonNumber)];
+        if(!confirmed){
+            return;
         }
 
-        airedEpisodeNumbers.forEach(episodeNumber=>{
-            removeHistoryEntry(showId,seasonNumber,episodeNumber);
+        const watchedEpisodes =
+        show.episodes_watched &&
+        Array.isArray(show.episodes_watched[String(seasonNumber)])
+        ? show.episodes_watched[String(seasonNumber)]
+        : [];
+
+        delete show.episodes_watched[String(seasonNumber)];
+
+        DATA.history = (Array.isArray(DATA.history) ? DATA.history : []).filter(entry=>{
+            return !(
+                String(entry.tmdb_id) === String(showId) &&
+                Number(entry.season) === Number(seasonNumber)
+            );
         });
 
         updateShowLastWatchedFromHistory(show);
@@ -2864,10 +2940,9 @@ async function markSeasonWatched(showId,seasonNumber){
 
     }
 
-    const newlyMarkedEpisodes = await getEpisodesToBeMarked(
+    const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(
         show,
-        seasonNumber,
-        9999
+        seasonNumber
     );
 
     if(newlyMarkedEpisodes.length === 0){
@@ -2877,11 +2952,8 @@ async function markSeasonWatched(showId,seasonNumber){
 
     }
 
-    markEpAndPrevious(showId,seasonNumber,9999);
-
+    markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
     addHistoryEntries(show,newlyMarkedEpisodes);
-
-    show.last_watched = new Date().toISOString().slice(0,10);
 
     if(show.status === "plan"){
         show.status = "watching";
@@ -2896,14 +2968,10 @@ async function markSeasonWatched(showId,seasonNumber){
     }
 
     showToast(
-        "Marked aired episodes up to Season " + seasonNumber
+        "Marked aired episodes in Season " + seasonNumber
     );
 
 }
-
-
-
-
 
 
 
@@ -2925,31 +2993,208 @@ function getWatchedMessage(show,episodes){
 
 
 
-function updateShowLastWatchedFromHistory(show){
+function getLatestHistoryTimestampMap(){
+
+    const latestByShow = new Map();
+
+    (Array.isArray(DATA.history) ? DATA.history : []).forEach(entry=>{
+
+        if(!entry || !entry.watched_at){
+            return;
+        }
+
+        const watchedAt = new Date(entry.watched_at);
+
+        if(Number.isNaN(watchedAt.getTime())){
+            return;
+        }
+
+        const showId = String(entry.tmdb_id);
+        const existing = latestByShow.get(showId);
+
+        if(!existing || watchedAt.getTime() > new Date(existing).getTime()){
+            latestByShow.set(showId,watchedAt.toISOString());
+        }
+
+    });
+
+    return latestByShow;
+
+}
+
+
+
+function getLatestHistoryEntryForShow(show){
+
+    if(!show || !Array.isArray(DATA.history)){
+        return null;
+    }
+
+    return DATA.history
+    .filter(entry=>{
+        return (
+            entry &&
+            String(entry.tmdb_id) === String(show.tmdb_id) &&
+            entry.watched_at &&
+            !Number.isNaN(new Date(entry.watched_at).getTime())
+        );
+    })
+    .slice()
+    .sort((a,b)=>{
+        return new Date(b.watched_at) - new Date(a.watched_at);
+    })[0] || null;
+
+}
+
+
+
+function setShowActivityFromTimestamp(show,watchedAt){
 
     if(!show){
         return;
     }
 
-    if(!DATA.history || !Array.isArray(DATA.history)){
-        DATA.history = [];
+    const value = String(watchedAt || "");
+    const parsed = value ? new Date(value) : null;
+
+    if(!parsed || Number.isNaN(parsed.getTime())){
+        show.last_activity_at = "";
         show.last_watched = "";
         return;
     }
 
-    const latestEntry = DATA.history
-    .filter(entry=>String(entry.tmdb_id) === String(show.tmdb_id))
-    .sort((a,b)=>{
-        return new Date(b.watched_at || 0) - new Date(a.watched_at || 0);
-    })[0];
-
-    show.last_watched = latestEntry && latestEntry.watched_at
-    ? latestEntry.watched_at.slice(0,10)
-    : "";
+    show.last_activity_at = parsed.toISOString();
+    show.last_watched = show.last_activity_at.slice(0,10);
 
 }
 
 
+
+function updateShowLastWatchedFromHistory(show,options={}){
+
+    if(!show){
+        return;
+    }
+
+    const latestEntry = getLatestHistoryEntryForShow(show);
+
+    if(latestEntry){
+        setShowActivityFromTimestamp(show,latestEntry.watched_at);
+        return;
+    }
+
+    show.last_activity_at = "";
+
+    if(!options.preserveLegacyDate){
+        show.last_watched = "";
+    }else if(typeof show.last_watched !== "string"){
+        show.last_watched = String(show.last_watched || "");
+    }
+
+}
+
+
+
+function getAiredEpisodeNumbersInSeason(show,seasonNumber){
+
+    const seasonList =
+    show &&
+    show._episode_list &&
+    Array.isArray(show._episode_list[String(seasonNumber)])
+    ? show._episode_list[String(seasonNumber)]
+    : [];
+
+    return seasonList
+    .filter(ep=>isEpisodeAired(ep.air_date,ep))
+    .map(ep=>Number(ep.episode_number))
+    .filter(Number.isFinite)
+    .sort((a,b)=>a-b);
+
+}
+
+
+
+function isSeasonFullyWatched(show,seasonNumber,airedEpisodeNumbers=null){
+
+    const aired = Array.isArray(airedEpisodeNumbers)
+    ? airedEpisodeNumbers
+    : getAiredEpisodeNumbersInSeason(show,seasonNumber);
+
+    if(aired.length === 0){
+        return false;
+    }
+
+    const watchedEpisodes =
+    show &&
+    show.episodes_watched &&
+    Array.isArray(show.episodes_watched[String(seasonNumber)])
+    ? show.episodes_watched[String(seasonNumber)]
+    : [];
+
+    return aired.every(episodeNumber=>{
+        return watchedEpisodes.includes(Number(episodeNumber));
+    });
+
+}
+
+
+
+function getAiredUnwatchedEpisodesInSeason(show,seasonNumber){
+
+    const watchedEpisodes =
+    show &&
+    show.episodes_watched &&
+    Array.isArray(show.episodes_watched[String(seasonNumber)])
+    ? show.episodes_watched[String(seasonNumber)]
+    : [];
+
+    return getAiredEpisodeNumbersInSeason(show,seasonNumber)
+    .filter(episodeNumber=>!watchedEpisodes.includes(episodeNumber))
+    .map(episodeNumber=>({
+        season:Number(seasonNumber),
+        episode:episodeNumber
+    }));
+
+}
+
+
+
+function markEpisodesWatchedInSeason(show,seasonNumber,episodes){
+
+    if(!show){
+        return;
+    }
+
+    if(!show.episodes_watched){
+        show.episodes_watched = {};
+    }
+
+    const key = String(seasonNumber);
+
+    if(!Array.isArray(show.episodes_watched[key])){
+        show.episodes_watched[key] = [];
+    }
+
+    (Array.isArray(episodes) ? episodes : []).forEach(item=>{
+
+        const episodeNumber = Number(
+            item && typeof item === "object"
+            ? item.episode
+            : item
+        );
+
+        if(
+            Number.isFinite(episodeNumber) &&
+            !show.episodes_watched[key].includes(episodeNumber)
+        ){
+            show.episodes_watched[key].push(episodeNumber);
+        }
+
+    });
+
+    show.episodes_watched[key].sort((a,b)=>a-b);
+
+}
 
 
 
@@ -2987,7 +3232,6 @@ async function completeShow(show){
 
     show.status = "finished";
     show.completed_at = new Date().toISOString();
-    show.last_watched = new Date().toISOString().slice(0,10);
 
 }
 
@@ -3255,8 +3499,6 @@ function markEpAndPrevious(showId,season,episode){
         show.episodes_watched[String(s)].sort((a,b)=>a-b);
 
     }
-
-    show.last_watched = new Date().toISOString().slice(0,10);
 
     if(show.status === "plan"){
         show.status = "watching";
@@ -3571,6 +3813,10 @@ function addHistoryEntries(show,episodes){
         addedEntries.push(historyEntry);
 
     });
+
+    if(addedEntries.length > 0){
+        setShowActivityFromTimestamp(show,watchedAt);
+    }
 
     return addedEntries;
 
@@ -5889,6 +6135,7 @@ function getAutomaticBackupSignatureData(){
             notes:String(show.notes || ""),
             episodes_watched:watched,
             last_watched:String(show.last_watched || ""),
+            last_activity_at:String(show.last_activity_at || ""),
             completed_at:String(show.completed_at || ""),
             was_unreleased_when_added:show.was_unreleased_when_added === true
         };
@@ -7647,6 +7894,7 @@ function createAppShowFromCompatibleShow(compatibleShow,mappedStatus,tmdbDetails
             episodes_watched:{},
             notes:"",
             last_watched:"",
+            last_activity_at:"",
             date_added:compatibleShow.created_at || importedAt,
             number_of_seasons:0,
             number_of_episodes:0,
@@ -7878,6 +8126,7 @@ function importCompatibleEpisodesIntoShow(show,compatibleShow,targetData){
     show.number_of_seasons = Math.max(Number(show.number_of_seasons || 0),maxRegularSeason);
     show.number_of_episodes = Math.max(Number(show.number_of_episodes || 0),regularEpisodeCount);
     show.last_watched = latestWatchedAt ? latestWatchedAt.slice(0,10) : "";
+    show.last_activity_at = latestWatchedAt || "";
 
     return stats;
 

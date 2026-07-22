@@ -1111,12 +1111,13 @@ function createWatchlistCard(show,options={}){
 
             <div class="watchlist-title-row">
                 <button type="button" class="title watchlist-title-button" aria-label="Open ${escapeHTML(show.title || "show")} details">${escapeHTML(show.title)}</button>
-                ${showNewBadge ? `<span class="new-badge watchlist-new-badge">NEW</span>` : ""}
             </div>
 
             <div class="episode">${episodeLine}</div>
 
             ${episodeTitle ? `<div class="episode-title">${episodeTitle}</div>` : ""}
+
+            ${showNewBadge ? `<div class="watchlist-new-badge-row"><span class="new-badge watchlist-new-badge">NEW</span></div>` : ""}
 
             ${releaseMeta ? `<div class="watchlist-release-meta">${escapeHTML(releaseMeta)}</div>` : ""}
 
@@ -1204,10 +1205,22 @@ function renderWatchlist(){
         .filter(show=>filterShow(show))
         .sort((a,b)=>{
 
-            const dateA = a.last_watched || a.date_added || "";
-            const dateB = b.last_watched || b.date_added || "";
+            const activityA = a.last_activity_at || a.date_added || "";
+            const activityB = b.last_activity_at || b.date_added || "";
+            const timeA = new Date(activityA).getTime();
+            const timeB = new Date(activityB).getTime();
+            const safeTimeA = Number.isFinite(timeA) ? timeA : 0;
+            const safeTimeB = Number.isFinite(timeB) ? timeB : 0;
 
-            return new Date(dateB) - new Date(dateA);
+            if(safeTimeA !== safeTimeB){
+                return safeTimeB - safeTimeA;
+            }
+
+            return String(a.title || "").localeCompare(
+                String(b.title || ""),
+                undefined,
+                {sensitivity:"base"}
+            );
 
         });
 
@@ -2223,6 +2236,36 @@ function renderDiscoverShowModal(show){
 
     });
 
+    document.querySelectorAll(".discover-season-all-button").forEach(button=>{
+
+        button.addEventListener("click",async function(event){
+
+            event.stopPropagation();
+
+            if(this.disabled){
+                return;
+            }
+
+            this.disabled = true;
+
+            try{
+                await playCheckSuccessAnimation(this);
+                await addDiscoverSeasonAsWatched(
+                    show.tmdb_id,
+                    Number(this.dataset.season)
+                );
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
+
+        });
+
+    });
+
+
+
     document.querySelectorAll(".discover-preview-check-button").forEach(button=>{
 
         button.addEventListener("click",async function(event){
@@ -2299,7 +2342,13 @@ function renderDiscoverPreviewSeasonsHTML(show){
         ? show._episode_list[String(season)]
         : [];
 
-        const total = episodeList.length || (show._season_episodes ? show._season_episodes[String(season)] : 0);
+        const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(show,season);
+        const seasonIsFullyWatched = isSeasonFullyWatched(
+            show,
+            season,
+            airedEpisodeNumbers
+        );
+        const seasonHasAiredEpisodes = airedEpisodeNumbers.length > 0;
 
         html += `
 
@@ -2312,7 +2361,14 @@ function renderDiscoverPreviewSeasonsHTML(show){
                         <div class="season-title">Season ${season}</div>
                     </div>
 
-                    <div class="season-count">${total ? `${total} episodes` : "Loading..."}</div>
+                    <button
+                    type="button"
+                    class="season-all-button discover-season-all-button ${seasonIsFullyWatched ? "checked" : ""}"
+                    data-season="${season}"
+                    aria-label="${seasonHasAiredEpisodes ? `Log all aired episodes in Season ${season}` : `Season ${season} has no aired episodes yet`}"
+                    title="${seasonHasAiredEpisodes ? `Log all aired episodes in Season ${season}` : "No aired episodes yet"}"
+                    ${seasonHasAiredEpisodes ? "" : "disabled"}>
+                    </button>
 
                 </div>
 
@@ -3048,17 +3104,13 @@ function renderSeasonsHTML(show){
 
         const watched = getSeasonWatchedCount(show,season);
 
-        const watchedEpisodes = show.episodes_watched[String(season)] || [];
+        const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(show,season);
 
-        const airedEpisodeNumbers = episodeList
-        ? episodeList
-            .filter(ep=>isEpisodeAired(ep.air_date,ep))
-            .map(ep=>Number(ep.episode_number))
-        : [];
-
-        const seasonIsFullyWatched = airedEpisodeNumbers.length > 0
-        ? airedEpisodeNumbers.every(episodeNumber=>watchedEpisodes.includes(episodeNumber))
-        : total && watched >= total;
+        const seasonIsFullyWatched = isSeasonFullyWatched(
+            show,
+            season,
+            airedEpisodeNumbers
+        );
 
         html += `
 
