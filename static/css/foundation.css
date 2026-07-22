@@ -1481,3 +1481,242 @@ percentages, badges, controls, sorting, or additional information is added.
         flex-basis:42px;
     }
 }
+
+/* ---------- TV Tracker 1.2.2c: approved Upcoming page layout ---------- */
+
+/*
+Only the approved Upcoming-page layout corrections are included here:
+compact aligned rows, monochrome batch controls, mobile bottom clearance,
+and a modal that stays inside the usable viewport.
+*/
+
+.upcoming-group{
+    margin-bottom:0;
+}
+
+.upcoming-entry-card{
+    position:relative;
+    min-height:124px;
+    display:grid;
+    grid-template-columns:128px minmax(0,1fr) minmax(72px,auto) 44px;
+    align-items:center;
+    gap:16px;
+    padding:12px 30px;
+    overflow:hidden;
+    border-radius:0;
+    background:transparent;
+    box-shadow:none;
+}
+
+.upcoming-entry-card:hover{
+    background:transparent;
+}
+
+.upcoming-still,
+.upcoming-still-placeholder{
+    width:128px;
+    height:72px;
+    border-radius:0;
+}
+
+.upcoming-entry-card .info{
+    width:100%;
+    min-width:0;
+}
+
+.upcoming-entry-card .title,
+.upcoming-episode-line{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.upcoming-entry-card .title{
+    margin-bottom:5px;
+    font-size:18px;
+    line-height:1.2;
+}
+
+.upcoming-episode-line{
+    margin-top:0;
+    color:#aaa;
+    font-size:14px;
+    line-height:1.35;
+}
+
+.upcoming-time{
+    min-width:0;
+    margin:0;
+    padding:0;
+    color:#888;
+    font-size:14px;
+    line-height:1.35;
+    text-align:right;
+    white-space:nowrap;
+}
+
+.upcoming-check{
+    width:44px;
+    height:44px;
+    min-width:44px;
+    min-height:44px;
+    margin:0;
+    justify-self:end;
+}
+
+.upcoming-batch-button{
+    min-width:0;
+    margin-top:8px;
+    padding:6px 9px;
+    border:1px solid #3a3a3a;
+    border-radius:4px;
+    background:#0d0d0d;
+    color:#aaa;
+    font-size:12px;
+    line-height:1.25;
+    text-align:left;
+}
+
+.upcoming-batch-button:hover{
+    border-color:#666;
+    background:#151515;
+    color:#fff;
+}
+
+/* Keep the modal within the desktop content area instead of underneath the sidebar. */
+@media (min-width:992px){
+    .show-modal-overlay.episode-detail-overlay{
+        right:0;
+        left:var(--tt-sidebar-width);
+        width:auto;
+        padding:24px;
+    }
+
+    .show-modal-overlay.episode-detail-overlay .show-modal{
+        width:min(1100px,calc(100vw - var(--tt-sidebar-width) - 48px));
+        height:min(850px,calc(100dvh - 48px));
+        max-height:calc(100dvh - 48px);
+        margin:0;
+    }
+}
+
+@media (max-width:767.98px){
+    /* The row remains horizontal: still left, information centre, action right. */
+    .upcoming-entry-card{
+        min-height:104px;
+        grid-template-columns:86px minmax(0,1fr) 44px;
+        grid-template-rows:auto auto;
+        align-items:center;
+        gap:3px 12px;
+        padding:12px 14px;
+        flex-wrap:initial;
+    }
+
+    .upcoming-still,
+    .upcoming-still-placeholder{
+        width:86px;
+        height:52px;
+        grid-column:1;
+        grid-row:1 / 3;
+        align-self:center;
+    }
+
+    .upcoming-entry-card .info{
+        grid-column:2;
+        grid-row:1;
+        align-self:end;
+    }
+
+    .upcoming-entry-card .title{
+        margin-bottom:4px;
+        font-size:17px;
+    }
+
+    .upcoming-episode-line{
+        font-size:13px;
+    }
+
+    .upcoming-time{
+        grid-column:2;
+        grid-row:2;
+        align-self:start;
+        margin:2px 0 0;
+        padding:0;
+        color:#777;
+        font-size:12px;
+        text-align:left;
+        white-space:nowrap;
+    }
+
+    .upcoming-entry-card .upcoming-check{
+        width:44px;
+        height:44px;
+        min-width:44px;
+        min-height:44px;
+        grid-column:3;
+        grid-row:1 / 3;
+        align-self:center;
+        justify-self:end;
+        margin:0;
+        order:initial;
+    }
+
+    .upcoming-batch-button{
+        margin-top:6px;
+        padding:5px 8px;
+        font-size:11px;
+    }
+
+    /* Let the final Upcoming content scroll fully above the fixed bottom navigation. */
+    #show-list:has(.upcoming-group){
+        padding-bottom:calc(var(--tt-mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
+    }
+}
+
+@media (max-width:419.98px){
+    .upcoming-entry-card{
+        min-height:98px;
+        grid-template-columns:74px minmax(0,1fr) 42px;
+        gap:3px 10px;
+        padding-right:12px;
+        padding-left:12px;
+    }
+
+    .upcoming-still,
+    .upcoming-still-placeholder{
+        width:74px;
+        height:46px;
+    }
+
+    .upcoming-entry-card .title{
+        font-size:16px;
+    }
+
+    .upcoming-episode-line,
+    .upcoming-time{
+        font-size:12px;
+    }
+
+    .upcoming-entry-card .upcoming-check{
+        width:42px;
+        height:42px;
+        min-width:42px;
+        min-height:42px;
+    }
+}
+
+@media (max-width:991.98px){
+    .show-modal-overlay{
+        inset:0;
+        width:100vw;
+        padding:0;
+    }
+
+    .show-modal{
+        width:100%;
+        height:100dvh;
+        max-height:none;
+        margin:0;
+    }
+}
