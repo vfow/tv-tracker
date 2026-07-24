@@ -32,6 +32,8 @@ assert.strictEqual(
 assert.strictEqual(utils.prefersReducedMotion(()=>({matches:true})),true);
 assert.strictEqual(utils.prefersReducedMotion(()=>({matches:false})),false);
 
+assert.strictEqual(saveStoreModule.pendingSaveStatusText,undefined);
+
 const storage = fakeStorage();
 const firstStore = saveStoreModule.createPendingSaveStore(storage,"test-pending");
 firstStore.add({

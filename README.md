@@ -2,6 +2,13 @@
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
 
+## v1.3.1 Audit Repair — silent background saving
+
+- The durable save queue remains enabled and survives reloads.
+- Normal saves, retries, synchronization interruptions, and recovery display no save-status banners or automatic toasts.
+- Operations remain queued until the server confirms them, then clear automatically.
+- Updated cache-busting ensures Firefox loads the silent background-save code.
+
 ## v1.3.1 Audit Repair
 
 - Date-only episodes use a fixed 9:00 AM Kuala Lumpur fallback when no trustworthy timestamp exists.
@@ -9,7 +16,7 @@ Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CS
 - Upcoming uses the same shared row hover as Watchlist and History.
 - Watched confirmation animations finish before the affected row or modal is redrawn.
 - Show, Discover, and episode detail hero images use the original centered cover/crop fit with the original dark gradients.
-- Failed saves are written to a persistent browser queue before network transmission, visibly marked as unsaved, replayed after reload, and removed only after server confirmation.
+- Failed saves are written to a persistent browser queue before network transmission, retried silently, replayed after reload, and removed only after server confirmation.
 - Ordinary synchronization writes now receive strict per-record validation for shows, History, profile/state values, identifiers, arrays, numbers, and real calendar dates.
 - Backup export validates stored records and refuses to export poisoned data.
 - Reduced-motion users no longer wait through an invisible 560 ms confirmation delay.
@@ -98,6 +105,10 @@ TV Tracker separates the episode calendar date from the instant when the episode
 4. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
 
 The fallback is internal and is not exposed as a Settings or per-show control.
+
+## Silent background saving
+
+Episode and tracker changes are protected by a durable browser queue and retried automatically after temporary failures. This process is intentionally invisible: normal saves, delayed retries, synchronization interruptions, and recovery do not display banners or automatic save-status toasts. Pending operations still survive reloads and are removed only after server confirmation.
 
 ## Backups and restore
 

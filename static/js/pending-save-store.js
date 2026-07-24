@@ -22,6 +22,7 @@
         );
     }
 
+
     function createPendingSaveStore(storage,key){
         if(!storage || typeof storage.getItem !== "function"){
             throw new Error("A persistent browser storage provider is required.");

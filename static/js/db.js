@@ -90,39 +90,15 @@ function persistPendingSaveQueue(){
 }
 
 function updateUnsavedStateIndicator(){
+    // Pending saves and retries are intentionally silent. Remove any indicator
+    // left behind by an older cached build, while keeping the durable queue.
     if(typeof document === "undefined"){
         return;
     }
-
-    let indicator = document.getElementById("tv-unsaved-status");
-    const pendingCount = PENDING_SAVE_OPERATIONS.length;
-
-    if(pendingCount === 0 && !PENDING_SAVE_STORAGE_ERROR){
-        if(indicator){
-            indicator.remove();
-        }
-        return;
+    const indicator = document.getElementById("tv-unsaved-status");
+    if(indicator){
+        indicator.remove();
     }
-
-    if(!indicator){
-        indicator = document.createElement("div");
-        indicator.id = "tv-unsaved-status";
-        indicator.className = "tv-unsaved-status";
-        indicator.setAttribute("role","status");
-        indicator.setAttribute("aria-live","polite");
-        document.body.appendChild(indicator);
-    }
-
-    if(PENDING_SAVE_STORAGE_ERROR && pendingCount === 0){
-        indicator.classList.add("storage-error");
-        indicator.textContent = "Unsaved protection unavailable";
-        return;
-    }
-
-    indicator.classList.remove("storage-error");
-    indicator.textContent = pendingCount === 1
-    ? "1 unsaved change — retrying"
-    : pendingCount + " unsaved changes — retrying";
 }
 
 function createPendingSaveOperation(options,operationId){
@@ -1589,19 +1565,14 @@ function processPendingSaveQueue(){
             try{
                 SAVE_IN_FLIGHT += 1;
                 await persistQueuedSaveOperation(operation);
-                removePendingSaveOperation(operation.id);
                 PENDING_SAVE_FAILURES = 0;
+                removePendingSaveOperation(operation.id);
                 SYNC_FAILURES = 0;
                 SYNC_WARNING_SHOWN = false;
             }catch(error){
                 console.error("TV Tracker has an unsaved operation",error);
                 PENDING_SAVE_FAILURES += 1;
                 updateUnsavedStateIndicator();
-                if(typeof showToast === "function"){
-                    showToast(
-                        friendlyRequestError(error,"Changes are unsaved. Retrying automatically.")
-                    );
-                }
                 schedulePendingSaveRetry();
                 return false;
             }finally{
@@ -1646,12 +1617,6 @@ function saveData(options={}){
         PENDING_SAVE_STORAGE_ERROR = error;
         updateUnsavedStateIndicator();
         console.error("TV Tracker could not protect the pending save",error);
-        if(typeof showToast === "function"){
-            showToast(
-                "Could not store this change safely in the browser. " +
-                "Keep this page open and restore browser storage access."
-            );
-        }
         return Promise.resolve(false);
     }
 
@@ -1697,18 +1662,12 @@ function noteSyncFailure(error){
 
     SYNC_FAILURES += 1;
 
-    if(SYNC_FAILURES >= 3 && !SYNC_WARNING_SHOWN){
+    if(SYNC_FAILURES >= 3){
         SYNC_WARNING_SHOWN = true;
-        if(typeof showToast === "function"){
-            showToast(friendlyRequestError(error,"Sync is temporarily unavailable. Retrying automatically."));
-        }
     }
 }
 
 function noteSyncSuccess(){
-    if(SYNC_WARNING_SHOWN && typeof showToast === "function"){
-        showToast("Sync restored");
-    }
     SYNC_FAILURES = 0;
     SYNC_WARNING_SHOWN = false;
 }

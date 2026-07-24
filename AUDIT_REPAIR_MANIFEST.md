@@ -4,7 +4,7 @@ This release is built from the approved `v1.3.1 Audit Repair + original image fi
 
 ## Reliability repairs included
 
-1. Durable browser save queue with automatic retry, reload recovery, idempotent operation IDs, and a visible unsaved-state indicator.
+1. Durable browser save queue with automatic retry, reload recovery, and idempotent operation IDs. Save and synchronization status run silently in the background.
 2. Strict validation of ordinary synchronization writes for shows, History records, profile/state records, identifiers, dates, timestamps, numbers, arrays, watched episodes, and supported state keys.
 3. Backup-export validation that blocks malformed stored records rather than producing a poisoned backup.
 4. Reduced-motion-aware watched confirmation with no invisible 560 ms delay.
@@ -42,7 +42,11 @@ The same command runs in `.github/workflows/audit-tests.yml`.
 The patch archive is cumulative against:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-original-image-fit-full.zip
+tv-tracker-v1.3.1-audit-repair-status-hotfix-full.zip
 ```
 
 Overlay the patch files onto that exact approved source, preserving paths, then restart the Flask website and hard-refresh browsers.
+
+## Silent background saving
+
+The durable pending-save queue, reload recovery, server confirmation, and automatic retries remain enabled. All save-state banners and automatic save/synchronization toasts are intentionally disabled. Older cached `tv-unsaved-status` elements are removed when the new build initializes.

@@ -17,12 +17,19 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn('Type RECREATE to continue', reset_py)
         self.assertIn("ON CONFLICT (singleton_id) DO UPDATE", reset_py)
 
-    def test_durable_queue_and_unsaved_indicator_are_present(self):
+    def test_durable_queue_runs_silently(self):
         db_js = (ROOT / "static/js/db.js").read_text(encoding="utf-8")
         self.assertIn("tv-tracker-pending-saves:v1", db_js)
         self.assertIn("replayPendingSaveOperations", db_js)
         self.assertIn("removePendingSaveOperation(operation.id)", db_js)
-        self.assertIn("1 unsaved change — retrying", db_js)
+        pending_store_js = (ROOT / "static/js/pending-save-store.js").read_text(encoding="utf-8")
+        foundation_css = (ROOT / "static/css/foundation.css").read_text(encoding="utf-8")
+        self.assertNotIn("pendingSaveStatusText", pending_store_js)
+        self.assertNotIn("tv-unsaved-status", foundation_css)
+        self.assertNotIn("Changes are unsaved. Retrying automatically.", db_js)
+        self.assertNotIn("Sync is temporarily unavailable. Retrying automatically.", db_js)
+        self.assertNotIn('showToast("Sync restored")', db_js)
+        self.assertIn('indicator.remove()', db_js)
 
     def test_reduced_motion_and_strict_dates_are_wired(self):
         ui_js = (ROOT / "static/js/ui.js").read_text(encoding="utf-8")
