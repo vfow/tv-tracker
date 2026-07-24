@@ -8,8 +8,9 @@ import os
 import re
 import threading
 import time
+import math
 from collections import defaultdict, deque
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -57,6 +58,17 @@ SYNC_LOCK = threading.Lock()
 CHANGE_LOG_RETENTION_REVISIONS = 5000
 CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
+DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+STATE_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
+ALLOWED_STATE_KEYS = {"profile", "metadata_sync", "network_sync"}
+MAX_JSON_DEPTH = 16
+MAX_JSON_CONTAINER_ITEMS = 500000
+MAX_JSON_STRING_CHARS = 12 * 1024 * 1024
+MAX_IDENTIFIER_CHARS = 240
+MAX_SHOWS_PER_SYNC = 5000
+MAX_HISTORY_PER_SYNC = 100000
+MAX_DELETES_PER_SYNC = 100000
+MAX_HISTORY_ORDER = 500000
 
 
 def required_env(name: str, *, strip: bool = True) -> str:
@@ -147,19 +159,27 @@ def ensure_schema() -> None:
     with database_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(statements)
-            cursor.execute(
-                "SELECT 1 FROM tv_tracker_admin WHERE singleton_id = 1"
-            )
-            if cursor.fetchone() is None:
-                bootstrap_username = required_env("APP_USERNAME")
-                bootstrap_password_hash = required_env("APP_PASSWORD_HASH")
+            bootstrap_username = os.environ.get("APP_USERNAME", "").strip()
+            bootstrap_password_hash = os.environ.get("APP_PASSWORD_HASH", "").strip()
+            if bootstrap_username and bootstrap_password_hash:
                 cursor.execute(
                     """
                     INSERT INTO tv_tracker_admin
                     (singleton_id, username, password_hash, session_version)
                     VALUES (1, %s, %s, 1)
+                    ON CONFLICT (singleton_id) DO NOTHING
                     """,
                     (bootstrap_username, bootstrap_password_hash),
+                )
+
+            cursor.execute(
+                "SELECT 1 FROM tv_tracker_admin WHERE singleton_id = 1"
+            )
+            if cursor.fetchone() is None:
+                raise RuntimeError(
+                    "The admin account is not initialized. Configure APP_USERNAME and "
+                    "APP_PASSWORD_HASH for first startup, or run tools/reset_admin.py "
+                    "over SSH to recreate the missing singleton account."
                 )
 
             cursor.execute(
@@ -562,20 +582,95 @@ class BackupValidationError(ValueError):
     pass
 
 
+class SyncValidationError(BackupValidationError):
+    pass
+
+
 def json_clone(value: Any) -> Any:
-    return json.loads(json.dumps(value, ensure_ascii=False))
+    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
 
 
-def backup_int(value: Any, field: str, *, minimum: int | None = None) -> int:
+def backup_int(
+    value: Any,
+    field: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     if isinstance(value, bool):
         raise BackupValidationError(f"{field} must be a number")
     try:
         number = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise BackupValidationError(f"{field} must be a number") from None
     if minimum is not None and number < minimum:
         raise BackupValidationError(f"{field} is outside the supported range")
+    if maximum is not None and number > maximum:
+        raise BackupValidationError(f"{field} is outside the supported range")
     return number
+
+
+def validate_calendar_date(value: str, field: str) -> str:
+    if not DATE_ONLY_RE.fullmatch(value):
+        raise BackupValidationError(f"{field} must use YYYY-MM-DD")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        raise BackupValidationError(f"{field} is not a real calendar date") from None
+    if parsed.isoformat() != value:
+        raise BackupValidationError(f"{field} is not a real calendar date")
+    return value
+
+
+def validate_timestamp(value: str, field: str) -> str:
+    if len(value) > 100:
+        raise BackupValidationError(f"{field} is too long")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError:
+        raise BackupValidationError(f"{field} is not a valid timestamp") from None
+    return value
+
+
+def validate_json_value(value: Any, field: str, *, depth: int = 0) -> None:
+    if depth > MAX_JSON_DEPTH:
+        raise BackupValidationError(f"{field} is nested too deeply")
+    if value is None or isinstance(value, (str, bool, int)):
+        if isinstance(value, str):
+            if len(value) > MAX_JSON_STRING_CHARS:
+                raise BackupValidationError(f"{field} contains an oversized string")
+            if DATE_ONLY_RE.fullmatch(value):
+                validate_calendar_date(value, field)
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise BackupValidationError(f"{field} contains an invalid number")
+        return
+    if isinstance(value, list):
+        if len(value) > MAX_JSON_CONTAINER_ITEMS:
+            raise BackupValidationError(f"{field} contains too many items")
+        for index, item in enumerate(value):
+            validate_json_value(item, f"{field}[{index}]", depth=depth + 1)
+        return
+    if isinstance(value, dict):
+        if len(value) > MAX_JSON_CONTAINER_ITEMS:
+            raise BackupValidationError(f"{field} contains too many fields")
+        for raw_key, item in value.items():
+            if not isinstance(raw_key, str) or not raw_key or len(raw_key) > 160:
+                raise BackupValidationError(f"{field} contains an invalid field name")
+            validate_json_value(item, f"{field}.{raw_key}", depth=depth + 1)
+        return
+    raise BackupValidationError(f"{field} contains an unsupported value")
+
+
+def normalized_identifier(value: Any, field: str, *, maximum: int = MAX_IDENTIFIER_CHARS) -> str:
+    if isinstance(value, (dict, list, bool)):
+        raise BackupValidationError(f"{field} is invalid")
+    identifier = str(value or "").strip()
+    if not identifier or len(identifier) > maximum:
+        raise BackupValidationError(f"{field} is invalid")
+    return identifier
 
 
 def generated_history_id(entry: dict[str, Any], index: int) -> str:
@@ -591,30 +686,27 @@ def generated_history_id(entry: dict[str, Any], index: int) -> str:
 
 
 def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
-    if not show_id or len(show_id) > 160:
-        raise BackupValidationError("A show has an invalid identifier")
+    show_id = normalized_identifier(show_id, "Show identifier", maximum=160)
     if not isinstance(raw_show, dict):
         raise BackupValidationError(f"Show {show_id} is malformed")
 
+    validate_json_value(raw_show, f"Show {show_id}")
     show = json_clone(raw_show)
     title = show.get("title")
-    if not isinstance(title, str) or not title.strip():
-        raise BackupValidationError(f"Show {show_id} is missing a title")
-    if len(title) > 500:
+    if not isinstance(title, str) or not title.strip() or len(title) > 500:
         raise BackupValidationError(f"Show {show_id} has an invalid title")
+    show["title"] = title.strip()
 
     tmdb_id = show.get("tmdb_id", show_id)
-    if isinstance(tmdb_id, (dict, list, bool)) or str(tmdb_id).strip() == "":
-        raise BackupValidationError(f"Show {show_id} has an invalid TMDB identifier")
-    show["tmdb_id"] = tmdb_id
+    show["tmdb_id"] = normalized_identifier(
+        tmdb_id, f"Show {show_id} TMDB identifier", maximum=160
+    )
 
     if "status" in show:
-        if not isinstance(show.get("status"), str):
-            raise BackupValidationError(f"Show {show_id} has an invalid status")
         supported_statuses = {
             "watching", "paused", "finished", "completed", "plan", "dropped"
         }
-        if show["status"] not in supported_statuses:
+        if not isinstance(show.get("status"), str) or show["status"] not in supported_statuses:
             raise BackupValidationError(f"Show {show_id} has an unsupported status")
 
     show.pop("date_only_episode_time_override", None)
@@ -622,19 +714,29 @@ def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
     watched = show.get("episodes_watched", {})
     if watched is None:
         watched = {}
-    if not isinstance(watched, dict):
+    if not isinstance(watched, dict) or len(watched) > 10000:
         raise BackupValidationError(f"Show {show_id} has invalid watched episodes")
+    normalized_watched: dict[str, list[int]] = {}
     for season_key, episode_values in watched.items():
-        if not isinstance(episode_values, list):
+        season = backup_int(
+            season_key, f"Show {show_id} season", minimum=0, maximum=10000
+        )
+        if not isinstance(episode_values, list) or len(episode_values) > 100000:
             raise BackupValidationError(
                 f"Show {show_id}, season {season_key} has invalid watched episodes"
             )
+        episodes: list[int] = []
         for episode_value in episode_values:
-            backup_int(
+            episode = backup_int(
                 episode_value,
                 f"Show {show_id}, season {season_key} episode",
                 minimum=0,
+                maximum=100000,
             )
+            if episode not in episodes:
+                episodes.append(episode)
+        normalized_watched[str(season)] = episodes
+    show["episodes_watched"] = normalized_watched
 
     for object_field in ("season_details", "seasons", "episode_details"):
         if object_field in show and show[object_field] is not None:
@@ -650,40 +752,226 @@ def validate_history_record(
     raw_entry: Any,
     index: int,
     seen_ids: set[str],
+    *,
+    expected_id: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if not isinstance(raw_entry, dict):
         raise BackupValidationError(f"History entry {index + 1} is malformed")
 
+    validate_json_value(raw_entry, f"History entry {index + 1}")
     entry = json_clone(raw_entry)
     show_id = entry.get("tmdb_id", entry.get("show_id"))
-    if show_id is None or isinstance(show_id, (dict, list, bool)):
-        raise BackupValidationError(
-            f"History entry {index + 1} is missing its show identifier"
-        )
-    entry["tmdb_id"] = show_id
+    entry["tmdb_id"] = normalized_identifier(
+        show_id, f"History entry {index + 1} show identifier", maximum=160
+    )
     entry["season"] = backup_int(
-        entry.get("season"), f"History entry {index + 1} season", minimum=0
+        entry.get("season"),
+        f"History entry {index + 1} season",
+        minimum=0,
+        maximum=10000,
     )
     entry["episode"] = backup_int(
-        entry.get("episode"), f"History entry {index + 1} episode", minimum=0
+        entry.get("episode"),
+        f"History entry {index + 1} episode",
+        minimum=0,
+        maximum=100000,
     )
 
-    for text_field in ("watched_at", "date", "title", "episode_name"):
+    for text_field in ("title", "episode_name"):
         if text_field in entry and entry[text_field] is not None:
-            if not isinstance(entry[text_field], str):
+            if not isinstance(entry[text_field], str) or len(entry[text_field]) > 500:
                 raise BackupValidationError(
                     f"History entry {index + 1} has invalid {text_field}"
                 )
+    if entry.get("date") is not None:
+        if not isinstance(entry["date"], str):
+            raise BackupValidationError(f"History entry {index + 1} has invalid date")
+        validate_calendar_date(entry["date"], f"History entry {index + 1} date")
+    if entry.get("watched_at") is not None:
+        if not isinstance(entry["watched_at"], str):
+            raise BackupValidationError(
+                f"History entry {index + 1} has invalid watched_at"
+            )
+        validate_timestamp(
+            entry["watched_at"], f"History entry {index + 1} watched_at"
+        )
+    if "special" in entry and not isinstance(entry["special"], bool):
+        raise BackupValidationError(f"History entry {index + 1} has invalid special flag")
 
     explicit_id = str(entry.get("id") or "").strip()
-    entry_id = explicit_id or generated_history_id(entry, index)
-    if len(entry_id) > 240:
-        raise BackupValidationError(f"History entry {index + 1} has an invalid ID")
+    entry_id = expected_id or explicit_id or generated_history_id(entry, index)
+    entry_id = normalized_identifier(
+        entry_id, f"History entry {index + 1} ID", maximum=240
+    )
+    if expected_id and explicit_id and explicit_id != expected_id:
+        raise BackupValidationError(
+            f"History entry {index + 1} ID does not match its update key"
+        )
     if entry_id in seen_ids:
         raise BackupValidationError(f"Duplicate History ID: {entry_id}")
     seen_ids.add(entry_id)
     entry["id"] = entry_id
     return entry_id, entry
+
+
+def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
+    if not isinstance(raw_profile, dict):
+        raise BackupValidationError("Profile data is invalid")
+    validate_json_value(raw_profile, "Profile")
+    profile = json_clone(raw_profile)
+    profile.pop("date_only_episode_time", None)
+
+    allowed_fields = {
+        "username", "favorite_shows", "avatar_type", "avatar_preset",
+        "avatar_data", "header_type", "header_preset", "header_image",
+    }
+    unknown = set(profile) - allowed_fields
+    if unknown:
+        raise BackupValidationError("Profile contains unsupported fields")
+
+    favorites = profile.get("favorite_shows", []) or []
+    if not isinstance(favorites, list) or len(favorites) > 8:
+        raise BackupValidationError("Profile favorites data is invalid")
+    normalized_favorites: list[str] = []
+    for favorite in favorites:
+        favorite_id = normalized_identifier(
+            favorite, "Profile favorite show identifier", maximum=160
+        )
+        if favorite_id not in normalized_favorites:
+            normalized_favorites.append(favorite_id)
+    profile["favorite_shows"] = normalized_favorites
+
+    limits = {
+        "username": 160,
+        "avatar_type": 40,
+        "avatar_preset": 120,
+        "avatar_data": MAX_JSON_STRING_CHARS,
+        "header_type": 40,
+        "header_preset": 120,
+        "header_image": MAX_JSON_STRING_CHARS,
+    }
+    for field, limit in limits.items():
+        if field in profile and profile[field] is not None:
+            if not isinstance(profile[field], str) or len(profile[field]) > limit:
+                raise BackupValidationError(f"Profile field {field} is invalid")
+    return profile
+
+
+def validate_sync_metadata_state(key: str, raw_value: Any) -> dict[str, Any]:
+    if not isinstance(raw_value, dict):
+        raise BackupValidationError(f"State {key} must be an object")
+    validate_json_value(raw_value, f"State {key}")
+    value = json_clone(raw_value)
+    allowed = {
+        "pending", "failed", "total", "completed", "paused", "active",
+        "current", "lastRun", "lastError", "startedAt", "completedAt",
+    }
+    if set(value) - allowed:
+        raise BackupValidationError(f"State {key} contains unsupported fields")
+    pending = value.get("pending", []) or []
+    if not isinstance(pending, list) or len(pending) > 10000:
+        raise BackupValidationError(f"State {key}.pending is invalid")
+    value["pending"] = [
+        normalized_identifier(item, f"State {key}.pending item", maximum=160)
+        for item in pending
+    ]
+
+    failed = value.get("failed", []) or []
+    if not isinstance(failed, list) or len(failed) > 10000:
+        raise BackupValidationError(f"State {key}.failed is invalid")
+    normalized_failed: list[dict[str, str]] = []
+    for index, item in enumerate(failed):
+        # Older synchronization state stored failed show identifiers as scalars.
+        # Accept and normalize those records so a strict validation rollout does
+        # not make an otherwise recoverable legacy backup impossible to import.
+        if not isinstance(item, dict):
+            normalized_failed.append({
+                "showId": normalized_identifier(
+                    item, f"State {key}.failed item {index + 1}", maximum=160
+                ),
+                "title": "",
+                "error": "",
+            })
+            continue
+        if set(item) - {"showId", "id", "title", "error"}:
+            raise BackupValidationError(f"State {key}.failed item {index + 1} is invalid")
+        show_id = normalized_identifier(
+            item.get("showId", item.get("id")),
+            f"State {key}.failed show ID",
+            maximum=160,
+        )
+        title = item.get("title", "")
+        error_text = item.get("error", "")
+        if not isinstance(title, str) or len(title) > 500:
+            raise BackupValidationError(f"State {key}.failed title is invalid")
+        if not isinstance(error_text, str) or len(error_text) > 2000:
+            raise BackupValidationError(f"State {key}.failed error is invalid")
+        normalized_failed.append({
+            "showId": show_id,
+            "title": title,
+            "error": error_text,
+        })
+    value["failed"] = normalized_failed
+    for field in ("total", "completed"):
+        if field in value:
+            value[field] = backup_int(
+                value[field], f"State {key}.{field}", minimum=0, maximum=10000000
+            )
+    for field in ("paused", "active"):
+        if field in value and not isinstance(value[field], bool):
+            raise BackupValidationError(f"State {key}.{field} is invalid")
+    for field in ("current", "lastRun", "lastError", "startedAt", "completedAt"):
+        if field in value:
+            if not isinstance(value[field], str) or len(value[field]) > 2000:
+                raise BackupValidationError(f"State {key}.{field} is invalid")
+    return value
+
+
+def validate_state_record(key: Any, raw_value: Any) -> tuple[str, Any]:
+    state_key = normalized_identifier(key, "State key", maximum=80)
+    if not STATE_KEY_RE.fullmatch(state_key) or state_key not in ALLOWED_STATE_KEYS:
+        raise BackupValidationError(f"Unsupported state key: {state_key}")
+    if state_key == "profile":
+        return state_key, validate_profile_record(raw_value)
+    return state_key, validate_sync_metadata_state(state_key, raw_value)
+
+
+def validate_tracker_data(raw_data: Any) -> dict[str, Any]:
+    if not isinstance(raw_data, dict):
+        raise BackupValidationError("Tracker data is invalid")
+    allowed_top_level = {"shows", "history", "profile", *ALLOWED_STATE_KEYS}
+    unknown = set(raw_data) - allowed_top_level
+    if unknown:
+        raise BackupValidationError("Tracker data contains unsupported state keys")
+
+    raw_shows = raw_data.get("shows")
+    raw_history = raw_data.get("history", [])
+    if not isinstance(raw_shows, dict) or len(raw_shows) > 10000:
+        raise BackupValidationError("Tracker shows data is invalid")
+    if not isinstance(raw_history, list) or len(raw_history) > 500000:
+        raise BackupValidationError("Tracker History data is invalid")
+
+    shows: dict[str, Any] = {}
+    for raw_show_id, raw_show in raw_shows.items():
+        show_id = normalized_identifier(raw_show_id, "Show identifier", maximum=160)
+        shows[show_id] = validate_show_record(show_id, raw_show)
+
+    history: list[dict[str, Any]] = []
+    seen_history_ids: set[str] = set()
+    for index, raw_entry in enumerate(raw_history):
+        _, entry = validate_history_record(raw_entry, index, seen_history_ids)
+        history.append(entry)
+
+    result: dict[str, Any] = {
+        "shows": shows,
+        "history": history,
+        "profile": validate_profile_record(raw_data.get("profile", {})),
+    }
+    for state_key in ("metadata_sync", "network_sync"):
+        if state_key in raw_data:
+            _, state_value = validate_state_record(state_key, raw_data[state_key])
+            result[state_key] = state_value
+    return result
 
 
 def validate_and_normalize_backup(backup: Any) -> tuple[dict[str, Any], dict[str, int]]:
@@ -695,84 +983,114 @@ def validate_and_normalize_backup(backup: Any) -> tuple[dict[str, Any], dict[str
     version = backup_int(backup.get("backupVersion", 1), "Backup version", minimum=1)
     if version not in SUPPORTED_BACKUP_VERSIONS:
         raise BackupValidationError("This backup version is not supported")
-
-    schema_version = backup.get("schemaVersion", 1)
-    schema_version = backup_int(schema_version, "Schema version", minimum=1)
+    schema_version = backup_int(
+        backup.get("schemaVersion", 1), "Schema version", minimum=1
+    )
     if schema_version > SCHEMA_VERSION:
-        raise BackupValidationError(
-            "This backup was created by a newer TV Tracker version"
-        )
+        raise BackupValidationError("This backup was created by a newer TV Tracker version")
 
-    raw_data = backup.get("data")
-    if not isinstance(raw_data, dict):
-        raise BackupValidationError("Backup is missing app data")
-
-    raw_shows = raw_data.get("shows")
-    raw_history = raw_data.get("history", [])
-    raw_profile = raw_data.get("profile", {})
-
-    if not isinstance(raw_shows, dict):
-        raise BackupValidationError("Backup is missing shows data")
-    if len(raw_shows) > 10000:
-        raise BackupValidationError("Backup contains too many shows")
-    if not isinstance(raw_history, list):
-        raise BackupValidationError("Backup history data is invalid")
-    if len(raw_history) > 500000:
-        raise BackupValidationError("Backup contains too many History entries")
-    if not isinstance(raw_profile, dict):
-        raise BackupValidationError("Backup profile data is invalid")
-
-    favorites = raw_profile.get("favorite_shows", [])
-    if favorites is not None and not isinstance(favorites, list):
-        raise BackupValidationError("Backup favorites data is invalid")
-    favorites = favorites or []
-    if len(favorites) > 8:
-        raise BackupValidationError("Backup contains more than 8 favorite shows")
-    normalized_favorites: list[str] = []
-    for favorite in favorites:
-        if isinstance(favorite, (dict, list, bool)) or not str(favorite).strip():
-            raise BackupValidationError("Backup favorites data is invalid")
-        favorite_id = str(favorite)
-        if favorite_id not in normalized_favorites:
-            normalized_favorites.append(favorite_id)
-
-    for profile_field in (
-        "username", "avatar_type", "avatar_preset", "avatar_data",
-        "header_type", "header_preset", "header_image",
-    ):
-        if profile_field in raw_profile and raw_profile[profile_field] is not None:
-            if not isinstance(raw_profile[profile_field], str):
-                raise BackupValidationError(
-                    f"Backup profile field {profile_field} is invalid"
-                )
-
-    shows: dict[str, Any] = {}
-    for raw_show_id, raw_show in raw_shows.items():
-        show_id = str(raw_show_id).strip()
-        shows[show_id] = validate_show_record(show_id, raw_show)
-
-    history: list[dict[str, Any]] = []
-    seen_history_ids: set[str] = set()
-    for index, raw_entry in enumerate(raw_history):
-        _, entry = validate_history_record(raw_entry, index, seen_history_ids)
-        history.append(entry)
-
-    data = json_clone(raw_data)
-    data["shows"] = shows
-    data["history"] = history
-    data["profile"] = json_clone(raw_profile)
-    data["profile"].pop("date_only_episode_time", None)
-    data["profile"]["favorite_shows"] = normalized_favorites
-
+    data = validate_tracker_data(backup.get("data"))
     summary = {
-        "shows": len(shows),
-        "historyEntries": len(history),
-        "favorites": len(normalized_favorites),
+        "shows": len(data["shows"]),
+        "historyEntries": len(data["history"]),
+        "favorites": len(data["profile"].get("favorite_shows") or []),
         "backupVersion": version,
         "schemaVersion": schema_version,
     }
     return data, summary
 
+
+def validate_identifier_list(
+    raw_values: Any,
+    field: str,
+    *,
+    maximum_items: int,
+    maximum_chars: int,
+) -> list[str]:
+    if not isinstance(raw_values, list) or len(raw_values) > maximum_items:
+        raise SyncValidationError(f"{field} is invalid")
+    result: list[str] = []
+    for raw_value in raw_values:
+        identifier = normalized_identifier(raw_value, field, maximum=maximum_chars)
+        if identifier not in result:
+            result.append(identifier)
+    return result
+
+
+def validate_sync_delta_payload(payload: dict[str, Any]) -> tuple[
+    dict[str, Any], list[str], dict[str, Any], list[str], list[str] | None, dict[str, Any]
+]:
+    shows_upsert_raw = payload.get("showsUpsert", {})
+    shows_delete_raw = payload.get("showsDelete", [])
+    history_upsert_raw = payload.get("historyUpsert", {})
+    history_delete_raw = payload.get("historyDelete", [])
+    history_order_raw = payload.get("historyOrder")
+    state_upsert_raw = payload.get("stateUpsert", {})
+
+    if not isinstance(shows_upsert_raw, dict) or len(shows_upsert_raw) > MAX_SHOWS_PER_SYNC:
+        raise SyncValidationError("Invalid shows update")
+    if not isinstance(history_upsert_raw, dict) or len(history_upsert_raw) > MAX_HISTORY_PER_SYNC:
+        raise SyncValidationError("Invalid history update")
+    if not isinstance(state_upsert_raw, dict) or len(state_upsert_raw) > len(ALLOWED_STATE_KEYS):
+        raise SyncValidationError("Invalid state update")
+
+    shows_upsert: dict[str, Any] = {}
+    for raw_show_id, raw_show in shows_upsert_raw.items():
+        show_id = normalized_identifier(raw_show_id, "Show identifier", maximum=160)
+        shows_upsert[show_id] = validate_show_record(show_id, raw_show)
+
+    shows_delete = validate_identifier_list(
+        shows_delete_raw,
+        "Shows delete list",
+        maximum_items=MAX_DELETES_PER_SYNC,
+        maximum_chars=160,
+    )
+
+    history_upsert: dict[str, Any] = {}
+    seen_history_ids: set[str] = set()
+    for index, (raw_entry_id, raw_entry) in enumerate(history_upsert_raw.items()):
+        entry_id = normalized_identifier(
+            raw_entry_id, "History update identifier", maximum=240
+        )
+        _, entry = validate_history_record(
+            raw_entry, index, seen_history_ids, expected_id=entry_id
+        )
+        history_upsert[entry_id] = entry
+
+    history_delete = validate_identifier_list(
+        history_delete_raw,
+        "History delete list",
+        maximum_items=MAX_DELETES_PER_SYNC,
+        maximum_chars=240,
+    )
+
+    history_order = None
+    if history_order_raw is not None:
+        history_order = validate_identifier_list(
+            history_order_raw,
+            "History order",
+            maximum_items=MAX_HISTORY_ORDER,
+            maximum_chars=240,
+        )
+
+    state_upsert: dict[str, Any] = {}
+    for raw_key, raw_value in state_upsert_raw.items():
+        key, value = validate_state_record(raw_key, raw_value)
+        state_upsert[key] = value
+
+    if set(shows_upsert) & set(shows_delete):
+        raise SyncValidationError("A show cannot be updated and deleted together")
+    if set(history_upsert) & set(history_delete):
+        raise SyncValidationError("A History entry cannot be updated and deleted together")
+
+    return (
+        shows_upsert,
+        shows_delete,
+        history_upsert,
+        history_delete,
+        history_order,
+        state_upsert,
+    )
 
 def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
     shows = data.get("shows") or {}
@@ -1279,12 +1597,6 @@ def create_app() -> Flask:
         if not isinstance(payload, dict):
             return jsonify({"ok": False, "error": "Invalid JSON body"}), 400
 
-        shows_upsert = payload.get("showsUpsert") or {}
-        shows_delete = payload.get("showsDelete") or []
-        history_upsert = payload.get("historyUpsert") or {}
-        history_delete = payload.get("historyDelete") or []
-        history_order = payload.get("historyOrder")
-        state_upsert = payload.get("stateUpsert") or {}
         operation_id = str(payload.get("operationId") or "")
 
         try:
@@ -1296,20 +1608,22 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "error": "Invalid base revision"}), 400
         if not OPERATION_ID_RE.fullmatch(operation_id):
             return jsonify({"ok": False, "error": "Invalid operation ID"}), 400
-        if not isinstance(shows_upsert, dict) or len(shows_upsert) > 5000:
-            return jsonify({"ok": False, "error": "Invalid shows update"}), 400
-        if not isinstance(history_upsert, dict) or len(history_upsert) > 100000:
-            return jsonify({"ok": False, "error": "Invalid history update"}), 400
-        if not isinstance(shows_delete, list) or not isinstance(history_delete, list):
-            return jsonify({"ok": False, "error": "Invalid delete list"}), 400
-        if history_order is not None and not isinstance(history_order, list):
-            return jsonify({"ok": False, "error": "Invalid history order"}), 400
-        if not isinstance(state_upsert, dict):
-            return jsonify({"ok": False, "error": "Invalid state update"}), 400
 
-        state_upsert.pop("shows", None)
-        state_upsert.pop("history", None)
-        state_upsert.pop("history_order", None)
+        try:
+            (
+                shows_upsert,
+                shows_delete,
+                history_upsert,
+                history_delete,
+                history_order,
+                state_upsert,
+            ) = validate_sync_delta_payload(payload)
+        except BackupValidationError as error:
+            return jsonify({
+                "ok": False,
+                "error": str(error),
+                "code": "invalid_sync_record",
+            }), 400
 
         incoming_delta = normalize_delta(
             shows_upsert,
@@ -1494,10 +1808,20 @@ def create_app() -> Flask:
     @app.get("/api/backup")
     @login_required
     def download_backup():
-        data, _ = read_tracker_data()
-        history = data.get("history") if isinstance(data.get("history"), list) else []
-        shows = data.get("shows") if isinstance(data.get("shows"), dict) else {}
-        profile = data.get("profile") if isinstance(data.get("profile"), dict) else {}
+        raw_data, _ = read_tracker_data()
+        try:
+            data = validate_tracker_data(raw_data)
+        except BackupValidationError as error:
+            app.logger.error("Backup export blocked malformed stored data: %s", error)
+            return jsonify({
+                "ok": False,
+                "error": "Stored tracker data failed validation. Export was blocked.",
+                "code": "backup_validation_failed",
+            }), 500
+
+        history = data["history"]
+        shows = data["shows"]
+        profile = data["profile"]
         special_count = sum(
             1
             for entry in history

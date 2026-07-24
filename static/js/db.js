@@ -10,6 +10,12 @@ let SYNC_CHANNEL = null;
 let SYNC_FAILURES = 0;
 let SYNC_WARNING_SHOWN = false;
 let LAST_USER_ACTIVITY_AT = Date.now();
+let PENDING_SAVE_STORE = null;
+let PENDING_SAVE_OPERATIONS = [];
+let PENDING_SAVE_PROCESSING = null;
+let PENDING_SAVE_RETRY_TIMER = null;
+let PENDING_SAVE_FAILURES = 0;
+let PENDING_SAVE_STORAGE_ERROR = null;
 
 const SYNC_ACTIVE_INTERVAL_MS = 2000;
 const SYNC_IDLE_INTERVAL_MS = 5000;
@@ -20,11 +26,181 @@ const MAX_SAVE_REQUEST_BYTES = 768 * 1024;
 const MAX_SINGLE_SAVE_REQUEST_BYTES = 2 * 1024 * 1024;
 const SYNC_CHANGE_PAGE_LIMIT = 1;
 const DELETE_VALUE = Symbol("delete-value");
+const PENDING_SAVE_STORAGE_KEY = "tv-tracker-pending-saves:v1";
+const MAX_PENDING_SAVE_OPERATIONS = 250;
 
 function cloneTrackerData(value){
     return value === undefined
     ? undefined
     : JSON.parse(JSON.stringify(value));
+}
+
+
+function pendingSaveStorageCandidates(){
+    const candidates = [];
+    try{
+        if(globalThis.localStorage){
+            candidates.push(globalThis.localStorage);
+        }
+    }catch(error){
+        // Browser privacy settings may deny access.
+    }
+    try{
+        if(globalThis.sessionStorage){
+            candidates.push(globalThis.sessionStorage);
+        }
+    }catch(error){
+        // The in-memory queue remains available for this tab.
+    }
+    return candidates;
+}
+
+function initializePendingSaveStore(){
+    PENDING_SAVE_STORE = null;
+    PENDING_SAVE_STORAGE_ERROR = null;
+
+    for(const storage of pendingSaveStorageCandidates()){
+        try{
+            const candidate = TVTrackerPendingSaveStore.createPendingSaveStore(
+                storage,
+                PENDING_SAVE_STORAGE_KEY
+            );
+            candidate.replace(candidate.load());
+            PENDING_SAVE_STORE = candidate;
+            PENDING_SAVE_OPERATIONS = candidate.load();
+            updateUnsavedStateIndicator();
+            return;
+        }catch(error){
+            PENDING_SAVE_STORAGE_ERROR = error;
+        }
+    }
+
+    PENDING_SAVE_OPERATIONS = [];
+    updateUnsavedStateIndicator();
+}
+
+function persistPendingSaveQueue(){
+    if(!PENDING_SAVE_STORE){
+        throw PENDING_SAVE_STORAGE_ERROR || new Error(
+            "Persistent browser storage is unavailable."
+        );
+    }
+    PENDING_SAVE_OPERATIONS = PENDING_SAVE_STORE.replace(PENDING_SAVE_OPERATIONS);
+    updateUnsavedStateIndicator();
+}
+
+function updateUnsavedStateIndicator(){
+    if(typeof document === "undefined"){
+        return;
+    }
+
+    let indicator = document.getElementById("tv-unsaved-status");
+    const pendingCount = PENDING_SAVE_OPERATIONS.length;
+
+    if(pendingCount === 0 && !PENDING_SAVE_STORAGE_ERROR){
+        if(indicator){
+            indicator.remove();
+        }
+        return;
+    }
+
+    if(!indicator){
+        indicator = document.createElement("div");
+        indicator.id = "tv-unsaved-status";
+        indicator.className = "tv-unsaved-status";
+        indicator.setAttribute("role","status");
+        indicator.setAttribute("aria-live","polite");
+        document.body.appendChild(indicator);
+    }
+
+    if(PENDING_SAVE_STORAGE_ERROR && pendingCount === 0){
+        indicator.classList.add("storage-error");
+        indicator.textContent = "Unsaved protection unavailable";
+        return;
+    }
+
+    indicator.classList.remove("storage-error");
+    indicator.textContent = pendingCount === 1
+    ? "1 unsaved change — retrying"
+    : pendingCount + " unsaved changes — retrying";
+}
+
+function createPendingSaveOperation(options,operationId){
+    ensureHistoryIds(DATA);
+    const dirtyOptions = dirtySaveHasWork(options)
+    ? normalizeDirtySaveOptions(options)
+    : null;
+    const delta = dirtyOptions
+    ? buildDirtyServerDelta(DATA,dirtyOptions)
+    : buildServerDelta(LAST_SAVED_DATA || {shows:{},history:[]},DATA);
+
+    return {
+        id:String(operationId),
+        createdAt:Date.now(),
+        dirtyOptions,
+        generation:0,
+        delta:cloneTrackerData(delta)
+    };
+}
+
+function enqueuePendingSaveOperation(operation){
+    if(deltaIsEmpty(operation.delta)){
+        return false;
+    }
+    if(PENDING_SAVE_OPERATIONS.length >= MAX_PENDING_SAVE_OPERATIONS){
+        throw new Error(
+            "Too many unsaved operations are waiting. Reconnect before making more changes."
+        );
+    }
+    PENDING_SAVE_OPERATIONS.push(cloneTrackerData(operation));
+    persistPendingSaveQueue();
+    return true;
+}
+
+function updatePendingSaveOperation(operation){
+    const index = PENDING_SAVE_OPERATIONS.findIndex(item=>item.id === operation.id);
+    if(index >= 0){
+        PENDING_SAVE_OPERATIONS[index] = cloneTrackerData(operation);
+        persistPendingSaveQueue();
+    }
+}
+
+function removePendingSaveOperation(operationId){
+    PENDING_SAVE_OPERATIONS = PENDING_SAVE_OPERATIONS.filter(
+        item=>item.id !== String(operationId || "")
+    );
+    persistPendingSaveQueue();
+}
+
+function clearPendingSaveOperations(){
+    PENDING_SAVE_OPERATIONS = [];
+    if(PENDING_SAVE_STORE){
+        PENDING_SAVE_STORE.clear();
+    }
+    clearTimeout(PENDING_SAVE_RETRY_TIMER);
+    PENDING_SAVE_RETRY_TIMER = null;
+    PENDING_SAVE_FAILURES = 0;
+    updateUnsavedStateIndicator();
+}
+
+function replayPendingSaveOperations(serverData){
+    const restored = cloneTrackerData(serverData || {shows:{},history:[]});
+    PENDING_SAVE_OPERATIONS.forEach(operation=>{
+        applyServerDelta(restored,operation.delta);
+    });
+    ensureHistoryIds(restored);
+    return restored;
+}
+
+function schedulePendingSaveRetry(){
+    if(PENDING_SAVE_OPERATIONS.length === 0){
+        return;
+    }
+    clearTimeout(PENDING_SAVE_RETRY_TIMER);
+    const delay = Math.min(30000,1000 * Math.pow(2,Math.min(PENDING_SAVE_FAILURES,5)));
+    PENDING_SAVE_RETRY_TIMER = setTimeout(()=>{
+        processPendingSaveQueue();
+    },delay);
 }
 
 function csrfToken(){
@@ -833,6 +1009,7 @@ function mergeTrackerSnapshots(base,local,remote){
 
 async function initDatabase(){
     DATABASE = {type:"online"};
+    initializePendingSaveStore();
 }
 
 async function fetchFullState(){
@@ -866,7 +1043,11 @@ async function getStoredData(){
         LAST_SAVED_DATA = null;
     }
 
-    return result.data;
+    const restored = replayPendingSaveOperations(
+        result.data || {shows:{},history:[]}
+    );
+    updateUnsavedStateIndicator();
+    return restored;
 }
 
 function captureUIState(){
@@ -1284,7 +1465,163 @@ async function persistDirtySave(options,operationId){
     }
 }
 
+
+async function persistQueuedSaveOperation(operation){
+    let attempts = 0;
+
+    while(true){
+        if(deltaIsEmpty(operation.delta)){
+            return true;
+        }
+
+        const batches = splitServerDeltaIntoBatches(
+            operation.delta,
+            SERVER_REVISION,
+            operation.id + "-g" + String(Number(operation.generation || 0))
+        );
+
+        try{
+            for(const pendingBatch of batches){
+                const requestPayload = buildSaveRequestPayload(
+                    pendingBatch.delta,
+                    SERVER_REVISION,
+                    pendingBatch.operationId
+                );
+                if(jsonByteLength(requestPayload) > MAX_SINGLE_SAVE_REQUEST_BYTES){
+                    throw new Error("Tracker save batch exceeded the safe request limit.");
+                }
+
+                const response = await fetch("/api/state",{
+                    method:"PATCH",
+                    credentials:"same-origin",
+                    cache:"no-store",
+                    headers:{
+                        "Accept":"application/json",
+                        "Content-Type":"application/json",
+                        "X-CSRF-Token":csrfToken()
+                    },
+                    body:JSON.stringify(requestPayload)
+                });
+                const payload = await parseAPIResponse(response);
+
+                if(payload.reset){
+                    const full = await fetchFullState();
+                    const oldBaseline = LAST_SAVED_DATA || {shows:{},history:[]};
+                    DATA = mergeTrackerSnapshots(oldBaseline,DATA,full.data || oldBaseline);
+                    LAST_SAVED_DATA = cloneTrackerData(full.data || oldBaseline);
+                    SERVER_REVISION = Number(full.revision || payload.revision || SERVER_REVISION);
+                    operation.generation = Number(operation.generation || 0) + 1;
+                    operation.delta = operation.dirtyOptions
+                    ? buildDirtyServerDelta(DATA,operation.dirtyOptions)
+                    : buildServerDelta(LAST_SAVED_DATA,DATA);
+                    updatePendingSaveOperation(operation);
+                    refreshUIAfterRemoteSync(null,true);
+                    throw Object.assign(new Error("Synchronization reset required"),{retryPending:true});
+                }
+
+                if((payload.changes || []).length > 0){
+                    if(!LAST_SAVED_DATA){
+                        LAST_SAVED_DATA = {shows:{},history:[]};
+                    }
+                    applyChangeList(LAST_SAVED_DATA,payload.changes);
+                    applyChangeList(DATA,payload.changes);
+                    refreshUIAfterRemoteSync(payload.changes,false);
+                }
+
+                if(!LAST_SAVED_DATA){
+                    LAST_SAVED_DATA = {shows:{},history:[]};
+                }
+                if(!payload.duplicate){
+                    applyServerDelta(
+                        LAST_SAVED_DATA,
+                        payload.appliedDelta || pendingBatch.delta
+                    );
+                }
+
+                SERVER_REVISION = Number(payload.revision || SERVER_REVISION);
+                broadcastRevision();
+                await sleep(0);
+            }
+            return true;
+        }catch(error){
+            if(error && error.status === 409){
+                const baseline = LAST_SAVED_DATA || {shows:{},history:[]};
+                const remoteResult = await getRemoteSnapshotFromConflict(
+                    error.payload || {},
+                    baseline
+                );
+                const remoteSnapshot = remoteResult.data || baseline;
+                DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
+                LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
+                SERVER_REVISION = Number(remoteResult.revision || SERVER_REVISION);
+                operation.generation = Number(operation.generation || 0) + 1;
+                operation.delta = operation.dirtyOptions
+                ? buildDirtyServerDelta(DATA,operation.dirtyOptions)
+                : buildServerDelta(LAST_SAVED_DATA,DATA);
+                updatePendingSaveOperation(operation);
+                refreshUIAfterRemoteSync(error.payload && error.payload.changes,false);
+                attempts += 1;
+            }else if(error && error.retryPending){
+                attempts += 1;
+            }else{
+                attempts += 1;
+                if(attempts >= MAX_SAVE_ATTEMPTS || (error && error.status)){
+                    throw error;
+                }
+                await sleep(attempts === 1 ? 500 : 1500);
+            }
+
+            if(attempts >= MAX_SAVE_ATTEMPTS){
+                throw error;
+            }
+        }
+    }
+}
+
+function processPendingSaveQueue(){
+    if(PENDING_SAVE_PROCESSING){
+        return PENDING_SAVE_PROCESSING;
+    }
+
+    PENDING_SAVE_PROCESSING = (async()=>{
+        while(PENDING_SAVE_OPERATIONS.length > 0){
+            const operation = cloneTrackerData(PENDING_SAVE_OPERATIONS[0]);
+            try{
+                SAVE_IN_FLIGHT += 1;
+                await persistQueuedSaveOperation(operation);
+                removePendingSaveOperation(operation.id);
+                PENDING_SAVE_FAILURES = 0;
+                SYNC_FAILURES = 0;
+                SYNC_WARNING_SHOWN = false;
+            }catch(error){
+                console.error("TV Tracker has an unsaved operation",error);
+                PENDING_SAVE_FAILURES += 1;
+                updateUnsavedStateIndicator();
+                if(typeof showToast === "function"){
+                    showToast(
+                        friendlyRequestError(error,"Changes are unsaved. Retrying automatically.")
+                    );
+                }
+                schedulePendingSaveRetry();
+                return false;
+            }finally{
+                SAVE_IN_FLIGHT = Math.max(0,SAVE_IN_FLIGHT - 1);
+            }
+        }
+        updateUnsavedStateIndicator();
+        return true;
+    })().finally(()=>{
+        PENDING_SAVE_PROCESSING = null;
+        if(SYNC_STARTED && document.visibilityState === "visible"){
+            scheduleNextSync(250);
+        }
+    });
+
+    return PENDING_SAVE_PROCESSING;
+}
+
 function adoptTransactionalTrackerData(data,revision){
+    clearPendingSaveOperations();
     const replacement = cloneTrackerData(data || {shows:{},history:[]});
     ensureHistoryIds(replacement);
     DATA = replacement;
@@ -1297,43 +1634,30 @@ function adoptTransactionalTrackerData(data,revision){
 }
 
 function saveData(options={}){
-    const dirtySave = dirtySaveHasWork(options);
     const operationId = createOperationId();
-    let snapshot = null;
-    let capturedBase = null;
-    let dirtyOptions = null;
+    let operation = null;
 
-    if(dirtySave){
-        dirtyOptions = normalizeDirtySaveOptions(options);
-    }else{
-        ensureHistoryIds(DATA);
-        snapshot = cloneTrackerData(DATA);
-        capturedBase = cloneTrackerData(LAST_SAVED_DATA || {shows:{},history:[]});
+    try{
+        operation = createPendingSaveOperation(options,operationId);
+        if(!enqueuePendingSaveOperation(operation)){
+            return Promise.resolve(true);
+        }
+    }catch(error){
+        PENDING_SAVE_STORAGE_ERROR = error;
+        updateUnsavedStateIndicator();
+        console.error("TV Tracker could not protect the pending save",error);
+        if(typeof showToast === "function"){
+            showToast(
+                "Could not store this change safely in the browser. " +
+                "Keep this page open and restore browser storage access."
+            );
+        }
+        return Promise.resolve(false);
     }
 
     SAVE_CHAIN = SAVE_CHAIN
     .catch(()=>false)
-    .then(async()=>{
-        SAVE_IN_FLIGHT += 1;
-        try{
-            return dirtySave
-            ? await persistDirtySave(dirtyOptions,operationId)
-            : await persistSnapshot(snapshot,capturedBase,operationId);
-        }catch(error){
-            console.error("TV Tracker could not save online data",error);
-
-            if(typeof showToast === "function"){
-                showToast(friendlyRequestError(error,"Could not save online."));
-            }
-
-            return false;
-        }finally{
-            SAVE_IN_FLIGHT = Math.max(0,SAVE_IN_FLIGHT - 1);
-            if(SYNC_STARTED && document.visibilityState === "visible"){
-                scheduleNextSync(250);
-            }
-        }
-    });
+    .then(()=>processPendingSaveQueue());
 
     return SAVE_CHAIN;
 }
@@ -1392,6 +1716,13 @@ function noteSyncSuccess(){
 async function syncFromServer(reason="poll",force=false){
     if(!SYNC_STARTED || SYNC_IN_FLIGHT || SAVE_IN_FLIGHT > 0){
         return false;
+    }
+
+    if(PENDING_SAVE_OPERATIONS.length > 0){
+        const saved = await processPendingSaveQueue();
+        if(!saved || PENDING_SAVE_OPERATIONS.length > 0){
+            return false;
+        }
     }
 
     if(!force && document.visibilityState !== "visible"){
@@ -1543,11 +1874,18 @@ function startDataSync(){
         });
     }
 
+    window.addEventListener("online",()=>{
+        processPendingSaveQueue();
+    });
+
     window.addEventListener("beforeunload",()=>{
         if(SYNC_CHANNEL){
             SYNC_CHANNEL.close();
         }
     });
 
+    if(PENDING_SAVE_OPERATIONS.length > 0){
+        processPendingSaveQueue();
+    }
     scheduleNextSync(SYNC_ACTIVE_INTERVAL_MS);
 }

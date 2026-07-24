@@ -142,22 +142,17 @@ def database_connection(database_environment: Mapping[str, str]) -> psycopg.Conn
     )
 
 
-def verify_admin_account(database_environment: Mapping[str, str]) -> None:
+def admin_account_exists(database_environment: Mapping[str, str]) -> bool:
     try:
         with database_connection(database_environment) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT singleton_id FROM tv_tracker_admin WHERE singleton_id = 1"
                 )
-                if cursor.fetchone() is None:
-                    raise RecoveryConfigurationError(
-                        "Admin account is not initialized. Start the Phase 4 website once first."
-                    )
-    except RecoveryConfigurationError:
-        raise
+                return cursor.fetchone() is not None
     except psycopg.errors.UndefinedTable as error:
         raise RecoveryConfigurationError(
-            "The Phase 4 admin table does not exist. Start the Phase 4 website once first."
+            "The admin table does not exist. Start the website once to create its schema."
         ) from error
     except psycopg.Error as error:
         raise RecoveryConfigurationError(
@@ -165,46 +160,57 @@ def verify_admin_account(database_environment: Mapping[str, str]) -> None:
         ) from error
 
 
-def update_admin_account(
+def upsert_admin_account(
     database_environment: Mapping[str, str], username: str, password_hash: str
-) -> None:
+) -> bool:
+    """Reset the singleton account, or recreate it when explicitly authorized."""
     try:
         with database_connection(database_environment) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
+                    "SELECT singleton_id FROM tv_tracker_admin WHERE singleton_id = 1"
+                )
+                existed = cursor.fetchone() is not None
+                cursor.execute(
                     """
-                    UPDATE tv_tracker_admin
-                    SET username = %s,
-                        password_hash = %s,
-                        session_version = session_version + 1,
+                    INSERT INTO tv_tracker_admin
+                    (singleton_id, username, password_hash, session_version, updated_at)
+                    VALUES (1, %s, %s, 1, NOW())
+                    ON CONFLICT (singleton_id) DO UPDATE
+                    SET username = EXCLUDED.username,
+                        password_hash = EXCLUDED.password_hash,
+                        session_version = tv_tracker_admin.session_version + 1,
                         updated_at = NOW()
-                    WHERE singleton_id = 1
                     """,
                     (username, password_hash),
                 )
-                if cursor.rowcount != 1:
-                    raise RecoveryConfigurationError(
-                        "Admin account is not initialized. Start the Phase 4 website once first."
-                    )
             connection.commit()
-    except RecoveryConfigurationError:
-        raise
+        return existed
     except psycopg.Error as error:
         raise RecoveryConfigurationError(
-            "The database rejected the account reset. No partial change was kept."
+            "The database rejected the account recovery. No partial change was kept."
         ) from error
-
 
 def main() -> int:
     print("Checking TV Tracker database access...")
     try:
         database_environment = resolve_database_environment()
-        verify_admin_account(database_environment)
+        account_exists = admin_account_exists(database_environment)
     except RecoveryConfigurationError as error:
         print(f"Recovery unavailable: {error}", file=sys.stderr)
         return 1
 
     print("Database connection confirmed.")
+
+    if not account_exists:
+        print(
+            "WARNING: the singleton administrator row is missing. "
+            "This recovery will recreate it."
+        )
+        confirmation = input('Type RECREATE to continue: ').strip()
+        if confirmation != "RECREATE":
+            print("Recovery cancelled. No database changes were made.", file=sys.stderr)
+            return 2
 
     username = input("New admin username: ").strip()
     if not username:
@@ -226,12 +232,15 @@ def main() -> int:
     password_hash = PasswordHasher().hash(password)
 
     try:
-        update_admin_account(database_environment, username, password_hash)
+        existed = upsert_admin_account(database_environment, username, password_hash)
     except RecoveryConfigurationError as error:
         print(f"Recovery failed: {error}", file=sys.stderr)
         return 1
 
-    print("Admin account reset. Every existing browser session is now invalid.")
+    if existed:
+        print("Admin account reset. Every existing browser session is now invalid.")
+    else:
+        print("Missing admin account recreated. Sign in with the new credentials.")
     return 0
 
 

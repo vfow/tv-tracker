@@ -1,14 +1,23 @@
-# TV Tracker v1.3.1 Release Candidate
+# TV Tracker v1.3.1
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
 
-## v1.3.1 release-candidate corrections
+## v1.3.1 Audit Repair
 
 - Date-only episodes use a fixed 9:00 AM Kuala Lumpur fallback when no trustworthy timestamp exists.
 - The unsolicited Release Time settings and per-show override controls have been removed.
 - Upcoming uses the same shared row hover as Watchlist and History.
 - Watched confirmation animations finish before the affected row or modal is redrawn.
-- Show and episode hero images display the complete uncropped image over a dark blurred fill.
+- Show, Discover, and episode detail hero images use the original centered cover/crop fit with the original dark gradients.
+- Failed saves are written to a persistent browser queue before network transmission, visibly marked as unsaved, replayed after reload, and removed only after server confirmation.
+- Ordinary synchronization writes now receive strict per-record validation for shows, History, profile/state values, identifiers, arrays, numbers, and real calendar dates.
+- Backup export validates stored records and refuses to export poisoned data.
+- Reduced-motion users no longer wait through an invisible 560 ms confirmation delay.
+- Impossible dates such as `2026-02-31` and invalid leap days are rejected instead of normalized.
+- SSH administrator recovery can explicitly recreate a missing singleton admin row.
+- First-time administrator insertion is conflict-safe when multiple workers start together.
+- The obsolete localhost `POST /api/backup` client code has been removed.
+- Permanent Python and Node regression tests, plus a GitHub Actions workflow, cover authentication, CSRF, malformed synchronization, conflict detection, backups, release-date boundaries, impossible dates, reduced motion, and durable failed saves.
 
 ## Production deployment
 
@@ -64,7 +73,7 @@ cd ~/www/tv-tracker
 .venv/bin/python tools/reset_admin.py
 ```
 
-The recovery tool checks database access before prompting, stores only an Argon2 password hash, and invalidates every existing browser session.
+The recovery tool checks database access before prompting, stores only an Argon2 password hash, and invalidates every existing browser session. If the singleton administrator row is missing, it can recreate it only after you type `RECREATE` explicitly.
 
 ### Removing bootstrap environment credentials
 
@@ -135,6 +144,16 @@ While logged in, open:
 ```
 
 A healthy stable installation reports an available database and `schemaVersion` 4 without exposing credentials.
+
+## Regression tests
+
+Run the stored backend and frontend suite before deployment:
+
+```bash
+python tests/run_all.py
+```
+
+The same suite runs automatically through `.github/workflows/audit-tests.yml`.
 
 ## Stable release checklist
 

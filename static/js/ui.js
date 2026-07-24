@@ -47,9 +47,10 @@ function playCheckSuccessAnimation(element){
         target.classList.add("card-marking");
     }
 
-    return new Promise(resolve=>{
-        setTimeout(()=>{
+    const reducedMotion = TVTrackerAuditUtils.prefersReducedMotion();
 
+    return new Promise(resolve=>{
+        const finish = ()=>{
             element.classList.remove("marking");
 
             if(target){
@@ -57,8 +58,14 @@ function playCheckSuccessAnimation(element){
             }
 
             resolve();
+        };
 
-        },CHECK_SUCCESS_ANIMATION_MS);
+        if(reducedMotion){
+            requestAnimationFrame(finish);
+            return;
+        }
+
+        setTimeout(finish,CHECK_SUCCESS_ANIMATION_MS);
     });
 
 }
@@ -2266,10 +2273,9 @@ function renderDiscoverShowModal(show){
     ? `<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">${Number(show.tmdb_rating).toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
 
-    const heroPath = show.backdrop_path || show.poster_path || "";
-    const heroImageURL = heroPath
-    ? `https://image.tmdb.org/t/p/original${heroPath}`
-    : "";
+    const backdrop = show.backdrop_path
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
+    : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const nextEpisode = show.next_episode_to_air
     ? `S${show.next_episode_to_air.season_number}E${show.next_episode_to_air.episode_number} — ${escapeHTML(show.next_episode_to_air.name || "Untitled Episode")}`
@@ -2283,9 +2289,7 @@ function renderDiscoverShowModal(show){
 
     content.innerHTML = `
 
-        <div class="modal-hero show-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
-
-            ${getModalHeroMediaHTML(heroImageURL)}
+        <div class="modal-hero show-detail-hero" style='background-image:${backdrop}'>
 
             <div class="modal-hero-content">
 
@@ -2597,24 +2601,6 @@ function renderShowModalPreservingScroll(show){
     }
 }
 
-function getModalHeroMediaHTML(imageURL){
-
-    if(!imageURL){
-        return "";
-    }
-
-    const safeURL = escapeHTML(imageURL);
-
-    return `
-        <div class="modal-hero-media" aria-hidden="true">
-            <img class="modal-hero-blur-image" src="${safeURL}" alt="" decoding="async">
-            <img class="modal-hero-fit-image" src="${safeURL}" alt="" decoding="async">
-        </div>
-    `;
-
-}
-
-
 function renderShowModal(show){
 
     const modal = document.getElementById("show-modal");
@@ -2656,16 +2642,13 @@ function renderShowModal(show){
     ? `Completed • ${totalCount} / ${totalCount} episodes`
     : `${watchedCount} / ${totalCount} episodes`;
 
-    const heroPath = show.backdrop_path || show.poster_path || "";
-    const heroImageURL = heroPath
-    ? `https://image.tmdb.org/t/p/original${heroPath}`
-    : "";
+    const backdrop = show.backdrop_path
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
+    : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     content.innerHTML = `
 
-        <div class="modal-hero show-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
-
-            ${getModalHeroMediaHTML(heroImageURL)}
+        <div class="modal-hero show-detail-hero" style='background-image:${backdrop}'>
 
             <div class="modal-hero-content">
 
@@ -2986,9 +2969,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
 
-    const heroImageURL = imagePath
-    ? `https://image.tmdb.org/t/p/original${imagePath}`
-    : "";
+    const backdrop = imagePath
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), url("https://image.tmdb.org/t/p/original${imagePath}")`
+    : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const airDateText = episodeData.air_date
     ? formatAirDate(episodeData.air_date,episodeData)
@@ -3040,9 +3023,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     content.innerHTML = `
 
-        <div class="modal-hero episode-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
-
-            ${getModalHeroMediaHTML(heroImageURL)}
+        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
 
             <div class="modal-hero-content episode-detail-hero-content">
 

@@ -49,10 +49,6 @@ var metadataSyncRunning = false;
 var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
-var automaticBackupTimer = null;
-var automaticBackupInFlight = false;
-var automaticBackupNeedsFlush = false;
-var automaticBackupLastSavedSignature = "";
 
 const TVMAZE_RELEASE_SAFETY_VERSION = 3;
 const DEFAULT_DATE_ONLY_EPISODE_TIME = "09:00";
@@ -314,7 +310,6 @@ async function init(){
     }
 
     normalizeExistingData();
-    initializeAutomaticBackupTracking();
     setupEvents();
     renderAll();
     startDataSync();
@@ -4030,17 +4025,7 @@ function getEpisodeHistoryEntry(showId,season,episode){
 
 function makeLocalDate(dateString){
 
-    if(!dateString){
-        return null;
-    }
-
-    const parts = dateString.split("-").map(Number);
-
-    if(parts.length !== 3){
-        return null;
-    }
-
-    return new Date(parts[0],parts[1] - 1,parts[2]);
+    return TVTrackerAuditUtils.parseStrictLocalDate(dateString);
 
 }
 
@@ -4096,19 +4081,11 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
 function makeDateOnlyEpisodeReleaseDate(dateString){
 
-    const date = String(dateString || "").trim();
-
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
-        return null;
-    }
-
-    const releaseDate = new Date(
-        `${date}T${DEFAULT_DATE_ONLY_EPISODE_TIME}:00${DATE_ONLY_EPISODE_UTC_OFFSET}`
+    return TVTrackerAuditUtils.makeDateOnlyEpisodeReleaseDate(
+        dateString,
+        DEFAULT_DATE_ONLY_EPISODE_TIME,
+        DATE_ONLY_EPISODE_UTC_OFFSET
     );
-
-    return Number.isNaN(releaseDate.getTime())
-    ? null
-    : releaseDate;
 
 }
 
@@ -6217,224 +6194,6 @@ async function saveFavoriteShowsOrder(showIds){
 
 
 
-function isAutomaticBackupServerAvailable(){
-
-    return (
-        location.protocol === "http:" &&
-        (
-            location.hostname === "127.0.0.1" ||
-            location.hostname === "localhost"
-        )
-    );
-
-}
-
-
-
-function getAutomaticBackupSignatureData(){
-
-    ensureProfileData();
-
-    const meaningfulShows = {};
-
-    Object.keys(DATA.shows || {})
-    .sort((a,b)=>String(a).localeCompare(String(b)))
-    .forEach(showId=>{
-
-        const show = DATA.shows[showId] || {};
-        const watched = {};
-
-        Object.keys(show.episodes_watched || {})
-        .sort((a,b)=>Number(a) - Number(b))
-        .forEach(seasonKey=>{
-
-            const episodes = Array.isArray(show.episodes_watched[seasonKey])
-            ? show.episodes_watched[seasonKey]
-            : [];
-
-            watched[String(seasonKey)] = Array.from(
-                new Set(
-                    episodes
-                    .map(Number)
-                    .filter(Number.isFinite)
-                )
-            ).sort((a,b)=>a-b);
-
-        });
-
-        meaningfulShows[String(showId)] = {
-            status:String(show.status || "plan"),
-            rating:Number(show.rating || 0),
-            notes:String(show.notes || ""),
-            episodes_watched:watched,
-            last_watched:String(show.last_watched || ""),
-            last_activity_at:String(show.last_activity_at || ""),
-            completed_at:String(show.completed_at || ""),
-            was_unreleased_when_added:show.was_unreleased_when_added === true
-        };
-
-    });
-
-    return {
-        shows:meaningfulShows,
-        history:Array.isArray(DATA.history)
-        ? DATA.history
-        : [],
-        profile:{
-            username:String(DATA.profile.username || "Username"),
-            favorite_shows:Array.isArray(DATA.profile.favorite_shows)
-            ? DATA.profile.favorite_shows.map(String)
-            : [],
-            avatar_type:String(DATA.profile.avatar_type || "initial"),
-            avatar_preset:String(DATA.profile.avatar_preset || "silhouette-1"),
-            avatar_data:String(DATA.profile.avatar_data || ""),
-            header_type:String(DATA.profile.header_type || "preset"),
-            header_preset:String(DATA.profile.header_preset || "default"),
-            header_image:String(DATA.profile.header_image || "")
-        }
-    };
-
-}
-
-
-
-function getAutomaticBackupSignature(){
-
-    return JSON.stringify(getAutomaticBackupSignatureData());
-
-}
-
-
-
-function initializeAutomaticBackupTracking(){
-
-    try{
-        automaticBackupLastSavedSignature = getAutomaticBackupSignature();
-    }catch(error){
-        console.warn("Could not initialize automatic backup tracking",error);
-        automaticBackupLastSavedSignature = "";
-    }
-
-}
-
-
-
-function queueAutomaticBackup(){
-
-    if(!isAutomaticBackupServerAvailable()){
-        return;
-    }
-
-    let currentSignature = "";
-
-    try{
-        currentSignature = getAutomaticBackupSignature();
-    }catch(error){
-        console.warn("Could not prepare automatic backup",error);
-        return;
-    }
-
-    if(currentSignature === automaticBackupLastSavedSignature){
-        return;
-    }
-
-    clearTimeout(automaticBackupTimer);
-
-    automaticBackupTimer = setTimeout(function(){
-        flushAutomaticBackup();
-    },350);
-
-}
-
-
-
-async function flushAutomaticBackup(){
-
-    if(!isAutomaticBackupServerAvailable()){
-        return;
-    }
-
-    if(automaticBackupInFlight){
-        automaticBackupNeedsFlush = true;
-        return;
-    }
-
-    let signature = "";
-
-    try{
-        signature = getAutomaticBackupSignature();
-    }catch(error){
-        console.warn("Could not prepare automatic backup",error);
-        return;
-    }
-
-    if(signature === automaticBackupLastSavedSignature){
-        return;
-    }
-
-    automaticBackupInFlight = true;
-    automaticBackupNeedsFlush = false;
-
-    let saved = false;
-
-    try{
-
-        const response = await fetch("/api/backup",{
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json"
-            },
-            body:JSON.stringify(getNativeBackupObject()),
-            cache:"no-store"
-        });
-
-        if(!response.ok){
-            throw new Error("Automatic backup server returned " + response.status);
-        }
-
-        automaticBackupLastSavedSignature = signature;
-        saved = true;
-
-    }catch(error){
-
-        console.warn(
-            "Automatic physical backup was not saved. Start the tracker with start-tracker.bat to enable it.",
-            error
-        );
-
-    }finally{
-
-        automaticBackupInFlight = false;
-
-        if(saved){
-
-            let latestSignature = "";
-
-            try{
-                latestSignature = getAutomaticBackupSignature();
-            }catch(error){
-                latestSignature = automaticBackupLastSavedSignature;
-            }
-
-            if(
-                automaticBackupNeedsFlush ||
-                latestSignature !== automaticBackupLastSavedSignature
-            ){
-                clearTimeout(automaticBackupTimer);
-                automaticBackupTimer = setTimeout(function(){
-                    flushAutomaticBackup();
-                },350);
-            }
-
-        }
-
-    }
-
-}
-
-
-
-
 function getBackupSummary(){
 
     ensureProfileData();
@@ -6630,8 +6389,7 @@ function importNativeBackupJSON(){
                 backup,
                 {updateStatuses:true}
             );
-            initializeAutomaticBackupTracking();
-            renderAll();
+                    renderAll();
             showToast("App backup imported");
 
         }catch(error){
@@ -6715,7 +6473,6 @@ async function resetTrackerData(){
     lastCompatibleCSVPreview = null;
 
     await prepareAndCommitTrackerData(replacementData);
-    initializeAutomaticBackupTracking();
 
     renderAll();
     showToast("Tracker data reset");
@@ -7656,8 +7413,7 @@ function importCompatibleBackupJSON(){
                 null,
                 {updateStatuses:true}
             );
-            initializeAutomaticBackupTracking();
-
+        
             lastCompatibleImportPreview = importResult.preview;
 
             renderAll();
