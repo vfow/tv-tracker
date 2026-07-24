@@ -6,8 +6,7 @@ var DATA = {
         favorite_shows:[],
         avatar_type:"initial",
         avatar_preset:"silhouette-1",
-        avatar_data:"",
-        date_only_episode_time:"09:00"
+        avatar_data:""
     },
     network_sync:{
         active:false,
@@ -587,10 +586,7 @@ function normalizeExistingData(){
             show._tvmaze_last_refresh = "";
         }
 
-        show.date_only_episode_time_override = normalizeEpisodeReleaseTimeValue(
-            show.date_only_episode_time_override,
-            ""
-        );
+        delete show.date_only_episode_time_override;
 
         if(show._tvmaze_release_safety_version !== TVMAZE_RELEASE_SAFETY_VERSION){
             clearOldTVmazeReleaseFields(show);
@@ -4098,64 +4094,16 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
 
 
-function normalizeEpisodeReleaseTimeValue(value,fallback=""){
-
-    const normalized = String(value || "").trim();
-
-    if(/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(normalized)){
-        return normalized;
-    }
-
-    return fallback;
-
-}
-
-
-
-function getGlobalDateOnlyEpisodeTime(){
-
-    const profile = DATA && DATA.profile && typeof DATA.profile === "object"
-    ? DATA.profile
-    : {};
-
-    return normalizeEpisodeReleaseTimeValue(
-        profile.date_only_episode_time,
-        DEFAULT_DATE_ONLY_EPISODE_TIME
-    );
-
-}
-
-
-
-function getShowDateOnlyEpisodeTime(showInfo=null){
-
-    const override = showInfo && typeof showInfo === "object"
-    ? normalizeEpisodeReleaseTimeValue(
-        showInfo.date_only_episode_time_override,
-        ""
-    )
-    : "";
-
-    return override || getGlobalDateOnlyEpisodeTime();
-
-}
-
-
-
-function makeDateOnlyEpisodeReleaseDate(dateString,timeString){
+function makeDateOnlyEpisodeReleaseDate(dateString){
 
     const date = String(dateString || "").trim();
-    const time = normalizeEpisodeReleaseTimeValue(
-        timeString,
-        DEFAULT_DATE_ONLY_EPISODE_TIME
-    );
 
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
         return null;
     }
 
     const releaseDate = new Date(
-        `${date}T${time}:00${DATE_ONLY_EPISODE_UTC_OFFSET}`
+        `${date}T${DEFAULT_DATE_ONLY_EPISODE_TIME}:00${DATE_ONLY_EPISODE_UTC_OFFSET}`
     );
 
     return Number.isNaN(releaseDate.getTime())
@@ -4204,11 +4152,7 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
     to appear at night. Date-only episodes therefore use the explicit Kuala
     Lumpur fallback instead.
     */
-    const releaseTime = getShowDateOnlyEpisodeTime(showInfo);
-    const releaseDate = makeDateOnlyEpisodeReleaseDate(
-        baseDateString,
-        releaseTime
-    );
+    const releaseDate = makeDateOnlyEpisodeReleaseDate(baseDateString);
 
     if(!releaseDate){
         return null;
@@ -4217,9 +4161,7 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
     return {
         date:releaseDate,
         estimated:true,
-        source:showInfo && showInfo.date_only_episode_time_override
-        ? "show-fallback"
-        : "global-fallback"
+        source:"fixed-fallback"
     };
 
 }
@@ -5540,10 +5482,7 @@ function ensureProfileData(){
 
     DATA.profile.username = String(DATA.profile.username || "Username").trim().slice(0,30) || "Username";
 
-    DATA.profile.date_only_episode_time = normalizeEpisodeReleaseTimeValue(
-        DATA.profile.date_only_episode_time,
-        DEFAULT_DATE_ONLY_EPISODE_TIME
-    );
+    delete DATA.profile.date_only_episode_time;
 
     if(!DATA.profile.favorite_shows || !Array.isArray(DATA.profile.favorite_shows)){
         DATA.profile.favorite_shows = [];
@@ -5806,78 +5745,6 @@ function getNetworkMetadataSyncSummary(){
         current:sync.current || "",
         percent:total > 0 ? Math.min(100,Math.round((completed / total) * 100)) : 100
     };
-
-}
-
-
-async function saveDateOnlyEpisodeTime(value){
-
-    const normalized = normalizeEpisodeReleaseTimeValue(value,"");
-
-    if(!normalized){
-        showToast("Choose a valid episode release time");
-        return false;
-    }
-
-    ensureProfileData();
-    const previousTime = DATA.profile.date_only_episode_time;
-    DATA.profile.date_only_episode_time = normalized;
-
-    const saved = await saveData({stateKeys:["profile"]});
-
-    if(saved !== false){
-        if(activePage === "shows" && activeShowsTab === "upcoming"){
-            await renderUpcoming(false);
-        }
-        showToast("Date-only episode time saved");
-        return true;
-    }
-
-    DATA.profile.date_only_episode_time = previousTime;
-    return false;
-
-}
-
-
-
-async function saveShowDateOnlyEpisodeTime(showId,value){
-
-    const id = String(showId || "");
-    const show = DATA.shows[id];
-
-    if(!show){
-        showToast("Show not found");
-        return false;
-    }
-
-    const requested = String(value || "").trim();
-    const normalized = requested
-    ? normalizeEpisodeReleaseTimeValue(requested,"")
-    : "";
-
-    if(requested && !normalized){
-        showToast("Choose a valid release-time override");
-        return false;
-    }
-
-    const previousOverride = show.date_only_episode_time_override || "";
-    show.date_only_episode_time_override = normalized;
-
-    const saved = await saveData({showIds:[id]});
-
-    if(saved !== false){
-        if(activePage === "shows" && activeShowsTab === "upcoming"){
-            await renderUpcoming(false);
-        }
-        renderShowModalPreservingScroll(show);
-        showToast(normalized
-        ? "Show release-time override saved"
-        : "Show now uses the global release time");
-        return true;
-    }
-
-    show.date_only_episode_time_override = previousOverride;
-    return false;
 
 }
 
@@ -6403,8 +6270,7 @@ function getAutomaticBackupSignatureData(){
             last_watched:String(show.last_watched || ""),
             last_activity_at:String(show.last_activity_at || ""),
             completed_at:String(show.completed_at || ""),
-            was_unreleased_when_added:show.was_unreleased_when_added === true,
-            date_only_episode_time_override:String(show.date_only_episode_time_override || "")
+            was_unreleased_when_added:show.was_unreleased_when_added === true
         };
 
     });
@@ -6424,8 +6290,7 @@ function getAutomaticBackupSignatureData(){
             avatar_data:String(DATA.profile.avatar_data || ""),
             header_type:String(DATA.profile.header_type || "preset"),
             header_preset:String(DATA.profile.header_preset || "default"),
-            header_image:String(DATA.profile.header_image || ""),
-            date_only_episode_time:String(DATA.profile.date_only_episode_time || DEFAULT_DATE_ONLY_EPISODE_TIME)
+            header_image:String(DATA.profile.header_image || "")
         }
     };
 

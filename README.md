@@ -1,6 +1,14 @@
-# TV Tracker v1.3.1 Stable
+# TV Tracker v1.3.1 Release Candidate
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
+
+## v1.3.1 release-candidate corrections
+
+- Date-only episodes use a fixed 9:00 AM Kuala Lumpur fallback when no trustworthy timestamp exists.
+- The unsolicited Release Time settings and per-show override controls have been removed.
+- Upcoming uses the same shared row hover as Watchlist and History.
+- Watched confirmation animations finish before the affected row or modal is redrawn.
+- Show and episode hero images display the complete uncropped image over a dark blurred fill.
 
 ## Production deployment
 
@@ -76,12 +84,11 @@ Keep `SECRET_KEY` and all database environment variables configured.
 TV Tracker separates the episode calendar date from the instant when the episode becomes available.
 
 1. A valid exact timestamp is authoritative and is displayed in the browser timezone.
-2. A date without a trustworthy exact timestamp uses the configured fallback in `Asia/Kuala_Lumpur`.
-3. The default fallback is `09:00`. Estimated times are displayed with `~`.
-4. A tracked show may use its own date-only time instead of the global fallback.
-5. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
+2. A date without a trustworthy exact timestamp uses the fixed `09:00` fallback in `Asia/Kuala_Lumpur`.
+3. Estimated fallback times are displayed with `~`.
+4. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
 
-The global fallback is configured under **Settings → Episode Release Time**. A per-show override is configured in that tracked show’s details.
+The fallback is internal and is not exposed as a Settings or per-show control.
 
 ## Backups and restore
 
@@ -141,7 +148,6 @@ A healthy stable installation reports an available database and `schemaVersion` 
 - Show and episode details open centered and use the intended heading font.
 - Date-only episodes default to approximately 9:00 AM in Asia/Kuala_Lumpur; exact timestamps remain authoritative.
 - Bare source times without a trustworthy timezone are not treated as Malaysian local time.
-- Global and per-show date-only release times persist in backups and synchronize across devices.
 - Upcoming rows show the standard hover highlight on pointer devices.
 - Valid backup import succeeds; malformed or unsupported backups are rejected without changing live data.
 - `/api/health` reports schema version 4.

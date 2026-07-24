@@ -1,7 +1,7 @@
 var historyVisibleLimit = 40;
 const HISTORY_BATCH_SIZE = 40;
 
-const CHECK_SUCCESS_ANIMATION_MS = 220;
+const CHECK_SUCCESS_ANIMATION_MS = 560;
 
 var profileSettingsDraft = null;
 var avatarCropState = null;
@@ -17,6 +17,7 @@ function getCheckSuccessAnimationTarget(element){
         element.closest(".episode-row") ||
         element.closest(".behind-episode-row") ||
         element.closest(".upcoming-batch-row") ||
+        element.closest(".episode-detail-actions") ||
         element.closest(".season-box") ||
         element.closest(".show") ||
         element
@@ -1154,9 +1155,8 @@ function createWatchlistCard(show,options={}){
 
             try{
 
-                playCheckSuccessAnimation(this);
-
                 if(action.action === "mark"){
+                    await playCheckSuccessAnimation(this);
                     await markNextEpisode(show.tmdb_id);
                 }else{
                     await updateShowStatus(show.tmdb_id,"watching");
@@ -1549,16 +1549,29 @@ async function renderUpcoming(startBackgroundRefresh=true){
                 check.addEventListener("click",async function(event){
 
                     event.stopPropagation();
-                    playCheckSuccessAnimation(this);
 
-                    await updateEpisodeWatched(
-                        Number(this.dataset.show),
-                        Number(this.dataset.season),
-                        Number(this.dataset.episode),
-                        true
-                    );
+                    if(this.disabled){
+                        return;
+                    }
 
-                    await renderUpcoming(false);
+                    this.disabled = true;
+
+                    try{
+                        await playCheckSuccessAnimation(this);
+
+                        await updateEpisodeWatched(
+                            Number(this.dataset.show),
+                            Number(this.dataset.season),
+                            Number(this.dataset.episode),
+                            true
+                        );
+
+                        await renderUpcoming(false);
+                    }finally{
+                        if(this.isConnected){
+                            this.disabled = false;
+                        }
+                    }
 
                 });
 
@@ -1955,17 +1968,29 @@ function openBehindEpisodesPopup(showId,episodes){
 
             event.stopPropagation();
 
-            playCheckSuccessAnimation(this);
+            if(this.disabled){
+                return;
+            }
 
-            await updateEpisodeWatched(
-                this.dataset.show,
-                Number(this.dataset.season),
-                Number(this.dataset.episode),
-                true
-            );
+            this.disabled = true;
 
-            closeBehindEpisodesPopup();
-            await renderUpcoming(false);
+            try{
+                await playCheckSuccessAnimation(this);
+
+                await updateEpisodeWatched(
+                    this.dataset.show,
+                    Number(this.dataset.season),
+                    Number(this.dataset.episode),
+                    true
+                );
+
+                closeBehindEpisodesPopup();
+                await renderUpcoming(false);
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
 
         });
 
@@ -2241,9 +2266,10 @@ function renderDiscoverShowModal(show){
     ? `<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">${Number(show.tmdb_rating).toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
 
-    const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    const heroPath = show.backdrop_path || show.poster_path || "";
+    const heroImageURL = heroPath
+    ? `https://image.tmdb.org/t/p/original${heroPath}`
+    : "";
 
     const nextEpisode = show.next_episode_to_air
     ? `S${show.next_episode_to_air.season_number}E${show.next_episode_to_air.episode_number} — ${escapeHTML(show.next_episode_to_air.name || "Untitled Episode")}`
@@ -2257,7 +2283,9 @@ function renderDiscoverShowModal(show){
 
     content.innerHTML = `
 
-        <div class="modal-hero show-detail-hero" style='background-image:${backdrop}'>
+        <div class="modal-hero show-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
+
+            ${getModalHeroMediaHTML(heroImageURL)}
 
             <div class="modal-hero-content">
 
@@ -2354,7 +2382,7 @@ function renderDiscoverShowModal(show){
             this.disabled = true;
 
             try{
-                playCheckSuccessAnimation(this);
+                await playCheckSuccessAnimation(this);
                 await addDiscoverSeasonAsWatched(
                     show.tmdb_id,
                     Number(this.dataset.season)
@@ -2384,7 +2412,7 @@ function renderDiscoverShowModal(show){
             this.disabled = true;
 
             try{
-                playCheckSuccessAnimation(this);
+                await playCheckSuccessAnimation(this);
                 await addDiscoverEpisodeAsWatched(
                     show.tmdb_id,
                     Number(this.dataset.season),
@@ -2569,6 +2597,24 @@ function renderShowModalPreservingScroll(show){
     }
 }
 
+function getModalHeroMediaHTML(imageURL){
+
+    if(!imageURL){
+        return "";
+    }
+
+    const safeURL = escapeHTML(imageURL);
+
+    return `
+        <div class="modal-hero-media" aria-hidden="true">
+            <img class="modal-hero-blur-image" src="${safeURL}" alt="" decoding="async">
+            <img class="modal-hero-fit-image" src="${safeURL}" alt="" decoding="async">
+        </div>
+    `;
+
+}
+
+
 function renderShowModal(show){
 
     const modal = document.getElementById("show-modal");
@@ -2610,13 +2656,16 @@ function renderShowModal(show){
     ? `Completed • ${totalCount} / ${totalCount} episodes`
     : `${watchedCount} / ${totalCount} episodes`;
 
-    const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    const heroPath = show.backdrop_path || show.poster_path || "";
+    const heroImageURL = heroPath
+    ? `https://image.tmdb.org/t/p/original${heroPath}`
+    : "";
 
     content.innerHTML = `
 
-        <div class="modal-hero show-detail-hero" style='background-image:${backdrop}'>
+        <div class="modal-hero show-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
+
+            ${getModalHeroMediaHTML(heroImageURL)}
 
             <div class="modal-hero-content">
 
@@ -2668,33 +2717,6 @@ function renderShowModal(show){
 
 
 
-            <div class="modal-section show-release-time-section">
-
-                <h3>Release Time</h3>
-
-                <p class="modal-control-note">
-                    Date-only episodes use the global Kuala Lumpur fallback unless this show has its own time. Exact timestamps always override this setting.
-                </p>
-
-                <div class="show-release-time-controls">
-                    <label class="profile-settings-label" for="show-release-time-mode">Date-only episode time</label>
-                    <select class="profile-settings-input" id="show-release-time-mode">
-                        <option value="global" ${show.date_only_episode_time_override ? "" : "selected"}>Use global fallback (${escapeHTML(getEpisodeReleaseTimeText("2026-01-01",null,null))})</option>
-                        <option value="custom" ${show.date_only_episode_time_override ? "selected" : ""}>Custom for this show</option>
-                    </select>
-                    <input
-                    class="profile-settings-input"
-                    id="show-release-time-input"
-                    type="time"
-                    value="${escapeHTML(show.date_only_episode_time_override || getGlobalDateOnlyEpisodeTime())}"
-                    ${show.date_only_episode_time_override ? "" : "disabled"}>
-                    <button class="settings-action-button" id="save-show-release-time" type="button">Save Release Time</button>
-                </div>
-
-            </div>
-
-
-
             <div class="modal-section">
 
                 <h3>Overall Progress</h3>
@@ -2735,30 +2757,6 @@ function renderShowModal(show){
     });
 
 
-    const showReleaseTimeMode = document.getElementById("show-release-time-mode");
-    const showReleaseTimeInput = document.getElementById("show-release-time-input");
-    const saveShowReleaseTimeButton = document.getElementById("save-show-release-time");
-
-    if(showReleaseTimeMode && showReleaseTimeInput){
-        showReleaseTimeMode.addEventListener("change",function(){
-            const usesCustomTime = this.value === "custom";
-            showReleaseTimeInput.disabled = !usesCustomTime;
-            if(usesCustomTime && !showReleaseTimeInput.value){
-                showReleaseTimeInput.value = getGlobalDateOnlyEpisodeTime();
-            }
-        });
-    }
-
-    if(saveShowReleaseTimeButton){
-        saveShowReleaseTimeButton.addEventListener("click",function(){
-            const value = showReleaseTimeMode && showReleaseTimeMode.value === "custom"
-            ? showReleaseTimeInput.value
-            : "";
-            saveShowDateOnlyEpisodeTime(show.tmdb_id,value);
-        });
-    }
-
-
     document.querySelectorAll(".season-header").forEach(header=>{
 
         header.addEventListener("click",function(){
@@ -2773,14 +2771,26 @@ function renderShowModal(show){
         button.addEventListener("click",async function(event){
             event.stopPropagation();
 
-            if(!this.classList.contains("checked")){
-                playCheckSuccessAnimation(this);
+            if(this.disabled){
+                return;
             }
 
-            await markSeasonWatched(
-                show.tmdb_id,
-                Number(this.dataset.season)
-            );
+            this.disabled = true;
+
+            try{
+                if(!this.classList.contains("checked")){
+                    await playCheckSuccessAnimation(this);
+                }
+
+                await markSeasonWatched(
+                    show.tmdb_id,
+                    Number(this.dataset.season)
+                );
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
         });
 
     });
@@ -2794,16 +2804,28 @@ function renderShowModal(show){
 
             const currentlyWatched = this.dataset.watched === "true";
 
-            if(!currentlyWatched){
-                playCheckSuccessAnimation(this);
+            if(this.disabled){
+                return;
             }
 
-            await updateEpisodeWatched(
-                show.tmdb_id,
-                Number(this.dataset.season),
-                Number(this.dataset.episode),
-                !currentlyWatched
-            );
+            this.disabled = true;
+
+            try{
+                if(!currentlyWatched){
+                    await playCheckSuccessAnimation(this);
+                }
+
+                await updateEpisodeWatched(
+                    show.tmdb_id,
+                    Number(this.dataset.season),
+                    Number(this.dataset.episode),
+                    !currentlyWatched
+                );
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
 
         });
 
@@ -2964,9 +2986,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
 
-    const backdrop = imagePath
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), url("https://image.tmdb.org/t/p/original${imagePath}")`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    const heroImageURL = imagePath
+    ? `https://image.tmdb.org/t/p/original${imagePath}`
+    : "";
 
     const airDateText = episodeData.air_date
     ? formatAirDate(episodeData.air_date,episodeData)
@@ -3018,7 +3040,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     content.innerHTML = `
 
-        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
+        <div class="modal-hero episode-detail-hero ${heroImageURL ? "has-hero-image" : "no-hero-image"}">
+
+            ${getModalHeroMediaHTML(heroImageURL)}
 
             <div class="modal-hero-content episode-detail-hero-content">
 
@@ -3208,12 +3232,28 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
         toggleButton.addEventListener("click",async function(){
 
-            await updateEpisodeWatched(
-                show.tmdb_id,
-                seasonNumber,
-                episodeNumber,
-                !isWatched
-            );
+            if(this.disabled){
+                return;
+            }
+
+            this.disabled = true;
+
+            try{
+                if(!isWatched){
+                    await playCheckSuccessAnimation(this);
+                }
+
+                await updateEpisodeWatched(
+                    show.tmdb_id,
+                    seasonNumber,
+                    episodeNumber,
+                    !isWatched
+                );
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
 
         });
 
@@ -4606,34 +4646,6 @@ function renderSettings(){
 
             </div>
 
-            <div class="settings-section episode-release-settings-section">
-
-                <div class="settings-section-header">
-                    <h2>EPISODE RELEASE TIME</h2>
-                    <p>When an episode has a date but no trustworthy exact timestamp, make it available at this estimated Kuala Lumpur time.</p>
-                </div>
-
-                <div class="admin-account-grid release-time-settings-grid">
-                    <label class="profile-settings-label" for="date-only-episode-time-input">Date-only episode time</label>
-                    <input
-                    class="profile-settings-input"
-                    id="date-only-episode-time-input"
-                    type="time"
-                    value="${escapeHTML(getGlobalDateOnlyEpisodeTime())}">
-                </div>
-
-                <p class="settings-small-note">
-                    Default: 9:00 AM. Estimated fallback times are marked with ~. A trustworthy exact timestamp always takes priority.
-                </p>
-
-                <div class="settings-button-list">
-                    <button class="settings-action-button" id="save-date-only-episode-time" type="button">Save Release Time</button>
-                </div>
-
-            </div>
-
-
-
             <div class="settings-section admin-account-section">
 
                 <div class="settings-section-header">
@@ -4782,15 +4794,6 @@ function renderSettings(){
         profileSettingsDraft.username = usernameInput.value;
         saveProfileSettings(profileSettingsDraft);
     });
-
-    const dateOnlyEpisodeTimeInput = document.getElementById("date-only-episode-time-input");
-    const saveDateOnlyEpisodeTimeButton = document.getElementById("save-date-only-episode-time");
-
-    if(saveDateOnlyEpisodeTimeButton && dateOnlyEpisodeTimeInput){
-        saveDateOnlyEpisodeTimeButton.addEventListener("click",function(){
-            saveDateOnlyEpisodeTime(dateOnlyEpisodeTimeInput.value);
-        });
-    }
 
     const adminUsernameInput = document.getElementById("admin-username-input");
     if(adminUsernameInput){
