@@ -6,7 +6,8 @@ var DATA = {
         favorite_shows:[],
         avatar_type:"initial",
         avatar_preset:"silhouette-1",
-        avatar_data:""
+        avatar_data:"",
+        date_only_episode_time:"09:00"
     },
     network_sync:{
         active:false,
@@ -55,7 +56,9 @@ var automaticBackupNeedsFlush = false;
 var automaticBackupLastSavedSignature = "";
 
 const TVMAZE_RELEASE_SAFETY_VERSION = 3;
-const FALLBACK_RELEASE_HOUR = 9;
+const DEFAULT_DATE_ONLY_EPISODE_TIME = "09:00";
+const DATE_ONLY_EPISODE_TIME_ZONE = "Asia/Kuala_Lumpur";
+const DATE_ONLY_EPISODE_UTC_OFFSET = "+08:00";
 const TVMAZE_MAX_DATE_DIFF_DAYS = 1;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
@@ -583,6 +586,11 @@ function normalizeExistingData(){
         if(typeof show._tvmaze_last_refresh === "undefined"){
             show._tvmaze_last_refresh = "";
         }
+
+        show.date_only_episode_time_override = normalizeEpisodeReleaseTimeValue(
+            show.date_only_episode_time_override,
+            ""
+        );
 
         if(show._tvmaze_release_safety_version !== TVMAZE_RELEASE_SAFETY_VERSION){
             clearOldTVmazeReleaseFields(show);
@@ -1915,7 +1923,7 @@ async function addDiscoverEpisodeAsWatched(showId,season,episode){
 
         const episodeData = getEpisodeData(show,seasonNumber,episodeNumber);
 
-        if(!isEpisodeAired(episodeData.air_date,episodeData)){
+        if(!isEpisodeAired(episodeData.air_date,episodeData,show)){
             showToast("This episode has not aired yet");
             return;
         }
@@ -2074,7 +2082,7 @@ function hasAnyAiredEpisode(show){
 
             const ep = seasonList[j];
 
-            if(isEpisodeAired(ep.air_date,ep)){
+            if(isEpisodeAired(ep.air_date,ep,show)){
                 return true;
             }
 
@@ -2082,7 +2090,7 @@ function hasAnyAiredEpisode(show){
 
     }
 
-    if(show.first_air_date && isEpisodeAired(show.first_air_date)){
+    if(show.first_air_date && isEpisodeAired(show.first_air_date,null,show)){
         return true;
     }
 
@@ -2939,7 +2947,7 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
 
     const episodeData = getEpisodeData(show,season,episode);
 
-    if(isWatched && !isEpisodeAired(episodeData.air_date,episodeData)){
+    if(isWatched && !isEpisodeAired(episodeData.air_date,episodeData,show)){
         showToast("This episode has not aired yet");
         return;
     }
@@ -3186,7 +3194,7 @@ function getAiredEpisodeNumbersInSeason(show,seasonNumber){
     : [];
 
     return seasonList
-    .filter(ep=>isEpisodeAired(ep.air_date,ep))
+    .filter(ep=>isEpisodeAired(ep.air_date,ep,show))
     .map(ep=>Number(ep.episode_number))
     .filter(Number.isFinite)
     .sort((a,b)=>a-b);
@@ -3342,7 +3350,7 @@ function getAllAiredUnwatchedEpisodes(show){
 
         episodeList.forEach(ep=>{
 
-            if(!ep.air_date || !isEpisodeAired(ep.air_date,ep)){
+            if(!ep.air_date || !isEpisodeAired(ep.air_date,ep,show)){
                 return;
             }
 
@@ -3550,7 +3558,7 @@ function markEpAndPrevious(showId,season,episode){
 
                 if(
                     shouldInclude &&
-                    isEpisodeAired(ep.air_date,ep) &&
+                    isEpisodeAired(ep.air_date,ep,show) &&
                     !alreadyWatched
                 ){
 
@@ -3642,7 +3650,7 @@ function getNextEpisode(show){
 
             const ep = episodeList[i];
 
-            if(!isEpisodeAired(ep.air_date,ep)){
+            if(!isEpisodeAired(ep.air_date,ep,show)){
                 continue;
             }
 
@@ -3804,7 +3812,7 @@ async function getEpisodesToBeMarked(show,targetSeason,targetEpisode){
 
             if(
                 shouldInclude &&
-                isEpisodeAired(ep.air_date,ep) &&
+                isEpisodeAired(ep.air_date,ep,show) &&
                 !alreadyWatched
             ){
 
@@ -3848,7 +3856,7 @@ function addHistoryEntries(show,episodes){
             ep.episode
         );
 
-        if(!isEpisodeAired(episodeData.air_date,episodeData)){
+        if(!isEpisodeAired(episodeData.air_date,episodeData,show)){
             return;
         }
 
@@ -4090,19 +4098,80 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
 
 
-function makeEpisodeReleaseDate(airDateString,episodeInfo=null){
+function normalizeEpisodeReleaseTimeValue(value,fallback=""){
 
-    const baseDateString = getEpisodeCalendarDateString(
-        airDateString,
-        episodeInfo
+    const normalized = String(value || "").trim();
+
+    if(/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(normalized)){
+        return normalized;
+    }
+
+    return fallback;
+
+}
+
+
+
+function getGlobalDateOnlyEpisodeTime(){
+
+    const profile = DATA && DATA.profile && typeof DATA.profile === "object"
+    ? DATA.profile
+    : {};
+
+    return normalizeEpisodeReleaseTimeValue(
+        profile.date_only_episode_time,
+        DEFAULT_DATE_ONLY_EPISODE_TIME
     );
 
-    const baseDate = makeLocalDate(baseDateString);
+}
+
+
+
+function getShowDateOnlyEpisodeTime(showInfo=null){
+
+    const override = showInfo && typeof showInfo === "object"
+    ? normalizeEpisodeReleaseTimeValue(
+        showInfo.date_only_episode_time_override,
+        ""
+    )
+    : "";
+
+    return override || getGlobalDateOnlyEpisodeTime();
+
+}
+
+
+
+function makeDateOnlyEpisodeReleaseDate(dateString,timeString){
+
+    const date = String(dateString || "").trim();
+    const time = normalizeEpisodeReleaseTimeValue(
+        timeString,
+        DEFAULT_DATE_ONLY_EPISODE_TIME
+    );
+
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
+        return null;
+    }
+
+    const releaseDate = new Date(
+        `${date}T${time}:00${DATE_ONLY_EPISODE_UTC_OFFSET}`
+    );
+
+    return Number.isNaN(releaseDate.getTime())
+    ? null
+    : releaseDate;
+
+}
+
+
+
+function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
     /*
-    The calendar day comes from the trusted episode-date helper above.
-    TVmaze may also provide an exact timestamp; use its local clock time while
-    keeping the chosen schedule day stable for display and grouping.
+    An exact timestamp is a real instant and must not be moved onto a different
+    calendar day. Calendar display/grouping remains handled separately by
+    getEpisodeCalendarDateString().
     */
     const exactTimestamp = getEpisodeExactTimestamp(episodeInfo);
 
@@ -4111,48 +4180,73 @@ function makeEpisodeReleaseDate(airDateString,episodeInfo=null){
         const exactDate = new Date(exactTimestamp);
 
         if(!Number.isNaN(exactDate.getTime())){
-
-            if(baseDate){
-                baseDate.setHours(
-                    exactDate.getHours(),
-                    exactDate.getMinutes(),
-                    0,
-                    0
-                );
-                return baseDate;
-            }
-
-            return exactDate;
-
+            return {
+                date:exactDate,
+                estimated:false,
+                source:"timestamp"
+            };
         }
 
     }
 
-    if(!baseDate){
+    const baseDateString = getEpisodeCalendarDateString(
+        airDateString,
+        episodeInfo
+    );
+
+    if(!baseDateString){
         return null;
     }
 
-    const airTime = episodeInfo && episodeInfo.air_time
-    ? String(episodeInfo.air_time)
-    : "";
+    /*
+    A bare TVmaze air_time has no trustworthy timezone in the stored episode
+    data. Treating it as Malaysian local time caused morning streaming releases
+    to appear at night. Date-only episodes therefore use the explicit Kuala
+    Lumpur fallback instead.
+    */
+    const releaseTime = getShowDateOnlyEpisodeTime(showInfo);
+    const releaseDate = makeDateOnlyEpisodeReleaseDate(
+        baseDateString,
+        releaseTime
+    );
 
-    const timeMatch = airTime.match(/^(\d{1,2}):(\d{2})/);
-
-    if(timeMatch){
-        baseDate.setHours(Number(timeMatch[1]),Number(timeMatch[2]),0,0);
-    }else{
-        baseDate.setHours(FALLBACK_RELEASE_HOUR,0,0,0);
+    if(!releaseDate){
+        return null;
     }
 
-    return baseDate;
+    return {
+        date:releaseDate,
+        estimated:true,
+        source:showInfo && showInfo.date_only_episode_time_override
+        ? "show-fallback"
+        : "global-fallback"
+    };
 
 }
 
 
 
-function isEpisodeAired(airDateString,episodeInfo=null){
+function makeEpisodeReleaseDate(airDateString,episodeInfo=null,showInfo=null){
 
-    const releaseDate = makeEpisodeReleaseDate(airDateString,episodeInfo);
+    const releaseInfo = getEpisodeReleaseInfo(
+        airDateString,
+        episodeInfo,
+        showInfo
+    );
+
+    return releaseInfo ? releaseInfo.date : null;
+
+}
+
+
+
+function isEpisodeAired(airDateString,episodeInfo=null,showInfo=null){
+
+    const releaseDate = makeEpisodeReleaseDate(
+        airDateString,
+        episodeInfo,
+        showInfo
+    );
 
     if(!releaseDate){
         return false;
@@ -4179,7 +4273,11 @@ function getHistoryEntries(){
             return true;
         }
 
-        return isEpisodeAired(entry.air_date,entry);
+        return isEpisodeAired(
+            entry.air_date,
+            entry,
+            DATA.shows[String(entry.tmdb_id)] || null
+        );
 
     })
     .slice()
@@ -4343,8 +4441,8 @@ function getUpcomingShows(){
 
     return items.sort((a,b)=>{
 
-        const aRelease = makeEpisodeReleaseDate(a.episode.air_date,a.episode);
-        const bRelease = makeEpisodeReleaseDate(b.episode.air_date,b.episode);
+        const aRelease = makeEpisodeReleaseDate(a.episode.air_date,a.episode,a.show);
+        const bRelease = makeEpisodeReleaseDate(b.episode.air_date,b.episode,b.show);
 
         if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
             return aRelease - bRelease;
@@ -4420,7 +4518,7 @@ function getUpcomingScheduleItems(show){
                 show:show,
                 episode:missedEpisode,
                 group:group,
-                timeLabel:getUpcomingTimeLabel(missedEpisode.air_date,missedEpisode),
+                timeLabel:getUpcomingTimeLabel(missedEpisode.air_date,missedEpisode,show),
                 isNew:isNewUpcomingEpisode(show,missedEpisode),
                 behindEpisodes:getBehindEpisodes(show,missedEpisode),
                 behindCount:getBehindCount(show,missedEpisode)
@@ -4465,7 +4563,7 @@ function getUpcomingScheduleItems(show){
             show:show,
             episode:ep,
             group:group,
-            timeLabel:getUpcomingTimeLabel(ep.air_date,ep),
+            timeLabel:getUpcomingTimeLabel(ep.air_date,ep,show),
             isNew:false,
             behindCount:0
         });
@@ -4501,7 +4599,7 @@ function getNextMissedAiredEpisode(show){
                 continue;
             }
 
-            if(!isEpisodeAired(ep.air_date,ep)){
+            if(!isEpisodeAired(ep.air_date,ep,show)){
                 continue;
             }
 
@@ -4569,7 +4667,7 @@ function getFutureScheduleEpisodes(show){
             return;
         }
 
-        if(isEpisodeAired(airDate,sourceEpisode)){
+        if(isEpisodeAired(airDate,sourceEpisode,show)){
 
             const dayDifference = getDayDiffFromToday(airDate,sourceEpisode);
 
@@ -4662,8 +4760,8 @@ function getFutureScheduleEpisodes(show){
 
     futureEpisodes.sort((a,b)=>{
 
-        const aRelease = makeEpisodeReleaseDate(a.air_date,a);
-        const bRelease = makeEpisodeReleaseDate(b.air_date,b);
+        const aRelease = makeEpisodeReleaseDate(a.air_date,a,show);
+        const bRelease = makeEpisodeReleaseDate(b.air_date,b,show);
 
         if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
             return aRelease - bRelease;
@@ -4733,7 +4831,7 @@ function getBehindEpisodes(show,currentEpisode){
                 return;
             }
 
-            if(!isEpisodeAired(ep.air_date,ep)){
+            if(!isEpisodeAired(ep.air_date,ep,show)){
                 return;
             }
 
@@ -4830,7 +4928,7 @@ function getBehindCount(show,currentEpisode){
                 return;
             }
 
-            if(!isEpisodeAired(ep.air_date,ep)){
+            if(!isEpisodeAired(ep.air_date,ep,show)){
                 return;
             }
 
@@ -4948,7 +5046,7 @@ function getUpcomingGroup(airDateString,episodeInfo=null){
 
 
 
-function getUpcomingTimeLabel(airDateString,episodeInfo=null){
+function getUpcomingTimeLabel(airDateString,episodeInfo=null,showInfo=null){
 
     const diffDays = getDayDiffFromToday(airDateString,episodeInfo);
 
@@ -4956,7 +5054,7 @@ function getUpcomingTimeLabel(airDateString,episodeInfo=null){
         return "";
     }
 
-    const releaseTime = getEpisodeReleaseTimeText(airDateString,episodeInfo);
+    const releaseTime = getEpisodeReleaseTimeText(airDateString,episodeInfo,showInfo);
 
     if(diffDays > 6){
         return "Aired";
@@ -4991,18 +5089,33 @@ function getUpcomingTimeLabel(airDateString,episodeInfo=null){
 
 
 
-function getEpisodeReleaseTimeText(airDateString,episodeInfo=null){
+function getEpisodeReleaseTimeText(airDateString,episodeInfo=null,showInfo=null){
 
-    const releaseDate = makeEpisodeReleaseDate(airDateString,episodeInfo);
+    const releaseInfo = getEpisodeReleaseInfo(
+        airDateString,
+        episodeInfo,
+        showInfo
+    );
 
-    if(!releaseDate){
+    if(!releaseInfo){
         return "";
     }
 
-    return releaseDate.toLocaleTimeString(undefined,{
+    const formatOptions = {
         hour:"numeric",
         minute:"2-digit"
-    });
+    };
+
+    if(releaseInfo.estimated){
+        formatOptions.timeZone = DATE_ONLY_EPISODE_TIME_ZONE;
+    }
+
+    const timeText = releaseInfo.date.toLocaleTimeString(
+        undefined,
+        formatOptions
+    );
+
+    return releaseInfo.estimated ? "~" + timeText : timeText;
 
 }
 
@@ -5043,7 +5156,7 @@ function isNewUpcomingEpisode(show,episode){
         return false;
     }
 
-    if(!isEpisodeAired(episode.air_date,episode)){
+    if(!isEpisodeAired(episode.air_date,episode,show)){
         return false;
     }
 
@@ -5076,8 +5189,8 @@ function isNewUpcomingEpisode(show,episode){
     full-season Friday drop marked as NEW while the Watchlist moves from
     S1E01 to S1E02, S1E03, etc. after each quick-log.
     */
-    const episodeReleaseDate = makeEpisodeReleaseDate(episode.air_date,episode);
-    const latestReleaseDate = makeEpisodeReleaseDate(latest.air_date,latest);
+    const episodeReleaseDate = makeEpisodeReleaseDate(episode.air_date,episode,show);
+    const latestReleaseDate = makeEpisodeReleaseDate(latest.air_date,latest,show);
 
     if(!episodeReleaseDate || !latestReleaseDate){
         return false;
@@ -5126,7 +5239,7 @@ function getLatestAiredEpisode(show){
                 return;
             }
 
-            if(!isEpisodeAired(ep.air_date,ep)){
+            if(!isEpisodeAired(ep.air_date,ep,show)){
                 return;
             }
 
@@ -5145,8 +5258,8 @@ function getLatestAiredEpisode(show){
 
             }
 
-            const currentDate = makeEpisodeReleaseDate(ep.air_date,ep);
-            const latestDate = makeEpisodeReleaseDate(latest.air_date,latest);
+            const currentDate = makeEpisodeReleaseDate(ep.air_date,ep,show);
+            const latestDate = makeEpisodeReleaseDate(latest.air_date,latest,show);
 
             if(currentDate > latestDate){
 
@@ -5254,7 +5367,7 @@ function hasNewAiredEpisodeAfterCompleted(show){
 
             const ep = episodeList[j];
 
-            if(!ep.air_date || !isEpisodeAired(ep.air_date,ep)){
+            if(!ep.air_date || !isEpisodeAired(ep.air_date,ep,show)){
                 continue;
             }
 
@@ -5262,7 +5375,7 @@ function hasNewAiredEpisodeAfterCompleted(show){
                 continue;
             }
 
-            const airDate = makeEpisodeReleaseDate(ep.air_date,ep);
+            const airDate = makeEpisodeReleaseDate(ep.air_date,ep,show);
 
             if(!airDate){
                 continue;
@@ -5426,6 +5539,11 @@ function ensureProfileData(){
     }
 
     DATA.profile.username = String(DATA.profile.username || "Username").trim().slice(0,30) || "Username";
+
+    DATA.profile.date_only_episode_time = normalizeEpisodeReleaseTimeValue(
+        DATA.profile.date_only_episode_time,
+        DEFAULT_DATE_ONLY_EPISODE_TIME
+    );
 
     if(!DATA.profile.favorite_shows || !Array.isArray(DATA.profile.favorite_shows)){
         DATA.profile.favorite_shows = [];
@@ -5690,6 +5808,79 @@ function getNetworkMetadataSyncSummary(){
     };
 
 }
+
+
+async function saveDateOnlyEpisodeTime(value){
+
+    const normalized = normalizeEpisodeReleaseTimeValue(value,"");
+
+    if(!normalized){
+        showToast("Choose a valid episode release time");
+        return false;
+    }
+
+    ensureProfileData();
+    const previousTime = DATA.profile.date_only_episode_time;
+    DATA.profile.date_only_episode_time = normalized;
+
+    const saved = await saveData({stateKeys:["profile"]});
+
+    if(saved !== false){
+        if(activePage === "shows" && activeShowsTab === "upcoming"){
+            await renderUpcoming(false);
+        }
+        showToast("Date-only episode time saved");
+        return true;
+    }
+
+    DATA.profile.date_only_episode_time = previousTime;
+    return false;
+
+}
+
+
+
+async function saveShowDateOnlyEpisodeTime(showId,value){
+
+    const id = String(showId || "");
+    const show = DATA.shows[id];
+
+    if(!show){
+        showToast("Show not found");
+        return false;
+    }
+
+    const requested = String(value || "").trim();
+    const normalized = requested
+    ? normalizeEpisodeReleaseTimeValue(requested,"")
+    : "";
+
+    if(requested && !normalized){
+        showToast("Choose a valid release-time override");
+        return false;
+    }
+
+    const previousOverride = show.date_only_episode_time_override || "";
+    show.date_only_episode_time_override = normalized;
+
+    const saved = await saveData({showIds:[id]});
+
+    if(saved !== false){
+        if(activePage === "shows" && activeShowsTab === "upcoming"){
+            await renderUpcoming(false);
+        }
+        renderShowModalPreservingScroll(show);
+        showToast(normalized
+        ? "Show release-time override saved"
+        : "Show now uses the global release time");
+        return true;
+    }
+
+    show.date_only_episode_time_override = previousOverride;
+    return false;
+
+}
+
 
 
 async function saveProfileSettings(settings){
@@ -6212,7 +6403,8 @@ function getAutomaticBackupSignatureData(){
             last_watched:String(show.last_watched || ""),
             last_activity_at:String(show.last_activity_at || ""),
             completed_at:String(show.completed_at || ""),
-            was_unreleased_when_added:show.was_unreleased_when_added === true
+            was_unreleased_when_added:show.was_unreleased_when_added === true,
+            date_only_episode_time_override:String(show.date_only_episode_time_override || "")
         };
 
     });
@@ -6232,7 +6424,8 @@ function getAutomaticBackupSignatureData(){
             avatar_data:String(DATA.profile.avatar_data || ""),
             header_type:String(DATA.profile.header_type || "preset"),
             header_preset:String(DATA.profile.header_preset || "default"),
-            header_image:String(DATA.profile.header_image || "")
+            header_image:String(DATA.profile.header_image || ""),
+            date_only_episode_time:String(DATA.profile.date_only_episode_time || DEFAULT_DATE_ONLY_EPISODE_TIME)
         }
     };
 

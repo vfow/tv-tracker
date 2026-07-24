@@ -994,7 +994,7 @@ function getWatchlistActionConfig(show,displayFilter,nextEp){
 
     const isAvailable = Boolean(
         nextEp.air_date &&
-        isEpisodeAired(nextEp.air_date,nextEp)
+        isEpisodeAired(nextEp.air_date,nextEp,show)
     );
 
     const releaseDate = nextEp.air_date
@@ -1066,7 +1066,7 @@ function createWatchlistCard(show,options={}){
     const nextEpisodeFuture = Boolean(
         nextEp &&
         nextEp.air_date &&
-        !isEpisodeAired(nextEp.air_date,nextEp)
+        !isEpisodeAired(nextEp.air_date,nextEp,show)
     );
 
     const releaseMeta = nextEpisodeFuture
@@ -1302,7 +1302,7 @@ function refreshInterfaceForDataChanges(change={}){
                 renderHistory();
             }
         }else if(activeShowsTab === "upcoming"){
-            if(showIds.length > 0 || historyChanged){
+            if(showIds.length > 0 || historyChanged || stateChanged){
                 renderUpcoming(false);
             }
         }
@@ -1322,8 +1322,11 @@ function refreshInterfaceForDataChanges(change={}){
     ? String(selectedShowId)
     : "";
     const selectedChanged = selectedId && showIds.includes(selectedId);
+    const selectedNeedsRefresh = Boolean(
+        selectedChanged || (stateChanged && selectedId)
+    );
 
-    if(selectedChanged && selectedEpisodeContext){
+    if(selectedNeedsRefresh && selectedEpisodeContext){
         const show = DATA.shows && DATA.shows[selectedId];
         if(show){
             renderEpisodeModal(
@@ -1333,7 +1336,7 @@ function refreshInterfaceForDataChanges(change={}){
                 selectedEpisodeContext
             );
         }
-    }else if(selectedChanged){
+    }else if(selectedNeedsRefresh){
         const show = DATA.shows && DATA.shows[selectedId];
         if(show){
             renderShowModalPreservingScroll(show);
@@ -1426,14 +1429,14 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
             // A row can cross from future to available while it is already
             // displayed as a Today schedule item. Do not rely only on ep.type.
-            const canLog = isEpisodeAired(ep.air_date,ep);
+            const canLog = isEpisodeAired(ep.air_date,ep,show);
 
             const displayIsNew =
             canLog &&
             (
                 item.isNew ||
                 isNewUpcomingEpisode(show,ep) ||
-                isRecentlyAvailableEpisode(ep)
+                isRecentlyAvailableEpisode(ep,show)
             );
 
             const batchOpen =
@@ -1677,13 +1680,13 @@ function getUpcomingBatchKey(show,episode){
 
 
 
-function isRecentlyAvailableEpisode(episode){
+function isRecentlyAvailableEpisode(episode,show=null){
 
     if(!episode || !episode.air_date){
         return false;
     }
 
-    if(!isEpisodeAired(episode.air_date,episode)){
+    if(!isEpisodeAired(episode.air_date,episode,show)){
         return false;
     }
 
@@ -1706,7 +1709,7 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
     episodes.forEach(ep=>{
 
         // Batch rows can also become available after their release time passes.
-        const canLog = isEpisodeAired(ep.air_date,ep);
+        const canLog = isEpisodeAired(ep.air_date,ep,show);
 
         const imagePath =
         ep.still_path ||
@@ -1729,7 +1732,7 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
                     </div>
 
                     <div class="upcoming-batch-date">
-                        ${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep))}
+                        ${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep,show))}
                     </div>
 
                 </div>
@@ -1876,7 +1879,7 @@ function openBehindEpisodesPopup(showId,episodes){
                         ${escapeHTML(title)}
                     </div>
                     <div class="behind-episode-date">
-                        ${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep))}
+                        ${escapeHTML(getUpcomingTimeLabel(ep.air_date,ep,show))}
                     </div>
                 </div>
 
@@ -2502,7 +2505,7 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
 
     episodeList.forEach(ep=>{
 
-        const aired = isEpisodeAired(ep.air_date,ep);
+        const aired = isEpisodeAired(ep.air_date,ep,show);
 
         html += `
             <div
@@ -2665,6 +2668,33 @@ function renderShowModal(show){
 
 
 
+            <div class="modal-section show-release-time-section">
+
+                <h3>Release Time</h3>
+
+                <p class="modal-control-note">
+                    Date-only episodes use the global Kuala Lumpur fallback unless this show has its own time. Exact timestamps always override this setting.
+                </p>
+
+                <div class="show-release-time-controls">
+                    <label class="profile-settings-label" for="show-release-time-mode">Date-only episode time</label>
+                    <select class="profile-settings-input" id="show-release-time-mode">
+                        <option value="global" ${show.date_only_episode_time_override ? "" : "selected"}>Use global fallback (${escapeHTML(getEpisodeReleaseTimeText("2026-01-01",null,null))})</option>
+                        <option value="custom" ${show.date_only_episode_time_override ? "selected" : ""}>Custom for this show</option>
+                    </select>
+                    <input
+                    class="profile-settings-input"
+                    id="show-release-time-input"
+                    type="time"
+                    value="${escapeHTML(show.date_only_episode_time_override || getGlobalDateOnlyEpisodeTime())}"
+                    ${show.date_only_episode_time_override ? "" : "disabled"}>
+                    <button class="settings-action-button" id="save-show-release-time" type="button">Save Release Time</button>
+                </div>
+
+            </div>
+
+
+
             <div class="modal-section">
 
                 <h3>Overall Progress</h3>
@@ -2703,6 +2733,30 @@ function renderShowModal(show){
         });
 
     });
+
+
+    const showReleaseTimeMode = document.getElementById("show-release-time-mode");
+    const showReleaseTimeInput = document.getElementById("show-release-time-input");
+    const saveShowReleaseTimeButton = document.getElementById("save-show-release-time");
+
+    if(showReleaseTimeMode && showReleaseTimeInput){
+        showReleaseTimeMode.addEventListener("change",function(){
+            const usesCustomTime = this.value === "custom";
+            showReleaseTimeInput.disabled = !usesCustomTime;
+            if(usesCustomTime && !showReleaseTimeInput.value){
+                showReleaseTimeInput.value = getGlobalDateOnlyEpisodeTime();
+            }
+        });
+    }
+
+    if(saveShowReleaseTimeButton){
+        saveShowReleaseTimeButton.addEventListener("click",function(){
+            const value = showReleaseTimeMode && showReleaseTimeMode.value === "custom"
+            ? showReleaseTimeInput.value
+            : "";
+            saveShowDateOnlyEpisodeTime(show.tmdb_id,value);
+        });
+    }
 
 
     document.querySelectorAll(".season-header").forEach(header=>{
@@ -2903,7 +2957,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     const episodeData = getEpisodeData(show,seasonNumber,episodeNumber);
     const historyEntry = getEpisodeHistoryEntry(show.tmdb_id,seasonNumber,episodeNumber);
     const isWatched = isEpisodeWatched(show,seasonNumber,episodeNumber);
-    const aired = isEpisodeAired(episodeData.air_date,episodeData);
+    const aired = isEpisodeAired(episodeData.air_date,episodeData,show);
 
     const episodeTitle = episodeData.name || "Untitled Episode";
     const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
@@ -2919,7 +2973,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     : "Unknown";
 
     const releaseTimeText = episodeData.air_date
-    ? getEpisodeReleaseTimeText(episodeData.air_date,episodeData)
+    ? getEpisodeReleaseTimeText(episodeData.air_date,episodeData,show)
     : "";
 
     const runtimeText = episodeData.runtime
@@ -3299,7 +3353,7 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
 
         const watchedEpisodes = show.episodes_watched[String(seasonNumber)] || [];
         const isWatched = watchedEpisodes.includes(ep.episode_number);
-        const aired = isEpisodeAired(ep.air_date,ep);
+        const aired = isEpisodeAired(ep.air_date,ep,show);
         const canToggle = aired || isWatched;
 
         html += `
@@ -4552,6 +4606,34 @@ function renderSettings(){
 
             </div>
 
+            <div class="settings-section episode-release-settings-section">
+
+                <div class="settings-section-header">
+                    <h2>EPISODE RELEASE TIME</h2>
+                    <p>When an episode has a date but no trustworthy exact timestamp, make it available at this estimated Kuala Lumpur time.</p>
+                </div>
+
+                <div class="admin-account-grid release-time-settings-grid">
+                    <label class="profile-settings-label" for="date-only-episode-time-input">Date-only episode time</label>
+                    <input
+                    class="profile-settings-input"
+                    id="date-only-episode-time-input"
+                    type="time"
+                    value="${escapeHTML(getGlobalDateOnlyEpisodeTime())}">
+                </div>
+
+                <p class="settings-small-note">
+                    Default: 9:00 AM. Estimated fallback times are marked with ~. A trustworthy exact timestamp always takes priority.
+                </p>
+
+                <div class="settings-button-list">
+                    <button class="settings-action-button" id="save-date-only-episode-time" type="button">Save Release Time</button>
+                </div>
+
+            </div>
+
+
+
             <div class="settings-section admin-account-section">
 
                 <div class="settings-section-header">
@@ -4700,6 +4782,15 @@ function renderSettings(){
         profileSettingsDraft.username = usernameInput.value;
         saveProfileSettings(profileSettingsDraft);
     });
+
+    const dateOnlyEpisodeTimeInput = document.getElementById("date-only-episode-time-input");
+    const saveDateOnlyEpisodeTimeButton = document.getElementById("save-date-only-episode-time");
+
+    if(saveDateOnlyEpisodeTimeButton && dateOnlyEpisodeTimeInput){
+        saveDateOnlyEpisodeTimeButton.addEventListener("click",function(){
+            saveDateOnlyEpisodeTime(dateOnlyEpisodeTimeInput.value);
+        });
+    }
 
     const adminUsernameInput = document.getElementById("admin-username-input");
     if(adminUsernameInput){

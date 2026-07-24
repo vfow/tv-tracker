@@ -57,6 +57,7 @@ SYNC_LOCK = threading.Lock()
 CHANGE_LOG_RETENTION_REVISIONS = 5000
 CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
+EPISODE_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 def required_env(name: str, *, strip: bool = True) -> str:
@@ -617,6 +618,17 @@ def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
         if show["status"] not in supported_statuses:
             raise BackupValidationError(f"Show {show_id} has an unsupported status")
 
+    release_override = show.get("date_only_episode_time_override", "")
+    if release_override is not None:
+        if not isinstance(release_override, str):
+            raise BackupValidationError(
+                f"Show {show_id} has an invalid release-time override"
+            )
+        if release_override and not EPISODE_TIME_RE.fullmatch(release_override):
+            raise BackupValidationError(
+                f"Show {show_id} has an invalid release-time override"
+            )
+
     watched = show.get("episodes_watched", {})
     if watched is None:
         watched = {}
@@ -737,12 +749,23 @@ def validate_and_normalize_backup(backup: Any) -> tuple[dict[str, Any], dict[str
     for profile_field in (
         "username", "avatar_type", "avatar_preset", "avatar_data",
         "header_type", "header_preset", "header_image",
+        "date_only_episode_time",
     ):
         if profile_field in raw_profile and raw_profile[profile_field] is not None:
             if not isinstance(raw_profile[profile_field], str):
                 raise BackupValidationError(
                     f"Backup profile field {profile_field} is invalid"
                 )
+
+    date_only_episode_time = raw_profile.get("date_only_episode_time")
+    if (
+        date_only_episode_time is not None
+        and date_only_episode_time != ""
+        and not EPISODE_TIME_RE.fullmatch(date_only_episode_time)
+    ):
+        raise BackupValidationError(
+            "Backup profile field date_only_episode_time is invalid"
+        )
 
     shows: dict[str, Any] = {}
     for raw_show_id, raw_show in raw_shows.items():

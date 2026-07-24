@@ -1,4 +1,4 @@
-# TV Tracker v1.3.0 Stable
+# TV Tracker v1.3.1 Stable
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
 
@@ -71,6 +71,18 @@ Remove `APP_USERNAME` and `APP_PASSWORD_HASH` only after all of the following ha
 
 Keep `SECRET_KEY` and all database environment variables configured.
 
+## Episode release-time rules
+
+TV Tracker separates the episode calendar date from the instant when the episode becomes available.
+
+1. A valid exact timestamp is authoritative and is displayed in the browser timezone.
+2. A date without a trustworthy exact timestamp uses the configured fallback in `Asia/Kuala_Lumpur`.
+3. The default fallback is `09:00`. Estimated times are displayed with `~`.
+4. A tracked show may use its own date-only time instead of the global fallback.
+5. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
+
+The global fallback is configured under **Settings → Episode Release Time**. A per-show override is configured in that tracked show’s details.
+
 ## Backups and restore
 
 Native exports use:
@@ -127,6 +139,10 @@ A healthy stable installation reports an available database and `schemaVersion` 
 - Watchlist ordering uses exact activity time.
 - Cross-device synchronization works without losing updates.
 - Show and episode details open centered and use the intended heading font.
+- Date-only episodes default to approximately 9:00 AM in Asia/Kuala_Lumpur; exact timestamps remain authoritative.
+- Bare source times without a trustworthy timezone are not treated as Malaysian local time.
+- Global and per-show date-only release times persist in backups and synchronize across devices.
+- Upcoming rows show the standard hover highlight on pointer devices.
 - Valid backup import succeeds; malformed or unsupported backups are rejected without changing live data.
 - `/api/health` reports schema version 4.
 - A fresh JSON backup and complete source archive are stored safely.
@@ -136,5 +152,5 @@ A healthy stable installation reports an available database and `schemaVersion` 
 The stable Git tag is:
 
 ```text
-v1.3.0
+v1.3.1
 ```
