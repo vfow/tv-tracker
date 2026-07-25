@@ -50,7 +50,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const TVMAZE_RELEASE_SAFETY_VERSION = 4;
+const TVMAZE_RELEASE_SAFETY_VERSION = 5;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
@@ -580,10 +580,13 @@ function normalizeExistingData(){
         delete show.date_only_episode_time_override;
 
         if(show._tvmaze_release_safety_version !== TVMAZE_RELEASE_SAFETY_VERSION){
-            clearOldTVmazeReleaseFields(show);
-            show._tvmaze_episodes = {};
+            /*
+            Remove old generated/default timestamps immediately. Keep only
+            timing records that already contain a real explicit TVmaze airtime
+            whose clock agrees with its offset-bearing timestamp.
+            */
+            sanitizeStoredTVmazeTiming(show);
             show._tvmaze_last_refresh = "";
-            show.last_tmdb_refresh = "";
             show._tvmaze_release_safety_version = TVMAZE_RELEASE_SAFETY_VERSION;
         }
 
@@ -1090,6 +1093,59 @@ function clearOldTVmazeReleaseFields(show){
 }
 
 
+function sanitizeStoredTVmazeTiming(show){
+
+    if(!show){
+        return;
+    }
+
+    Object.values(show._tvmaze_episodes || {}).forEach(ep=>{
+        if(!ep){
+            return;
+        }
+
+        if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
+            ep.airtime || "",
+            ep.airstamp || ""
+        )){
+            ep.airtime = "";
+            ep.airstamp = "";
+        }
+    });
+
+    Object.values(show._episode_list || {}).forEach(list=>{
+        if(!Array.isArray(list)){
+            return;
+        }
+
+        list.forEach(ep=>{
+            if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
+                ep.air_time || "",
+                ep.air_timestamp || ""
+            )){
+                ep.air_time = "";
+                ep.air_timestamp = "";
+            }
+        });
+    });
+
+    Object.values(show._episode_details || {}).forEach(detail=>{
+        if(!detail){
+            return;
+        }
+
+        if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
+            detail.air_time || "",
+            detail.air_timestamp || ""
+        )){
+            detail.air_time = "";
+            detail.air_timestamp = "";
+        }
+    });
+
+}
+
+
 
 function syncNextEpisodeFromTMDB(show){
 
@@ -1356,12 +1412,19 @@ async function refreshTVmazeData(show,forceRefresh=false){
 
                 const key = String(ep.season) + "-" + String(ep.number);
 
+                const explicitAirtime = String(ep.airtime || "").trim();
+                const offsetTimestamp = String(ep.airstamp || "").trim();
+                const hasTrustedTime = TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
+                    explicitAirtime,
+                    offsetTimestamp
+                );
+
                 show._tvmaze_episodes[key] = {
                     season:Number(ep.season),
                     episode:Number(ep.number),
                     airdate:ep.airdate || "",
-                    airtime:ep.airtime || "",
-                    airstamp:ep.airstamp || "",
+                    airtime:hasTrustedTime ? explicitAirtime : "",
+                    airstamp:hasTrustedTime ? offsetTimestamp : "",
                     runtime:ep.runtime || null
                 };
 
@@ -1459,9 +1522,10 @@ function applyTVmazeEpisodeFields(target,tvmazeEpisode){
 
     /*
     Season and episode numbers were already matched exactly before this point.
-    TMDB owns the calendar date. TVmaze contributes only the matched episode's
-    clock time and its offset-bearing airstamp. The TVmaze date itself never
-    replaces a valid TMDB date.
+    TMDB owns the calendar date. TVmaze contributes time only when that exact
+    episode explicitly publishes an airtime and an offset-bearing airstamp with
+    the same local clock. An airstamp alone is ignored because it may be derived
+    from a default schedule. The TVmaze date never replaces a valid TMDB date.
     */
     const releaseDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
         canonicalDate,
@@ -4081,9 +4145,10 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
     /*
     TMDB owns the official calendar date. For the exact matching season and
-    episode, TVmaze may contribute only its clock time and offset-bearing
-    airstamp. Rebuild the instant on the TMDB date, then let the browser format
-    that instant in the device's current timezone. No country is hardcoded.
+    episode, TVmaze may contribute only a verified explicit airtime and its
+    matching offset-bearing airstamp. Rebuild the instant on the TMDB date, then
+    let the browser format that instant in the device's current timezone. An
+    airstamp without an explicit airtime is ignored. No country is hardcoded.
     */
     const exactDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
         baseDateString,

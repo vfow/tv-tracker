@@ -57,13 +57,40 @@ assert.strictEqual(
     "2026-07-28T01:00:00.000Z"
 );
 
+// An offset-bearing airstamp without an explicitly published TVmaze airtime
+// is not trustworthy. It may be generated from a default show schedule.
 assert.strictEqual(
     utils.makeCanonicalEpisodeReleaseDate(
         "2026-07-27",
         "",
         "2026-07-26T03:15:00+02:00"
-    ).toISOString(),
-    "2026-07-27T01:15:00.000Z"
+    ),
+    null
+);
+
+// The explicit clock and airstamp clock must agree before the timestamp's
+// source offset can be used.
+assert.strictEqual(
+    utils.makeCanonicalEpisodeReleaseDate(
+        "2026-07-27",
+        "17:00",
+        "2026-07-26T20:00:00+02:00"
+    ),
+    null
+);
+assert.strictEqual(
+    utils.hasTrustworthyTVmazeAirtime(
+        "17:00",
+        "2026-07-26T17:00:00+02:00"
+    ),
+    true
+);
+assert.strictEqual(
+    utils.hasTrustworthyTVmazeAirtime(
+        "",
+        "2026-07-26T17:00:00+02:00"
+    ),
+    false
 );
 
 // A source clock without an offset-bearing airstamp cannot be converted

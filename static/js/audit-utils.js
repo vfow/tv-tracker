@@ -82,25 +82,54 @@
         };
     }
 
+    function parseExplicitAirtime(airtime){
+        const value = String(airtime || "").trim();
+        const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+
+        if(!match){
+            return null;
+        }
+
+        return {
+            hour:match[1],
+            minute:match[2]
+        };
+    }
+
+    function hasTrustworthyTVmazeAirtime(airtime,airstamp){
+        const timeParts = parseExplicitAirtime(airtime);
+        const timestampParts = parseOffsetTimestamp(airstamp);
+
+        if(!timeParts || !timestampParts){
+            return false;
+        }
+
+        /*
+        TVmaze must explicitly publish the episode clock time. An airstamp by
+        itself may be generated from a default schedule and is not evidence of
+        a confirmed airtime. The timestamp is used only for its source offset,
+        and its local clock must agree with the explicit airtime field.
+        */
+        return (
+            timeParts.hour === timestampParts.hour &&
+            timeParts.minute === timestampParts.minute
+        );
+    }
+
     function makeCanonicalEpisodeReleaseDate(dateString,airtime,airstamp){
         const canonicalDate = String(dateString || "").trim();
         if(!parseStrictLocalDate(canonicalDate)){
             return null;
         }
 
-        const timestampParts = parseOffsetTimestamp(airstamp);
-        if(!timestampParts){
+        if(!hasTrustworthyTVmazeAirtime(airtime,airstamp)){
             return null;
         }
 
-        const clockTime = String(airtime || "").trim();
-        const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(clockTime);
-        const hour = timeMatch ? timeMatch[1] : timestampParts.hour;
-        const minute = timeMatch ? timeMatch[2] : timestampParts.minute;
-        const second = timeMatch ? "00" : timestampParts.second;
-
+        const timeParts = parseExplicitAirtime(airtime);
+        const timestampParts = parseOffsetTimestamp(airstamp);
         const result = new Date(
-            `${canonicalDate}T${hour}:${minute}:${second}${timestampParts.offset}`
+            `${canonicalDate}T${timeParts.hour}:${timeParts.minute}:00${timestampParts.offset}`
         );
 
         return Number.isNaN(result.getTime()) ? null : result;
@@ -134,6 +163,8 @@
         parseStrictLocalDate,
         chooseEpisodeCalendarDate,
         parseOffsetTimestamp,
+        parseExplicitAirtime,
+        hasTrustworthyTVmazeAirtime,
         makeCanonicalEpisodeReleaseDate,
         makeDateOnlyEpisodeReleaseDate,
         prefersReducedMotion
