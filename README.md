@@ -9,14 +9,17 @@ Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CS
 - Existing watched progress is preserved, so Paused and Dropped shows resume from where viewing stopped.
 - Completed rows have no right-side circle or icon and display `✓ Completed` in green in the original style.
 - Statuses remain editable from every show-detail window.
-- This update includes and preserves the v1.3.1 schedule calendar-date correction and all Audit Repair protections.
+- This update includes and preserves the v1.3.1 browser-local timing rules and all Audit Repair protections.
 
-## v1.3.1 Schedule calendar-date correction
+## v1.3.1 Browser-local episode timing
 
-- The primary episode `air_date` remains the canonical date shown in Watchlist, Upcoming, countdowns, and episode details.
-- TVmaze can supply a missing date, but it can no longer replace a valid July 27 date with a July 26 broadcaster date.
-- Exact timestamps still refine release time when they remain on the canonical date in `Asia/Kuala_Lumpur`.
-- A conflicting previous-day or next-day timestamp is ignored and the existing estimated `~9:00 AM` fallback is used instead.
+- TMDB remains authoritative for the official episode calendar date used by Watchlist, Upcoming, countdowns, and episode details.
+- TVmaze contributes only the clock time for the exact matching season and episode. Its calendar date never replaces a valid TMDB date.
+- The TVmaze clock is accepted only when its `airstamp` contains a trustworthy UTC offset. The app attaches that clock to the TMDB date and lets the browser convert the instant to the device's current timezone.
+- The website displays only the converted local time in 12-hour format, never the original source time or timezone.
+- No country, city, UTC offset, fallback hour, or manual timezone setting is hardcoded.
+- When no trustworthy TVmaze time exists, the website displays only the TMDB date. The episode remains Upcoming through the end of that official date in the device's timezone.
+- Metadata refreshes replace corrected TVmaze times and remove stale timing values before rebuilding Upcoming.
 - No design, image, hover, database-schema, save-queue, or tracker-data behavior changed.
 
 ## v1.3.1 Audit Repair — silent background saving
@@ -28,7 +31,7 @@ Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CS
 
 ## v1.3.1 Audit Repair
 
-- Date-only episodes use a fixed 9:00 AM Kuala Lumpur fallback when no trustworthy timestamp exists.
+- Date-only episodes display only their TMDB date and remain Upcoming through the end of that date in the browser/device timezone.
 - The unsolicited Release Time settings and per-show override controls have been removed.
 - Upcoming uses the same shared row hover as Watchlist and History.
 - Watched confirmation animations finish before the affected row or modal is redrawn.
@@ -114,16 +117,16 @@ Keep `SECRET_KEY` and all database environment variables configured.
 
 ## Episode release-time rules
 
-TV Tracker separates the episode calendar date from the instant when the episode becomes available.
+TV Tracker keeps the official episode date separate from the local display time.
 
-1. The primary episode `air_date` is the canonical calendar date.
-2. A valid exact timestamp is used only when it remains on that calendar date in `Asia/Kuala_Lumpur`; its time is displayed in the browser timezone.
-3. A missing date may fall back to TVmaze's date.
-4. A date without a trustworthy matching timestamp uses the fixed `09:00` fallback in `Asia/Kuala_Lumpur`.
-5. Estimated fallback times are displayed with `~`.
-6. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
-
-The fallback is internal and is not exposed as a Settings or per-show control.
+1. A valid TMDB `air_date` is always the canonical calendar date.
+2. TVmaze is matched by the exact season and episode number and contributes only its clock time.
+3. TVmaze's own date is ignored when TMDB has a valid date; if TMDB has no valid date, TVmaze may supply the date as a fallback.
+4. A TVmaze time is used only when an offset-bearing `airstamp` makes conversion reliable.
+5. The clock is attached to the canonical TMDB date, converted automatically by the browser to the device's current timezone, and displayed only as local 12-hour time.
+6. The source time and source timezone are never displayed on website pages or in episode/show details.
+7. When no trustworthy time exists, the row displays only the date and remains Upcoming through the end of that official date in the device timezone.
+8. There is no manual timezone setting, country-specific fallback, invented hour, or `~` marker.
 
 ## Silent background saving
 
@@ -195,8 +198,8 @@ The same suite runs automatically through `.github/workflows/audit-tests.yml`.
 - Watchlist ordering uses exact activity time.
 - Cross-device synchronization works without losing updates.
 - Show and episode details open centered and use the intended heading font.
-- Date-only episodes default to approximately 9:00 AM in Asia/Kuala_Lumpur; exact timestamps remain authoritative.
-- Bare source times without a trustworthy timezone are not treated as Malaysian local time.
+- TMDB remains authoritative for episode dates; exact matching TVmaze clock times are converted automatically by the browser.
+- Date-only episodes show no invented time and remain Upcoming through the end of the official date.
 - Upcoming rows show the standard hover highlight on pointer devices.
 - Valid backup import succeeds; malformed or unsupported backups are rejected without changing live data.
 - `/api/health` reports schema version 4.

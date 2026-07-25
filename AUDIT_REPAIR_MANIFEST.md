@@ -1,6 +1,6 @@
 # TV Tracker v1.3.1 Audit Repair Manifest
 
-This release is built from the approved v1.3.1 schedule-date-corrected Audit Repair source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, schedule correction, silent save queue, and episode progress. The only visual interaction change is the user-approved Watchlist status-control correction documented below.
+This release is built from the approved v1.3.1 schedule-and-status-controls source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, silent save queue, Watchlist status controls, and episode progress. The timing update documented below removes location-specific assumptions without changing the design.
 
 ## Reliability repairs included
 
@@ -22,7 +22,7 @@ The stored suite covers:
 - malformed synchronization writes and conflict detection;
 - malformed backup import and poisoned backup export;
 - impossible dates and leap-day handling;
-- the 9:00 AM Kuala Lumpur estimated-release boundary;
+- TMDB-canonical dates, exact TVmaze clock extraction, browser-local conversion, and date-only end-of-day boundaries;
 - reduced-motion behavior;
 - persistent pending-save survival across reload and removal only after confirmation;
 - conflict-safe administrator bootstrap and explicit administrator recreation;
@@ -39,30 +39,33 @@ The same command runs in `.github/workflows/audit-tests.yml`.
 
 ## Patch installation
 
-The patch archive is cumulative against:
+The changed-files archive is cumulative against:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-status-hotfix-full.zip
+tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
 ```
 
-Overlay the patch files onto that exact approved source, preserving paths, then restart the Flask website and hard-refresh browsers.
+Overlay the changed files onto that exact approved source, preserving paths, then restart the Flask website. The new script cache version loads the timing update without changing database data.
 
 ## Silent background saving
 
 The durable pending-save queue, reload recovery, server confirmation, and automatic retries remain enabled. All save-state banners and automatic save/synchronization toasts are intentionally disabled. Older cached `tv-unsaved-status` elements are removed when the new build initializes.
 
-## Schedule calendar-date correction
+## Browser-local episode timing
 
-- The official episode `air_date` is now canonical for display, grouping, countdowns, and availability-day boundaries.
-- TVmaze dates are fallback-only and no longer override a valid primary date by one day.
-- Exact timestamps are accepted only when their `Asia/Kuala_Lumpur` calendar date matches the canonical episode date.
-- Conflicting timestamps fall back to the existing estimated `~9:00 AM` policy.
-- The change preserves silent background saving, schema version 4, original image fit, hover styling, and all approved audit repairs.
+- TMDB controls the official episode date for display, grouping, countdowns, and availability-day boundaries.
+- TVmaze is matched by exact season and episode number and contributes only its clock time; its date never overrides a valid TMDB date.
+- An offset-bearing TVmaze `airstamp` is required. The clock is attached to the TMDB date and converted by the browser to the device's current timezone.
+- Only local 12-hour time is displayed. Source time and source timezone are never shown.
+- No Malaysia-specific timezone, fixed UTC offset, invented fallback hour, manual timezone setting, or `~` marker remains.
+- Without a trustworthy time, the website displays only the date and keeps the episode Upcoming through the end of that date in the device timezone.
+- Successful metadata refreshes clear stale TVmaze timing fields before applying current exact-match data.
+- The change preserves silent background saving, schema version 4, original image fit, hover styling, Watchlist status controls, and all approved audit repairs.
 
-The cumulative patch is based on:
+The changed-files patch is based on:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-silent-background-full.zip
+tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
 ```
 
 ## Watchlist status-control correction
@@ -71,10 +74,10 @@ tv-tracker-v1.3.1-audit-repair-silent-background-full.zip
 - Activating the control changes the show to Watching while retaining watched-episode progress.
 - Completed cards render only the green `✓ Completed` label and no trailing action circle.
 - All modal status controls remain available from every filter.
-- The schedule calendar-date correction, silent save queue, original image fit, and all audit safeguards remain unchanged.
+- Browser-local episode timing, the silent save queue, original image fit, and all audit safeguards remain unchanged.
 
-The cumulative patch is based on:
+The Watchlist status-control work remains inherited from:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-schedule-date-full.zip
+tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
 ```

@@ -49,13 +49,22 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn('action:"watching"', ui_js)
         self.assertIn("1.3.1-audit-watchlist-status", index_html)
 
-    def test_schedule_calendar_date_cannot_shift_backward(self):
+    def test_schedule_uses_tmdb_date_and_browser_local_time(self):
         app_js = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
+        audit_utils_js = (ROOT / "static/js/audit-utils.js").read_text(encoding="utf-8")
         index_html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
         self.assertIn("chooseEpisodeCalendarDate", app_js)
-        self.assertIn("isTimestampOnCalendarDate", app_js)
-        self.assertIn("official episode air_date as the canonical calendar day", app_js)
-        self.assertIn("1.3.1-audit-schedule-date", index_html)
+        self.assertIn("makeCanonicalEpisodeReleaseDate", app_js)
+        self.assertIn("TVmaze contributes only the matched episode's", app_js)
+        self.assertIn('hour12:true', app_js)
+        self.assertIn("date.setDate(date.getDate() + 1)", audit_utils_js)
+        self.assertNotIn("Asia/Kuala_Lumpur", app_js)
+        self.assertNotIn("DEFAULT_DATE_ONLY_EPISODE_TIME", app_js)
+        self.assertNotIn("DATE_ONLY_EPISODE_UTC_OFFSET", app_js)
+        self.assertNotIn("TVMAZE_MAX_DATE_DIFF_DAYS", app_js)
+        self.assertNotIn('return releaseInfo.estimated ? "~"', app_js)
+        self.assertIn("Official TMDB calendar dates control schedule ordering", app_js)
+        self.assertIn("1.3.1-audit-browser-time", index_html)
 
 
 if __name__ == "__main__":

@@ -50,11 +50,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const TVMAZE_RELEASE_SAFETY_VERSION = 3;
-const DEFAULT_DATE_ONLY_EPISODE_TIME = "09:00";
-const DATE_ONLY_EPISODE_TIME_ZONE = "Asia/Kuala_Lumpur";
-const DATE_ONLY_EPISODE_UTC_OFFSET = "+08:00";
-const TVMAZE_MAX_DATE_DIFF_DAYS = 1;
+const TVMAZE_RELEASE_SAFETY_VERSION = 4;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
@@ -1371,6 +1367,12 @@ async function refreshTVmazeData(show,forceRefresh=false){
 
             });
 
+            /*
+            A successful metadata refresh is authoritative for TVmaze timing.
+            Clear the previously derived timing fields first so corrected or
+            removed TVmaze times do not leave stale values behind.
+            */
+            clearOldTVmazeReleaseFields(show);
             applyTVmazeEpisodesToShow(show);
 
         }
@@ -1379,7 +1381,7 @@ async function refreshTVmazeData(show,forceRefresh=false){
 
     }catch(error){
 
-        // TVmaze is only a helper source. If it fails, the app falls back to TMDB date + 9 AM.
+        // TVmaze is optional. Keep the TMDB date and show no time when it fails.
 
     }
 
@@ -1440,53 +1442,39 @@ function applyTVmazeEpisodeFields(target,tvmazeEpisode){
         return;
     }
 
-    const tmdbAirDate = target.air_date || "";
-    const tvmazeAirDate = tvmazeEpisode.airdate || "";
+    const tmdbAirDate = String(target.air_date || "");
+    const tvmazeAirDate = String(tvmazeEpisode.airdate || "");
+    const canonicalDate = TVTrackerAuditUtils.chooseEpisodeCalendarDate(
+        tmdbAirDate,
+        tvmazeAirDate
+    );
 
-    if(!isTrustedTVmazeEpisodeDate(tmdbAirDate,tvmazeAirDate,tvmazeEpisode.airstamp || "")){
-        return;
+    if(!target.air_date && canonicalDate){
+        target.air_date = canonicalDate;
     }
 
-    target.tvmaze_airdate = tvmazeAirDate || target.tvmaze_airdate || "";
-    target.air_time = tvmazeEpisode.airtime || target.air_time || "";
-    target.air_timestamp = tvmazeEpisode.airstamp || target.air_timestamp || "";
+    target.tvmaze_airdate = TVTrackerAuditUtils.parseStrictLocalDate(tvmazeAirDate)
+    ? tvmazeAirDate
+    : "";
 
-    if(!target.air_date && tvmazeAirDate){
-        target.air_date = tvmazeAirDate;
-    }
+    /*
+    Season and episode numbers were already matched exactly before this point.
+    TMDB owns the calendar date. TVmaze contributes only the matched episode's
+    clock time and its offset-bearing airstamp. The TVmaze date itself never
+    replaces a valid TMDB date.
+    */
+    const releaseDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
+        canonicalDate,
+        tvmazeEpisode.airtime || "",
+        tvmazeEpisode.airstamp || ""
+    );
+
+    target.air_time = releaseDate ? String(tvmazeEpisode.airtime || "") : "";
+    target.air_timestamp = releaseDate ? String(tvmazeEpisode.airstamp || "") : "";
 
     if(tvmazeEpisode.runtime && !target.runtime){
         target.runtime = tvmazeEpisode.runtime;
     }
-
-}
-
-
-
-function isTrustedTVmazeEpisodeDate(tmdbAirDate,tvmazeAirDate,airstamp){
-
-    if(!tmdbAirDate){
-        return true;
-    }
-
-    const comparisonDate = tvmazeAirDate || String(airstamp || "").slice(0,10);
-
-    if(!comparisonDate){
-        return true;
-    }
-
-    const tmdbDate = makeLocalDate(tmdbAirDate);
-    const tvmazeDate = makeLocalDate(comparisonDate);
-
-    if(!tmdbDate || !tvmazeDate){
-        return false;
-    }
-
-    const diffDays = Math.abs(
-        Math.round((tmdbDate - tvmazeDate) / (1000 * 60 * 60 * 24))
-    );
-
-    return diffDays <= TVMAZE_MAX_DATE_DIFF_DAYS;
 
 }
 
@@ -4074,11 +4062,7 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
 function makeDateOnlyEpisodeReleaseDate(dateString){
 
-    return TVTrackerAuditUtils.makeDateOnlyEpisodeReleaseDate(
-        dateString,
-        DEFAULT_DATE_ONLY_EPISODE_TIME,
-        DATE_ONLY_EPISODE_UTC_OFFSET
-    );
+    return TVTrackerAuditUtils.makeDateOnlyEpisodeReleaseDate(dateString);
 
 }
 
@@ -4091,46 +4075,36 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
         episodeInfo
     );
 
-    /*
-    Use an exact timestamp only when it belongs to the canonical episode date
-    in the schedule timezone. This prevents timezone conversion or a TVmaze
-    broadcaster date from moving a July 27 episode onto July 26.
-    */
-    const exactTimestamp = getEpisodeExactTimestamp(episodeInfo);
-
-    if(exactTimestamp){
-
-        const exactDate = new Date(exactTimestamp);
-
-        if(
-            !Number.isNaN(exactDate.getTime()) &&
-            (
-                !baseDateString ||
-                TVTrackerAuditUtils.isTimestampOnCalendarDate(
-                    exactDate,
-                    baseDateString,
-                    DATE_ONLY_EPISODE_TIME_ZONE
-                )
-            )
-        ){
-            return {
-                date:exactDate,
-                estimated:false,
-                source:"timestamp"
-            };
-        }
-
-    }
-
     if(!baseDateString){
         return null;
     }
 
     /*
-    A bare TVmaze air_time has no trustworthy timezone in the stored episode
-    data. Treating it as Malaysian local time caused morning streaming releases
-    to appear at night. Date-only episodes therefore use the explicit Kuala
-    Lumpur fallback instead.
+    TMDB owns the official calendar date. For the exact matching season and
+    episode, TVmaze may contribute only its clock time and offset-bearing
+    airstamp. Rebuild the instant on the TMDB date, then let the browser format
+    that instant in the device's current timezone. No country is hardcoded.
+    */
+    const exactDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
+        baseDateString,
+        episodeInfo && episodeInfo.air_time
+        ? episodeInfo.air_time
+        : "",
+        getEpisodeExactTimestamp(episodeInfo)
+    );
+
+    if(exactDate){
+        return {
+            date:exactDate,
+            hasTime:true,
+            source:"tvmaze-clock"
+        };
+    }
+
+    /*
+    When no trustworthy offset-bearing TVmaze time exists, show only the TMDB
+    date and keep the episode upcoming through the end of that date in the
+    browser/device's current timezone.
     */
     const releaseDate = makeDateOnlyEpisodeReleaseDate(baseDateString);
 
@@ -4140,8 +4114,8 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
     return {
         date:releaseDate,
-        estimated:true,
-        source:"fixed-fallback"
+        hasTime:false,
+        source:"date-only"
     };
 
 }
@@ -4363,13 +4337,11 @@ function getUpcomingShows(){
 
     return items.sort((a,b)=>{
 
-        const aRelease = makeEpisodeReleaseDate(a.episode.air_date,a.episode,a.show);
-        const bRelease = makeEpisodeReleaseDate(b.episode.air_date,b.episode,b.show);
-
-        if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
-            return aRelease - bRelease;
-        }
-
+        /*
+        Official TMDB calendar dates control schedule ordering and grouping.
+        Local-time conversion is only a time display/refinement within the same
+        official date and must never reorder July 28 ahead of July 27.
+        */
         const dateCompare = compareEpisodeCalendarDates(
             a.episode.air_date,
             a.episode,
@@ -4379,6 +4351,13 @@ function getUpcomingShows(){
 
         if(dateCompare !== 0){
             return dateCompare;
+        }
+
+        const aRelease = makeEpisodeReleaseDate(a.episode.air_date,a.episode,a.show);
+        const bRelease = makeEpisodeReleaseDate(b.episode.air_date,b.episode,b.show);
+
+        if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
+            return aRelease - bRelease;
         }
 
         const titleA = String(a.show.title || "");
@@ -4682,13 +4661,6 @@ function getFutureScheduleEpisodes(show){
 
     futureEpisodes.sort((a,b)=>{
 
-        const aRelease = makeEpisodeReleaseDate(a.air_date,a,show);
-        const bRelease = makeEpisodeReleaseDate(b.air_date,b,show);
-
-        if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
-            return aRelease - bRelease;
-        }
-
         const dateCompare = compareEpisodeCalendarDates(
             a.air_date,
             a,
@@ -4698,6 +4670,13 @@ function getFutureScheduleEpisodes(show){
 
         if(dateCompare !== 0){
             return dateCompare;
+        }
+
+        const aRelease = makeEpisodeReleaseDate(a.air_date,a,show);
+        const bRelease = makeEpisodeReleaseDate(b.air_date,b,show);
+
+        if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
+            return aRelease - bRelease;
         }
 
         if(Number(a.season_number) !== Number(b.season_number)){
@@ -5019,25 +4998,18 @@ function getEpisodeReleaseTimeText(airDateString,episodeInfo=null,showInfo=null)
         showInfo
     );
 
-    if(!releaseInfo){
+    if(!releaseInfo || !releaseInfo.hasTime){
         return "";
     }
 
-    const formatOptions = {
-        hour:"numeric",
-        minute:"2-digit"
-    };
-
-    if(releaseInfo.estimated){
-        formatOptions.timeZone = DATE_ONLY_EPISODE_TIME_ZONE;
-    }
-
-    const timeText = releaseInfo.date.toLocaleTimeString(
+    return releaseInfo.date.toLocaleTimeString(
         undefined,
-        formatOptions
+        {
+            hour:"numeric",
+            minute:"2-digit",
+            hour12:true
+        }
     );
-
-    return releaseInfo.estimated ? "~" + timeText : timeText;
 
 }
 

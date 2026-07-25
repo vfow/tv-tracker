@@ -34,35 +34,62 @@ assert.strictEqual(
     "2026-07-26"
 );
 
-// An exact timestamp can refine the time only when it remains on the canonical
-// calendar date in Kuala Lumpur. A previous-day timestamp must not shift it.
-assert.strictEqual(
-    utils.isTimestampOnCalendarDate(
-        "2026-07-27T01:00:00.000Z",
-        "2026-07-27",
-        "Asia/Kuala_Lumpur"
-    ),
-    true
+// TVmaze contributes only the exact matching episode's clock time and source
+// offset. Its calendar date is ignored and the clock is attached to TMDB's
+// canonical date before the browser converts the instant to local time.
+const canonicalUtcRelease = utils.makeCanonicalEpisodeReleaseDate(
+    "2026-07-27",
+    "17:00",
+    "2026-07-26T17:00:00Z"
 );
 assert.strictEqual(
-    utils.isTimestampOnCalendarDate(
-        "2026-07-26T01:00:00.000Z",
-        "2026-07-27",
-        "Asia/Kuala_Lumpur"
-    ),
-    false
+    canonicalUtcRelease.toISOString(),
+    "2026-07-27T17:00:00.000Z"
 );
 
-const fallback = utils.makeDateOnlyEpisodeReleaseDate("2026-07-25","09:00","+08:00");
-assert.strictEqual(fallback.toISOString(),"2026-07-25T01:00:00.000Z");
-// The estimated release boundary is exact: unavailable immediately before it,
-// available at the fallback instant.
-assert.strictEqual(new Date("2026-07-25T00:59:59.999Z").getTime() >= fallback.getTime(),false);
-assert.strictEqual(new Date("2026-07-25T01:00:00.000Z").getTime() >= fallback.getTime(),true);
+const canonicalOffsetRelease = utils.makeCanonicalEpisodeReleaseDate(
+    "2026-07-27",
+    "21:00",
+    "2026-07-26T21:00:00-04:00"
+);
 assert.strictEqual(
-    utils.makeDateOnlyEpisodeReleaseDate("2026-02-31","09:00","+08:00"),
+    canonicalOffsetRelease.toISOString(),
+    "2026-07-28T01:00:00.000Z"
+);
+
+assert.strictEqual(
+    utils.makeCanonicalEpisodeReleaseDate(
+        "2026-07-27",
+        "",
+        "2026-07-26T03:15:00+02:00"
+    ).toISOString(),
+    "2026-07-27T01:15:00.000Z"
+);
+
+// A source clock without an offset-bearing airstamp cannot be converted
+// reliably and must be treated as date-only metadata.
+assert.strictEqual(
+    utils.makeCanonicalEpisodeReleaseDate(
+        "2026-07-27",
+        "17:00",
+        "2026-07-26T17:00:00"
+    ),
     null
 );
+
+// Date-only metadata remains upcoming for the complete official date in the
+// browser's timezone and becomes available at local midnight the next day.
+const dateOnlyRelease = utils.makeDateOnlyEpisodeReleaseDate("2026-07-27");
+assert.strictEqual(dateOnlyRelease.getFullYear(),2026);
+assert.strictEqual(dateOnlyRelease.getMonth(),6);
+assert.strictEqual(dateOnlyRelease.getDate(),28);
+assert.strictEqual(dateOnlyRelease.getHours(),0);
+assert.strictEqual(dateOnlyRelease.getMinutes(),0);
+assert.strictEqual(
+    utils.makeDateOnlyEpisodeReleaseDate("2026-02-31"),
+    null
+);
+
 assert.strictEqual(utils.prefersReducedMotion(()=>({matches:true})),true);
 assert.strictEqual(utils.prefersReducedMotion(()=>({matches:false})),false);
 

@@ -57,64 +57,64 @@
         return "";
     }
 
-    function getDateStringInTimeZone(dateValue,timeZone){
-        const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    function parseOffsetTimestamp(timestamp){
+        const value = String(timestamp || "").trim();
+        const match = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(?:\.\d{1,6})?)?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/.exec(value);
 
-        if(Number.isNaN(date.getTime())){
-            return "";
+        if(!match){
+            return null;
         }
 
-        try{
-            const parts = new Intl.DateTimeFormat("en-CA",{
-                timeZone:String(timeZone || "UTC"),
-                year:"numeric",
-                month:"2-digit",
-                day:"2-digit"
-            }).formatToParts(date);
-
-            const values = {};
-            parts.forEach(part=>{
-                if(part.type !== "literal"){
-                    values[part.type] = part.value;
-                }
-            });
-
-            const result = `${values.year || ""}-${values.month || ""}-${values.day || ""}`;
-            return parseStrictLocalDate(result) ? result : "";
-        }catch(error){
-            return "";
+        if(!parseStrictLocalDate(`${match[1]}-${match[2]}-${match[3]}`)){
+            return null;
         }
+
+        const parsed = new Date(value);
+        if(Number.isNaN(parsed.getTime())){
+            return null;
+        }
+
+        return {
+            hour:match[4],
+            minute:match[5],
+            second:match[6] || "00",
+            offset:match[7]
+        };
     }
 
-    function isTimestampOnCalendarDate(timestamp,dateString,timeZone){
-        const calendarDate = String(dateString || "").trim();
-
-        if(!parseStrictLocalDate(calendarDate)){
-            return false;
-        }
-
-        return getDateStringInTimeZone(timestamp,timeZone) === calendarDate;
-    }
-
-    function makeDateOnlyEpisodeReleaseDate(
-        dateString,
-        fallbackTime="09:00",
-        utcOffset="+08:00"
-    ){
-        const date = String(dateString || "").trim();
-        if(!parseStrictLocalDate(date)){
+    function makeCanonicalEpisodeReleaseDate(dateString,airtime,airstamp){
+        const canonicalDate = String(dateString || "").trim();
+        if(!parseStrictLocalDate(canonicalDate)){
             return null;
         }
 
-        if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(fallbackTime || ""))){
-            return null;
-        }
-        if(!/^[+-](0\d|1[0-4]):[0-5]\d$/.test(String(utcOffset || ""))){
+        const timestampParts = parseOffsetTimestamp(airstamp);
+        if(!timestampParts){
             return null;
         }
 
-        const result = new Date(`${date}T${fallbackTime}:00${utcOffset}`);
+        const clockTime = String(airtime || "").trim();
+        const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(clockTime);
+        const hour = timeMatch ? timeMatch[1] : timestampParts.hour;
+        const minute = timeMatch ? timeMatch[2] : timestampParts.minute;
+        const second = timeMatch ? "00" : timestampParts.second;
+
+        const result = new Date(
+            `${canonicalDate}T${hour}:${minute}:${second}${timestampParts.offset}`
+        );
+
         return Number.isNaN(result.getTime()) ? null : result;
+    }
+
+    function makeDateOnlyEpisodeReleaseDate(dateString){
+        const date = parseStrictLocalDate(dateString);
+        if(!date){
+            return null;
+        }
+
+        date.setDate(date.getDate() + 1);
+        date.setHours(0,0,0,0);
+        return date;
     }
 
     function prefersReducedMotion(matchMediaFunction){
@@ -133,8 +133,8 @@
     return {
         parseStrictLocalDate,
         chooseEpisodeCalendarDate,
-        getDateStringInTimeZone,
-        isTimestampOnCalendarDate,
+        parseOffsetTimestamp,
+        makeCanonicalEpisodeReleaseDate,
         makeDateOnlyEpisodeReleaseDate,
         prefersReducedMotion
     };
