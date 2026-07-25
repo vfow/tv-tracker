@@ -38,6 +38,25 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn("parseStrictLocalDate", app_js)
         self.assertIn("makeDateOnlyEpisodeReleaseDate", app_js)
 
+    def test_watchlist_status_controls_match_original_style(self):
+        ui_js = (ROOT / "static/js/ui.js").read_text(encoding="utf-8")
+        foundation_css = (ROOT / "static/css/foundation.css").read_text(encoding="utf-8")
+        index_html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+        self.assertNotIn("getWatchlistActionIcon", ui_js)
+        self.assertNotIn("watchlist-complete-mark", ui_js)
+        self.assertNotIn("watchlist-complete-mark", foundation_css)
+        self.assertIn('<span class="completed-label">✓ Completed</span>', ui_js)
+        self.assertIn('action:"watching"', ui_js)
+        self.assertIn("1.3.1-audit-watchlist-status", index_html)
+
+    def test_schedule_calendar_date_cannot_shift_backward(self):
+        app_js = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
+        index_html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+        self.assertIn("chooseEpisodeCalendarDate", app_js)
+        self.assertIn("isTimestampOnCalendarDate", app_js)
+        self.assertIn("official episode air_date as the canonical calendar day", app_js)
+        self.assertIn("1.3.1-audit-schedule-date", index_html)
+
 
 if __name__ == "__main__":
     unittest.main()

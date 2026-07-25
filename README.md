@@ -2,6 +2,23 @@
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
 
+## v1.3.1 Watchlist status-control correction
+
+- Paused, Plan To Watch, and Dropped rows now use the same empty circular control as the Watching list instead of play or restore icons.
+- Pressing that circle changes the show to Watching and immediately moves it to the Watching filter.
+- Existing watched progress is preserved, so Paused and Dropped shows resume from where viewing stopped.
+- Completed rows have no right-side circle or icon and display `✓ Completed` in green in the original style.
+- Statuses remain editable from every show-detail window.
+- This update includes and preserves the v1.3.1 schedule calendar-date correction and all Audit Repair protections.
+
+## v1.3.1 Schedule calendar-date correction
+
+- The primary episode `air_date` remains the canonical date shown in Watchlist, Upcoming, countdowns, and episode details.
+- TVmaze can supply a missing date, but it can no longer replace a valid July 27 date with a July 26 broadcaster date.
+- Exact timestamps still refine release time when they remain on the canonical date in `Asia/Kuala_Lumpur`.
+- A conflicting previous-day or next-day timestamp is ignored and the existing estimated `~9:00 AM` fallback is used instead.
+- No design, image, hover, database-schema, save-queue, or tracker-data behavior changed.
+
 ## v1.3.1 Audit Repair — silent background saving
 
 - The durable save queue remains enabled and survives reloads.
@@ -99,10 +116,12 @@ Keep `SECRET_KEY` and all database environment variables configured.
 
 TV Tracker separates the episode calendar date from the instant when the episode becomes available.
 
-1. A valid exact timestamp is authoritative and is displayed in the browser timezone.
-2. A date without a trustworthy exact timestamp uses the fixed `09:00` fallback in `Asia/Kuala_Lumpur`.
-3. Estimated fallback times are displayed with `~`.
-4. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
+1. The primary episode `air_date` is the canonical calendar date.
+2. A valid exact timestamp is used only when it remains on that calendar date in `Asia/Kuala_Lumpur`; its time is displayed in the browser timezone.
+3. A missing date may fall back to TVmaze's date.
+4. A date without a trustworthy matching timestamp uses the fixed `09:00` fallback in `Asia/Kuala_Lumpur`.
+5. Estimated fallback times are displayed with `~`.
+6. A bare `air_time` value is ignored unless a trustworthy source timezone is available.
 
 The fallback is internal and is not exposed as a Settings or per-show control.
 

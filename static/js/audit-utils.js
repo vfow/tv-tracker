@@ -42,6 +42,60 @@
         return result;
     }
 
+    function chooseEpisodeCalendarDate(primaryDate,fallbackDate){
+        const primary = String(primaryDate || "").trim();
+        const fallback = String(fallbackDate || "").trim();
+
+        if(parseStrictLocalDate(primary)){
+            return primary;
+        }
+
+        if(parseStrictLocalDate(fallback)){
+            return fallback;
+        }
+
+        return "";
+    }
+
+    function getDateStringInTimeZone(dateValue,timeZone){
+        const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+
+        if(Number.isNaN(date.getTime())){
+            return "";
+        }
+
+        try{
+            const parts = new Intl.DateTimeFormat("en-CA",{
+                timeZone:String(timeZone || "UTC"),
+                year:"numeric",
+                month:"2-digit",
+                day:"2-digit"
+            }).formatToParts(date);
+
+            const values = {};
+            parts.forEach(part=>{
+                if(part.type !== "literal"){
+                    values[part.type] = part.value;
+                }
+            });
+
+            const result = `${values.year || ""}-${values.month || ""}-${values.day || ""}`;
+            return parseStrictLocalDate(result) ? result : "";
+        }catch(error){
+            return "";
+        }
+    }
+
+    function isTimestampOnCalendarDate(timestamp,dateString,timeZone){
+        const calendarDate = String(dateString || "").trim();
+
+        if(!parseStrictLocalDate(calendarDate)){
+            return false;
+        }
+
+        return getDateStringInTimeZone(timestamp,timeZone) === calendarDate;
+    }
+
     function makeDateOnlyEpisodeReleaseDate(
         dateString,
         fallbackTime="09:00",
@@ -78,6 +132,9 @@
 
     return {
         parseStrictLocalDate,
+        chooseEpisodeCalendarDate,
+        getDateStringInTimeZone,
+        isTimestampOnCalendarDate,
         makeDateOnlyEpisodeReleaseDate,
         prefersReducedMotion
     };

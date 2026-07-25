@@ -19,6 +19,40 @@ assert.strictEqual(utils.parseStrictLocalDate("2026-02-31"),null);
 assert.strictEqual(utils.parseStrictLocalDate("2025-02-29"),null);
 assert.ok(utils.parseStrictLocalDate("2024-02-29") instanceof Date);
 
+// The primary episode date remains canonical when TVmaze reports the previous
+// broadcaster day. TVmaze is used only when the primary date is unavailable.
+assert.strictEqual(
+    utils.chooseEpisodeCalendarDate("2026-07-27","2026-07-26"),
+    "2026-07-27"
+);
+assert.strictEqual(
+    utils.chooseEpisodeCalendarDate("","2026-07-26"),
+    "2026-07-26"
+);
+assert.strictEqual(
+    utils.chooseEpisodeCalendarDate("2026-02-31","2026-07-26"),
+    "2026-07-26"
+);
+
+// An exact timestamp can refine the time only when it remains on the canonical
+// calendar date in Kuala Lumpur. A previous-day timestamp must not shift it.
+assert.strictEqual(
+    utils.isTimestampOnCalendarDate(
+        "2026-07-27T01:00:00.000Z",
+        "2026-07-27",
+        "Asia/Kuala_Lumpur"
+    ),
+    true
+);
+assert.strictEqual(
+    utils.isTimestampOnCalendarDate(
+        "2026-07-26T01:00:00.000Z",
+        "2026-07-27",
+        "Asia/Kuala_Lumpur"
+    ),
+    false
+);
+
 const fallback = utils.makeDateOnlyEpisodeReleaseDate("2026-07-25","09:00","+08:00");
 assert.strictEqual(fallback.toISOString(),"2026-07-25T01:00:00.000Z");
 // The estimated release boundary is exact: unavailable immediately before it,

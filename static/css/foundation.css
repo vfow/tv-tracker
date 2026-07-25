@@ -1328,8 +1328,7 @@ percentages, badges, controls, sorting, or additional information is added.
     letter-spacing:.01em;
 }
 
-.watchlist-action,
-.watchlist-complete-mark{
+.watchlist-action{
     width:44px;
     height:44px;
     min-width:44px;
@@ -1344,18 +1343,7 @@ percentages, badges, controls, sorting, or additional information is added.
     border-radius:50%;
     background:#0b0b0b;
     color:#fff;
-}
-
-.watchlist-action{
     cursor:pointer;
-}
-
-.watchlist-action svg,
-.watchlist-complete-mark svg{
-    width:18px;
-    height:18px;
-    display:block;
-    pointer-events:none;
 }
 
 .watchlist-action:hover{
@@ -1376,10 +1364,6 @@ percentages, badges, controls, sorting, or additional information is added.
     cursor:not-allowed;
 }
 
-.watchlist-complete-mark{
-    border-color:#2b2b2b;
-    color:#777;
-}
 
 .watchlist-card:focus-visible{
     outline:1px solid #fff;
@@ -1433,8 +1417,7 @@ percentages, badges, controls, sorting, or additional information is added.
         font-size:13px;
     }
 
-    .watchlist-action,
-    .watchlist-complete-mark{
+    .watchlist-action{
         width:44px;
         height:44px;
         min-width:44px;
@@ -1442,11 +1425,6 @@ percentages, badges, controls, sorting, or additional information is added.
         flex-basis:44px;
     }
 
-    .watchlist-action svg,
-    .watchlist-complete-mark svg{
-        width:18px;
-        height:18px;
-    }
 }
 
 @media (max-width:419.98px){
@@ -1472,8 +1450,7 @@ percentages, badges, controls, sorting, or additional information is added.
         font-size:12px;
     }
 
-    .watchlist-action,
-    .watchlist-complete-mark{
+    .watchlist-action{
         width:42px;
         height:42px;
         min-width:42px;

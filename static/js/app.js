@@ -4057,23 +4057,16 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
     : "";
 
     /*
-    TMDB and TVmaze sometimes disagree by one calendar day for streaming
-    releases. When TVmaze passed the existing safety check, use its explicit
-    airdate for calendar display and schedule grouping. Keep TMDB as the
-    fallback so shows without TVmaze metadata still work normally.
+    Keep the official episode air_date as the canonical calendar day. TVmaze
+    may describe the originating broadcaster's previous-day date even when the
+    episode is released on the following day elsewhere. Its date is therefore
+    only a fallback when the primary date is absent or invalid. Exact timestamps
+    may refine the release time, but they must not rewrite the calendar date.
     */
-    if(
-        tvmazeAirDate &&
-        isTrustedTVmazeEpisodeDate(
-            tmdbAirDate,
-            tvmazeAirDate,
-            getEpisodeExactTimestamp(episodeInfo)
-        )
-    ){
-        return tvmazeAirDate;
-    }
-
-    return tmdbAirDate || tvmazeAirDate;
+    return TVTrackerAuditUtils.chooseEpisodeCalendarDate(
+        tmdbAirDate,
+        tvmazeAirDate
+    );
 
 }
 
@@ -4093,10 +4086,15 @@ function makeDateOnlyEpisodeReleaseDate(dateString){
 
 function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
+    const baseDateString = getEpisodeCalendarDateString(
+        airDateString,
+        episodeInfo
+    );
+
     /*
-    An exact timestamp is a real instant and must not be moved onto a different
-    calendar day. Calendar display/grouping remains handled separately by
-    getEpisodeCalendarDateString().
+    Use an exact timestamp only when it belongs to the canonical episode date
+    in the schedule timezone. This prevents timezone conversion or a TVmaze
+    broadcaster date from moving a July 27 episode onto July 26.
     */
     const exactTimestamp = getEpisodeExactTimestamp(episodeInfo);
 
@@ -4104,7 +4102,17 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
         const exactDate = new Date(exactTimestamp);
 
-        if(!Number.isNaN(exactDate.getTime())){
+        if(
+            !Number.isNaN(exactDate.getTime()) &&
+            (
+                !baseDateString ||
+                TVTrackerAuditUtils.isTimestampOnCalendarDate(
+                    exactDate,
+                    baseDateString,
+                    DATE_ONLY_EPISODE_TIME_ZONE
+                )
+            )
+        ){
             return {
                 date:exactDate,
                 estimated:false,
@@ -4113,11 +4121,6 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
         }
 
     }
-
-    const baseDateString = getEpisodeCalendarDateString(
-        airDateString,
-        episodeInfo
-    );
 
     if(!baseDateString){
         return null;

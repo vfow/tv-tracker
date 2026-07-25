@@ -1,6 +1,6 @@
 # TV Tracker v1.3.1 Audit Repair Manifest
 
-This release is built from the approved `v1.3.1 Audit Repair + original image fit` full source and preserves the existing visual design, database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, and episode interactions.
+This release is built from the approved v1.3.1 schedule-date-corrected Audit Repair source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, schedule correction, silent save queue, and episode progress. The only visual interaction change is the user-approved Watchlist status-control correction documented below.
 
 ## Reliability repairs included
 
@@ -50,3 +50,31 @@ Overlay the patch files onto that exact approved source, preserving paths, then 
 ## Silent background saving
 
 The durable pending-save queue, reload recovery, server confirmation, and automatic retries remain enabled. All save-state banners and automatic save/synchronization toasts are intentionally disabled. Older cached `tv-unsaved-status` elements are removed when the new build initializes.
+
+## Schedule calendar-date correction
+
+- The official episode `air_date` is now canonical for display, grouping, countdowns, and availability-day boundaries.
+- TVmaze dates are fallback-only and no longer override a valid primary date by one day.
+- Exact timestamps are accepted only when their `Asia/Kuala_Lumpur` calendar date matches the canonical episode date.
+- Conflicting timestamps fall back to the existing estimated `~9:00 AM` policy.
+- The change preserves silent background saving, schema version 4, original image fit, hover styling, and all approved audit repairs.
+
+The cumulative patch is based on:
+
+```text
+tv-tracker-v1.3.1-audit-repair-silent-background-full.zip
+```
+
+## Watchlist status-control correction
+
+- Paused, Plan To Watch, and Dropped cards use one empty circular control with no play or restore glyph.
+- Activating the control changes the show to Watching while retaining watched-episode progress.
+- Completed cards render only the green `✓ Completed` label and no trailing action circle.
+- All modal status controls remain available from every filter.
+- The schedule calendar-date correction, silent save queue, original image fit, and all audit safeguards remain unchanged.
+
+The cumulative patch is based on:
+
+```text
+tv-tracker-v1.3.1-audit-repair-schedule-date-full.zip
+```

@@ -928,39 +928,6 @@ function getWatchlistPosterFallback(show){
 
 
 
-function getWatchlistActionIcon(icon){
-
-    const icons = {
-        check:`
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-        `,
-        play:`
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M8.5 6.5v11l9-5.5-9-5.5Z" fill="currentColor"></path>
-            </svg>
-        `,
-        restore:`
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M8 8H4V4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                <path d="M4.5 8.5A8 8 0 1 1 5 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-            </svg>
-        `,
-        clock:`
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"></circle>
-                <path d="M12 8v4.5l3 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-        `
-    };
-
-    return icons[icon] || icons.check;
-
-}
-
-
-
 function getWatchlistActionConfig(show,displayFilter,nextEp){
 
     const title = show.title || "show";
@@ -969,29 +936,14 @@ function getWatchlistActionConfig(show,displayFilter,nextEp){
         return null;
     }
 
-    if(displayFilter === "paused"){
+    if(
+        displayFilter === "paused" ||
+        displayFilter === "plan" ||
+        displayFilter === "dropped"
+    ){
         return {
-            action:"resume",
-            icon:"play",
-            label:`Resume ${title}`,
-            disabled:false
-        };
-    }
-
-    if(displayFilter === "plan"){
-        return {
-            action:"start",
-            icon:"play",
-            label:`Start watching ${title}`,
-            disabled:false
-        };
-    }
-
-    if(displayFilter === "dropped"){
-        return {
-            action:"restore",
-            icon:"restore",
-            label:`Restore ${title} to Watching`,
+            action:"watching",
+            label:`Change ${title} to Watching`,
             disabled:false
         };
     }
@@ -1011,7 +963,6 @@ function getWatchlistActionConfig(show,displayFilter,nextEp){
 
     return {
         action:"mark",
-        icon:isAvailable ? "check" : "clock",
         label:isAvailable
         ? `Mark ${title} Season ${nextEp.season}, Episode ${nextEp.episode} watched`
         : releaseDate
@@ -1052,7 +1003,7 @@ function createWatchlistCard(show,options={}){
     });
 
     const episodeLine = isCompletedFilter
-    ? `<span class="completed-label">Completed</span>`
+    ? `<span class="completed-label">✓ Completed</span>`
     : isDroppedFilter && droppedStopEpisode
     ? `Stopped after Season ${droppedStopEpisode.season}, Episode ${droppedStopEpisode.episode}`
     : isDroppedFilter
@@ -1103,14 +1054,9 @@ function createWatchlistCard(show,options={}){
         aria-label="${escapeHTML(action.label)}"
         title="${escapeHTML(action.label)}"
         ${action.disabled ? "disabled" : ""}>
-            ${action.action === "mark" ? "" : getWatchlistActionIcon(action.icon)}
         </button>
     `
-    : `
-        <div class="watchlist-complete-mark" role="img" aria-label="Completed" title="Completed">
-            ${getWatchlistActionIcon("check")}
-        </div>
-    `;
+    : "";
 
     card.innerHTML = `
 
