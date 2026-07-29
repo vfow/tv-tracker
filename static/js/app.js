@@ -6855,6 +6855,7 @@ function importNativeBackupJSON(){
                 title:"Import App Backup JSON",
                 message:[
                     "This will replace your current tracker data.",
+                    "Native backups are restored exactly; statuses are not recalculated during restore.",
                     "The server validates the complete backup before changing anything.",
                     "",
                     "Current data:",
@@ -6883,7 +6884,7 @@ function importNativeBackupJSON(){
             await prepareAndCommitTrackerData(
                 backup.data,
                 backup,
-                {updateStatuses:true}
+                {updateStatuses:false}
             );
                     renderAll();
             showToast("App backup imported");

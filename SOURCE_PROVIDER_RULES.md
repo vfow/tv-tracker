@@ -1,48 +1,56 @@
 # TV Tracker Source Provider Rules
 
-TV Tracker v1.6.0 introduces a source split so that episode/date logic never mixes TMDB and TVmaze in the same edition.
+This file documents the source-provider contract for **TV Tracker v1.6.1 — TMDB Edition**.
 
-## Current edition
+## Active sources
 
 ```text
-TV Tracker v1.6.0 — TMDB Edition
 Metadata Source: TMDB
 Artwork Source: TMDB
 ```
 
-## Non-negotiable rule
+## Core rule
 
-One edition must have one authority for episode/date logic. Do not combine TMDB and TVmaze to decide episode names, season lists, air dates, Upcoming groups, next episode, or availability status.
+Do not mix TMDB and TVmaze for episode/date logic.
 
-## Metadata source controls
+Episode/date authority controls:
 
-The metadata source controls:
+```text
+episodes
+seasons
+episode names
+air dates
+Upcoming
+next episode
+schedule logic
+availability/date logic
+```
 
-- show search
-- show metadata
-- seasons
-- episode lists
-- episode names
-- air dates
-- Upcoming
-- next episode logic
-- availability/date logic
+Only the active metadata source may control those fields.
 
-## Artwork source controls
+## Artwork rule
 
-The artwork source controls only:
+Artwork source controls:
 
-- posters
-- backdrops
-- hero images
-- decorative image URLs
+```text
+posters
+backdrops
+hero images
+blurred background fills
+```
 
-Artwork must not change episode dates, Upcoming grouping, watched/unwatched availability, or season structure.
+Artwork may come from a different provider only when the edition explicitly says so.
 
-## Old metadata
+## Old mixed metadata
 
-Old mixed TMDB/TVmaze fields may remain in the database and backups for rollback safety. The running edition must ignore fields that do not belong to its configured source.
+Old mixed TMDB/TVmaze fields may remain in existing data and backups. Do not delete them during normal operation. Each edition must ignore fields that are not allowed by its active provider rules.
 
-## Patches are alternatives
+## Native backup restore rule
 
-The three v1.6.0 patches are separate alternatives. Apply each patch directly over clean v1.5. Do not apply them cumulatively.
+Native App Backup JSON import is an exact restore. It must not recalculate show statuses, episode availability, or schedule state during restore.
+
+The top-level `import_info` object is app-owned restore metadata. It should be accepted, preserved, and ignored for provider-authority decisions.
+
+## Compatible import rule
+
+Compatible TV Time/Refrakt import is different from native backup restore. Compatible import may map statuses and migrate source data because it is importing from another app, not restoring a TV Tracker backup.
