@@ -5,8 +5,8 @@ TV Tracker v1.6.0 introduces a source split so that episode/date logic never mix
 ## Current edition
 
 ```text
-TV Tracker v1.6.0 — TVmaze Edition with TMDB Artwork
-Metadata Source: TVmaze
+TV Tracker v1.6.0 — TMDB Edition
+Metadata Source: TMDB
 Artwork Source: TMDB
 ```
 

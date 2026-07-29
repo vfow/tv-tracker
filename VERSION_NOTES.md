@@ -1,4 +1,4 @@
-# TV Tracker v1.6.0 — TVmaze Edition with TMDB Artwork
+# TV Tracker v1.6.0 — TMDB Edition
 
 ## Included corrections
 
@@ -10,17 +10,17 @@
 - Settings displays only:
 
 ```text
-Metadata Source: TVmaze
+Metadata Source: TMDB
 Artwork Source: TMDB
 ```
 
 **Edition behavior**
 
-- TVmaze controls show search, show metadata, episodes, seasons, episode names, air dates, Upcoming, and next episode logic. TMDB is used only for posters, backdrops, and hero images.
+- TMDB controls show search, show metadata, episodes, seasons, episode names, air dates, Upcoming, next episode logic, posters, backdrops, and hero images. TVmaze is ignored for episode/date logic.
 - Old mixed TMDB/TVmaze metadata is preserved in data and backups.
 - Disallowed provider fields are ignored by the running edition.
 - There is no Settings switch for changing source providers inside the live UI.
-- Cache-busting is set to `1.6.0-tvmaze-artwork-tmdb`.
+- Cache-busting is set to `1.6.0-tmdb`.
 
 ## Install
 
@@ -31,7 +31,7 @@ Artwork Source: TMDB
 5. Commit with:
 
 ```text
-Create TV Tracker v1.6.0 source split tvmaze-tmdb edition
+Create TV Tracker v1.6.0 source split tmdb-tmdb edition
 ```
 
 6. Deploy normally, restart the website, and hard-refresh desktop and phone.
