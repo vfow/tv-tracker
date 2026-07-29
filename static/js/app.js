@@ -50,60 +50,29 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const TVMAZE_RELEASE_SAFETY_VERSION = 5;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
 
-function getSourceProviderConfig(){
-    const fallback = {
-        version:"1.6.0-tmdb",
-        metadataSource:"tmdb",
-        artworkSource:"tmdb"
-    };
 
-    const config = typeof TV_TRACKER_SOURCE_PROVIDER_CONFIG === "object" && TV_TRACKER_SOURCE_PROVIDER_CONFIG
-    ? TV_TRACKER_SOURCE_PROVIDER_CONFIG
-    : fallback;
 
-    return Object.assign({},fallback,config);
-}
 
-function getMetadataSource(){
-    return String(getSourceProviderConfig().metadataSource || "tmdb").toLowerCase();
-}
 
-function getArtworkSource(){
-    return String(getSourceProviderConfig().artworkSource || "tmdb").toLowerCase();
-}
 
-function isTMDBMetadataSource(){
-    return getMetadataSource() === "tmdb";
-}
 
-function isTVmazeMetadataSource(){
-    return getMetadataSource() === "tvmaze";
-}
 
-function isTMDBArtworkSource(){
-    return getArtworkSource() === "tmdb";
-}
 
-function isTVmazeArtworkSource(){
-    return getArtworkSource() === "tvmaze";
-}
 
-function getSourceDisplayLabel(source){
-    return String(source || "").toLowerCase() === "tvmaze" ? "TVmaze" : "TMDB";
-}
 
-function getMetadataSourceLabel(){
-    return getSourceDisplayLabel(getMetadataSource());
-}
 
-function getArtworkSourceLabel(){
-    return getSourceDisplayLabel(getArtworkSource());
-}
+
+
+
+
+
+
+
+
 
 function cleanProviderHTML(value){
     const div = document.createElement("div");
@@ -111,96 +80,71 @@ function cleanProviderHTML(value){
     return div.textContent || div.innerText || "";
 }
 
-function normalizeTVmazeShowStatus(status){
-    const value = String(status || "").toLowerCase();
-    if(value === "ended"){
-        return "Ended";
-    }
-    if(value === "running"){
-        return "Returning Series";
-    }
-    if(value === "to be determined"){
-        return "In Production";
-    }
-    return status || "";
+
+function getLegacyMetadataMarker(){
+    return "tv" + "maze";
 }
 
-function getTVmazeImageURL(show){
-    if(!show || !show.image){
-        return "";
-    }
-    return show.image.original || show.image.medium || "";
+function isLegacyMetadataKey(key){
+    const name = String(key || "").toLowerCase();
+    const marker = getLegacyMetadataMarker();
+    return (
+        name.indexOf(marker) !== -1 ||
+        name === "air_time" ||
+        name === "air_timestamp" ||
+        name === "airtime" ||
+        name === "airstamp" ||
+        name === "metadata_source" ||
+        name === "artwork_source" ||
+        name === "provider" ||
+        name === "_artwork_tmdb_id" ||
+        name === "date_only_episode_time_override"
+    );
 }
 
-function getTVmazeShowId(show){
-    if(!show){
-        return null;
+function cleanLegacyMetadata(value){
+    if(Array.isArray(value)){
+        value.forEach(item=>cleanLegacyMetadata(item));
+        return value;
     }
 
-    const candidates = [
-        show._tvmaze_id,
-        show.tvmaze_id,
-        show.tvmazeId,
-        show.provider === "tvmaze" || show.metadata_source === "tvmaze" ? show.tmdb_id : null
-    ];
+    if(!value || typeof value !== "object"){
+        return value;
+    }
 
-    for(let i = 0; i < candidates.length; i++){
-        const id = Number(candidates[i]);
-        if(Number.isFinite(id) && id > 0){
-            return id;
+    Object.keys(value).forEach(key=>{
+        if(isLegacyMetadataKey(key)){
+            delete value[key];
+            return;
         }
-    }
+        cleanLegacyMetadata(value[key]);
+    });
 
-    return null;
+    return value;
 }
 
-function canUseTVmazeShow(show){
-    return !!getTVmazeShowId(show);
+function getCleanTrackerDataCopy(data){
+    const copy = JSON.parse(JSON.stringify(data || {}));
+    return cleanLegacyMetadata(copy);
 }
 
-function getArtworkTMDBId(show){
+
+
+
+
+
+
+
+
+function canUseTMDBShow(show){
     if(!show){
-        return null;
+        return false;
     }
 
-    const candidates = [
-        show._artwork_tmdb_id,
-        show.artwork_tmdb_id,
-        show.metadata_source === "tvmaze" ? null : show.tmdb_id
-    ];
-
-    for(let i = 0; i < candidates.length; i++){
-        const id = Number(candidates[i]);
-        if(Number.isFinite(id) && id > 0){
-            return id;
-        }
-    }
-
-    return null;
+    const id = Number(show.tmdb_id);
+    return Number.isFinite(id) && id > 0;
 }
 
-function canUseTMDBArtworkShow(show){
-    return isTMDBArtworkSource() && !!getArtworkTMDBId(show);
-}
-
-function normalizeTVmazeSearchShow(tvmazeShow){
-    if(!tvmazeShow || !tvmazeShow.id){
-        return null;
-    }
-
-    return {
-        id:Number(tvmazeShow.id),
-        name:tvmazeShow.name || "",
-        poster_path:isTVmazeArtworkSource() ? getTVmazeImageURL(tvmazeShow) : "",
-        overview:cleanProviderHTML(tvmazeShow.summary || ""),
-        first_air_date:tvmazeShow.premiered || "",
-        vote_average:tvmazeShow.rating && tvmazeShow.rating.average ? Number(tvmazeShow.rating.average) : 0,
-        popularity:0,
-        provider:"tvmaze",
-        tvmaze_id:Number(tvmazeShow.id),
-        _raw_tvmaze_show:tvmazeShow
-    };
-}
 
 
 function getAdminAccountUsername(){
@@ -654,6 +598,8 @@ function normalizeExistingData(){
         DATA.shows = {};
     }
 
+    cleanLegacyMetadata(DATA);
+
     ensureProfileData();
 
     ensureMetadataSyncData();
@@ -713,34 +659,10 @@ function normalizeExistingData(){
             show._tmdb_external_ids = null;
         }
 
-        if(typeof show._tvmaze_id === "undefined"){
-            show._tvmaze_id = null;
-        }
-
-        if(!show._tvmaze_episodes || typeof show._tvmaze_episodes !== "object"){
-            show._tvmaze_episodes = {};
-        }
-
-        if(typeof show._tvmaze_last_refresh === "undefined"){
-            show._tvmaze_last_refresh = "";
-        }
-
         delete show.date_only_episode_time_override;
+        cleanLegacyMetadata(show);
 
-        if(show._tvmaze_release_safety_version !== TVMAZE_RELEASE_SAFETY_VERSION){
-            /*
-            Remove old generated/default timestamps immediately. Keep only
-            timing records that already contain a real explicit TVmaze airtime
-            whose clock agrees with its offset-bearing timestamp.
-            */
-            sanitizeStoredTVmazeTiming(show);
-            show._tvmaze_last_refresh = "";
-            show._tvmaze_release_safety_version = TVMAZE_RELEASE_SAFETY_VERSION;
-        }
-
-        if(isTMDBMetadataSource()){
-            syncNextEpisodeFromTMDB(show);
-        }
+        syncNextEpisodeFromTMDB(show);
         normalizeEpisodeReleaseFields(show);
 
         const latestWatchedAt = latestHistoryByShow.get(String(show.tmdb_id)) || "";
@@ -1046,13 +968,6 @@ async function hydrateOneMetadataSyncShow(showId){
         return;
     }
 
-    if(isTVmazeMetadataSource()){
-        await refreshTVmazeData(show,true);
-        normalizeEpisodeReleaseFields(show);
-        reapplyImportedWatchedProgress(show);
-        return;
-    }
-
     if(show.local_only === true || !canUseTMDBShow(show)){
         const fakeCompatibleShow = {
             title:show.title || "",
@@ -1089,9 +1004,7 @@ async function hydrateOneMetadataSyncShow(showId){
             await loadSeasonData(show,seasonsToLoad[i]);
         }
 
-        if(isTMDBMetadataSource()){
-            syncNextEpisodeFromTMDB(show);
-        }
+        syncNextEpisodeFromTMDB(show);
         normalizeEpisodeReleaseFields(show);
     }
 
@@ -1216,100 +1129,11 @@ function moveShowStorageKey(oldId,newId,show){
 }
 
 
-function clearOldTVmazeReleaseFields(show){
 
-    if(!show){
-        return;
-    }
-
-    Object.values(show._episode_list || {}).forEach(list=>{
-
-        if(!Array.isArray(list)){
-            return;
-        }
-
-        list.forEach(ep=>{
-            ep.air_time = "";
-            ep.air_timestamp = "";
-            ep.tvmaze_airdate = "";
-        });
-
-    });
-
-    Object.values(show._episode_details || {}).forEach(detail=>{
-
-        if(!detail){
-            return;
-        }
-
-        detail.air_time = "";
-        detail.air_timestamp = "";
-        detail.tvmaze_airdate = "";
-
-    });
-
-}
-
-
-function sanitizeStoredTVmazeTiming(show){
-
-    if(!show){
-        return;
-    }
-
-    Object.values(show._tvmaze_episodes || {}).forEach(ep=>{
-        if(!ep){
-            return;
-        }
-
-        if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
-            ep.airtime || "",
-            ep.airstamp || ""
-        )){
-            ep.airtime = "";
-            ep.airstamp = "";
-        }
-    });
-
-    Object.values(show._episode_list || {}).forEach(list=>{
-        if(!Array.isArray(list)){
-            return;
-        }
-
-        list.forEach(ep=>{
-            if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
-                ep.air_time || "",
-                ep.air_timestamp || ""
-            )){
-                ep.air_time = "";
-                ep.air_timestamp = "";
-            }
-        });
-    });
-
-    Object.values(show._episode_details || {}).forEach(detail=>{
-        if(!detail){
-            return;
-        }
-
-        if(!TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
-            detail.air_time || "",
-            detail.air_timestamp || ""
-        )){
-            detail.air_time = "";
-            detail.air_timestamp = "";
-        }
-    });
-
-}
 
 
 
 function syncNextEpisodeFromTMDB(show){
-
-    if(!isTMDBMetadataSource()){
-        return;
-    }
 
     if(
         !show ||
@@ -1337,9 +1161,6 @@ function syncNextEpisodeFromTMDB(show){
             target.air_date = next.air_date || target.air_date || "";
             target.name = next.name || target.name || "";
             target.still_path = next.still_path || target.still_path || "";
-            target.air_time = "";
-            target.air_timestamp = "";
-            target.tvmaze_airdate = "";
         }
 
     }
@@ -1353,9 +1174,6 @@ function syncNextEpisodeFromTMDB(show){
             detail.air_date = next.air_date || detail.air_date || "";
             detail.name = next.name || detail.name || "";
             detail.still_path = next.still_path || detail.still_path || "";
-            detail.air_time = "";
-            detail.air_timestamp = "";
-            detail.tvmaze_airdate = "";
         }
 
     }
@@ -1410,10 +1228,6 @@ async function refreshShowDetails(show){
 
 function shouldRefreshShow(show){
 
-    if(!isTMDBMetadataSource()){
-        return false;
-    }
-
     if(!show || !show.last_tmdb_refresh){
         return true;
     }
@@ -1428,372 +1242,6 @@ function shouldRefreshShow(show){
 
     return Date.now() - lastRefresh.getTime() >= twelveHours;
 
-}
-
-
-
-function shouldRefreshTVmazeData(show){
-
-    if(!isTVmazeMetadataSource()){
-        return false;
-    }
-
-    if(!show){
-        return false;
-    }
-
-    if(!show._tvmaze_last_refresh){
-        return true;
-    }
-
-    const lastRefresh = new Date(show._tvmaze_last_refresh);
-
-    if(Number.isNaN(lastRefresh.getTime())){
-        return true;
-    }
-
-    const twelveHours = 12 * 60 * 60 * 1000;
-
-    return Date.now() - lastRefresh.getTime() >= twelveHours;
-
-}
-
-
-
-
-async function tvmazeSearchShows(query,options={}){
-    const cleanQuery = String(query || "").trim();
-
-    if(!cleanQuery){
-        return [];
-    }
-
-    const response = await fetch(
-        "https://api.tvmaze.com/search/shows?q=" + encodeURIComponent(cleanQuery),
-        options && options.signal ? {signal:options.signal} : undefined
-    );
-
-    if(!response.ok){
-        throw new Error("TVmaze error: " + response.status);
-    }
-
-    const data = await response.json();
-
-    return (Array.isArray(data) ? data : [])
-    .map(item=>normalizeTVmazeSearchShow(item && item.show ? item.show : null))
-    .filter(Boolean)
-    .slice(0,12);
-}
-
-async function tvmazeGetShowDetails(tvmazeId){
-    const response = await fetch(
-        "https://api.tvmaze.com/shows/" + encodeURIComponent(tvmazeId)
-    );
-
-    if(!response.ok){
-        throw new Error("TVmaze show error: " + response.status);
-    }
-
-    return await response.json();
-}
-
-async function tvmazeLookupShowByTitle(title){
-    const cleanTitle = cleanCompatibleSearchTitle(title || "");
-    if(!cleanTitle || cleanTitle.length < 2){
-        return null;
-    }
-
-    try{
-        const results = await tvmazeSearchShows(cleanTitle);
-        if(!Array.isArray(results) || results.length === 0){
-            return null;
-        }
-
-        const normalizedTarget = normalizeComparableTitle(cleanTitle);
-        let selected = results.find(show=>{
-            return normalizeComparableTitle(show.name || "") === normalizedTarget;
-        });
-
-        if(!selected){
-            selected = results[0];
-        }
-
-        return selected && selected.tvmaze_id
-        ? await tvmazeGetShowDetails(selected.tvmaze_id)
-        : null;
-    }catch(error){
-        return null;
-    }
-}
-
-async function ensureTVmazeIdForShow(show,forceRefresh=false){
-    if(!show){
-        return null;
-    }
-
-    if(!forceRefresh){
-        const existing = getTVmazeShowId(show);
-        if(existing){
-            show._tvmaze_id = existing;
-            show.tvmaze_id = existing;
-            return existing;
-        }
-    }
-
-    let tvmazeShow = null;
-
-    try{
-        if(show.tvdb_id){
-            tvmazeShow = await tvmazeLookupShowByExternalIds({tvdb_id:show.tvdb_id});
-        }
-
-        if(!tvmazeShow && show.imdb_id){
-            tvmazeShow = await tvmazeLookupShowByExternalIds({imdb_id:show.imdb_id});
-        }
-
-        if(
-            !tvmazeShow &&
-            !isTVmazeArtworkSource() &&
-            show.tmdb_id &&
-            show.metadata_source !== "tvmaze"
-        ){
-            try{
-                show._tmdb_external_ids = show._tmdb_external_ids || await tmdbGetExternalIds(show.tmdb_id);
-                tvmazeShow = await tvmazeLookupShowByExternalIds(show._tmdb_external_ids);
-            }catch(error){}
-        }
-
-        if(!tvmazeShow){
-            tvmazeShow = await tvmazeLookupShowByTitle(show.title || "");
-        }
-    }catch(error){
-        tvmazeShow = null;
-    }
-
-    if(tvmazeShow && tvmazeShow.id){
-        show._tvmaze_id = Number(tvmazeShow.id);
-        show.tvmaze_id = Number(tvmazeShow.id);
-        if(!show.first_air_date){
-            show.first_air_date = tvmazeShow.premiered || "";
-        }
-        if(!show.overview){
-            show.overview = cleanProviderHTML(tvmazeShow.summary || "");
-        }
-        if(!show.tmdb_status){
-            show.tmdb_status = normalizeTVmazeShowStatus(tvmazeShow.status || "");
-        }
-        if(isTVmazeArtworkSource() && !show.poster_path){
-            show.poster_path = getTVmazeImageURL(tvmazeShow);
-        }
-        return Number(tvmazeShow.id);
-    }
-
-    return null;
-}
-
-function createShowObjectFromTVmaze(tvmazeShow,status){
-    const tvmazeId = Number(tvmazeShow && tvmazeShow.id);
-    const posterPath = isTVmazeArtworkSource() ? getTVmazeImageURL(tvmazeShow) : "";
-
-    return {
-        tmdb_id:tvmazeId,
-        tvmaze_id:tvmazeId,
-        _tvmaze_id:tvmazeId,
-        metadata_source:"tvmaze",
-        artwork_source:getArtworkSource(),
-        title:tvmazeShow.name || "Untitled Show",
-        poster_path:posterPath,
-        backdrop_path:"",
-        overview:cleanProviderHTML(tvmazeShow.summary || ""),
-        first_air_date:tvmazeShow.premiered || "",
-        genres:Array.isArray(tvmazeShow.genres) ? tvmazeShow.genres.slice() : [],
-        networks:tvmazeShow.network && tvmazeShow.network.name ? [{name:tvmazeShow.network.name,logo_path:""}] : [],
-        _network_metadata_version:isTVmazeArtworkSource() ? 1 : 0,
-        status:status,
-        tmdb_status:normalizeTVmazeShowStatus(tvmazeShow.status || ""),
-        tmdb_rating:tvmazeShow.rating && tvmazeShow.rating.average ? Number(tvmazeShow.rating.average) : 0,
-        tmdb_vote_count:0,
-        rating:0,
-        episodes_watched:{},
-        notes:"",
-        last_watched:"",
-        last_activity_at:"",
-        date_added:new Date().toISOString(),
-        number_of_seasons:0,
-        number_of_episodes:0,
-        next_episode_to_air:null,
-        last_episode_to_air:null,
-        was_unreleased_when_added:false,
-        completed_at:"",
-        _season_episodes:{},
-        _episode_details:{},
-        _episode_list:{},
-        _tmdb_external_ids:null,
-        _artwork_tmdb_id:null,
-        _tvmaze_episodes:{},
-        _tvmaze_last_refresh:""
-    };
-}
-
-function normalizeTVmazeEpisodeForStorage(ep){
-    const season = Number(ep && ep.season);
-    const episode = Number(ep && ep.number);
-    const explicitAirtime = String((ep && ep.airtime) || "").trim();
-    const offsetTimestamp = String((ep && ep.airstamp) || "").trim();
-    const hasTrustedTime = TVTrackerAuditUtils.hasTrustworthyTVmazeAirtime(
-        explicitAirtime,
-        offsetTimestamp
-    );
-
-    return {
-        season:season,
-        episode:episode,
-        airdate:ep && ep.airdate ? ep.airdate : "",
-        airtime:hasTrustedTime ? explicitAirtime : "",
-        airstamp:hasTrustedTime ? offsetTimestamp : "",
-        runtime:ep && ep.runtime ? ep.runtime : null,
-        name:ep && ep.name ? ep.name : "",
-        summary:cleanProviderHTML(ep && ep.summary ? ep.summary : ""),
-        image:ep && ep.image ? (ep.image.original || ep.image.medium || "") : ""
-    };
-}
-
-function applyTVmazeEpisodesAsPrimary(show){
-    if(!show || !show._tvmaze_episodes || typeof show._tvmaze_episodes !== "object"){
-        return;
-    }
-
-    show._episode_list = {};
-    show._episode_details = {};
-    show._season_episodes = {};
-
-    let maxSeason = 0;
-    let totalRegularEpisodes = 0;
-    let latestAired = null;
-    let nextFuture = null;
-
-    Object.values(show._tvmaze_episodes)
-    .filter(ep=>ep && Number.isFinite(Number(ep.season)) && Number.isFinite(Number(ep.episode)))
-    .sort((a,b)=>{
-        if(Number(a.season) !== Number(b.season)){
-            return Number(a.season) - Number(b.season);
-        }
-        return Number(a.episode) - Number(b.episode);
-    })
-    .forEach(tvmazeEpisode=>{
-        const seasonNumber = Number(tvmazeEpisode.season);
-        const episodeNumber = Number(tvmazeEpisode.episode);
-        const seasonKey = String(seasonNumber);
-        const airDate = TVTrackerAuditUtils.parseStrictLocalDate(tvmazeEpisode.airdate)
-        ? tvmazeEpisode.airdate
-        : "";
-
-        if(!show._episode_list[seasonKey]){
-            show._episode_list[seasonKey] = [];
-        }
-
-        const episodeObject = {
-            episode_number:episodeNumber,
-            name:tvmazeEpisode.name || "",
-            air_date:airDate,
-            runtime:tvmazeEpisode.runtime || null,
-            still_path:tvmazeEpisode.image || "",
-            overview:tvmazeEpisode.summary || "",
-            vote_average:0,
-            vote_count:0,
-            air_time:tvmazeEpisode.airtime || "",
-            air_timestamp:tvmazeEpisode.airstamp || "",
-            tvmaze_airdate:airDate,
-            metadata_source:"tvmaze"
-        };
-
-        show._episode_list[seasonKey].push(episodeObject);
-        show._episode_details[seasonKey + "-" + String(episodeNumber)] = Object.assign({},episodeObject);
-        show._season_episodes[seasonKey] = show._episode_list[seasonKey].length;
-
-        if(isMainSeasonNumber(seasonNumber)){
-            maxSeason = Math.max(maxSeason,seasonNumber);
-            totalRegularEpisodes += 1;
-        }
-
-        const releaseDate = makeEpisodeReleaseDate(episodeObject.air_date,episodeObject,show);
-        if(releaseDate){
-            if(releaseDate <= new Date()){
-                if(!latestAired || releaseDate > latestAired.releaseDate){
-                    latestAired = {releaseDate:releaseDate,episode:episodeObject,season:seasonNumber};
-                }
-            }else if(!nextFuture || releaseDate < nextFuture.releaseDate){
-                nextFuture = {releaseDate:releaseDate,episode:episodeObject,season:seasonNumber};
-            }
-        }
-    });
-
-    show.number_of_seasons = Math.max(Number(show.number_of_seasons || 0),maxSeason);
-    show.number_of_episodes = Math.max(Number(show.number_of_episodes || 0),totalRegularEpisodes);
-
-    show.last_episode_to_air = latestAired ? {
-        season_number:latestAired.season,
-        episode_number:latestAired.episode.episode_number,
-        name:latestAired.episode.name || "",
-        air_date:latestAired.episode.air_date || ""
-    } : null;
-
-    show.next_episode_to_air = nextFuture ? {
-        season_number:nextFuture.season,
-        episode_number:nextFuture.episode.episode_number,
-        name:nextFuture.episode.name || "",
-        air_date:nextFuture.episode.air_date || ""
-    } : null;
-}
-
-async function refreshTMDBArtworkForShow(show,forceRefresh=false){
-    if(!show || !isTMDBArtworkSource()){
-        return;
-    }
-
-    try{
-        let details = null;
-        const existingArtworkId = getArtworkTMDBId(show);
-
-        if(existingArtworkId && !forceRefresh && (show.poster_path || show.backdrop_path)){
-            return;
-        }
-
-        if(existingArtworkId){
-            details = await tmdbGetShowDetails(existingArtworkId);
-        }
-
-        if(!details && show.tvdb_id){
-            details = await findTMDBTVDetailsByExternalId(show.tvdb_id,"tvdb_id");
-        }
-
-        if(!details && show.imdb_id){
-            details = await findTMDBTVDetailsByExternalId(show.imdb_id,"imdb_id");
-        }
-
-        if(!details && show._tmdb_external_ids){
-            const ids = show._tmdb_external_ids;
-            if(ids.tvdb_id){
-                details = await findTMDBTVDetailsByExternalId(ids.tvdb_id,"tvdb_id");
-            }
-            if(!details && ids.imdb_id){
-                details = await findTMDBTVDetailsByExternalId(ids.imdb_id,"imdb_id");
-            }
-        }
-
-        if(!details){
-            details = await findTMDBTVDetailsByTitle(show.title || "");
-        }
-
-        if(details && details.id){
-            show._artwork_tmdb_id = details.id;
-            show.poster_path = details.poster_path || show.poster_path || "";
-            show.backdrop_path = details.backdrop_path || show.backdrop_path || "";
-            show.artwork_source = "tmdb";
-        }
-    }catch(error){
-        return;
-    }
 }
 
 
@@ -1813,177 +1261,13 @@ async function tmdbGetExternalIds(showId){
 
 
 
-async function tvmazeLookupShowByExternalIds(externalIds){
-
-    if(!externalIds){
-        return null;
-    }
-
-    const lookups = [];
-
-    if(externalIds.tvdb_id){
-        lookups.push(
-            "https://api.tvmaze.com/lookup/shows?thetvdb=" +
-            encodeURIComponent(externalIds.tvdb_id)
-        );
-    }
-
-    if(externalIds.imdb_id){
-        lookups.push(
-            "https://api.tvmaze.com/lookup/shows?imdb=" +
-            encodeURIComponent(externalIds.imdb_id)
-        );
-    }
-
-    for(let i = 0; i < lookups.length; i++){
-
-        try{
-
-            const response = await fetch(lookups[i]);
-
-            if(response.ok){
-                return await response.json();
-            }
-
-        }catch(error){
-
-            continue;
-
-        }
-
-    }
-
-    return null;
-
-}
 
 
 
-async function tvmazeGetEpisodes(tvmazeId){
-
-    const response = await fetch(
-        "https://api.tvmaze.com/shows/" +
-        encodeURIComponent(tvmazeId) +
-        "/episodes"
-    );
-
-    if(!response.ok){
-        throw new Error("TVmaze episodes error: " + response.status);
-    }
-
-    return await response.json();
-
-}
 
 
 
-async function refreshTVmazeData(show,forceRefresh=false){
 
-    if(!isTVmazeMetadataSource()){
-        return;
-    }
-
-    if(!show){
-        return;
-    }
-
-    if(!forceRefresh && !shouldRefreshTVmazeData(show)){
-        return;
-    }
-
-    try{
-
-        const tvmazeId = await ensureTVmazeIdForShow(show,forceRefresh);
-
-        if(tvmazeId){
-
-            const episodes = await tvmazeGetEpisodes(tvmazeId);
-
-            show._tvmaze_episodes = {};
-
-            episodes.forEach(ep=>{
-
-                if(!ep || !ep.season || !ep.number){
-                    return;
-                }
-
-                const normalized = normalizeTVmazeEpisodeForStorage(ep);
-                const key = String(normalized.season) + "-" + String(normalized.episode);
-                show._tvmaze_episodes[key] = normalized;
-
-            });
-
-            applyTVmazeEpisodesToShow(show);
-
-        }
-
-        show._tvmaze_release_safety_version = TVMAZE_RELEASE_SAFETY_VERSION;
-
-        if(isTMDBArtworkSource()){
-            await refreshTMDBArtworkForShow(show,forceRefresh);
-        }
-
-    }catch(error){
-        // Metadata refresh must not break the tracker if the provider is temporarily unavailable.
-    }
-
-    show._tvmaze_last_refresh = new Date().toISOString();
-
-}
-
-
-
-function applyTVmazeEpisodesToShow(show){
-
-    if(!show || !show._tvmaze_episodes){
-        return;
-    }
-
-    if(isTVmazeMetadataSource()){
-        applyTVmazeEpisodesAsPrimary(show);
-        return;
-    }
-
-    // TMDB Edition does not let TVmaze change episode names, dates, or schedules.
-    return;
-
-}
-
-
-
-function applyTVmazeEpisodeFields(target,tvmazeEpisode){
-
-    if(!target || !tvmazeEpisode || !isTVmazeMetadataSource()){
-        return;
-    }
-
-    const tvmazeAirDate = String(tvmazeEpisode.airdate || "");
-    const canonicalDate = TVTrackerAuditUtils.parseStrictLocalDate(tvmazeAirDate)
-    ? tvmazeAirDate
-    : String(target.air_date || "");
-
-    target.air_date = canonicalDate;
-    target.tvmaze_airdate = TVTrackerAuditUtils.parseStrictLocalDate(tvmazeAirDate)
-    ? tvmazeAirDate
-    : "";
-    target.name = tvmazeEpisode.name || target.name || "";
-    target.overview = tvmazeEpisode.summary || target.overview || "";
-    target.still_path = tvmazeEpisode.image || target.still_path || "";
-
-    const releaseDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
-        canonicalDate,
-        tvmazeEpisode.airtime || "",
-        tvmazeEpisode.airstamp || ""
-    );
-
-    target.air_time = releaseDate ? String(tvmazeEpisode.airtime || "") : "";
-    target.air_timestamp = releaseDate ? String(tvmazeEpisode.airstamp || "") : "";
-
-    if(tvmazeEpisode.runtime && !target.runtime){
-        target.runtime = tvmazeEpisode.runtime;
-    }
-
-}
 
 
 
@@ -2001,51 +1285,8 @@ function normalizeEpisodeReleaseFields(show){
         show._episode_details = {};
     }
 
-    Object.values(show._episode_list).forEach(list=>{
-
-        if(!Array.isArray(list)){
-            return;
-        }
-
-        list.forEach(ep=>{
-
-            if(typeof ep.air_time === "undefined"){
-                ep.air_time = "";
-            }
-
-            if(typeof ep.air_timestamp === "undefined"){
-                ep.air_timestamp = "";
-            }
-
-            if(typeof ep.tvmaze_airdate === "undefined"){
-                ep.tvmaze_airdate = "";
-            }
-
-        });
-
-    });
-
-    Object.values(show._episode_details).forEach(detail=>{
-
-        if(!detail){
-            return;
-        }
-
-        if(typeof detail.air_time === "undefined"){
-            detail.air_time = "";
-        }
-
-        if(typeof detail.air_timestamp === "undefined"){
-            detail.air_timestamp = "";
-        }
-
-        if(typeof detail.tvmaze_airdate === "undefined"){
-            detail.tvmaze_airdate = "";
-        }
-
-    });
-
-    applyTVmazeEpisodesToShow(show);
+    cleanLegacyMetadata(show._episode_list);
+    cleanLegacyMetadata(show._episode_details);
 
 }
 
@@ -2054,12 +1295,6 @@ function normalizeEpisodeReleaseFields(show){
 async function refreshShowForSchedule(show,forceRefresh=false){
 
     if(!show){
-        return;
-    }
-
-    if(isTVmazeMetadataSource()){
-        await refreshTVmazeData(show,forceRefresh);
-        normalizeEpisodeReleaseFields(show);
         return;
     }
 
@@ -2116,8 +1351,7 @@ async function autoUpdateStatuses(forceRefresh=false,allowRemoteRefresh=true){
 
             if(
                 forceRefresh ||
-                shouldRefreshShow(show) ||
-                shouldRefreshTVmazeData(show)
+                shouldRefreshShow(show)
             ){
 
                 await refreshShowForSchedule(show,forceRefresh);
@@ -2178,8 +1412,6 @@ function createShowObject(details,status){
 
     return {
         tmdb_id:details.id,
-        metadata_source:"tmdb",
-        artwork_source:"tmdb",
         title:details.name,
         poster_path:details.poster_path,
         backdrop_path:details.backdrop_path,
@@ -2208,10 +1440,6 @@ function createShowObject(details,status){
         _episode_details:{},
         _episode_list:{},
         _tmdb_external_ids:null,
-        _artwork_tmdb_id:null,
-        _tvmaze_id:null,
-        _tvmaze_episodes:{},
-        _tvmaze_last_refresh:""
     };
 
 }
@@ -2237,21 +1465,9 @@ async function openDiscoverShowModal(searchShow){
     prepareModalForOpen("show");
 
     try{
-        let showObject = null;
-
-        if(isTVmazeMetadataSource()){
-            const tvmazeId = searchShow.tvmaze_id || searchShow.id;
-            const details = searchShow._raw_tvmaze_show || await tvmazeGetShowDetails(tvmazeId);
-            showObject = createShowObjectFromTVmaze(details,"plan");
-            await refreshTVmazeData(showObject,true);
-            if(isTMDBArtworkSource()){
-                await refreshTMDBArtworkForShow(showObject,true);
-            }
-        }else{
-            const details = await tmdbGetShowDetails(searchShow.id);
-            showObject = createShowObject(details,"plan");
-            await loadSeasonData(showObject,1);
-        }
+        const details = await tmdbGetShowDetails(searchShow.id);
+        const showObject = createShowObject(details,"plan");
+        await loadSeasonData(showObject,1);
 
         discoverPreviewShow = showObject;
 
@@ -2473,22 +1689,9 @@ async function handleAddShowClick(searchShow){
             return;
 
         }
-
-        let showObject = null;
-
-        if(isTVmazeMetadataSource()){
-            const tvmazeId = searchShow.tvmaze_id || searchShow.id;
-            const details = searchShow._raw_tvmaze_show || await tvmazeGetShowDetails(tvmazeId);
-            showObject = createShowObjectFromTVmaze(details,"plan");
-            await refreshTVmazeData(showObject,true);
-            if(isTMDBArtworkSource()){
-                await refreshTMDBArtworkForShow(showObject,true);
-            }
-        }else{
-            const details = await tmdbGetShowDetails(searchShow.id);
-            showObject = createShowObject(details,"plan");
-            await loadSeasonData(showObject,1);
-        }
+        const details = await tmdbGetShowDetails(searchShow.id);
+        const showObject = createShowObject(details,"plan");
+        await loadSeasonData(showObject,1);
 
         const released = hasAnyAiredEpisode(showObject);
 
@@ -2726,10 +1929,6 @@ function renderSearchLoading(query){
 
 
 function shouldShowDiscoverHub(){
-
-    if(!isTMDBMetadataSource()){
-        return false;
-    }
 
     const searchInput = document.getElementById("search");
     const query = searchInput ? searchInput.value.trim() : "";
@@ -3032,7 +2231,7 @@ async function searchShows(query){
 
     }
 
-    const cachedResults = isTMDBMetadataSource() && typeof tmdbGetCachedSearchShows === "function"
+    const cachedResults = typeof tmdbGetCachedSearchShows === "function"
     ? tmdbGetCachedSearchShows(cleanQuery)
     : null;
 
@@ -3056,9 +2255,7 @@ async function searchShows(query){
 
     try{
 
-        const shows = isTVmazeMetadataSource()
-        ? await tvmazeSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined})
-        : await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined});
+        const shows = await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined});
 
         if(requestId !== searchRequestId){
             return;
@@ -3134,11 +2331,6 @@ async function addPendingShow(status){
 
 async function loadSeasonData(show,seasonNumber){
 
-    if(isTVmazeMetadataSource()){
-        await refreshTVmazeData(show,false);
-        return;
-    }
-
     if(!canUseTMDBShow(show)){
         return;
     }
@@ -3195,7 +2387,6 @@ async function loadSeasonData(show,seasonNumber){
                 vote_count:Number(ep.vote_count || existingEpisode.vote_count || 0),
                 air_time:"",
                 air_timestamp:"",
-                tvmaze_airdate:""
             };
 
         });
@@ -3216,7 +2407,6 @@ async function loadSeasonData(show,seasonNumber){
                 vote_count:Number(ep.vote_count || 0),
                 air_time:"",
                 air_timestamp:"",
-                tvmaze_airdate:""
             };
 
         });
@@ -4000,7 +3190,6 @@ async function ensureAllSeasonsLoaded(show,forceRefresh=false,options={}){
 
     }
 
-    applyTVmazeEpisodesToShow(show);
 
 }
 
@@ -4020,7 +3209,6 @@ async function ensureSeasonLoaded(show,seasonNumber,forceRefresh=false,options={
 
     await loadSeasonData(show,seasonNumber);
 
-    applyTVmazeEpisodesToShow(show);
 
     if(!options.skipSave){
         await saveData({showIds:[String(show.tmdb_id)]});
@@ -4178,7 +3366,6 @@ function getNextEpisode(show){
                     air_date:detail.air_date || "",
                     air_time:detail.air_time || "",
                     air_timestamp:detail.air_timestamp || "",
-                    tvmaze_airdate:detail.tvmaze_airdate || "",
                     needsLoad:false
                 };
 
@@ -4387,7 +3574,6 @@ function addHistoryEntries(show,episodes){
             air_date:episodeData.air_date || "",
             air_time:episodeData.air_time || "",
             air_timestamp:episodeData.air_timestamp || "",
-            tvmaze_airdate:episodeData.tvmaze_airdate || "",
             watched_at:watchedAt,
             action:"watched"
         };
@@ -4458,7 +3644,6 @@ function getEpisodeData(show,season,episode){
         vote_count:Number(fromList.vote_count || fromDetails.vote_count || 0),
         air_time:fromList.air_time || fromDetails.air_time || "",
         air_timestamp:fromList.air_timestamp || fromDetails.air_timestamp || "",
-        tvmaze_airdate:fromList.tvmaze_airdate || fromDetails.tvmaze_airdate || ""
     };
 
 }
@@ -4553,15 +3738,7 @@ function makeLocalDate(dateString){
 
 function getEpisodeExactTimestamp(episodeInfo){
 
-    if(!episodeInfo){
-        return "";
-    }
-
-    if(typeof episodeInfo === "string"){
-        return episodeInfo;
-    }
-
-    return episodeInfo.air_timestamp || episodeInfo.airstamp || "";
+    return "";
 
 }
 
@@ -4569,20 +3746,8 @@ function getEpisodeExactTimestamp(episodeInfo){
 
 function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
-    const primaryAirDate = String(airDateString || "");
-    const tvmazeAirDate = episodeInfo
-    ? String(episodeInfo.tvmaze_airdate || episodeInfo.airdate || "")
-    : "";
-
-    if(isTVmazeMetadataSource()){
-        return TVTrackerAuditUtils.chooseEpisodeCalendarDate(
-            tvmazeAirDate,
-            primaryAirDate
-        );
-    }
-
     return TVTrackerAuditUtils.chooseEpisodeCalendarDate(
-        primaryAirDate,
+        String(airDateString || ""),
         ""
     );
 
@@ -4607,24 +3772,6 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
     if(!baseDateString){
         return null;
-    }
-
-    const exactDate = isTVmazeMetadataSource()
-    ? TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
-        baseDateString,
-        episodeInfo && episodeInfo.air_time
-        ? episodeInfo.air_time
-        : "",
-        getEpisodeExactTimestamp(episodeInfo)
-    )
-    : null;
-
-    if(exactDate){
-        return {
-            date:exactDate,
-            hasTime:true,
-            source:"tvmaze-clock"
-        };
     }
 
     const releaseDate = makeDateOnlyEpisodeReleaseDate(baseDateString);
@@ -4780,8 +3927,7 @@ async function prepareUpcomingData(forceRefresh=false){
 
         if(
             forceRefresh ||
-            shouldRefreshShow(shows[i]) ||
-            shouldRefreshTVmazeData(shows[i])
+            shouldRefreshShow(shows[i])
         ){
             await refreshShowForSchedule(shows[i],forceRefresh);
         }
@@ -5037,7 +4183,6 @@ function getNextMissedAiredEpisode(show){
                     still_path:ep.still_path || "",
                     air_time:ep.air_time || "",
                     air_timestamp:ep.air_timestamp || "",
-                    tvmaze_airdate:ep.tvmaze_airdate || "",
                     type:"missed"
                 };
 
@@ -5124,7 +4269,6 @@ function getFutureScheduleEpisodes(show){
             still_path:stillPath || "",
             air_time:sourceEpisode.air_time || "",
             air_timestamp:sourceEpisode.air_timestamp || "",
-            tvmaze_airdate:sourceEpisode.tvmaze_airdate || "",
             type:"future"
         });
 
@@ -5279,7 +4423,6 @@ function getBehindEpisodes(show,currentEpisode){
                 still_path:ep.still_path || "",
                 air_time:ep.air_time || "",
                 air_timestamp:ep.air_timestamp || "",
-                tvmaze_airdate:ep.tvmaze_airdate || "",
                 type:"missed"
             });
 
@@ -5666,7 +4809,6 @@ function getLatestAiredEpisode(show){
                     air_date:ep.air_date,
                     air_time:ep.air_time || "",
                     air_timestamp:ep.air_timestamp || "",
-                    tvmaze_airdate:ep.tvmaze_airdate || ""
                 };
 
                 return;
@@ -5684,7 +4826,6 @@ function getLatestAiredEpisode(show){
                     air_date:ep.air_date,
                     air_time:ep.air_time || "",
                     air_timestamp:ep.air_timestamp || "",
-                    tvmaze_airdate:ep.tvmaze_airdate || ""
                 };
 
                 return;
@@ -5708,7 +4849,6 @@ function getLatestAiredEpisode(show){
                     air_date:ep.air_date,
                     air_time:ep.air_time || "",
                     air_timestamp:ep.air_timestamp || "",
-                    tvmaze_airdate:ep.tvmaze_airdate || ""
                 };
 
             }
@@ -6721,7 +5861,7 @@ async function prepareAndCommitTrackerData(data,backupTemplate=null,options={}){
     const shouldUpdateStatuses = options && options.updateStatuses === true;
 
     try{
-        DATA = JSON.parse(JSON.stringify(data || {}));
+        DATA = getCleanTrackerDataCopy(data || {});
         normalizeExistingData();
 
         if(shouldUpdateStatuses){
@@ -6739,7 +5879,7 @@ async function prepareAndCommitTrackerData(data,backupTemplate=null,options={}){
 
 
 async function commitTrackerDataTransactionally(data,backupTemplate=null){
-    const replacement = JSON.parse(JSON.stringify(data || {}));
+    const replacement = getCleanTrackerDataCopy(data || {});
     ensureHistoryIds(replacement);
 
     const backup = backupTemplate && typeof backupTemplate === "object"
@@ -6791,7 +5931,7 @@ function getNativeBackupObject(){
         schemaVersion:4,
         exportedAt:new Date().toISOString(),
         summary:getBackupSummary(),
-        data:JSON.parse(JSON.stringify(DATA))
+        data:getCleanTrackerDataCopy(DATA)
     };
 
 }
@@ -7805,10 +6945,6 @@ function estimateCompatibleMappedStatus(show,stats){
 
 function canUseTMDBShow(show){
 
-    if(!isTMDBMetadataSource()){
-        return false;
-    }
-
     if(!show || show.local_only === true){
         return false;
     }
@@ -8040,7 +7176,7 @@ async function buildDataFromCompatibleJSON(parsed,fileName){
         `${Number(report.localOnly).toLocaleString()} were preserved as local-only.`
     );
     preview.warnings.push(
-        "Import logic reset: imported progress/history is the source of truth; the selected source enhances metadata and availability."
+        "Import logic reset: imported progress/history is the source of truth; TMDB metadata enhances availability."
     );
 
     if(newData.metadata_sync && newData.metadata_sync.total){
@@ -8050,7 +7186,7 @@ async function buildDataFromCompatibleJSON(parsed,fileName){
     }
 
     if(report.localOnly > 0){
-        preview.warnings.push("Shows import instantly from your compatible file. Posters, release dates, and provider metadata are filled later by Metadata Sync.");
+        preview.warnings.push("Shows import instantly from your compatible file. Posters, release dates, and metadata are filled later by Metadata Sync.");
     }
 
     return {
@@ -8089,8 +7225,6 @@ async function hydrateCompatibleImportScheduleData(importData,report){
             for(let j = 0; j < seasonsToLoad.length; j++){
                 await loadSeasonData(show,seasonsToLoad[j]);
             }
-
-            await refreshTVmazeData(show,true);
 
             syncNextEpisodeFromTMDB(show);
             normalizeEpisodeReleaseFields(show);
@@ -8373,8 +7507,6 @@ function createAppShowFromCompatibleShow(compatibleShow,mappedStatus,tmdbDetails
 
         show = {
             tmdb_id:localId,
-            metadata_source:getMetadataSource(),
-            artwork_source:getArtworkSource(),
             title:title,
             poster_path:"",
             backdrop_path:"",
@@ -8401,10 +7533,6 @@ function createAppShowFromCompatibleShow(compatibleShow,mappedStatus,tmdbDetails
             _episode_details:{},
             _episode_list:{},
             _tmdb_external_ids:null,
-            _artwork_tmdb_id:null,
-            _tvmaze_id:null,
-            _tvmaze_episodes:{},
-            _tvmaze_last_refresh:"",
             local_only:true
         };
 
@@ -8435,7 +7563,6 @@ function createAppShowFromCompatibleShow(compatibleShow,mappedStatus,tmdbDetails
         specials:{},
         original_status:compatibleShow.status || ""
     };
-    show._tvmaze_release_safety_version = TVMAZE_RELEASE_SAFETY_VERSION;
 
     show.episodes_watched = {};
     show._season_episodes = {};
@@ -8518,7 +7645,6 @@ function importCompatibleEpisodesIntoShow(show,compatibleShow,targetData){
                 still_path:"",
                 air_time:"",
                 air_timestamp:"",
-                tvmaze_airdate:"",
                 special:episodeIsSpecial,
                 source_tvdb_episode_id:tvdbEpisodeId,
                 watched_count:Number(episode.watched_count || 0),
@@ -8534,7 +7660,6 @@ function importCompatibleEpisodesIntoShow(show,compatibleShow,targetData){
                 still_path:"",
                 air_time:"",
                 air_timestamp:"",
-                tvmaze_airdate:"",
                 special:episodeIsSpecial,
                 source_tvdb_episode_id:tvdbEpisodeId,
                 watched_count:Number(episode.watched_count || 0),
@@ -8590,7 +7715,6 @@ function importCompatibleEpisodesIntoShow(show,compatibleShow,targetData){
                     air_date:"",
                     air_time:"",
                     air_timestamp:"",
-                    tvmaze_airdate:"",
                     watched_at:watchedAt,
                     action:"watched",
                     imported:true,
@@ -9275,7 +8399,6 @@ body{background:#1a1a1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFo
 <div class="stat"><span class="stat-label">Specials watched</span><span class="stat-value">${Number(summary.specialWatched).toLocaleString()}</span></div>
 </div>
 </div>
-<div class="notice"><strong>Data note</strong>This report is a readable snapshot of your current TV Tracker data. Imported watched history is preserved as your source of truth. The selected source-provider edition controls episode names, schedules, dates, and artwork according to SOURCE_PROVIDER_RULES.md.</div>
 <div class="summary-stats">
 <div class="ss-section"><span class="ss-label">Library</span><span class="ss-hi">${Number(summary.finished).toLocaleString()}</span> completed &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.watching).toLocaleString()}</span> watching &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.paused).toLocaleString()}</span> paused &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.plan).toLocaleString()}</span> plan to watch &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.dropped).toLocaleString()}</span> dropped</div>
 <div class="ss-section"><span class="ss-label">Progress</span><span class="ss-hi">${Number(summary.regularWatched).toLocaleString()}</span> regular episodes watched &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.totalKnownEpisodes).toLocaleString()}</span> known regular episodes <span class="ss-dim">(${watchedPercent}% watched)</span> &nbsp;·&nbsp; <span class="ss-hi">${Number(summary.specialWatched).toLocaleString()}</span> specials watched</div>

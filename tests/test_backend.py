@@ -1,6 +1,32 @@
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+import sys
+import types
+
+try:
+    import psycopg  # noqa: F401
+except ModuleNotFoundError:
+    psycopg_stub = types.ModuleType("psycopg")
+    psycopg_stub.connect = lambda *args, **kwargs: None
+    types_stub = types.ModuleType("psycopg.types")
+    json_stub = types.ModuleType("psycopg.types.json")
+
+    class Jsonb:
+        def __init__(self, value):
+            self.value = value
+
+    json_stub.Jsonb = Jsonb
+    sys.modules["psycopg"] = psycopg_stub
+    sys.modules["psycopg.types"] = types_stub
+    sys.modules["psycopg.types.json"] = json_stub
+
+
+
+try:
+    import flask  # noqa: F401
+except ModuleNotFoundError as error:
+    raise unittest.SkipTest("Flask is not installed in this test environment") from error
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DB_HOST", "test-db")

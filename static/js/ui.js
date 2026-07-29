@@ -1024,7 +1024,6 @@ function createWatchlistCard(show,options={}){
         air_date:nextEp.air_date,
         air_time:nextEp.air_time || "",
         air_timestamp:nextEp.air_timestamp || "",
-        tvmaze_airdate:nextEp.tvmaze_airdate || ""
     });
 
     const episodeLine = isCompletedFilter
@@ -1776,7 +1775,6 @@ function getCatchUpEpisodesForPopup(currentEpisode,behindEpisodes){
             still_path:ep.still_path || "",
             air_time:ep.air_time || "",
             air_timestamp:ep.air_timestamp || "",
-            tvmaze_airdate:ep.tvmaze_airdate || "",
             type:ep.type || "missed"
         });
 
@@ -4634,18 +4632,13 @@ function renderSettings(){
             <div class="settings-section">
                 <div class="settings-section-header">
                     <h2>SOURCE</h2>
-                    <p>This edition uses one authority for episode and schedule data.</p>
                 </div>
 
                 <div class="settings-summary-grid">
                     <div class="settings-summary-card">
-                        <span>Metadata Source</span>
-                        <strong>${escapeHTML(getMetadataSourceLabel())}</strong>
                     </div>
 
                     <div class="settings-summary-card">
-                        <span>Artwork Source</span>
-                        <strong>${escapeHTML(getArtworkSourceLabel())}</strong>
                     </div>
                 </div>
             </div>
@@ -4824,7 +4817,6 @@ function renderMetadataSyncPanel(){
         <div class="settings-section metadata-sync-section">
             <div class="settings-section-header">
                 <h2>METADATA SYNC</h2>
-                <p>Imports save your personal data first. Posters, TMDB matches, episode air dates, and TVmaze release times sync separately and can resume later.</p>
             </div>
 
             <div class="metadata-sync-status">

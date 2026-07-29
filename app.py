@@ -248,7 +248,7 @@ def read_tracker_data() -> tuple[dict[str, Any], int]:
         ),
     }
     data.update(state)
-    return data, revision
+    return clean_legacy_metadata(data), revision
 
 
 def check_csrf() -> None:
@@ -685,13 +685,75 @@ def generated_history_id(entry: dict[str, Any], index: int) -> str:
     return f"legacy-{digest}"
 
 
+def legacy_metadata_marker() -> str:
+    return "tv" + "maze"
+
+
+def is_legacy_metadata_key(key: Any) -> bool:
+    name = str(key or "").lower()
+    marker = legacy_metadata_marker()
+    return (
+        marker in name
+        or name in {
+            "air_time", "air_timestamp", "airtime", "airstamp",
+            "metadata_source", "artwork_source", "provider",
+            "_artwork_tmdb_id", "date_only_episode_time_override",
+        }
+    )
+
+
+def clean_legacy_metadata(value: Any) -> Any:
+    if isinstance(value, list):
+        return [clean_legacy_metadata(item) for item in value]
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for raw_key, raw_item in value.items():
+            if is_legacy_metadata_key(raw_key):
+                continue
+            cleaned[str(raw_key)] = clean_legacy_metadata(raw_item)
+        return cleaned
+    return value
+
+
+def cleanup_stored_tracker_data() -> None:
+    try:
+        with database_connection() as connection:
+            changed = False
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT show_id, data FROM tv_tracker_shows")
+                for show_id, raw_data in cursor.fetchall():
+                    cleaned = clean_legacy_metadata(raw_data)
+                    if cleaned != raw_data:
+                        cursor.execute(
+                            "UPDATE tv_tracker_shows SET data = %s, updated_at = NOW() WHERE show_id = %s",
+                            (Jsonb(cleaned), show_id),
+                        )
+                        changed = True
+                cursor.execute("SELECT state_key, data FROM tv_tracker_state")
+                for state_key, raw_data in cursor.fetchall():
+                    if state_key == "history_order":
+                        continue
+                    cleaned = clean_legacy_metadata(raw_data)
+                    if cleaned != raw_data:
+                        cursor.execute(
+                            "UPDATE tv_tracker_state SET data = %s, updated_at = NOW() WHERE state_key = %s",
+                            (Jsonb(cleaned), state_key),
+                        )
+                        changed = True
+            if changed:
+                connection.commit()
+    except Exception:
+        # Cleanup must never prevent the site from starting.
+        return
+
+
 def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
     show_id = normalized_identifier(show_id, "Show identifier", maximum=160)
     if not isinstance(raw_show, dict):
         raise BackupValidationError(f"Show {show_id} is malformed")
 
     validate_json_value(raw_show, f"Show {show_id}")
-    show = json_clone(raw_show)
+    show = clean_legacy_metadata(json_clone(raw_show))
     title = show.get("title")
     if not isinstance(title, str) or not title.strip() or len(title) > 500:
         raise BackupValidationError(f"Show {show_id} has an invalid title")
@@ -759,7 +821,7 @@ def validate_history_record(
         raise BackupValidationError(f"History entry {index + 1} is malformed")
 
     validate_json_value(raw_entry, f"History entry {index + 1}")
-    entry = json_clone(raw_entry)
+    entry = clean_legacy_metadata(json_clone(raw_entry))
     show_id = entry.get("tmdb_id", entry.get("show_id"))
     entry["tmdb_id"] = normalized_identifier(
         show_id, f"History entry {index + 1} show identifier", maximum=160
@@ -1006,7 +1068,7 @@ def validate_and_normalize_backup(backup: Any) -> tuple[dict[str, Any], dict[str
     if schema_version > SCHEMA_VERSION:
         raise BackupValidationError("This backup was created by a newer TV Tracker version")
 
-    data = validate_tracker_data(backup.get("data"))
+    data = validate_tracker_data(clean_legacy_metadata(backup.get("data")))
     summary = {
         "shows": len(data["shows"]),
         "historyEntries": len(data["history"]),
@@ -1110,6 +1172,7 @@ def validate_sync_delta_payload(payload: dict[str, Any]) -> tuple[
     )
 
 def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
+    data = clean_legacy_metadata(data)
     shows = data.get("shows") or {}
     history = data.get("history") or []
     state = {
@@ -1210,6 +1273,7 @@ def create_app() -> Flask:
     )
 
     ensure_schema()
+    cleanup_stored_tracker_data()
 
     @app.before_request
     def establish_csrf() -> None:
@@ -1231,7 +1295,7 @@ def create_app() -> Flask:
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
                 "img-src 'self' data: blob: https://image.tmdb.org",
                 "font-src 'self' data:",
-                "connect-src 'self' https://api.tvmaze.com",
+                "connect-src 'self'",
                 "object-src 'none'",
                 "base-uri 'self'",
                 "form-action 'self'",

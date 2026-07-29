@@ -102,6 +102,12 @@ function updateUnsavedStateIndicator(){
 }
 
 function createPendingSaveOperation(options,operationId){
+    if(typeof cleanLegacyMetadata === "function"){
+        cleanLegacyMetadata(DATA);
+        if(LAST_SAVED_DATA){
+            cleanLegacyMetadata(LAST_SAVED_DATA);
+        }
+    }
     ensureHistoryIds(DATA);
     const dirtyOptions = dirtySaveHasWork(options)
     ? normalizeDirtySaveOptions(options)
@@ -1594,6 +1600,9 @@ function processPendingSaveQueue(){
 function adoptTransactionalTrackerData(data,revision){
     clearPendingSaveOperations();
     const replacement = cloneTrackerData(data || {shows:{},history:[]});
+    if(typeof cleanLegacyMetadata === "function"){
+        cleanLegacyMetadata(replacement);
+    }
     ensureHistoryIds(replacement);
     DATA = replacement;
     LAST_SAVED_DATA = cloneTrackerData(replacement);
