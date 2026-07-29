@@ -7,31 +7,6 @@ var profileSettingsDraft = null;
 var avatarCropState = null;
 var profileHeaderCropState = null;
 
-
-function trackerImageURL(path,size="w500"){
-    const value = String(path || "").trim();
-    if(!value){
-        return "";
-    }
-    if(/^https?:\/\//i.test(value)){
-        return value;
-    }
-    return "https://image.tmdb.org/t/p/" + String(size || "w500") + value;
-}
-
-function trackerImageHTML(path,size,className,alt="",attrs=""){
-    const url = trackerImageURL(path,size);
-    if(!url){
-        return "";
-    }
-    return `<img${className ? ` class="${escapeHTML(className)}"` : ""} src="${escapeHTML(url)}" alt="${escapeHTML(alt || "")}" ${attrs || ""}>`;
-}
-
-function trackerBackgroundImage(path,size="original"){
-    const url = trackerImageURL(path,size);
-    return url ? `url("${escapeHTML(url)}")` : "";
-}
-
 function getCheckSuccessAnimationTarget(element){
 
     if(!element){
@@ -537,7 +512,7 @@ function setupInfiniteDiscoverCarousels(){
 function renderDiscoverHubCard(show){
 
     const posterHTML = show.poster_path
-    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="">`
+    ? `<img loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="">`
     : `<div class="discover-card-placeholder">TV</div>`;
 
     const year = show.first_air_date
@@ -593,7 +568,7 @@ function renderSearchResults(shows){
         card.className = "show";
 
         const posterHTML = show.poster_path
-        ? `<img class="poster" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}">`
+        ? `<img class="poster" loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w500${show.poster_path}">`
         : `<div class="poster-placeholder">📺</div>`;
 
         const alreadyTracked = DATA.shows[String(show.id)];
@@ -1067,7 +1042,7 @@ function createWatchlistCard(show,options={}){
     card.dataset.showId = String(show.tmdb_id || show.id || "");
 
     const posterHTML = show.poster_path
-    ? `<img class="poster" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(show.title || "Show")} poster" loading="lazy">`
+    ? `<img class="poster" src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="${escapeHTML(show.title || "Show")} poster" loading="lazy">`
     : `<div class="poster-placeholder watchlist-poster-placeholder" aria-hidden="true"><span>${escapeHTML(getWatchlistPosterFallback(show))}</span></div>`;
 
     const actionHTML = action
@@ -1397,7 +1372,7 @@ async function renderUpcoming(startBackgroundRefresh=true){
             "";
 
             const imageHTML = imagePath
-            ? `<img class="upcoming-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(imagePath,"w780"))}">`
+            ? `<img class="upcoming-still" loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w780${imagePath}">`
             : `<div class="upcoming-still-placeholder">📺</div>`;
 
             const regularBehindText =
@@ -1708,7 +1683,7 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
         "";
 
         const imageHTML = imagePath
-        ? `<img class="upcoming-batch-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(imagePath,"w780"))}">`
+        ? `<img class="upcoming-batch-still" loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w780${imagePath}">`
         : `<div class="upcoming-batch-still-placeholder">📺</div>`;
 
         html += `
@@ -1854,7 +1829,7 @@ function openBehindEpisodesPopup(showId,episodes){
         "";
 
         const imageHTML = imagePath
-        ? `<img class="behind-episode-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(imagePath,"w780"))}">`
+        ? `<img class="behind-episode-still" loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w780${imagePath}">`
         : `<div class="behind-episode-still-placeholder">📺</div>`;
 
         return `
@@ -2028,7 +2003,7 @@ function renderHistory(){
             card.className = "show history-entry-card";
 
             const imageHTML = stillPath
-            ? `<img class="history-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(stillPath,"w780"))}">`
+            ? `<img class="history-still" loading="lazy" decoding="async" src="https://image.tmdb.org/t/p/w780${stillPath}">`
             : `<div class="history-still-placeholder">📺</div>`;
 
             const episodeTitle =
@@ -2171,7 +2146,7 @@ function getShowNetworkInlineHTML(show){
         if(network.logo_path){
             return `
                 <span class="network-logo-chip" title="${escapeHTML(network.name)}">
-                    <img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(network.name)}">
+                    <img class="network-logo-inline" src="https://image.tmdb.org/t/p/w92${escapeHTML(network.logo_path)}" alt="${escapeHTML(network.name)}">
                 </span>
             `;
         }
@@ -2245,7 +2220,7 @@ function renderDiscoverShowModal(show){
     : "";
 
     const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
     : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const nextEpisode = show.next_episode_to_air
@@ -2614,7 +2589,7 @@ function renderShowModal(show){
     : `${watchedCount} / ${totalCount} episodes`;
 
     const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 60%), url("https://image.tmdb.org/t/p/original${show.backdrop_path}")`
     : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     content.innerHTML = `
@@ -2941,7 +2916,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
 
     const backdrop = imagePath
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(imagePath,"original")}`
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), url("https://image.tmdb.org/t/p/original${imagePath}")`
     : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const airDateText = episodeData.air_date
@@ -4487,7 +4462,7 @@ function renderRankedStatsRows(items,type){
     return items.map((item,index)=>{
 
         const networkLogo = type === "network" && item.logo_path
-        ? `<span class="ranked-network-logo"><img src="${escapeHTML(trackerImageURL(escapeHTML(item.logo_path),"w92"))}" alt="${escapeHTML(item.name)}"></span>`
+        ? `<span class="ranked-network-logo"><img src="https://image.tmdb.org/t/p/w92${escapeHTML(item.logo_path)}" alt="${escapeHTML(item.name)}"></span>`
         : "";
 
         return `
@@ -4627,27 +4602,6 @@ function renderSettings(){
                 </div>
                 </form>
 
-            </div>
-
-
-
-            <div class="settings-section">
-                <div class="settings-section-header">
-                    <h2>SOURCE</h2>
-                    <p>This edition uses one authority for episode and schedule data.</p>
-                </div>
-
-                <div class="settings-summary-grid">
-                    <div class="settings-summary-card">
-                        <span>Metadata Source</span>
-                        <strong>${escapeHTML(getMetadataSourceLabel())}</strong>
-                    </div>
-
-                    <div class="settings-summary-card">
-                        <span>Artwork Source</span>
-                        <strong>${escapeHTML(getArtworkSourceLabel())}</strong>
-                    </div>
-                </div>
             </div>
 
             <div class="settings-section">
@@ -5072,7 +5026,7 @@ function renderProfileHomeView(profile,stats){
         if(show){
 
             const posterHTML = show.poster_path
-            ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="">`
+            ? `<img src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="">`
             : `<div class="profile-favorite-placeholder">📺</div>`;
 
             favoriteSlotsHTML += `
@@ -5306,7 +5260,7 @@ function renderFavoritesPopup(){
     ? favorites.map(show=>{
 
         const posterHTML = show.poster_path
-        ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="" draggable="false">`
+        ? `<img src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="" draggable="false">`
         : `<div class="favorites-popup-poster-placeholder">📺</div>`;
 
         return `
@@ -5383,7 +5337,7 @@ function renderFavoritesPopup(){
 
         searchResults.innerHTML = matches.map(show=>{
             const posterHTML = show.poster_path
-            ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="" draggable="false">`
+            ? `<img src="https://image.tmdb.org/t/p/w500${show.poster_path}" alt="" draggable="false">`
             : `<span class="favorites-search-placeholder">📺</span>`;
 
             return `
