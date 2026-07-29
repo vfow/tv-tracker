@@ -118,7 +118,8 @@
 
     function makeCanonicalEpisodeReleaseDate(dateString,airtime,airstamp){
         const canonicalDate = String(dateString || "").trim();
-        if(!parseStrictLocalDate(canonicalDate)){
+        const result = parseStrictLocalDate(canonicalDate);
+        if(!result){
             return null;
         }
 
@@ -127,12 +128,16 @@
         }
 
         const timeParts = parseExplicitAirtime(airtime);
-        const timestampParts = parseOffsetTimestamp(airstamp);
-        const result = new Date(
-            `${canonicalDate}T${timeParts.hour}:${timeParts.minute}:00${timestampParts.offset}`
-        );
 
-        return Number.isNaN(result.getTime()) ? null : result;
+        /*
+        The offset-bearing airstamp proves that TVmaze supplied an explicit,
+        trustworthy clock for the matched episode. The offset itself must not
+        move the official TMDB calendar date. This keeps a Friday episode from
+        appearing on Thursday after browser timezone conversion.
+        */
+        result.setHours(Number(timeParts.hour),Number(timeParts.minute),0,0);
+
+        return result;
     }
 
     function makeDateOnlyEpisodeReleaseDate(dateString){

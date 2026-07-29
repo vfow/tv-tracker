@@ -34,28 +34,29 @@ assert.strictEqual(
     "2026-07-26"
 );
 
-// TVmaze contributes only the exact matching episode's clock time and source
-// offset. Its calendar date is ignored and the clock is attached to TMDB's
-// canonical date before the browser converts the instant to local time.
+// TVmaze contributes only the exact matching episode's clock time. Its
+// calendar date and source offset do not move TMDB's canonical calendar date.
 const canonicalUtcRelease = utils.makeCanonicalEpisodeReleaseDate(
     "2026-07-27",
     "17:00",
     "2026-07-26T17:00:00Z"
 );
-assert.strictEqual(
-    canonicalUtcRelease.toISOString(),
-    "2026-07-27T17:00:00.000Z"
-);
+assert.strictEqual(canonicalUtcRelease.getFullYear(),2026);
+assert.strictEqual(canonicalUtcRelease.getMonth(),6);
+assert.strictEqual(canonicalUtcRelease.getDate(),27);
+assert.strictEqual(canonicalUtcRelease.getHours(),17);
+assert.strictEqual(canonicalUtcRelease.getMinutes(),0);
 
 const canonicalOffsetRelease = utils.makeCanonicalEpisodeReleaseDate(
     "2026-07-27",
-    "21:00",
-    "2026-07-26T21:00:00-04:00"
+    "00:30",
+    "2026-07-26T00:30:00+09:00"
 );
-assert.strictEqual(
-    canonicalOffsetRelease.toISOString(),
-    "2026-07-28T01:00:00.000Z"
-);
+assert.strictEqual(canonicalOffsetRelease.getFullYear(),2026);
+assert.strictEqual(canonicalOffsetRelease.getMonth(),6);
+assert.strictEqual(canonicalOffsetRelease.getDate(),27);
+assert.strictEqual(canonicalOffsetRelease.getHours(),0);
+assert.strictEqual(canonicalOffsetRelease.getMinutes(),30);
 
 // An offset-bearing airstamp without an explicitly published TVmaze airtime
 // is not trustworthy. It may be generated from a default show schedule.

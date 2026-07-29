@@ -58,7 +58,8 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn("TVmaze contributes time only when that exact", app_js)
         self.assertIn("hasTrustworthyTVmazeAirtime", app_js)
         self.assertIn("const TVMAZE_RELEASE_SAFETY_VERSION = 5", app_js)
-        self.assertIn("An airstamp by", audit_utils_js)
+        self.assertIn("The offset-bearing airstamp proves", audit_utils_js)
+        self.assertIn("move the official TMDB calendar date", audit_utils_js)
         self.assertIn('hour12:true', app_js)
         self.assertIn("date.setDate(date.getDate() + 1)", audit_utils_js)
         self.assertNotIn("Asia/Kuala_Lumpur", app_js)
@@ -67,7 +68,7 @@ class SourceContractTests(unittest.TestCase):
         self.assertNotIn("TVMAZE_MAX_DATE_DIFF_DAYS", app_js)
         self.assertNotIn('return releaseInfo.estimated ? "~"', app_js)
         self.assertIn("Official TMDB calendar dates control schedule ordering", app_js)
-        self.assertIn("1.3.1-explicit-airtime", index_html)
+        self.assertIn("1.3.1-no-day-shift", index_html)
 
 
 if __name__ == "__main__":
