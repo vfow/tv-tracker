@@ -1,4 +1,4 @@
-# TV Tracker v1.6.1 — Source Split Foundation (TVmaze Edition with TMDB Artwork)
+# TV Tracker v1.6.1 — Source Split Foundation (Strict TVmaze Edition)
 
 This is a **consolidated changed-files-only patch** applied directly over clean **TV Tracker v1.5**.
 
@@ -11,16 +11,14 @@ v1.6.1 — Exact Backup Restore Fix
 
 Do not install the old v1.6.0 patch first. Do not install the separate v1.6.1 restore-fix patch after this.
 
-This is the **main recommended edition** to test first.
-
 ## Active source rules
 
 ```text
 Metadata Source: TVmaze
-Artwork Source: TMDB
+Artwork Source: TVmaze
 ```
 
-TVmaze controls show search, show metadata, episodes, seasons, episode names, air dates, Upcoming, and next episode logic. TMDB is used only for posters, backdrops, and hero images.
+TVmaze controls show search, show metadata, episodes, seasons, episode names, air dates, Upcoming, next episode logic, and artwork. TMDB is ignored completely.
 
 ## Included corrections
 
@@ -74,7 +72,7 @@ app.py
 5. Commit with:
 
 ```text
-Create TV Tracker v1.6.1 TVmaze Edition with TMDB Artwork
+Create TV Tracker v1.6.1 Strict TVmaze Edition
 ```
 
 6. Deploy normally:
@@ -92,7 +90,7 @@ git pull --ff-only origin main
 Confirm that:
 
 - Settings shows `Metadata Source: TVmaze`.
-- Settings shows `Artwork Source: TMDB`.
+- Settings shows `Artwork Source: TVmaze`.
 - Native App Backup JSON import does not fail with `Unsupported state key: import_info`.
 - Native backup restore does not change show statuses during import.
 - Existing watched history remains intact.
