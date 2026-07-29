@@ -60,7 +60,7 @@ CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STATE_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
-ALLOWED_STATE_KEYS = {"profile", "metadata_sync", "network_sync", "import_info"}
+ALLOWED_STATE_KEYS = {"profile", "metadata_sync", "network_sync"}
 MAX_JSON_DEPTH = 16
 MAX_JSON_CONTAINER_ITEMS = 500000
 MAX_JSON_STRING_CHARS = 12 * 1024 * 1024
@@ -927,29 +927,12 @@ def validate_sync_metadata_state(key: str, raw_value: Any) -> dict[str, Any]:
     return value
 
 
-def validate_import_info_state(raw_value: Any) -> dict[str, Any]:
-    """Accept app-owned compatible-import metadata in native backups.
-
-    Older exports may include a top-level `import_info` state object that records
-    where imported data originally came from. This is not episode/date authority
-    data and must not block an exact native backup restore.
-    """
-    if raw_value is None:
-        return {}
-    if not isinstance(raw_value, dict) or len(raw_value) > 200:
-        raise BackupValidationError("State import_info is invalid")
-    validate_json_value(raw_value, "State import_info")
-    return json_clone(raw_value)
-
-
 def validate_state_record(key: Any, raw_value: Any) -> tuple[str, Any]:
     state_key = normalized_identifier(key, "State key", maximum=80)
     if not STATE_KEY_RE.fullmatch(state_key) or state_key not in ALLOWED_STATE_KEYS:
         raise BackupValidationError(f"Unsupported state key: {state_key}")
     if state_key == "profile":
         return state_key, validate_profile_record(raw_value)
-    if state_key == "import_info":
-        return state_key, validate_import_info_state(raw_value)
     return state_key, validate_sync_metadata_state(state_key, raw_value)
 
 
@@ -984,7 +967,7 @@ def validate_tracker_data(raw_data: Any) -> dict[str, Any]:
         "history": history,
         "profile": validate_profile_record(raw_data.get("profile", {})),
     }
-    for state_key in ("metadata_sync", "network_sync", "import_info"):
+    for state_key in ("metadata_sync", "network_sync"):
         if state_key in raw_data:
             _, state_value = validate_state_record(state_key, raw_data[state_key])
             result[state_key] = state_value
