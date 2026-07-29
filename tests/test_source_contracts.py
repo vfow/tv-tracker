@@ -49,17 +49,18 @@ class SourceContractTests(unittest.TestCase):
         self.assertIn('action:"watching"', ui_js)
         self.assertIn("1.5", index_html)
 
-    def test_schedule_uses_tmdb_date_and_browser_local_time(self):
+    def test_schedule_uses_local_release_day_when_timestamp_exists(self):
         app_js = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
         audit_utils_js = (ROOT / "static/js/audit-utils.js").read_text(encoding="utf-8")
         index_html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
         self.assertIn("chooseEpisodeCalendarDate", app_js)
         self.assertIn("makeCanonicalEpisodeReleaseDate", app_js)
-        self.assertIn("TVmaze contributes time only when that exact", app_js)
+        self.assertIn("getEpisodeDisplayCalendarDateString", app_js)
         self.assertIn("hasTrustworthyTVmazeAirtime", app_js)
         self.assertIn("const TVMAZE_RELEASE_SAFETY_VERSION = 5", app_js)
-        self.assertIn("The offset-bearing airstamp proves", audit_utils_js)
-        self.assertIn("move the official TMDB calendar date", audit_utils_js)
+        self.assertIn("const TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION = 2", app_js)
+        self.assertIn("real broadcast instant", audit_utils_js)
+        self.assertIn("current local calendar day", audit_utils_js)
         self.assertIn('hour12:true', app_js)
         self.assertIn("date.setDate(date.getDate() + 1)", audit_utils_js)
         self.assertNotIn("Asia/Kuala_Lumpur", app_js)
@@ -67,11 +68,11 @@ class SourceContractTests(unittest.TestCase):
         self.assertNotIn("DATE_ONLY_EPISODE_UTC_OFFSET", app_js)
         self.assertNotIn("TVMAZE_MAX_DATE_DIFF_DAYS", app_js)
         self.assertNotIn('return releaseInfo.estimated ? "~"', app_js)
-        self.assertIn("Official TMDB calendar dates control schedule ordering", app_js)
+        self.assertIn("Schedule ordering and grouping use the user's local calendar day", app_js)
         self.assertIn("TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION", app_js)
         self.assertIn("Prefer TMDB's top-level next episode before cached season rows", app_js)
         self.assertIn('show.last_tmdb_refresh = ""', app_js)
-        self.assertIn("1.5.2-persistent-no-early-day", index_html)
+        self.assertIn("1.5.3-local-release-day", index_html)
 
 
 if __name__ == "__main__":

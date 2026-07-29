@@ -1,8 +1,8 @@
-# TV Tracker v1.5.2 Persistent No-Early-Day Repair Manifest
+# TV Tracker v1.5.3 Local Release Day Fix Manifest
 
-## v1.5.2 scope
+## v1.5.3 scope
 
-This focused patch fixes the wrong-day schedule display only. It does not remove TVmaze, does not create a 9 AM release rule, and does not change database schema, tracker data, backups, imports, or status behavior.
+This focused patch fixes the wrong-day schedule display for international/local timezone viewing. It does not remove TVmaze, does not create a 9 AM release rule, and does not change database schema, tracker data, backups, imports, or status behavior.
 
 This release is based on the approved v1.5 baseline source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, silent save queue, Watchlist status controls, and episode progress. The timing update documented below removes location-specific assumptions without changing the design.
 
@@ -71,6 +71,13 @@ The changed-files patch is based on:
 ```text
 tv-tracker-v1.5-main.zip
 ```
+
+
+## v1.5.3 local release-day correction
+
+The previous v1.5.1/v1.5.2 approach was too strict because it preserved the stored TMDB `air_date` as the displayed calendar day even when a verified offset-bearing release timestamp existed. v1.5.3 keeps TMDB `air_date` as stored data, but display/group/sort/countdown logic now uses the browser/device local date from a verified `airtime` + `airstamp` pair.
+
+This means a U.S. Thursday-night episode can correctly appear as Friday for a user in Malaysia or any other timezone where the actual release instant falls on Friday. Date-only episodes without a trustworthy timestamp continue to use the stored TMDB date.
 
 ## Watchlist status-control correction
 

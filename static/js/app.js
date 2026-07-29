@@ -51,7 +51,7 @@ var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
 const TVMAZE_RELEASE_SAFETY_VERSION = 5;
-const TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION = 1;
+const TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION = 2;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
@@ -3819,7 +3819,7 @@ function isCaughtUp(show){
     today.setHours(0,0,0,0);
 
     const airDate = makeLocalDate(
-        getEpisodeCalendarDateString(nextEp.air_date,nextEp)
+        getEpisodeDisplayCalendarDateString(nextEp.air_date,nextEp,show)
     );
 
     if(!airDate){
@@ -4137,6 +4137,25 @@ function getEpisodeCalendarDateString(airDateString,episodeInfo=null){
 
 
 
+function getEpisodeDisplayCalendarDateString(airDateString,episodeInfo=null,showInfo=null){
+
+    const releaseInfo = getEpisodeReleaseInfo(
+        airDateString,
+        episodeInfo,
+        showInfo
+    );
+
+    if(releaseInfo && releaseInfo.hasTime && releaseInfo.date){
+        return getLocalDateKey(releaseInfo.date);
+    }
+
+    return getEpisodeCalendarDateString(airDateString,episodeInfo);
+
+}
+
+
+
+
 function makeDateOnlyEpisodeReleaseDate(dateString){
 
     return TVTrackerAuditUtils.makeDateOnlyEpisodeReleaseDate(dateString);
@@ -4157,11 +4176,11 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
     }
 
     /*
-    TMDB owns the official calendar date. For the exact matching season and
-    episode, TVmaze may contribute only a verified explicit airtime and its
-    matching offset-bearing airstamp. Rebuild the instant on the TMDB date, then
-    let the browser format that instant in the device's current timezone. An
-    airstamp without an explicit airtime is ignored. No country is hardcoded.
+    TMDB owns the stored episode date. For the exact matching season and
+    episode, TVmaze may contribute a verified explicit airtime and an
+    offset-bearing airstamp. The airstamp is the real broadcast instant, so the
+    browser can convert it to the user's current local calendar day. An airstamp
+    without an explicit airtime is ignored. No country is hardcoded.
     */
     const exactDate = TVTrackerAuditUtils.makeCanonicalEpisodeReleaseDate(
         baseDateString,
@@ -4175,7 +4194,7 @@ function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
         return {
             date:exactDate,
             hasTime:true,
-            source:"tvmaze-clock"
+            source:"verified-local-timestamp"
         };
     }
 
@@ -4416,9 +4435,9 @@ function getUpcomingShows(){
     return items.sort((a,b)=>{
 
         /*
-        Official TMDB calendar dates control schedule ordering and grouping.
-        Local-time conversion is only a time display/refinement within the same
-        official date and must never reorder July 28 ahead of July 27.
+        Schedule ordering and grouping use the user's local calendar day when a
+        verified release timestamp exists. Date-only TMDB metadata still stays
+        as its official date.
         */
         const dateCompare = compareEpisodeCalendarDates(
             a.episode.air_date,
@@ -4971,8 +4990,8 @@ function compareDateStrings(dateA,dateB){
 function compareEpisodeCalendarDates(dateA,episodeA,dateB,episodeB){
 
     return compareDateStrings(
-        getEpisodeCalendarDateString(dateA,episodeA),
-        getEpisodeCalendarDateString(dateB,episodeB)
+        getEpisodeDisplayCalendarDateString(dateA,episodeA),
+        getEpisodeDisplayCalendarDateString(dateB,episodeB)
     );
 
 }
@@ -5008,7 +5027,7 @@ function getUpcomingGroup(airDateString,episodeInfo=null){
     }
 
     const airDate = makeLocalDate(
-        getEpisodeCalendarDateString(airDateString,episodeInfo)
+        getEpisodeDisplayCalendarDateString(airDateString,episodeInfo)
     );
 
     const today = new Date();
@@ -5101,7 +5120,7 @@ function getEpisodeReleaseTimeText(airDateString,episodeInfo=null,showInfo=null)
 function getDayDiffFromToday(dateString,episodeInfo=null){
 
     const date = makeLocalDate(
-        getEpisodeCalendarDateString(dateString,episodeInfo)
+        getEpisodeDisplayCalendarDateString(dateString,episodeInfo)
     );
 
     if(!date){
@@ -5407,7 +5426,7 @@ function getCountdownText(airDateString,episodeInfo=null){
     today.setHours(0,0,0,0);
 
     const airDate = makeLocalDate(
-        getEpisodeCalendarDateString(airDateString,episodeInfo)
+        getEpisodeDisplayCalendarDateString(airDateString,episodeInfo)
     );
 
     if(!airDate){
@@ -5438,7 +5457,7 @@ function getCountdownText(airDateString,episodeInfo=null){
 
 function formatAirDate(dateString,episodeInfo=null){
 
-    const calendarDate = getEpisodeCalendarDateString(
+    const calendarDate = getEpisodeDisplayCalendarDateString(
         dateString,
         episodeInfo
     );
