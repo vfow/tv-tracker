@@ -1,26 +1,57 @@
-# TV Tracker v1.6.1 — Exact Backup Restore Fix (TMDB Edition)
+# TV Tracker v1.6.1 — Source Split Foundation (TVmaze Edition with TMDB Artwork)
 
-This patch is applied over **TV Tracker v1.6.0 — TMDB Edition**.
+This is a **consolidated changed-files-only patch** applied directly over clean **TV Tracker v1.5**.
 
-## Included corrections
-
-**Native App Backup import**
-
-- Native App Backup JSON import is now treated as an exact restore.
-- The import flow no longer runs `autoUpdateStatuses` after loading the backup.
-- Imported show statuses are preserved from the backup instead of being recalculated during restore.
-- The server now accepts the app-owned top-level `import_info` state object that older/current backups can contain.
-- `import_info` is preserved in data and future backups instead of causing `Unsupported state key` errors.
-- The restore remains transactional: if validation fails, the current tracker data is not replaced.
-
-**Source-provider rules remain unchanged**
+It includes both:
 
 ```text
-Metadata Source: TMDB
+v1.6.0 — Source Split Foundation
+v1.6.1 — Exact Backup Restore Fix
+```
+
+Do not install the old v1.6.0 patch first. Do not install the separate v1.6.1 restore-fix patch after this.
+
+This is the **main recommended edition** to test first.
+
+## Active source rules
+
+```text
+Metadata Source: TVmaze
 Artwork Source: TMDB
 ```
 
-This patch does not change the TMDB/TVmaze source split.
+TVmaze controls show search, show metadata, episodes, seasons, episode names, air dates, Upcoming, and next episode logic. TMDB is used only for posters, backdrops, and hero images.
+
+## Included corrections
+
+**Source split**
+
+- Adds fixed provider mode for this edition.
+- Adds `static/js/source-provider.js`.
+- Adds `SOURCE_PROVIDER_RULES.md`.
+- Adds edition-specific cache-busting labels.
+- Settings displays the active metadata source and artwork source.
+- No source switch button is added.
+- The app no longer mixes TMDB and TVmaze for episode/date authority.
+- Old mixed metadata is preserved in data/backups but ignored when it is not allowed by this edition.
+
+**Exact native backup restore**
+
+- Native App Backup JSON import is treated as an exact restore.
+- Import no longer runs `autoUpdateStatuses` after loading a native backup.
+- Imported show statuses are preserved from the backup.
+- The server accepts and preserves the app-owned top-level `import_info` state object.
+- Fixes `Unsupported state key: import_info`.
+- If validation fails, current tracker data is not replaced.
+
+**What is not included**
+
+- No 9 AM release-time rule.
+- No release-time setting.
+- No database schema change.
+- No deletion of watched history.
+- No deletion of old TMDB/TVmaze metadata from backups.
+- No carry-forward of failed v1.5.1, v1.5.2, or v1.5.3 date hotfix attempts.
 
 ## Files changed
 
@@ -30,19 +61,20 @@ SOURCE_PROVIDER_RULES.md
 templates/index.html
 static/js/source-provider.js
 static/js/app.js
+static/js/ui.js
 app.py
 ```
 
 ## Install
 
-1. Export a fresh App Backup JSON before replacing files.
-2. Apply this patch only over **v1.6.0 — TMDB Edition**.
-3. Do not apply it over the other v1.6.0 editions.
-4. Extract the patch ZIP over the project root.
+1. Export a fresh App Backup JSON first.
+2. Start from a clean **TV Tracker v1.5** project copy or branch.
+3. Extract this patch ZIP over the v1.5 project root.
+4. Do not stack this patch with the other v1.6.1 consolidated editions.
 5. Commit with:
 
 ```text
-Repair TV Tracker v1.6.1 TMDB backup restore import
+Create TV Tracker v1.6.1 TVmaze Edition with TMDB Artwork
 ```
 
 6. Deploy normally:
@@ -59,14 +91,27 @@ git pull --ff-only origin main
 
 Confirm that:
 
-- Settings still shows `Metadata Source: TMDB`.
-- Settings still shows `Artwork Source: TMDB`.
-- Native App Backup JSON import no longer fails with `Unsupported state key: import_info`.
-- A native backup restore does not change show statuses during import.
+- Settings shows `Metadata Source: TVmaze`.
+- Settings shows `Artwork Source: TMDB`.
+- Native App Backup JSON import does not fail with `Unsupported state key: import_info`.
+- Native backup restore does not change show statuses during import.
 - Existing watched history remains intact.
 - App Backup JSON export still works after importing.
+- Upcoming uses only the edition's metadata source for episode/date logic.
 - Compatible TV Time/Refrakt import still works as a migration flow.
 
-## Notes
+## Safe testing rule
 
-This is a data-safety patch. It fixes restore/import behavior and does not modify provider selection, episode source rules, or database schema version.
+Each consolidated patch is an alternative over clean v1.5:
+
+```text
+v1.5 → v1.6.1 TMDB Edition
+v1.5 → v1.6.1 TVmaze Edition with TMDB Artwork
+v1.5 → v1.6.1 Strict TVmaze Edition
+```
+
+Do not stack them:
+
+```text
+v1.5 → TMDB patch → TVmaze patch → Strict TVmaze patch
+```

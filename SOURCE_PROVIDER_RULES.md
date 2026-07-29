@@ -1,11 +1,11 @@
 # TV Tracker Source Provider Rules
 
-This file documents the source-provider contract for **TV Tracker v1.6.1 — TMDB Edition**.
+This file documents the source-provider contract for **TV Tracker v1.6.1 — TVmaze Edition with TMDB Artwork**.
 
 ## Active sources
 
 ```text
-Metadata Source: TMDB
+Metadata Source: TVmaze
 Artwork Source: TMDB
 ```
 
@@ -54,3 +54,7 @@ The top-level `import_info` object is app-owned restore metadata. It should be a
 ## Compatible import rule
 
 Compatible TV Time/Refrakt import is different from native backup restore. Compatible import may map statuses and migrate source data because it is importing from another app, not restoring a TV Tracker backup.
+
+## Consolidated patch rule
+
+The v1.6.1 consolidated patches are applied directly over clean v1.5. They already include both the source split and the exact backup restore fix. Do not install v1.6.0 first.
