@@ -1,12 +1,12 @@
 # TV Tracker Source Provider Rules
 
-This file documents the source-provider contract for **TV Tracker v1.6.1 — Strict TVmaze Edition**.
+This file documents the source-provider contract for **TV Tracker v1.6.1 — TMDB Edition**.
 
 ## Active sources
 
 ```text
-Metadata Source: TVmaze
-Artwork Source: TVmaze
+Metadata Source: TMDB
+Artwork Source: TMDB
 ```
 
 ## Core rule
