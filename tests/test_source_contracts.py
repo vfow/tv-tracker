@@ -47,7 +47,7 @@ class SourceContractTests(unittest.TestCase):
         self.assertNotIn("watchlist-complete-mark", foundation_css)
         self.assertIn('<span class="completed-label">✓ Completed</span>', ui_js)
         self.assertIn('action:"watching"', ui_js)
-        self.assertIn("1.3.1-audit-watchlist-status", index_html)
+        self.assertIn("1.5", index_html)
 
     def test_schedule_uses_tmdb_date_and_browser_local_time(self):
         app_js = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
@@ -68,7 +68,10 @@ class SourceContractTests(unittest.TestCase):
         self.assertNotIn("TVMAZE_MAX_DATE_DIFF_DAYS", app_js)
         self.assertNotIn('return releaseInfo.estimated ? "~"', app_js)
         self.assertIn("Official TMDB calendar dates control schedule ordering", app_js)
-        self.assertIn("1.3.1-no-day-shift", index_html)
+        self.assertIn("TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION", app_js)
+        self.assertIn("Prefer TMDB's top-level next episode before cached season rows", app_js)
+        self.assertIn('show.last_tmdb_refresh = ""', app_js)
+        self.assertIn("1.5.2-persistent-no-early-day", index_html)
 
 
 if __name__ == "__main__":

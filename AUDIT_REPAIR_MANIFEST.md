@@ -1,6 +1,10 @@
-# TV Tracker v1.3.1 Audit Repair Manifest
+# TV Tracker v1.5.2 Persistent No-Early-Day Repair Manifest
 
-This release is built from the approved v1.3.1 schedule-and-status-controls source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, silent save queue, Watchlist status controls, and episode progress. The timing update documented below removes location-specific assumptions without changing the design.
+## v1.5.2 scope
+
+This focused patch fixes the wrong-day schedule display only. It does not remove TVmaze, does not create a 9 AM release rule, and does not change database schema, tracker data, backups, imports, or status behavior.
+
+This release is based on the approved v1.5 baseline source. It preserves the database schema version, tracker data format, hero-image cover/crop behavior, hover appearance, silent save queue, Watchlist status controls, and episode progress. The timing update documented below removes location-specific assumptions without changing the design.
 
 ## Reliability repairs included
 
@@ -42,7 +46,7 @@ The same command runs in `.github/workflows/audit-tests.yml`.
 The changed-files archive is cumulative against:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
+tv-tracker-v1.5-main.zip
 ```
 
 Overlay the changed files onto that exact approved source, preserving paths, then restart the Flask website. The new script cache version loads the timing update without changing database data.
@@ -65,7 +69,7 @@ The durable pending-save queue, reload recovery, server confirmation, and automa
 The changed-files patch is based on:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
+tv-tracker-v1.5-main.zip
 ```
 
 ## Watchlist status-control correction
@@ -79,5 +83,5 @@ tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
 The Watchlist status-control work remains inherited from:
 
 ```text
-tv-tracker-v1.3.1-audit-repair-schedule-status-controls-full.zip
+tv-tracker-v1.5-main.zip
 ```

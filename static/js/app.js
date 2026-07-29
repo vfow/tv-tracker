@@ -51,6 +51,7 @@ var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
 const TVMAZE_RELEASE_SAFETY_VERSION = 5;
+const TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION = 1;
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
@@ -588,6 +589,18 @@ function normalizeExistingData(){
             sanitizeStoredTVmazeTiming(show);
             show._tvmaze_last_refresh = "";
             show._tvmaze_release_safety_version = TVMAZE_RELEASE_SAFETY_VERSION;
+        }
+
+        if(show._tmdb_schedule_airdate_repair_version !== TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION){
+            /*
+            v1.5.2 repair: older cached season rows may already contain a
+            previous-day air_date copied from schedule metadata. Force one
+            normal TMDB refresh so cached _episode_list/_episode_details rows
+            are rewritten from TMDB's official season data, then stamp the show
+            so this repair is not repeated on every startup.
+            */
+            show.last_tmdb_refresh = "";
+            show._tmdb_schedule_airdate_repair_version = TMDB_SCHEDULE_AIRDATE_REPAIR_VERSION;
         }
 
         syncNextEpisodeFromTMDB(show);
@@ -4675,6 +4688,30 @@ function getFutureScheduleEpisodes(show){
     }
 
 
+    if(
+        show.next_episode_to_air &&
+        show.next_episode_to_air.air_date
+    ){
+
+        const next = show.next_episode_to_air;
+
+        /*
+        Prefer TMDB's top-level next episode before cached season rows. This
+        prevents an older cached _episode_list air_date from winning the
+        duplicate check and making a Friday episode appear as Thursday.
+        */
+        addFutureEpisode(
+            next.season_number,
+            next.episode_number,
+            next.name || "",
+            next.air_date || "",
+            next.still_path || "",
+            next
+        );
+
+    }
+
+
     Object.keys(episodeLists).forEach(seasonKey=>{
 
         const seasonNumber = Number(seasonKey);
@@ -4703,25 +4740,6 @@ function getFutureScheduleEpisodes(show){
         });
 
     });
-
-
-    if(
-        show.next_episode_to_air &&
-        show.next_episode_to_air.air_date
-    ){
-
-        const next = show.next_episode_to_air;
-
-        addFutureEpisode(
-            next.season_number,
-            next.episode_number,
-            next.name || "",
-            next.air_date || "",
-            next.still_path || "",
-            next
-        );
-
-    }
 
 
     futureEpisodes.sort((a,b)=>{

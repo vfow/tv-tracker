@@ -1,17 +1,29 @@
-# TV Tracker v1.3.1
+# TV Tracker v1.5.2
+
+## v1.5.2 Persistent No-Early-Day Repair
+
+This patch fixes the case where v1.5.1 did not help because the app already had stale cached season rows. The app now prefers TMDB `next_episode_to_air` before cached `_episode_list` rows when building Upcoming, and it forces a one-time TMDB schedule refresh so cached episode dates are rewritten from TMDB's official season data.
+
+## v1.5.1 No Day-Shift Focused Fix
+
+- Fixes episodes appearing one calendar day early when timezone conversion moved a TMDB air date backward.
+- Keeps TMDB's official calendar date as the display, grouping, countdown, and schedule-ordering date.
+- Keeps TVmaze in the system; TVmaze may still contribute an exact matched clock time, but its offset no longer changes the official calendar day.
+- Does not add a 9 AM availability rule.
+- Does not change database schema, imports, backups, statuses, profile data, metadata sync, or existing tracker data.
 
 Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CSS, and vanilla JavaScript.
 
-## v1.3.1 Watchlist status-control correction
+## v1.5 Watchlist status-control correction
 
 - Paused, Plan To Watch, and Dropped rows now use the same empty circular control as the Watching list instead of play or restore icons.
 - Pressing that circle changes the show to Watching and immediately moves it to the Watching filter.
 - Existing watched progress is preserved, so Paused and Dropped shows resume from where viewing stopped.
 - Completed rows have no right-side circle or icon and display `✓ Completed` in green in the original style.
 - Statuses remain editable from every show-detail window.
-- This update includes and preserves the v1.3.1 browser-local timing rules and all Audit Repair protections.
+- This update includes and preserves the v1.5 browser-local timing rules and all Audit Repair protections.
 
-## v1.3.1 Browser-local episode timing
+## v1.5 Browser-local episode timing
 
 - TMDB remains authoritative for the official episode calendar date used by Watchlist, Upcoming, countdowns, and episode details.
 - TVmaze contributes only the clock time for the exact matching season and episode. Its calendar date never replaces a valid TMDB date.
@@ -22,14 +34,14 @@ Private, single-admin TV tracking website built with Flask, PostgreSQL, HTML, CS
 - Metadata refreshes replace corrected TVmaze times and remove stale timing values before rebuilding Upcoming.
 - No design, image, hover, database-schema, save-queue, or tracker-data behavior changed.
 
-## v1.3.1 Audit Repair — silent background saving
+## v1.5 Audit Repair — silent background saving
 
 - The durable save queue remains enabled and survives reloads.
 - Normal saves, retries, synchronization interruptions, and recovery display no save-status banners or automatic toasts.
 - Operations remain queued until the server confirms them, then clear automatically.
 - Updated cache-busting ensures Firefox loads the silent background-save code.
 
-## v1.3.1 Audit Repair
+## v1.5 Audit Repair
 
 - Date-only episodes display only their TMDB date and remain Upcoming through the end of that date in the browser/device timezone.
 - The unsolicited Release Time settings and per-show override controls have been removed.
@@ -207,8 +219,8 @@ The same suite runs automatically through `.github/workflows/audit-tests.yml`.
 
 ## Release tag
 
-The stable Git tag is:
+The stable release label is:
 
 ```text
-v1.3.1
+v1.5.2
 ```
