@@ -126,13 +126,11 @@
             return null;
         }
 
-        /*
-        A verified offset-bearing TVmaze airstamp is the real broadcast instant.
-        Use that instant directly and let the browser convert it to the user's
-        current local calendar day. This fixes the Malaysia/UTC+ style case
-        where a U.S. Thursday-night episode is actually Friday locally.
-        */
-        const result = new Date(String(airstamp || "").trim());
+        const timeParts = parseExplicitAirtime(airtime);
+        const timestampParts = parseOffsetTimestamp(airstamp);
+        const result = new Date(
+            `${canonicalDate}T${timeParts.hour}:${timeParts.minute}:00${timestampParts.offset}`
+        );
 
         return Number.isNaN(result.getTime()) ? null : result;
     }

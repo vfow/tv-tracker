@@ -1575,8 +1575,7 @@ function prepareUpcomingDisplayItems(groupItems){
                     otherEp.type === "future" &&
                     String(other.show.tmdb_id) === String(show.tmdb_id) &&
                     Number(otherEp.season_number) === Number(ep.season_number) &&
-                    getEpisodeDisplayCalendarDateString(otherEp.air_date,otherEp,other.show) ===
-                    getEpisodeDisplayCalendarDateString(ep.air_date,ep,show)
+                    String(otherEp.air_date || "") === String(ep.air_date || "")
                 );
 
             });
@@ -1607,8 +1606,7 @@ function prepareUpcomingDisplayItems(groupItems){
 
             return (
                 Number(extra.season_number) === Number(ep.season_number) &&
-                getEpisodeDisplayCalendarDateString(extra.air_date,extra,show) ===
-                getEpisodeDisplayCalendarDateString(ep.air_date,ep,show)
+                String(extra.air_date || "") === String(ep.air_date || "")
             );
 
         })
@@ -1639,7 +1637,7 @@ function getUpcomingBatchKey(show,episode){
     return [
         String(show.tmdb_id),
         String(episode.season_number),
-        getEpisodeDisplayCalendarDateString(episode.air_date,episode,show),
+        String(episode.air_date || ""),
         String(episode.type || "")
     ].join("-");
 

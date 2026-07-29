@@ -34,29 +34,28 @@ assert.strictEqual(
     "2026-07-26"
 );
 
-// TVmaze contributes only when the exact episode has an explicit clock and an
-// offset-bearing airstamp. The airstamp is the real release instant, so local
-// browser timezones may move the display day forward or backward.
+// TVmaze contributes only the exact matching episode's clock time and source
+// offset. Its calendar date is ignored and the clock is attached to TMDB's
+// canonical date before the browser converts the instant to local time.
 const canonicalUtcRelease = utils.makeCanonicalEpisodeReleaseDate(
     "2026-07-27",
     "17:00",
     "2026-07-26T17:00:00Z"
 );
-assert.strictEqual(canonicalUtcRelease.toISOString(),"2026-07-26T17:00:00.000Z");
+assert.strictEqual(
+    canonicalUtcRelease.toISOString(),
+    "2026-07-27T17:00:00.000Z"
+);
 
 const canonicalOffsetRelease = utils.makeCanonicalEpisodeReleaseDate(
     "2026-07-27",
-    "00:30",
-    "2026-07-26T00:30:00+09:00"
+    "21:00",
+    "2026-07-26T21:00:00-04:00"
 );
-assert.strictEqual(canonicalOffsetRelease.toISOString(),"2026-07-25T15:30:00.000Z");
-
-const malaysiaFridayRelease = utils.makeCanonicalEpisodeReleaseDate(
-    "2026-07-30",
-    "22:00",
-    "2026-07-30T22:00:00-04:00"
+assert.strictEqual(
+    canonicalOffsetRelease.toISOString(),
+    "2026-07-28T01:00:00.000Z"
 );
-assert.strictEqual(malaysiaFridayRelease.toISOString(),"2026-07-31T02:00:00.000Z");
 
 // An offset-bearing airstamp without an explicitly published TVmaze airtime
 // is not trustworthy. It may be generated from a default show schedule.
