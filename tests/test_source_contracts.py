@@ -13,6 +13,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         self.assertNotIn('Metadata ' + 'Source', ui)
         self.assertNotIn('Artwork ' + 'Source', ui)
+        self.assertNotIn('<h2>SOURCE</h2>', ui)
+        self.assertIn('Export or import a full backup of this tracker.', ui)
+        self.assertNotIn('Export a full backup of this tracker.', ui)
 
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')

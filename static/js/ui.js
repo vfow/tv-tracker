@@ -4627,27 +4627,11 @@ function renderSettings(){
 
             </div>
 
-
-
-            <div class="settings-section">
-                <div class="settings-section-header">
-                    <h2>SOURCE</h2>
-                </div>
-
-                <div class="settings-summary-grid">
-                    <div class="settings-summary-card">
-                    </div>
-
-                    <div class="settings-summary-card">
-                    </div>
-                </div>
-            </div>
-
             <div class="settings-section">
 
                 <div class="settings-section-header">
                     <h2>APP BACKUP</h2>
-                    <p>Export a full backup of this tracker.</p>
+                    <p>Export or import a full backup of this tracker.</p>
                 </div>
 
                 <div class="settings-summary-grid">
