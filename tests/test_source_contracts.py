@@ -33,6 +33,14 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('clean_legacy_metadata', app_py)
         self.assertIn('cleanLegacyMetadata', app_js)
 
+    def test_empty_season_has_final_empty_state(self):
+        ui = self.read('static/js/ui.js')
+        app_js = self.read('static/js/app.js')
+        self.assertIn('Episode list not announced yet.', ui)
+        self.assertIn('Loading episode list...', ui)
+        self.assertIn('seasonEpisodeListIsLoadedEmpty', ui)
+        self.assertIn('Number(show._season_episodes[seasonKey] || 0) === 0', app_js)
+
 
 if __name__ == '__main__':
     unittest.main()

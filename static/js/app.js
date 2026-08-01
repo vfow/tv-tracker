@@ -3136,15 +3136,29 @@ function seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh=false){
         return false;
     }
 
-    const list = show._episode_list[String(seasonNumber)];
+    const seasonKey = String(seasonNumber);
+    const list = show._episode_list[seasonKey];
+    const hasKnownSeasonCount = (
+        show._season_episodes &&
+        Object.prototype.hasOwnProperty.call(show._season_episodes,seasonKey)
+    );
 
     return (
         !forceRefresh &&
         Array.isArray(list) &&
-        list.length > 0 &&
-        list.every(ep=>{
-            return "still_path" in ep && "air_date" in ep;
-        })
+        (
+            (
+                list.length === 0 &&
+                hasKnownSeasonCount &&
+                Number(show._season_episodes[seasonKey] || 0) === 0
+            ) ||
+            (
+                list.length > 0 &&
+                list.every(ep=>{
+                    return "still_path" in ep && "air_date" in ep;
+                })
+            )
+        )
     );
 
 }

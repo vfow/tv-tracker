@@ -2496,10 +2496,40 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
 
 
+function seasonEpisodeListIsLoadedEmpty(show,seasonNumber){
+
+    const seasonKey = String(seasonNumber);
+
+    return (
+        show &&
+        show._episode_list &&
+        Array.isArray(show._episode_list[seasonKey]) &&
+        show._episode_list[seasonKey].length === 0 &&
+        show._season_episodes &&
+        Object.prototype.hasOwnProperty.call(show._season_episodes,seasonKey) &&
+        Number(show._season_episodes[seasonKey] || 0) === 0
+    );
+
+}
+
+
+
+function renderSeasonEpisodeEmptyStateHTML(show,seasonNumber){
+
+    const message = seasonEpisodeListIsLoadedEmpty(show,seasonNumber)
+    ? "Episode list not announced yet."
+    : "Loading episode list...";
+
+    return `<div class="season-loading">${message}</div>`;
+
+}
+
+
+
 function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
 
     if(!episodeList || episodeList.length === 0){
-        return `<div class="season-loading">Loading episode list...</div>`;
+        return renderSeasonEpisodeEmptyStateHTML(show,seasonNumber);
     }
 
     let html = "";
@@ -3334,7 +3364,7 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
     : null;
 
     if(!episodeList || episodeList.length === 0){
-        return `<div class="season-loading">Loading episode list...</div>`;
+        return renderSeasonEpisodeEmptyStateHTML(show,seasonNumber);
     }
 
     let html = "";
