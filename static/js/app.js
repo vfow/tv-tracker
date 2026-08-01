@@ -35,6 +35,7 @@ var currentSearchController = null;
 var searchRequestId = 0;
 var lastDiscoverSearchQuery = "";
 var lastDiscoverSearchResults = [];
+var discoverSearchState = {query:"",page:1,totalPages:1,loading:false};
 var discoverHubState = {
     loaded:false,
     loading:false,
@@ -125,7 +126,225 @@ function cleanLegacyMetadata(value){
 
 function getCleanTrackerDataCopy(data){
     const copy = JSON.parse(JSON.stringify(data || {}));
+    normalizeTrackerDataForEpisodeIntegrity(copy);
     return cleanLegacyMetadata(copy);
+}
+
+
+function getEpisodeIdentityKey(showId,season,episode){
+    const cleanShowId = String(showId || "").trim();
+    const cleanSeason = Number(season);
+    const cleanEpisode = Number(episode);
+
+    if(!cleanShowId || !Number.isFinite(cleanSeason) || !Number.isFinite(cleanEpisode)){
+        return "";
+    }
+
+    return cleanShowId + "::" + String(cleanSeason) + "::" + String(cleanEpisode);
+}
+
+function getHistoryEntryEpisodeKey(entry){
+    if(!entry || typeof entry !== "object"){
+        return "";
+    }
+
+    return getEpisodeIdentityKey(
+        entry.tmdb_id || entry.show_id,
+        entry.season,
+        entry.episode
+    );
+}
+
+function getDeterministicHistoryId(showId,season,episode){
+    const cleanShowId = String(showId || "").trim();
+    const cleanSeason = Number(season);
+    const cleanEpisode = Number(episode);
+
+    if(!cleanShowId || !Number.isFinite(cleanSeason) || !Number.isFinite(cleanEpisode)){
+        return "";
+    }
+
+    return "watched-" + cleanShowId + "-s" + cleanSeason + "-e" + cleanEpisode;
+}
+
+function getHistoryEntryTimestampValue(entry){
+    const value = entry && (entry.watched_at || entry.date || "");
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? time : 0;
+}
+
+function preferHistoryEntryForEpisode(left,right){
+    if(!left){
+        return right;
+    }
+
+    if(!right){
+        return left;
+    }
+
+    const leftTime = getHistoryEntryTimestampValue(left);
+    const rightTime = getHistoryEntryTimestampValue(right);
+
+    if(rightTime > leftTime){
+        return right;
+    }
+
+    return left;
+}
+
+function normalizeWatchedEpisodeArray(values){
+    const seen = new Set();
+    const output = [];
+
+    (Array.isArray(values) ? values : []).forEach(value=>{
+        const episode = Number(value);
+
+        if(!Number.isFinite(episode) || seen.has(episode)){
+            return;
+        }
+
+        seen.add(episode);
+        output.push(episode);
+    });
+
+    output.sort((a,b)=>a-b);
+    return output;
+}
+
+function normalizeShowEpisodeProgress(show){
+    if(!show || typeof show !== "object"){
+        return;
+    }
+
+    if(!show.episodes_watched || typeof show.episodes_watched !== "object"){
+        show.episodes_watched = {};
+    }
+
+    Object.keys(show.episodes_watched).forEach(seasonKey=>{
+        const season = Number(seasonKey);
+        const clean = normalizeWatchedEpisodeArray(show.episodes_watched[seasonKey]);
+        delete show.episodes_watched[seasonKey];
+
+        if(Number.isFinite(season) && clean.length > 0){
+            show.episodes_watched[String(season)] = clean;
+        }
+    });
+}
+
+function dedupeTrackerHistoryEntries(data){
+    if(!data || !Array.isArray(data.history)){
+        return [];
+    }
+
+    const byEpisode = new Map();
+    const passthrough = [];
+    const removedIds = [];
+
+    data.history.forEach((entry,index)=>{
+        if(!entry || typeof entry !== "object"){
+            return;
+        }
+
+        const key = getHistoryEntryEpisodeKey(entry);
+
+        if(!key){
+            passthrough.push(entry);
+            return;
+        }
+
+        if(!entry.id){
+            entry.id = getDeterministicHistoryId(entry.tmdb_id || entry.show_id,entry.season,entry.episode) || ("history-" + index);
+        }
+
+        const previous = byEpisode.get(key);
+        const preferred = preferHistoryEntryForEpisode(previous,entry);
+
+        if(previous && previous !== preferred && previous.id){
+            removedIds.push(String(previous.id));
+        }
+
+        if(previous && entry !== preferred && entry.id){
+            removedIds.push(String(entry.id));
+        }
+
+        byEpisode.set(key,preferred);
+    });
+
+    const deduped = [...passthrough,...Array.from(byEpisode.values())];
+    deduped.sort((a,b)=>getHistoryEntryTimestampValue(b) - getHistoryEntryTimestampValue(a));
+    data.history = deduped;
+
+    return Array.from(new Set(removedIds));
+}
+
+function normalizeTrackerDataForEpisodeIntegrity(data){
+    if(!data || typeof data !== "object"){
+        return [];
+    }
+
+    if(!data.shows || typeof data.shows !== "object"){
+        data.shows = {};
+    }
+
+    Object.values(data.shows).forEach(show=>normalizeShowEpisodeProgress(show));
+
+    if(!Array.isArray(data.history)){
+        data.history = [];
+        return [];
+    }
+
+    return dedupeTrackerHistoryEntries(data);
+}
+
+function removeExistingHistoryEntriesForEpisode(showId,season,episode){
+    if(!Array.isArray(DATA.history)){
+        DATA.history = [];
+        return [];
+    }
+
+    const targetKey = getEpisodeIdentityKey(showId,season,episode);
+
+    if(!targetKey){
+        return [];
+    }
+
+    const removedIds = [];
+
+    DATA.history = DATA.history.filter(entry=>{
+        const matches = getHistoryEntryEpisodeKey(entry) === targetKey;
+
+        if(matches && entry && entry.id){
+            removedIds.push(String(entry.id));
+        }
+
+        return !matches;
+    });
+
+    return removedIds;
+}
+
+function getHistoryDeleteIdsFromAddedEntries(entries){
+    return Array.isArray(entries) && Array.isArray(entries._deletedHistoryIds)
+    ? entries._deletedHistoryIds.map(String)
+    : [];
+}
+
+function combineHistoryDeleteIds(){
+    const seen = new Set();
+    const output = [];
+
+    Array.from(arguments).forEach(values=>{
+        (Array.isArray(values) ? values : []).forEach(value=>{
+            const id = String(value || "");
+
+            if(id && !seen.has(id)){
+                seen.add(id);
+                output.push(id);
+            }
+        });
+    });
+
+    return output;
 }
 
 
@@ -338,10 +557,15 @@ function historyEntryIds(entries){
 }
 
 async function saveShowMutation(showId,addedEntries=[],deletedHistoryIds=[]){
+    const combinedDeletedHistoryIds = combineHistoryDeleteIds(
+        deletedHistoryIds,
+        getHistoryDeleteIdsFromAddedEntries(addedEntries)
+    );
+
     return saveData({
         showIds:[String(showId)],
         historyUpsertIds:historyEntryIds(addedEntries),
-        historyDeleteIds:(deletedHistoryIds || []).map(String)
+        historyDeleteIds:combinedDeletedHistoryIds
     });
 }
 
@@ -599,6 +823,7 @@ function normalizeExistingData(){
     }
 
     cleanLegacyMetadata(DATA);
+    normalizeTrackerDataForEpisodeIntegrity(DATA);
 
     ensureProfileData();
 
@@ -2002,10 +2227,11 @@ function writeDiscoverHubCache(sections){
 
 
 
-async function tmdbGetDiscoverList(path,params={}){
+async function tmdbGetDiscoverPage(path,params={}){
 
     const searchParams = new URLSearchParams();
-    searchParams.set("page",String(params.page || 1));
+    const pageNumber = Math.max(1,Number(params.page || 1));
+    searchParams.set("page",String(pageNumber));
 
     Object.keys(params || {}).forEach(key=>{
 
@@ -2028,9 +2254,23 @@ async function tmdbGetDiscoverList(path,params={}){
     }
 
     const data = await response.json();
-    return data.results || [];
+
+    return {
+        results:data.results || [],
+        page:Number(data.page || pageNumber),
+        total_pages:Number(data.total_pages || pageNumber || 1),
+        total_results:Number(data.total_results || 0)
+    };
 
 }
+
+
+
+async function tmdbGetDiscoverList(path,params={}){
+    const payload = await tmdbGetDiscoverPage(path,params);
+    return payload.results || [];
+}
+
 
 
 
@@ -2055,7 +2295,7 @@ function normalizeDiscoverHubShow(show){
 
 
 
-function buildDiscoverHubSection(key,title,subtitle,shows,usedIds){
+function buildDiscoverHubSection(key,title,subtitle,shows,usedIds,options={}){
 
     const output = [];
 
@@ -2082,10 +2322,113 @@ function buildDiscoverHubSection(key,title,subtitle,shows,usedIds){
         key:key,
         title:title,
         subtitle:subtitle,
-        shows:output.slice(0,12)
+        shows:output.slice(0,20),
+        page:Number(options.page || 1),
+        totalPages:Number(options.totalPages || 1),
+        hasMore:Number(options.page || 1) < Number(options.totalPages || 1),
+        loadingMore:false
     };
 
 }
+
+function getDiscoverSectionRequestConfig(key){
+    const today = getLocalDateKey(new Date());
+
+    if(key === "coming-soon"){
+        return {
+            path:"discover/tv",
+            params:{
+                "first_air_date.gte":today,
+                "sort_by":"popularity.desc",
+                "include_adult":"false",
+                "include_null_first_air_dates":"false"
+            },
+            filter:show=>show && show.first_air_date && show.first_air_date >= today
+        };
+    }
+
+    if(key === "trending-week"){
+        return {path:"trending/tv/week",params:{},filter:null};
+    }
+
+    if(key === "airing-now"){
+        return {path:"tv/on_the_air",params:{},filter:null};
+    }
+
+    if(key === "popular"){
+        return {path:"tv/popular",params:{},filter:null};
+    }
+
+    return null;
+}
+
+async function loadMoreDiscoverSection(sectionKey){
+    const key = String(sectionKey || "");
+    const state = discoverHubState || {};
+    const sections = Array.isArray(state.sections) ? state.sections : [];
+    const section = sections.find(item=>String(item.key || "") === key);
+    const config = getDiscoverSectionRequestConfig(key);
+
+    if(!section || !config || section.loadingMore){
+        return;
+    }
+
+    const currentPage = Number(section.page || 1);
+    const totalPages = Number(section.totalPages || 1);
+
+    if(totalPages > 0 && currentPage >= totalPages){
+        section.hasMore = false;
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+        return;
+    }
+
+    section.loadingMore = true;
+
+    if(typeof renderDiscoverHub === "function"){
+        renderDiscoverHub();
+    }
+
+    try{
+        const nextPage = currentPage + 1;
+        const payload = await tmdbGetDiscoverPage(config.path,Object.assign({},config.params,{page:nextPage}));
+        const existing = new Set((section.shows || []).map(show=>String(show.id)));
+        const newShows = [];
+
+        (payload.results || [])
+        .filter(show=>config.filter ? config.filter(show) : true)
+        .forEach(raw=>{
+            const show = normalizeDiscoverHubShow(raw);
+
+            if(!show || existing.has(String(show.id))){
+                return;
+            }
+
+            existing.add(String(show.id));
+            newShows.push(show);
+        });
+
+        section.shows = (section.shows || []).concat(newShows);
+        section.page = Number(payload.page || nextPage);
+        section.totalPages = Number(payload.total_pages || totalPages || section.page);
+        section.hasMore = section.page < section.totalPages;
+        section.loadingMore = false;
+        writeDiscoverHubCache(sections);
+
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+    }catch(error){
+        section.loadingMore = false;
+        showToast(error && error.message ? error.message : "Could not load more shows");
+
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+    }
+}
+
 
 
 
@@ -2135,15 +2478,15 @@ async function loadDiscoverHub(force=false){
         const today = getLocalDateKey(new Date());
 
         const [comingSoon,trendingWeek,airingNow,popular] = await Promise.all([
-            tmdbGetDiscoverList("discover/tv",{
+            tmdbGetDiscoverPage("discover/tv",{
                 "first_air_date.gte":today,
                 "sort_by":"popularity.desc",
                 "include_adult":"false",
                 "include_null_first_air_dates":"false"
             }),
-            tmdbGetDiscoverList("trending/tv/week"),
-            tmdbGetDiscoverList("tv/on_the_air"),
-            tmdbGetDiscoverList("tv/popular")
+            tmdbGetDiscoverPage("trending/tv/week"),
+            tmdbGetDiscoverPage("tv/on_the_air"),
+            tmdbGetDiscoverPage("tv/popular")
         ]);
 
         const usedIds = new Set();
@@ -2153,29 +2496,33 @@ async function loadDiscoverHub(force=false){
                 "coming-soon",
                 "Coming Soon",
                 "",
-                comingSoon.filter(show=>show && show.first_air_date && show.first_air_date >= today),
-                usedIds
+                comingSoon.results.filter(show=>show && show.first_air_date && show.first_air_date >= today),
+                usedIds,
+                {page:comingSoon.page,totalPages:comingSoon.total_pages}
             ),
             buildDiscoverHubSection(
                 "trending-week",
                 "Trending This Week",
                 "",
-                trendingWeek,
-                usedIds
+                trendingWeek.results,
+                usedIds,
+                {page:trendingWeek.page,totalPages:trendingWeek.total_pages}
             ),
             buildDiscoverHubSection(
                 "airing-now",
                 "Airing Now",
                 "",
-                airingNow,
-                usedIds
+                airingNow.results,
+                usedIds,
+                {page:airingNow.page,totalPages:airingNow.total_pages}
             ),
             buildDiscoverHubSection(
                 "popular",
                 "Popular",
                 "",
-                popular,
-                usedIds
+                popular.results,
+                usedIds,
+                {page:popular.page,totalPages:popular.total_pages}
             )
         ];
 
@@ -2225,21 +2572,11 @@ async function searchShows(query){
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
+        discoverSearchState = {query:"",page:1,totalPages:1,loading:false};
         renderSearchIntro();
 
         return;
 
-    }
-
-    const cachedResults = typeof tmdbGetCachedSearchShows === "function"
-    ? tmdbGetCachedSearchShows(cleanQuery)
-    : null;
-
-    if(cachedResults && cachedResults.length){
-        lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = cachedResults.slice(0,10);
-        renderSearchResults(lastDiscoverSearchResults);
-        return;
     }
 
     cancelActiveSearchRequest();
@@ -2251,18 +2588,27 @@ async function searchShows(query){
     currentSearchController = controller;
     const requestId = ++searchRequestId;
 
+    discoverSearchState = {query:cleanQuery,page:1,totalPages:1,loading:true};
     renderSearchLoading(cleanQuery);
 
     try{
 
-        const shows = await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined});
+        const payload = typeof tmdbSearchShowsPage === "function"
+        ? await tmdbSearchShowsPage(cleanQuery,1,{signal:controller ? controller.signal : undefined})
+        : {results:await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined}),page:1,total_pages:1};
 
         if(requestId !== searchRequestId){
             return;
         }
 
         lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = (shows || []).slice(0,10);
+        lastDiscoverSearchResults = payload.results || [];
+        discoverSearchState = {
+            query:cleanQuery,
+            page:Number(payload.page || 1),
+            totalPages:Number(payload.total_pages || 1),
+            loading:false
+        };
 
         renderSearchResults(lastDiscoverSearchResults);
 
@@ -2276,6 +2622,7 @@ async function searchShows(query){
             return;
         }
 
+        discoverSearchState.loading = false;
         showToast(error.message || "Network error");
 
     }finally{
@@ -2286,6 +2633,65 @@ async function searchShows(query){
 
     }
 
+}
+
+
+
+async function loadMoreSearchResults(){
+    const state = discoverSearchState || {};
+    const query = String(state.query || "").trim();
+
+    if(!query || state.loading){
+        return;
+    }
+
+    const nextPage = Number(state.page || 1) + 1;
+    const totalPages = Number(state.totalPages || 1);
+
+    if(totalPages > 0 && nextPage > totalPages){
+        return;
+    }
+
+    state.loading = true;
+    discoverSearchState = state;
+
+    if(typeof renderSearchResults === "function"){
+        renderSearchResults(lastDiscoverSearchResults || []);
+    }
+
+    try{
+        const payload = typeof tmdbSearchShowsPage === "function"
+        ? await tmdbSearchShowsPage(query,nextPage)
+        : {results:[],page:nextPage,total_pages:nextPage};
+        const existing = new Set((lastDiscoverSearchResults || []).map(show=>String(show.id)));
+        const fresh = (payload.results || []).filter(show=>{
+            if(!show || !show.id || existing.has(String(show.id))){
+                return false;
+            }
+
+            existing.add(String(show.id));
+            return true;
+        });
+
+        lastDiscoverSearchResults = (lastDiscoverSearchResults || []).concat(fresh);
+        discoverSearchState = {
+            query:query,
+            page:Number(payload.page || nextPage),
+            totalPages:Number(payload.total_pages || totalPages || nextPage),
+            loading:false
+        };
+
+        if(typeof renderSearchResults === "function"){
+            renderSearchResults(lastDiscoverSearchResults);
+        }
+    }catch(error){
+        discoverSearchState.loading = false;
+        showToast(error && error.message ? error.message : "Could not load more results");
+
+        if(typeof renderSearchResults === "function"){
+            renderSearchResults(lastDiscoverSearchResults || []);
+        }
+    }
 }
 
 
@@ -2473,6 +2879,14 @@ async function openEpisodeModal(showId,season,episode,options={}){
     }
 
     const backToShow = typeof options === "object" ? !!options.backToShow : !!options;
+    const replaceInPlace = typeof options === "object" && options.replaceInPlace === true;
+    const modal = document.getElementById("show-modal");
+    const canReplaceInPlace = !!(
+        replaceInPlace &&
+        modal &&
+        modal.style.display !== "none" &&
+        modal.classList.contains("episode-detail-overlay")
+    );
 
     selectedShowId = id;
     selectedEpisodeContext = {
@@ -2482,14 +2896,19 @@ async function openEpisodeModal(showId,season,episode,options={}){
         backToShow:backToShow
     };
 
-    prepareModalForOpen("episode");
+    if(!canReplaceInPlace){
+        prepareModalForOpen("episode");
+    }
 
     const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
     const neededLoad = !seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh);
 
     await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
     renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
-    await revealPreparedModal();
+
+    if(!canReplaceInPlace){
+        await revealPreparedModal();
+    }
 
     if(neededLoad){
         saveData({showIds:[id]});
@@ -2646,7 +3065,7 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
 
     const episodeData = getEpisodeData(show,season,episode);
 
-    if(isWatched && !isEpisodeAired(episodeData.air_date,episodeData,show)){
+    if(isWatched && !isEpisodeLoggable(episodeData,show,season)){
         showToast("This episode has not aired yet");
         return;
     }
@@ -2893,7 +3312,7 @@ function getAiredEpisodeNumbersInSeason(show,seasonNumber){
     : [];
 
     return seasonList
-    .filter(ep=>isEpisodeAired(ep.air_date,ep,show))
+    .filter(ep=>isEpisodeLoggable(ep,show,seasonNumber))
     .map(ep=>Number(ep.episode_number))
     .filter(Number.isFinite)
     .sort((a,b)=>a-b);
@@ -3049,7 +3468,7 @@ function getAllAiredUnwatchedEpisodes(show){
 
         episodeList.forEach(ep=>{
 
-            if(!ep.air_date || !isEpisodeAired(ep.air_date,ep,show)){
+            if(!isEpisodeLoggable(ep,show,seasonNumber)){
                 return;
             }
 
@@ -3269,7 +3688,7 @@ function markEpAndPrevious(showId,season,episode){
 
                 if(
                     shouldInclude &&
-                    isEpisodeAired(ep.air_date,ep,show) &&
+                    isEpisodeLoggable(ep,show,s) &&
                     !alreadyWatched
                 ){
 
@@ -3401,10 +3820,10 @@ function getWatchedEpisodeCount(show){
 
     let count = 0;
 
-    const watched = show.episodes_watched || {};
+    const watched = show && show.episodes_watched ? show.episodes_watched : {};
 
     Object.values(watched).forEach(episodes=>{
-        count += episodes.length;
+        count += normalizeWatchedEpisodeArray(episodes).length;
     });
 
     return count;
@@ -3437,7 +3856,26 @@ function getTotalEpisodeCount(show){
 
 function getSeasonWatchedCount(show,seasonNumber){
 
-    const watched = show.episodes_watched[String(seasonNumber)] || [];
+    if(!show || !show.episodes_watched){
+        return 0;
+    }
+
+    const watched = normalizeWatchedEpisodeArray(show.episodes_watched[String(seasonNumber)] || []);
+    const episodeList = show._episode_list && Array.isArray(show._episode_list[String(seasonNumber)])
+    ? show._episode_list[String(seasonNumber)]
+    : null;
+
+    if(Array.isArray(episodeList) && episodeList.length > 0){
+        const knownEpisodes = new Set(
+            episodeList
+            .map(ep=>Number(ep.episode_number))
+            .filter(Number.isFinite)
+        );
+
+        if(knownEpisodes.size > 0){
+            return watched.filter(episode=>knownEpisodes.has(Number(episode))).length;
+        }
+    }
 
     return watched.length;
 
@@ -3522,7 +3960,7 @@ async function getEpisodesToBeMarked(show,targetSeason,targetEpisode){
 
             if(
                 shouldInclude &&
-                isEpisodeAired(ep.air_date,ep,show) &&
+                isEpisodeLoggable(ep,show,s) &&
                 !alreadyWatched
             ){
 
@@ -3556,6 +3994,7 @@ function addHistoryEntries(show,episodes){
     }
 
     const addedEntries = [];
+    const deletedHistoryIds = [];
     const watchedAt = new Date().toISOString();
 
     episodes.forEach((ep,index)=>{
@@ -3566,17 +4005,24 @@ function addHistoryEntries(show,episodes){
             ep.episode
         );
 
-        if(!isEpisodeAired(episodeData.air_date,episodeData,show)){
+        if(!isEpisodeLoggable(episodeData,show,ep.season)){
             return;
         }
 
+        deletedHistoryIds.push(...removeExistingHistoryEntriesForEpisode(
+            show.tmdb_id,
+            ep.season,
+            ep.episode
+        ));
+
         const historyEntry = {
-            id:
-            String(show.tmdb_id) + "-" +
-            String(ep.season) + "-" +
-            String(ep.episode) + "-" +
-            String(Date.now()) + "-" +
-            String(index),
+            id:getDeterministicHistoryId(show.tmdb_id,ep.season,ep.episode) || (
+                String(show.tmdb_id) + "-" +
+                String(ep.season) + "-" +
+                String(ep.episode) + "-" +
+                String(Date.now()) + "-" +
+                String(index)
+            ),
 
             tmdb_id:show.tmdb_id,
             title:show.title,
@@ -3596,6 +4042,8 @@ function addHistoryEntries(show,episodes){
         addedEntries.push(historyEntry);
 
     });
+
+    addedEntries._deletedHistoryIds = Array.from(new Set(deletedHistoryIds));
 
     if(addedEntries.length > 0){
         setShowActivityFromTimestamp(show,watchedAt);
@@ -3832,6 +4280,78 @@ function isEpisodeAired(airDateString,episodeInfo=null,showInfo=null){
 
     return new Date() >= releaseDate;
 
+}
+
+
+function getEpisodeNumberFromInfo(episodeInfo){
+    if(!episodeInfo || typeof episodeInfo !== "object"){
+        return NaN;
+    }
+
+    return Number(
+        episodeInfo.episode_number !== undefined
+        ? episodeInfo.episode_number
+        : episodeInfo.episode
+    );
+}
+
+function isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo=null){
+    if(!showInfo || !Number.isFinite(Number(seasonNumber))){
+        return false;
+    }
+
+    const season = Number(seasonNumber);
+    const episode = getEpisodeNumberFromInfo(episodeInfo);
+    const last = showInfo.last_episode_to_air || null;
+
+    if(last && Number.isFinite(Number(last.season_number))){
+        const lastSeason = Number(last.season_number);
+        const lastEpisode = Number(last.episode_number || 0);
+
+        if(season < lastSeason){
+            return true;
+        }
+
+        if(season === lastSeason && Number.isFinite(episode) && episode <= lastEpisode){
+            return true;
+        }
+    }
+
+    const next = showInfo.next_episode_to_air || null;
+
+    if(next && Number.isFinite(Number(next.season_number)) && season < Number(next.season_number)){
+        return true;
+    }
+
+    const totalSeasons = Number(showInfo.number_of_seasons || 0);
+
+    if(totalSeasons > 0 && season < totalSeasons){
+        return true;
+    }
+
+    const statusText = String(showInfo.tmdb_status || showInfo.status_text || showInfo.status || "").toLowerCase();
+
+    if(statusText === "ended" || statusText === "finished"){
+        return true;
+    }
+
+    return false;
+}
+
+function isEpisodeLoggable(episodeInfo=null,showInfo=null,seasonNumber=null){
+    const airDate = episodeInfo && typeof episodeInfo === "object"
+    ? episodeInfo.air_date
+    : "";
+
+    if(isEpisodeAired(airDate,episodeInfo,showInfo)){
+        return true;
+    }
+
+    if(airDate){
+        return false;
+    }
+
+    return isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo);
 }
 
 

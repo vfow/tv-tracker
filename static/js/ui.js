@@ -371,6 +371,18 @@ function renderDiscoverHub(){
 
     });
 
+
+    document.querySelectorAll(".discover-view-more-button").forEach(button=>{
+        button.addEventListener("click",async function(){
+            if(this.disabled){
+                return;
+            }
+
+            this.disabled = true;
+            await loadMoreDiscoverSection(this.dataset.sectionKey);
+        });
+    });
+
 }
 
 
@@ -418,6 +430,7 @@ function renderDiscoverHubSection(section){
                     <button type="button" class="discover-row-arrow discover-row-arrow-right" data-direction="right" aria-label="Scroll right">›</button>
                 </div>
             </div>
+            ${section.hasMore ? `<button type="button" class="view-more-button discover-view-more-button" data-section-key="${rowKey}">${section.loadingMore ? "Loading…" : "View More"}</button>` : ""}
         </div>
     `;
 
@@ -653,6 +666,20 @@ function renderSearchResults(shows){
         results.appendChild(card);
 
     });
+
+    const state = typeof discoverSearchState === "object" && discoverSearchState
+    ? discoverSearchState
+    : {page:1,totalPages:1,loading:false};
+
+    if(Number(state.page || 1) < Number(state.totalPages || 1)){
+        const moreButton = document.createElement("button");
+        moreButton.className = "view-more-button search-view-more-button";
+        moreButton.type = "button";
+        moreButton.textContent = state.loading ? "Loading…" : "View More";
+        moreButton.disabled = state.loading === true;
+        moreButton.addEventListener("click",loadMoreSearchResults);
+        results.appendChild(moreButton);
+    }
 
 }
 
@@ -2536,7 +2563,7 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
 
     episodeList.forEach(ep=>{
 
-        const aired = isEpisodeAired(ep.air_date,ep,show);
+        const aired = isEpisodeLoggable(ep,show,seasonNumber);
 
         html += `
             <div
@@ -2961,7 +2988,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     const episodeData = getEpisodeData(show,seasonNumber,episodeNumber);
     const historyEntry = getEpisodeHistoryEntry(show.tmdb_id,seasonNumber,episodeNumber);
     const isWatched = isEpisodeWatched(show,seasonNumber,episodeNumber);
-    const aired = isEpisodeAired(episodeData.air_date,episodeData,show);
+    const aired = isEpisodeLoggable(episodeData,show,seasonNumber);
 
     const episodeTitle = episodeData.name || "Untitled Episode";
     const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
@@ -3171,7 +3198,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                 show.tmdb_id,
                 previousEpisodeTarget.season,
                 previousEpisodeTarget.episode,
-                {backToShow:context && context.backToShow}
+                {backToShow:context && context.backToShow,replaceInPlace:true}
             );
 
         });
@@ -3197,7 +3224,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                 show.tmdb_id,
                 nextEpisodeTarget.season,
                 nextEpisodeTarget.episode,
-                {backToShow:context && context.backToShow}
+                {backToShow:context && context.backToShow,replaceInPlace:true}
             );
 
         });
@@ -3373,7 +3400,7 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
 
         const watchedEpisodes = show.episodes_watched[String(seasonNumber)] || [];
         const isWatched = watchedEpisodes.includes(ep.episode_number);
-        const aired = isEpisodeAired(ep.air_date,ep,show);
+        const aired = isEpisodeLoggable(ep,show,seasonNumber);
         const canToggle = aired || isWatched;
 
         html += `

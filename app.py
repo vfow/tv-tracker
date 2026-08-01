@@ -876,6 +876,71 @@ def validate_history_record(
     return entry_id, entry
 
 
+def history_episode_identity(entry: dict[str, Any]) -> tuple[str, int, int] | None:
+    try:
+        return (
+            str(entry.get("tmdb_id", "")),
+            int(entry.get("season")),
+            int(entry.get("episode")),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def history_timestamp_value(entry: dict[str, Any]) -> float:
+    value = entry.get("watched_at") or entry.get("date") or ""
+    if not isinstance(value, str) or not value:
+        return 0.0
+    try:
+        normalized = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def dedupe_history_by_episode(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_episode: dict[tuple[str, int, int], dict[str, Any]] = {}
+    passthrough: list[dict[str, Any]] = []
+
+    for entry in history:
+        identity = history_episode_identity(entry)
+        if identity is None or not identity[0]:
+            passthrough.append(entry)
+            continue
+
+        previous = by_episode.get(identity)
+        if previous is None or history_timestamp_value(entry) >= history_timestamp_value(previous):
+            by_episode[identity] = entry
+
+    deduped = passthrough + list(by_episode.values())
+    deduped.sort(key=history_timestamp_value, reverse=True)
+    return deduped
+
+
+def find_logical_duplicate_history_ids(
+    cursor: psycopg.Cursor[Any],
+    entry_id: str,
+    entry: dict[str, Any],
+) -> list[str]:
+    identity = history_episode_identity(entry)
+    if identity is None or not identity[0]:
+        return []
+
+    show_id, season, episode = identity
+    cursor.execute(
+        """
+        SELECT entry_id
+        FROM tv_tracker_history
+        WHERE entry_id <> %s
+          AND data->>'tmdb_id' = %s
+          AND data->>'season' = %s
+          AND data->>'episode' = %s
+        """,
+        (str(entry_id), show_id, str(season), str(episode)),
+    )
+    return [str(row[0]) for row in cursor.fetchall()]
+
+
 def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
     if not isinstance(raw_profile, dict):
         raise BackupValidationError("Profile data is invalid")
@@ -1040,6 +1105,8 @@ def validate_tracker_data(raw_data: Any) -> dict[str, Any]:
     for index, raw_entry in enumerate(raw_history):
         _, entry = validate_history_record(raw_entry, index, seen_history_ids)
         history.append(entry)
+
+    history = dedupe_history_by_episode(history)
 
     result: dict[str, Any] = {
         "shows": shows,
@@ -1778,8 +1845,21 @@ def create_app() -> Flask:
                         "changes": serialize_change_rows(concurrent_rows),
                     }), 409
 
+                logical_history_delete: list[str] = []
+                for entry_id, entry_data in history_upsert.items():
+                    for duplicate_id in find_logical_duplicate_history_ids(
+                        cursor, str(entry_id), entry_data
+                    ):
+                        if (
+                            duplicate_id not in logical_history_delete
+                            and duplicate_id not in history_delete
+                        ):
+                            logical_history_delete.append(duplicate_id)
+
+                effective_history_delete = list(history_delete) + logical_history_delete
+
                 actual_history_order = merge_history_order(
-                    cursor, history_order, history_upsert, history_delete
+                    cursor, history_order, history_upsert, effective_history_delete
                 )
 
                 for show_id, show_data in shows_upsert.items():
@@ -1810,10 +1890,10 @@ def create_app() -> Flask:
                         (str(entry_id), Jsonb(entry_data)),
                     )
 
-                if history_delete:
+                if effective_history_delete:
                     cursor.execute(
                         "DELETE FROM tv_tracker_history WHERE entry_id = ANY(%s)",
-                        ([str(item) for item in history_delete],),
+                        ([str(item) for item in effective_history_delete],),
                     )
 
                 for key, value in state_upsert.items():
@@ -1843,7 +1923,7 @@ def create_app() -> Flask:
                     shows_upsert,
                     shows_delete,
                     history_upsert,
-                    history_delete,
+                    effective_history_delete,
                     actual_history_order,
                     state_upsert,
                 )

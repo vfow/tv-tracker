@@ -62,7 +62,7 @@ function writeTMDBSearchCache(query,results){
         return;
     }
 
-    const cleanResults = results.slice(0,12).map(show=>{
+    const cleanResults = results.slice(0,20).map(show=>{
         return {
             id:show.id,
             name:show.name || show.original_name || "",
@@ -98,22 +98,31 @@ function tmdbGetCachedSearchShows(query){
 
 
 
-async function tmdbSearchShows(query,options={}){
+
+async function tmdbSearchShowsPage(query,page=1,options={}){
 
     const cleanQuery = String(query || "").trim();
+    const pageNumber = Math.max(1,Number(page || 1));
 
     if(!cleanQuery){
-        return [];
+        return {results:[],page:1,total_pages:1,total_results:0};
     }
 
-    const cached = readTMDBSearchCache(cleanQuery);
+    if(pageNumber === 1){
+        const cached = readTMDBSearchCache(cleanQuery);
 
-    if(cached){
-        return cached;
+        if(cached){
+            return {
+                results:cached,
+                page:1,
+                total_pages:cached.length >= 20 ? 2 : 1,
+                total_results:cached.length
+            };
+        }
     }
 
     const response = await fetch(
-        `${TMDB_API_BASE}/search/tv?query=${encodeURIComponent(cleanQuery)}&include_adult=false&page=1`,
+        `${TMDB_API_BASE}/search/tv?query=${encodeURIComponent(cleanQuery)}&include_adult=false&page=${encodeURIComponent(pageNumber)}`,
         options && options.signal ? {signal:options.signal} : undefined
     );
 
@@ -124,9 +133,31 @@ async function tmdbSearchShows(query,options={}){
     const data = await response.json();
     const results = data.results || [];
 
-    writeTMDBSearchCache(cleanQuery,results);
+    if(pageNumber === 1){
+        writeTMDBSearchCache(cleanQuery,results);
+    }
 
-    return readTMDBSearchCache(cleanQuery) || results;
+    return {
+        results:results,
+        page:Number(data.page || pageNumber),
+        total_pages:Number(data.total_pages || pageNumber || 1),
+        total_results:Number(data.total_results || results.length || 0)
+    };
+
+}
+
+
+
+async function tmdbSearchShows(query,options={}){
+
+    const cleanQuery = String(query || "").trim();
+
+    if(!cleanQuery){
+        return [];
+    }
+
+    const payload = await tmdbSearchShowsPage(cleanQuery,1,options);
+    return payload.results || [];
 
 }
 
