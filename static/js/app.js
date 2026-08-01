@@ -35,15 +35,6 @@ var currentSearchController = null;
 var searchRequestId = 0;
 var lastDiscoverSearchQuery = "";
 var lastDiscoverSearchResults = [];
-var searchPaginationState = {
-    query:"",
-    displayQuery:"",
-    page:1,
-    totalPages:1,
-    loading:false,
-    results:[]
-};
-var romanizedTitleMemoryCache = new Map();
 var discoverHubState = {
     loaded:false,
     loading:false,
@@ -59,7 +50,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v3";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
 
@@ -666,18 +657,6 @@ function normalizeExistingData(){
 
         if(typeof show._tmdb_external_ids === "undefined"){
             show._tmdb_external_ids = null;
-        }
-
-        if(typeof show.romanized_title !== "string"){
-            show.romanized_title = "";
-        }
-
-        if(typeof show._romanized_title_source !== "string"){
-            show._romanized_title_source = "";
-        }
-
-        if(typeof show._romanized_title_validation_version === "undefined"){
-            show._romanized_title_validation_version = 0;
         }
 
         delete show.date_only_episode_time_override;
@@ -1429,454 +1408,6 @@ async function autoUpdateStatuses(forceRefresh=false,allowRemoteRefresh=true){
 
 
 
-function normalizeTitleText(value){
-    return String(value || "").replace(/\s+/g," ").trim();
-}
-
-
-
-function normalizeTitleComparison(value){
-    return normalizeTitleText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g,"")
-    .trim();
-}
-
-
-
-function titleUsesNonLatinScript(value){
-    return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u04ff\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u0e00-\u0e7f]/.test(String(value || ""));
-}
-
-
-
-const ROMANIZED_TITLE_VALIDATION_VERSION = 4;
-
-
-
-function isCleanRomanizedTitle(value,mainTitle){
-    const title = normalizeTitleText(value);
-
-    if(!title || title.length > 160){
-        return false;
-    }
-
-    if(titleUsesNonLatinScript(title)){
-        return false;
-    }
-
-    if(!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(title)){
-        return false;
-    }
-
-    if(normalizeTitleComparison(title) === normalizeTitleComparison(mainTitle)){
-        return false;
-    }
-
-    return true;
-}
-
-
-
-function getOriginCountries(details){
-    return Array.isArray(details && details.origin_country)
-    ? details.origin_country.map(value=>String(value || "").toUpperCase()).filter(Boolean)
-    : [];
-}
-
-
-
-function titleHasRomanizedStructureMarker(value){
-    const normalized = ` ${normalizeTitleText(value).toLowerCase()} `;
-
-    return /[-'’āēīōū]/i.test(normalized) ||
-    /\b(no|wa|ga|wo|o|ni|de|to|ya|kara|made|dake|mono|hen|san|kun|chan|sama|sensei|senpai)\b/.test(normalized);
-}
-
-
-
-function titleLooksLikeShortLoanwordReading(candidate,mainTitle){
-    const candidateWords = normalizeTitleText(candidate)
-    .toLowerCase()
-    .replace(/[^a-zÀ-ÖØ-öø-ÿ\s-]+/g," ")
-    .split(/[\s-]+/)
-    .filter(Boolean);
-
-    const mainWords = normalizeTitleText(mainTitle)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g," ")
-    .split(/\s+/)
-    .filter(Boolean);
-
-    if(candidateWords.length < 1 || mainWords.length < 1){
-        return false;
-    }
-
-    if(candidateWords.length !== mainWords.length){
-        return false;
-    }
-
-    if(candidateWords.length > 3){
-        return false;
-    }
-
-    const allCandidateWordsShort = candidateWords.every(word=>word.length >= 2 && word.length <= 5);
-    const allMainWordsShort = mainWords.every(word=>word.length >= 2 && word.length <= 8);
-
-    return allCandidateWordsShort && allMainWordsShort;
-}
-
-
-
-function titleLooksLikeEpisodeOrSpecialTitle(candidate,mainTitle){
-    const candidateComparison = normalizeTitleComparison(candidate);
-    const mainComparison = normalizeTitleComparison(mainTitle);
-
-    if(!candidateComparison || !mainComparison){
-        return false;
-    }
-
-    if(candidateComparison === mainComparison){
-        return true;
-    }
-
-    if(candidateComparison.startsWith(mainComparison) || candidateComparison.endsWith(mainComparison)){
-        return true;
-    }
-
-    return /(episode|special|ova|ona|movie|film|recap|summary|sidestory|spinoff|fanletter)/.test(candidateComparison);
-}
-
-
-
-function titleLooksLikeUsefulOriginalRomanization(value){
-    const title = normalizeTitleText(value);
-
-    if(!title){
-        return false;
-    }
-
-    if(titleHasRomanizedStructureMarker(title)){
-        return true;
-    }
-
-    const words = title
-    .toLowerCase()
-    .replace(/[^a-zÀ-ÖØ-öø-ÿ\s-]+/g," ")
-    .split(/[\s-]+/)
-    .filter(Boolean);
-
-    if(words.length < 2){
-        return false;
-    }
-
-    return words.some(word=>word.length >= 6) && !words.every(word=>word.length <= 5);
-}
-
-
-
-function romanizedTitleItemHasExplicitRomanizationType(item){
-    const type = String(item && item.type ? item.type : "").toLowerCase();
-
-    return /romaji|romaniz|transliter|transcript/.test(type);
-}
-
-
-
-function romanizedTitleItemHasOriginalTitleType(item){
-    const type = String(item && item.type ? item.type : "").toLowerCase();
-
-    return /original/.test(type);
-}
-
-
-
-function isLikelyUsefulRomanizedAlternative(item,details,mainTitle){
-    const title = normalizeTitleText(item && item.title);
-
-    if(!isCleanRomanizedTitle(title,mainTitle)){
-        return false;
-    }
-
-    if(titleLooksLikeShortLoanwordReading(title,mainTitle)){
-        return false;
-    }
-
-    if(titleLooksLikeEpisodeOrSpecialTitle(title,mainTitle)){
-        return false;
-    }
-
-    const type = String(item && item.type ? item.type : "").toLowerCase();
-    const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
-    const originCountries = getOriginCountries(details);
-    const isOriginCountry = country && originCountries.includes(country);
-    const hasExplicitRomanizationType = romanizedTitleItemHasExplicitRomanizationType(item);
-    const hasOriginalTitleType = romanizedTitleItemHasOriginalTitleType(item);
-    const hasRomanizedMarker = titleHasRomanizedStructureMarker(title);
-    const hasUsefulOriginalShape = titleLooksLikeUsefulOriginalRomanization(title);
-
-    if(/translation|translated|local|regional|release/.test(type)){
-        return false;
-    }
-
-    if(hasOriginalTitleType){
-        return Boolean(isOriginCountry && hasRomanizedMarker);
-    }
-
-    if(hasExplicitRomanizationType){
-        return Boolean(isOriginCountry && (hasRomanizedMarker || hasUsefulOriginalShape));
-    }
-
-    if(isOriginCountry && hasRomanizedMarker){
-        return true;
-    }
-
-    return false;
-}
-
-
-
-function getRomanizedTitleCandidateScore(item,details){
-    const type = String(item && item.type ? item.type : "").toLowerCase();
-    const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
-    const originCountries = getOriginCountries(details);
-
-    let score = 100;
-
-    if(/romaji|romaniz|transliter|transcript/.test(type)){
-        score = 0;
-    }else if(/original/.test(type)){
-        score = 15;
-    }
-
-    if(country && originCountries.includes(country)){
-        score -= 10;
-    }
-
-    if(titleHasRomanizedStructureMarker(item && item.title)){
-        score -= 5;
-    }
-
-    return score;
-}
-
-
-
-function chooseRomanizedTitle(details,alternativeTitlePayload){
-    const mainTitle = normalizeTitleText(
-        details && (details.name || details.title)
-    );
-
-    const originalName = normalizeTitleText(details && details.original_name);
-
-    if(isCleanRomanizedTitle(originalName,mainTitle)){
-        return {
-            title:originalName,
-            source:"original_name",
-            validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION
-        };
-    }
-
-    const results = alternativeTitlePayload && Array.isArray(alternativeTitlePayload.results)
-    ? alternativeTitlePayload.results
-    : [];
-
-    const candidates = results
-    .map((item,index)=>{
-        const title = normalizeTitleText(item && item.title);
-
-        if(!isLikelyUsefulRomanizedAlternative(item,details,mainTitle)){
-            return null;
-        }
-
-        return {
-            title:title,
-            source:"alternative_titles",
-            validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION,
-            score:getRomanizedTitleCandidateScore(item,details),
-            index:index
-        };
-    })
-    .filter(Boolean)
-    .sort((a,b)=>{
-        if(a.score !== b.score){
-            return a.score - b.score;
-        }
-        return a.index - b.index;
-    });
-
-    return candidates[0] || {title:"",source:"",validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION};
-}
-
-
-
-function clearRomanizedTitle(show){
-    if(!show){
-        return false;
-    }
-
-    const changed = Boolean(
-        show.romanized_title ||
-        show._romanized_title_source ||
-        show._romanized_title_validation_version
-    );
-
-    show.romanized_title = "";
-    show._romanized_title_source = "";
-    show._romanized_title_validation_version = ROMANIZED_TITLE_VALIDATION_VERSION;
-
-    return changed;
-}
-
-
-
-function isStoredRomanizedTitleDisplayable(show){
-    if(!show){
-        return false;
-    }
-
-    const mainTitle = show.title || show.name || "";
-    const subtitle = show.romanized_title || "";
-
-    if(Number(show._romanized_title_validation_version || 0) < ROMANIZED_TITLE_VALIDATION_VERSION){
-        return false;
-    }
-
-    if(!isCleanRomanizedTitle(subtitle,mainTitle)){
-        return false;
-    }
-
-    if(titleLooksLikeShortLoanwordReading(subtitle,mainTitle)){
-        return false;
-    }
-
-    if(titleLooksLikeEpisodeOrSpecialTitle(subtitle,mainTitle)){
-        return false;
-    }
-
-    if(show._romanized_title_source === "original_name"){
-        return true;
-    }
-
-    return true;
-}
-
-
-
-function applyRomanizedTitleCandidate(show,candidate){
-    if(!show){
-        return false;
-    }
-
-    const cleanTitle = normalizeTitleText(candidate && candidate.title);
-    const mainTitle = show.title || show.name || "";
-
-    if(
-        !isCleanRomanizedTitle(cleanTitle,mainTitle) ||
-        titleLooksLikeShortLoanwordReading(cleanTitle,mainTitle) ||
-        titleLooksLikeEpisodeOrSpecialTitle(cleanTitle,mainTitle)
-    ){
-        return clearRomanizedTitle(show);
-    }
-
-    const nextSource = candidate && candidate.source ? candidate.source : "tmdb";
-    const nextVersion = candidate && candidate.validationVersion
-    ? candidate.validationVersion
-    : ROMANIZED_TITLE_VALIDATION_VERSION;
-
-    const changed = show.romanized_title !== cleanTitle ||
-    show._romanized_title_source !== nextSource ||
-    Number(show._romanized_title_validation_version || 0) !== Number(nextVersion);
-
-    show.romanized_title = cleanTitle;
-    show._romanized_title_source = nextSource;
-    show._romanized_title_validation_version = nextVersion;
-
-    return changed;
-}
-
-
-
-async function ensureRomanizedTitleForShow(show,options={}){
-    if(!show || !canUseTMDBShow(show)){
-        return false;
-    }
-
-    if(isStoredRomanizedTitleDisplayable(show)){
-        return false;
-    }
-
-    const hadRejectedSavedSubtitle = Boolean(
-        show.romanized_title ||
-        show._romanized_title_source ||
-        show._romanized_title_validation_version
-    );
-
-    const showId = String(show.tmdb_id);
-
-    if(romanizedTitleMemoryCache.has(showId)){
-        const cached = romanizedTitleMemoryCache.get(showId);
-        const changed = applyRomanizedTitleCandidate(show,cached);
-
-        if(changed && options.skipSave !== true){
-            await saveData({showIds:[showId]});
-        }
-
-        return changed;
-    }
-
-    try{
-        const details = await tmdbGetShowDetails(show.tmdb_id);
-        const alternativeTitles = typeof tmdbGetAlternativeTitles === "function"
-        ? await tmdbGetAlternativeTitles(show.tmdb_id)
-        : null;
-        const candidate = chooseRomanizedTitle(details,alternativeTitles);
-
-        romanizedTitleMemoryCache.set(showId,candidate);
-
-        const changed = applyRomanizedTitleCandidate(show,candidate);
-
-        if((changed || hadRejectedSavedSubtitle) && options.skipSave !== true){
-            await saveData({showIds:[showId]});
-        }
-
-        return changed || hadRejectedSavedSubtitle;
-    }catch(error){
-        if(hadRejectedSavedSubtitle){
-            const changed = clearRomanizedTitle(show);
-
-            if(changed && options.skipSave !== true){
-                await saveData({showIds:[showId]});
-            }
-
-            return changed;
-        }
-
-        return false;
-    }
-}
-
-
-
-async function enrichShowWithRomanizedTitle(show,options={}){
-    const changed = await ensureRomanizedTitleForShow(show,options);
-
-    if(changed && typeof renderShowModalPreservingScroll === "function"){
-        const isSelectedShow = selectedShowId && String(show.tmdb_id) === String(selectedShowId);
-        const isPreviewShow = discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === String(show.tmdb_id);
-
-        if(isSelectedShow){
-            renderShowModalPreservingScroll(show);
-        }else if(isPreviewShow && typeof renderDiscoverShowModalPreservingScroll === "function"){
-            renderDiscoverShowModalPreservingScroll(show);
-        }
-    }
-
-    return changed;
-}
-
-
-
 function createShowObject(details,status){
 
     return {
@@ -1908,15 +1439,6 @@ function createShowObject(details,status){
         _season_episodes:{},
         _episode_details:{},
         _episode_list:{},
-        romanized_title:isCleanRomanizedTitle(details.original_name,details.name)
-        ? normalizeTitleText(details.original_name)
-        : "",
-        _romanized_title_source:isCleanRomanizedTitle(details.original_name,details.name)
-        ? "original_name"
-        : "",
-        _romanized_title_validation_version:isCleanRomanizedTitle(details.original_name,details.name)
-        ? ROMANIZED_TITLE_VALIDATION_VERSION
-        : 0,
         _tmdb_external_ids:null,
     };
 
@@ -1954,7 +1476,6 @@ async function openDiscoverShowModal(searchShow){
 
         renderDiscoverShowModal(showObject);
         await revealPreparedModal();
-        enrichShowWithRomanizedTitle(showObject,{skipSave:true});
         loadDiscoverPreviewSeason(showObject,1);
     }catch(error){
         const content = document.getElementById("show-modal-content");
@@ -2376,43 +1897,6 @@ function cancelActiveSearchRequest(){
 
 
 
-function resetSearchPagination(){
-    searchPaginationState = {
-        query:"",
-        displayQuery:"",
-        page:1,
-        totalPages:1,
-        loading:false,
-        results:[]
-    };
-}
-
-
-
-function mergeUniqueShows(existing,next){
-    const seen = new Set();
-    const output = [];
-
-    (existing || []).concat(next || []).forEach(show=>{
-        if(!show || !show.id){
-            return;
-        }
-
-        const id = String(show.id);
-
-        if(seen.has(id)){
-            return;
-        }
-
-        seen.add(id);
-        output.push(show);
-    });
-
-    return output;
-}
-
-
-
 function renderSearchIntro(){
 
     const results = document.getElementById("search-results");
@@ -2521,8 +2005,7 @@ function writeDiscoverHubCache(sections){
 async function tmdbGetDiscoverList(path,params={}){
 
     const searchParams = new URLSearchParams();
-    const pageNumber = Math.max(1,Number(params.page || 1));
-    searchParams.set("page",String(pageNumber));
+    searchParams.set("page",String(params.page || 1));
 
     Object.keys(params || {}).forEach(key=>{
 
@@ -2545,12 +2028,7 @@ async function tmdbGetDiscoverList(path,params={}){
     }
 
     const data = await response.json();
-    return {
-        results:data.results || [],
-        page:Number(data.page || pageNumber),
-        total_pages:Number(data.total_pages || pageNumber || 1),
-        total_results:Number(data.total_results || 0)
-    };
+    return data.results || [];
 
 }
 
@@ -2577,14 +2055,9 @@ function normalizeDiscoverHubShow(show){
 
 
 
-function buildDiscoverHubSection(key,title,subtitle,response,usedIds,path,params){
+function buildDiscoverHubSection(key,title,subtitle,shows,usedIds){
 
     const output = [];
-    const shows = response && Array.isArray(response.results)
-    ? response.results
-    : Array.isArray(response)
-    ? response
-    : [];
 
     (shows || []).forEach(raw=>{
 
@@ -2609,12 +2082,7 @@ function buildDiscoverHubSection(key,title,subtitle,response,usedIds,path,params
         key:key,
         title:title,
         subtitle:subtitle,
-        shows:output.slice(0,12),
-        path:path || "",
-        params:params || {},
-        page:Number(response && response.page ? response.page : 1),
-        total_pages:Number(response && response.total_pages ? response.total_pages : 1),
-        loadingMore:false
+        shows:output.slice(0,12)
     };
 
 }
@@ -2666,23 +2134,17 @@ async function loadDiscoverHub(force=false){
 
         const today = getLocalDateKey(new Date());
 
-        const comingSoonParams = {
-            "first_air_date.gte":today,
-            "sort_by":"popularity.desc",
-            "include_adult":"false",
-            "include_null_first_air_dates":"false"
-        };
-
         const [comingSoon,trendingWeek,airingNow,popular] = await Promise.all([
-            tmdbGetDiscoverList("discover/tv",comingSoonParams),
+            tmdbGetDiscoverList("discover/tv",{
+                "first_air_date.gte":today,
+                "sort_by":"popularity.desc",
+                "include_adult":"false",
+                "include_null_first_air_dates":"false"
+            }),
             tmdbGetDiscoverList("trending/tv/week"),
             tmdbGetDiscoverList("tv/on_the_air"),
             tmdbGetDiscoverList("tv/popular")
         ]);
-
-        comingSoon.results = (comingSoon.results || []).filter(show=>{
-            return show && show.first_air_date && show.first_air_date >= today;
-        });
 
         const usedIds = new Set();
 
@@ -2691,37 +2153,29 @@ async function loadDiscoverHub(force=false){
                 "coming-soon",
                 "Coming Soon",
                 "",
-                comingSoon,
-                usedIds,
-                "discover/tv",
-                comingSoonParams
+                comingSoon.filter(show=>show && show.first_air_date && show.first_air_date >= today),
+                usedIds
             ),
             buildDiscoverHubSection(
                 "trending-week",
                 "Trending This Week",
                 "",
                 trendingWeek,
-                usedIds,
-                "trending/tv/week",
-                {}
+                usedIds
             ),
             buildDiscoverHubSection(
                 "airing-now",
                 "Airing Now",
                 "",
                 airingNow,
-                usedIds,
-                "tv/on_the_air",
-                {}
+                usedIds
             ),
             buildDiscoverHubSection(
                 "popular",
                 "Popular",
                 "",
                 popular,
-                usedIds,
-                "tv/popular",
-                {}
+                usedIds
             )
         ];
 
@@ -2754,72 +2208,6 @@ async function loadDiscoverHub(force=false){
 
 
 
-async function loadMoreDiscoverHubSection(sectionKey){
-    if(!discoverHubState || !Array.isArray(discoverHubState.sections)){
-        return;
-    }
-
-    const section = discoverHubState.sections.find(item=>{
-        return item && String(item.key) === String(sectionKey);
-    });
-
-    if(!section || section.loadingMore || !section.path){
-        return;
-    }
-
-    const currentPage = Number(section.page || 1);
-    const totalPages = Number(section.total_pages || 1);
-
-    if(currentPage >= totalPages){
-        return;
-    }
-
-    section.loadingMore = true;
-
-    if(typeof renderDiscoverHub === "function"){
-        renderDiscoverHub();
-    }
-
-    try{
-        const nextPage = currentPage + 1;
-        const params = Object.assign({},section.params || {},{page:nextPage});
-        const response = await tmdbGetDiscoverList(section.path,params);
-        let nextShows = response.results || [];
-
-        if(section.key === "coming-soon"){
-            const today = getLocalDateKey(new Date());
-            nextShows = nextShows.filter(show=>{
-                return show && show.first_air_date && show.first_air_date >= today;
-            });
-        }
-
-        const normalized = nextShows
-        .map(normalizeDiscoverHubShow)
-        .filter(Boolean);
-
-        section.shows = mergeUniqueShows(section.shows || [],normalized);
-        section.page = Number(response.page || nextPage);
-        section.total_pages = Number(response.total_pages || section.total_pages || nextPage);
-        section.loadingMore = false;
-
-        writeDiscoverHubCache(discoverHubState.sections);
-
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
-        }
-    }catch(error){
-        section.loadingMore = false;
-
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
-        }
-
-        showToast(error && error.message ? error.message : "Could not load more shows");
-    }
-}
-
-
-
 async function searchShows(query){
 
     const results = document.getElementById("search-results");
@@ -2837,11 +2225,21 @@ async function searchShows(query){
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
-        resetSearchPagination();
         renderSearchIntro();
 
         return;
 
+    }
+
+    const cachedResults = typeof tmdbGetCachedSearchShows === "function"
+    ? tmdbGetCachedSearchShows(cleanQuery)
+    : null;
+
+    if(cachedResults && cachedResults.length){
+        lastDiscoverSearchQuery = cacheKey;
+        lastDiscoverSearchResults = cachedResults.slice(0,10);
+        renderSearchResults(lastDiscoverSearchResults);
+        return;
     }
 
     cancelActiveSearchRequest();
@@ -2857,25 +2255,14 @@ async function searchShows(query){
 
     try{
 
-        const pageData = typeof tmdbSearchShowsPage === "function"
-        ? await tmdbSearchShowsPage(cleanQuery,1,{signal:controller ? controller.signal : undefined})
-        : {results:await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined}),page:1,total_pages:1};
+        const shows = await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined});
 
         if(requestId !== searchRequestId){
             return;
         }
 
-        const shows = pageData.results || [];
         lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = shows;
-        searchPaginationState = {
-            query:cacheKey,
-            displayQuery:cleanQuery,
-            page:Number(pageData.page || 1),
-            totalPages:Number(pageData.total_pages || 1),
-            loading:false,
-            results:shows
-        };
+        lastDiscoverSearchResults = (shows || []).slice(0,10);
 
         renderSearchResults(lastDiscoverSearchResults);
 
@@ -2897,43 +2284,6 @@ async function searchShows(query){
             currentSearchController = null;
         }
 
-    }
-
-}
-
-
-
-async function loadMoreSearchResults(){
-
-    if(!searchPaginationState || searchPaginationState.loading){
-        return;
-    }
-
-    const nextPage = Number(searchPaginationState.page || 1) + 1;
-    const totalPages = Number(searchPaginationState.totalPages || 1);
-
-    if(nextPage > totalPages){
-        return;
-    }
-
-    searchPaginationState.loading = true;
-    renderSearchResults(searchPaginationState.results || []);
-
-    try{
-        const pageData = await tmdbSearchShowsPage(searchPaginationState.displayQuery,nextPage);
-        const merged = mergeUniqueShows(searchPaginationState.results || [],pageData.results || []);
-
-        searchPaginationState.results = merged;
-        searchPaginationState.page = Number(pageData.page || nextPage);
-        searchPaginationState.totalPages = Number(pageData.total_pages || searchPaginationState.totalPages || nextPage);
-        searchPaginationState.loading = false;
-        lastDiscoverSearchResults = merged;
-
-        renderSearchResults(merged);
-    }catch(error){
-        searchPaginationState.loading = false;
-        renderSearchResults(searchPaginationState.results || []);
-        showToast(error && error.message ? error.message : "Could not load more results");
     }
 
 }
@@ -3085,7 +2435,6 @@ async function openShowModal(showId){
     expandedSeasons[selectedShowId] = expandedSeasons[selectedShowId] || {};
     renderShowModal(show);
     await revealPreparedModal();
-    enrichShowWithRomanizedTitle(show);
 }
 
 
@@ -3553,65 +2902,24 @@ function getAiredEpisodeNumbersInSeason(show,seasonNumber){
 
 
 
-function getKnownSeasonEpisodeNumbers(show,seasonNumber){
-    const seasonKey = String(seasonNumber);
-
-    const episodeList =
-    show &&
-    show._episode_list &&
-    Array.isArray(show._episode_list[seasonKey])
-    ? show._episode_list[seasonKey]
-    : [];
-
-    const fromEpisodeList = episodeList
-    .map(ep=>Number(ep && ep.episode_number))
-    .filter(Number.isFinite)
-    .sort((a,b)=>a-b);
-
-    if(fromEpisodeList.length){
-        return fromEpisodeList;
-    }
-
-    const storedCount = Number(
-        show &&
-        show._season_episodes &&
-        show._season_episodes[seasonKey]
-    );
-    const knownCount = Number.isFinite(storedCount)
-    ? Math.max(0,Math.floor(storedCount))
-    : 0;
-
-    if(knownCount){
-        return Array.from({length:knownCount},(_,index)=>index + 1);
-    }
-
-    return [];
-}
-
-
-
 function isSeasonFullyWatched(show,seasonNumber,airedEpisodeNumbers=null){
+
+    const aired = Array.isArray(airedEpisodeNumbers)
+    ? airedEpisodeNumbers
+    : getAiredEpisodeNumbersInSeason(show,seasonNumber);
+
+    if(aired.length === 0){
+        return false;
+    }
 
     const watchedEpisodes =
     show &&
     show.episodes_watched &&
     Array.isArray(show.episodes_watched[String(seasonNumber)])
-    ? show.episodes_watched[String(seasonNumber)].map(Number).filter(Number.isFinite)
+    ? show.episodes_watched[String(seasonNumber)]
     : [];
 
-    if(watchedEpisodes.length === 0){
-        return false;
-    }
-
-    const requiredEpisodes = Array.isArray(airedEpisodeNumbers) && airedEpisodeNumbers.length
-    ? airedEpisodeNumbers.map(Number).filter(Number.isFinite)
-    : getKnownSeasonEpisodeNumbers(show,seasonNumber);
-
-    if(requiredEpisodes.length === 0){
-        return false;
-    }
-
-    return requiredEpisodes.every(episodeNumber=>{
+    return aired.every(episodeNumber=>{
         return watchedEpisodes.includes(Number(episodeNumber));
     });
 

@@ -20,7 +20,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
-        self.assertIn('1.7-ui-polish-repair', template)
+        self.assertIn('1.7-candidate', template)
 
     def test_backend_proxy_is_tmdb_only(self):
         app_py = self.read('app.py')
@@ -40,51 +40,6 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('Loading episode list...', ui)
         self.assertIn('seasonEpisodeListIsLoadedEmpty', ui)
         self.assertIn('Number(show._season_episodes[seasonKey] || 0) === 0', app_js)
-
-    def test_title_and_view_more_polish_exists(self):
-        app_js = self.read('static/js/app.js')
-        ui = self.read('static/js/ui.js')
-        tmdb = self.read('static/js/tmdb.js')
-        css = self.read('static/css/style.css')
-        foundation = self.read('static/css/foundation.css')
-        self.assertIn('romanized_title', app_js)
-        self.assertIn('ROMANIZED_TITLE_VALIDATION_VERSION', app_js)
-        self.assertIn('isLikelyUsefulRomanizedAlternative', app_js)
-        self.assertIn('titleLooksLikeShortLoanwordReading', app_js)
-        self.assertIn('titleLooksLikeEpisodeOrSpecialTitle', app_js)
-        self.assertIn('titleLooksLikeUsefulOriginalRomanization', app_js)
-        self.assertIn('clearRomanizedTitle', app_js)
-        self.assertIn('isStoredRomanizedTitleDisplayable', app_js)
-        self.assertIn('ensureRomanizedTitleForShow', app_js)
-        self.assertIn('/alternative_titles', tmdb)
-        self.assertIn('modal-title-subtitle', ui)
-        self.assertIn('isStoredRomanizedTitleDisplayable(show)', ui)
-        self.assertIn('View More', ui)
-        self.assertIn('loadMoreSearchResults', app_js)
-        self.assertIn('loadMoreDiscoverHubSection', app_js)
-        self.assertIn('view-more-button', css)
-        self.assertIn('tmdbMatch', ui)
-        self.assertIn('requestedSize', ui)
-        self.assertIn('ROMANIZED_TITLE_VALIDATION_VERSION = 4', app_js)
-        self.assertIn('function getKnownSeasonEpisodeNumbers', app_js)
-        self.assertIn('function trackerHeroBackground', ui)
-        self.assertIn('function applyEpisodeHeroImageQualityFallback', ui)
-        self.assertIn('episodeStillLooksWeakForHero', ui)
-
-    def test_ui_polish_repair_exists(self):
-        app_js = self.read('static/js/app.js')
-        ui = self.read('static/js/ui.js')
-        css = self.read('static/css/style.css')
-        foundation = self.read('static/css/foundation.css')
-        self.assertIn('ROMANIZED_TITLE_VALIDATION_VERSION = 4', app_js)
-        self.assertIn('function getKnownSeasonEpisodeNumbers', app_js)
-        self.assertIn('watchedEpisodes.length === 0', app_js)
-        self.assertIn('function applyEpisodeHeroImageQualityFallback', ui)
-        self.assertIn('episodeStillLooksWeakForHero', ui)
-        self.assertIn('episode-detail-hero', ui)
-        self.assertIn('-webkit-line-clamp:3', css)
-        self.assertIn('#discover-page .search-results', css)
-        self.assertIn('#discover-page .search-results .show', foundation)
 
 
 if __name__ == '__main__':

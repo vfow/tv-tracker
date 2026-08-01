@@ -540,7 +540,7 @@ body{
 }
 
 .show-detail-hero{
-    padding-bottom:6px;
+    padding-bottom:16px;
 }
 
 
@@ -549,60 +549,6 @@ body{
     font-size:70px;
     line-height:0.9;
     margin-bottom:10px;
-}
-
-.modal-title-subtitle{
-    font-family:"League Gothic", Arial, Helvetica, sans-serif;
-    font-size:34px;
-    line-height:1;
-    color:#cfcfcf;
-    letter-spacing:.02em;
-    margin-top:-2px;
-    margin-bottom:10px;
-}
-
-.view-more-row{
-    display:flex;
-    justify-content:center;
-    margin:26px 0 10px;
-}
-
-.view-more-button{
-    background:#fff;
-    color:#000;
-    border:none;
-    border-radius:999px;
-    padding:9px 18px;
-    font-weight:bold;
-    cursor:pointer;
-    transition:background .18s ease, transform .18s ease, opacity .18s ease;
-}
-
-.view-more-button:hover:not(:disabled){
-    background:#d8d8d8;
-    transform:translateY(-1px);
-}
-
-.view-more-button:disabled{
-    opacity:.55;
-    cursor:default;
-}
-
-.discover-view-more-button{
-    flex:0 0 auto;
-    font-size:13px;
-    padding:8px 14px;
-}
-
-@media(max-width:600px){
-    .modal-title-subtitle{
-        font-size:28px;
-    }
-
-    .discover-section-heading{
-        align-items:flex-start;
-        flex-direction:column;
-    }
 }
 
 
@@ -4136,35 +4082,5 @@ body.favorite-reordering{
 
     .admin-account-grid .profile-settings-label:not(:first-child){
         margin-top:10px;
-    }
-}
-
-/* ---------- v1.7 UI polish repair: Discover result rows ---------- */
-#discover-page .search-results{
-    margin-left:-30px;
-    margin-right:-30px;
-}
-
-#discover-page .search-results .show{
-    padding-left:30px;
-    padding-right:30px;
-}
-
-#discover-page .search-results .episode-title{
-    display:-webkit-box;
-    overflow:hidden;
-    -webkit-box-orient:vertical;
-    -webkit-line-clamp:3;
-}
-
-@media (max-width:767.98px){
-    #discover-page .search-results{
-        margin-left:-16px;
-        margin-right:-16px;
-    }
-
-    #discover-page .search-results .show{
-        padding-left:16px;
-        padding-right:16px;
     }
 }

@@ -10,23 +10,13 @@ var profileHeaderCropState = null;
 
 function trackerImageURL(path,size="w500"){
     const value = String(path || "").trim();
-    const requestedSize = String(size || "w500");
-
     if(!value){
         return "";
     }
-
-    const tmdbMatch = value.match(/^https?:\/\/image\.tmdb\.org\/t\/p\/([^/]+)(\/.+)$/i);
-
-    if(tmdbMatch){
-        return "https://image.tmdb.org/t/p/" + requestedSize + tmdbMatch[2];
-    }
-
     if(/^https?:\/\//i.test(value)){
         return value;
     }
-
-    return "https://image.tmdb.org/t/p/" + requestedSize + value;
+    return "https://image.tmdb.org/t/p/" + String(size || "w500") + value;
 }
 
 function trackerImageHTML(path,size,className,alt="",attrs=""){
@@ -41,92 +31,6 @@ function trackerBackgroundImage(path,size="original"){
     const url = trackerImageURL(path,size);
     return url ? `url("${escapeHTML(url)}")` : "";
 }
-
-function trackerHeroBackground(path){
-    return path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(path,"original")}`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
-}
-
-function getEpisodeHeroImageCandidates(show,episodeData){
-    const rawCandidates = [
-        {type:"episode",path:episodeData && episodeData.still_path},
-        {type:"backdrop",path:show && show.backdrop_path},
-        {type:"poster",path:show && show.poster_path}
-    ];
-
-    const seen = new Set();
-
-    return rawCandidates.filter(candidate=>{
-        const path = String(candidate.path || "").trim();
-
-        if(!path){
-            return false;
-        }
-
-        const key = path.toLowerCase();
-
-        if(seen.has(key)){
-            return false;
-        }
-
-        seen.add(key);
-        candidate.path = path;
-        return true;
-    });
-}
-
-function episodeStillLooksWeakForHero(image){
-    if(!image){
-        return true;
-    }
-
-    const width = Number(image.naturalWidth || 0);
-    const height = Number(image.naturalHeight || 0);
-
-    if(width < 960 || height < 500){
-        return true;
-    }
-
-    if(width / Math.max(height,1) < 1.35){
-        return true;
-    }
-
-    return false;
-}
-
-function applyEpisodeHeroImageQualityFallback(hero,candidates){
-    if(!hero || !Array.isArray(candidates) || candidates.length < 2){
-        return;
-    }
-
-    const first = candidates[0];
-
-    if(!first || first.type !== "episode"){
-        return;
-    }
-
-    const fallback = candidates.find(candidate=>candidate.type === "backdrop") || candidates.find(candidate=>candidate.type === "poster");
-
-    if(!fallback){
-        return;
-    }
-
-    const image = new Image();
-
-    image.onload = function(){
-        if(episodeStillLooksWeakForHero(image)){
-            hero.style.backgroundImage = trackerHeroBackground(fallback.path);
-        }
-    };
-
-    image.onerror = function(){
-        hero.style.backgroundImage = trackerHeroBackground(fallback.path);
-    };
-
-    image.src = trackerImageURL(first.path,"original");
-}
-
 
 function getCheckSuccessAnimationTarget(element){
 
@@ -346,35 +250,6 @@ function renderShowsPage(){
 
 
 
-function getShowRomanizedSubtitleHTML(show){
-    const subtitle = show && show.romanized_title
-    ? String(show.romanized_title || "").trim()
-    : "";
-
-    if(!subtitle){
-        return "";
-    }
-
-    if(
-        typeof isStoredRomanizedTitleDisplayable === "function" &&
-        !isStoredRomanizedTitleDisplayable(show)
-    ){
-        return "";
-    }
-
-    if(
-        typeof isStoredRomanizedTitleDisplayable !== "function" &&
-        typeof isCleanRomanizedTitle === "function" &&
-        !isCleanRomanizedTitle(subtitle,show.title || show.name || "")
-    ){
-        return "";
-    }
-
-    return `<div class="modal-title-subtitle">${escapeHTML(subtitle)}</div>`;
-}
-
-
-
 function renderDiscoverHub(){
 
     const results = document.getElementById("search-results");
@@ -496,14 +371,6 @@ function renderDiscoverHub(){
 
     });
 
-    document.querySelectorAll(".discover-view-more-button").forEach(button=>{
-
-        button.addEventListener("click",function(){
-            loadMoreDiscoverHubSection(this.dataset.sectionKey);
-        });
-
-    });
-
 }
 
 
@@ -534,8 +401,6 @@ function renderDiscoverHubSection(section){
     const repeatedShows = shows.length > 1
     ? [...shows,...shows,...shows]
     : shows;
-    const hasMore = Number(section.page || 1) < Number(section.total_pages || 1);
-    const loadingMore = section.loadingMore === true;
 
     return `
         <div class="discover-section">
@@ -543,15 +408,6 @@ function renderDiscoverHubSection(section){
                 <div>
                     <h3>${escapeHTML(section.title || "Shows")}</h3>
                 </div>
-                ${hasMore || loadingMore ? `
-                    <button
-                    type="button"
-                    class="view-more-button discover-view-more-button"
-                    data-section-key="${rowKey}"
-                    ${loadingMore ? "disabled" : ""}>
-                        ${loadingMore ? "Loading…" : "View More"}
-                    </button>
-                ` : ""}
             </div>
             <div class="discover-carousel-shell">
                 <div class="discover-card-row infinite-discover-row" data-discover-row="${rowKey}" data-original-count="${shows.length}">
@@ -566,7 +422,6 @@ function renderDiscoverHubSection(section){
     `;
 
 }
-
 
 
 function getDiscoverCarouselMetrics(row){
@@ -798,27 +653,6 @@ function renderSearchResults(shows){
         results.appendChild(card);
 
     });
-
-    const state = typeof searchPaginationState === "object" && searchPaginationState
-    ? searchPaginationState
-    : null;
-
-    if(state && Number(state.page || 1) < Number(state.totalPages || 1)){
-        const wrapper = document.createElement("div");
-        wrapper.className = "view-more-row";
-
-        const button = document.createElement("button");
-        button.className = "view-more-button search-view-more-button";
-        button.textContent = state.loading ? "Loading…" : "View More";
-        button.disabled = state.loading === true;
-
-        button.addEventListener("click",function(){
-            loadMoreSearchResults();
-        });
-
-        wrapper.appendChild(button);
-        results.appendChild(wrapper);
-    }
 
 }
 
@@ -2432,8 +2266,6 @@ function renderDiscoverShowModal(show){
                     ${escapeHTML(show.title)}
                 </div>
 
-                ${getShowRomanizedSubtitleHTML(show)}
-
             </div>
 
         </div>
@@ -2823,8 +2655,6 @@ function renderShowModal(show){
                     ${escapeHTML(show.title)}
                 </div>
 
-                ${getShowRomanizedSubtitleHTML(show)}
-
             </div>
 
         </div>
@@ -3136,9 +2966,11 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     const episodeTitle = episodeData.name || "Untitled Episode";
     const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
 
-    const heroImageCandidates = getEpisodeHeroImageCandidates(show,episodeData);
-    const imagePath = heroImageCandidates.length ? heroImageCandidates[0].path : "";
-    const backdrop = trackerHeroBackground(imagePath);
+    const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
+
+    const backdrop = imagePath
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(imagePath,"original")}`
+    : `linear-gradient(to top, #080808 0%, #111 100%)`;
 
     const airDateText = episodeData.air_date
     ? formatAirDate(episodeData.air_date,episodeData)
@@ -3190,7 +3022,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     content.innerHTML = `
 
-        <div class="modal-hero episode-detail-hero" id="episode-detail-hero" style='background-image:${backdrop}'>
+        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
 
             <div class="modal-hero-content episode-detail-hero-content">
 
@@ -3284,11 +3116,6 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
         </div>
 
     `;
-
-    applyEpisodeHeroImageQualityFallback(
-        document.getElementById("episode-detail-hero"),
-        heroImageCandidates
-    );
 
     const openShowButton = document.getElementById("episode-open-show-button");
 

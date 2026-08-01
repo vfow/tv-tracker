@@ -62,7 +62,7 @@ function writeTMDBSearchCache(query,results){
         return;
     }
 
-    const cleanResults = results.slice(0,20).map(show=>{
+    const cleanResults = results.slice(0,12).map(show=>{
         return {
             id:show.id,
             name:show.name || show.original_name || "",
@@ -98,30 +98,22 @@ function tmdbGetCachedSearchShows(query){
 
 
 
-async function tmdbSearchShowsPage(query,page=1,options={}){
+async function tmdbSearchShows(query,options={}){
 
     const cleanQuery = String(query || "").trim();
-    const pageNumber = Math.max(1,Number(page || 1));
 
     if(!cleanQuery){
-        return {results:[],page:1,total_pages:1,total_results:0};
+        return [];
     }
 
-    if(pageNumber === 1){
-        const cached = readTMDBSearchCache(cleanQuery);
+    const cached = readTMDBSearchCache(cleanQuery);
 
-        if(cached){
-            return {
-                results:cached,
-                page:1,
-                total_pages:cached.length >= 10 ? 2 : 1,
-                total_results:cached.length
-            };
-        }
+    if(cached){
+        return cached;
     }
 
     const response = await fetch(
-        `${TMDB_API_BASE}/search/tv?query=${encodeURIComponent(cleanQuery)}&include_adult=false&page=${encodeURIComponent(pageNumber)}`,
+        `${TMDB_API_BASE}/search/tv?query=${encodeURIComponent(cleanQuery)}&include_adult=false&page=1`,
         options && options.signal ? {signal:options.signal} : undefined
     );
 
@@ -132,32 +124,9 @@ async function tmdbSearchShowsPage(query,page=1,options={}){
     const data = await response.json();
     const results = data.results || [];
 
-    if(pageNumber === 1){
-        writeTMDBSearchCache(cleanQuery,results);
-    }
+    writeTMDBSearchCache(cleanQuery,results);
 
-    return {
-        results:results,
-        page:Number(data.page || pageNumber),
-        total_pages:Number(data.total_pages || pageNumber || 1),
-        total_results:Number(data.total_results || results.length || 0)
-    };
-
-}
-
-
-
-async function tmdbSearchShows(query,options={}){
-
-    const cleanQuery = String(query || "").trim();
-
-    if(!cleanQuery){
-        return [];
-    }
-
-    const pageData = await tmdbSearchShowsPage(cleanQuery,1,options);
-
-    return pageData.results || [];
+    return readTMDBSearchCache(cleanQuery) || results;
 
 }
 
@@ -171,22 +140,6 @@ async function tmdbGetShowDetails(showId){
 
     if(!response.ok){
         throw new Error("TMDB error: " + response.status);
-    }
-
-    return await response.json();
-
-}
-
-
-
-async function tmdbGetAlternativeTitles(showId){
-
-    const response = await fetch(
-        `${TMDB_API_BASE}/tv/${showId}/alternative_titles`
-    );
-
-    if(!response.ok){
-        throw new Error("TMDB alternative titles error: " + response.status);
     }
 
     return await response.json();
