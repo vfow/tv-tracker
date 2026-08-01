@@ -20,7 +20,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
-        self.assertIn('1.7-title-subtitle-repair', template)
+        self.assertIn('1.7-title-modal-image-repair', template)
 
     def test_backend_proxy_is_tmdb_only(self):
         app_py = self.read('app.py')
@@ -50,6 +50,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('ROMANIZED_TITLE_VALIDATION_VERSION', app_js)
         self.assertIn('isLikelyUsefulRomanizedAlternative', app_js)
         self.assertIn('titleLooksLikeShortLoanwordReading', app_js)
+        self.assertIn('titleLooksLikeEpisodeOrSpecialTitle', app_js)
+        self.assertIn('titleLooksLikeUsefulOriginalRomanization', app_js)
         self.assertIn('clearRomanizedTitle', app_js)
         self.assertIn('isStoredRomanizedTitleDisplayable', app_js)
         self.assertIn('ensureRomanizedTitleForShow', app_js)
@@ -60,6 +62,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('loadMoreSearchResults', app_js)
         self.assertIn('loadMoreDiscoverHubSection', app_js)
         self.assertIn('view-more-button', css)
+        self.assertIn('tmdbMatch', ui)
+        self.assertIn('requestedSize', ui)
 
 
 if __name__ == '__main__':

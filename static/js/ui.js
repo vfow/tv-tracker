@@ -10,13 +10,23 @@ var profileHeaderCropState = null;
 
 function trackerImageURL(path,size="w500"){
     const value = String(path || "").trim();
+    const requestedSize = String(size || "w500");
+
     if(!value){
         return "";
     }
+
+    const tmdbMatch = value.match(/^https?:\/\/image\.tmdb\.org\/t\/p\/([^/]+)(\/.+)$/i);
+
+    if(tmdbMatch){
+        return "https://image.tmdb.org/t/p/" + requestedSize + tmdbMatch[2];
+    }
+
     if(/^https?:\/\//i.test(value)){
         return value;
     }
-    return "https://image.tmdb.org/t/p/" + String(size || "w500") + value;
+
+    return "https://image.tmdb.org/t/p/" + requestedSize + value;
 }
 
 function trackerImageHTML(path,size,className,alt="",attrs=""){

@@ -1450,7 +1450,7 @@ function titleUsesNonLatinScript(value){
 
 
 
-const ROMANIZED_TITLE_VALIDATION_VERSION = 2;
+const ROMANIZED_TITLE_VALIDATION_VERSION = 3;
 
 
 
@@ -1532,6 +1532,57 @@ function titleLooksLikeShortLoanwordReading(candidate,mainTitle){
 
 
 
+function titleLooksLikeEpisodeOrSpecialTitle(candidate,mainTitle){
+    const candidateComparison = normalizeTitleComparison(candidate);
+    const mainComparison = normalizeTitleComparison(mainTitle);
+
+    if(!candidateComparison || !mainComparison){
+        return false;
+    }
+
+    if(candidateComparison === mainComparison){
+        return true;
+    }
+
+    if(candidateComparison.startsWith(mainComparison + " ")){
+        return true;
+    }
+
+    if(candidateComparison.endsWith(" " + mainComparison)){
+        return true;
+    }
+
+    return /\b(episode|special|ova|ona|movie|film|recap|summary|side story|spin off|spinoff|fan letter)\b/.test(candidateComparison);
+}
+
+
+
+function titleLooksLikeUsefulOriginalRomanization(value){
+    const title = normalizeTitleText(value);
+
+    if(!title){
+        return false;
+    }
+
+    if(titleHasRomanizedStructureMarker(title)){
+        return true;
+    }
+
+    const words = title
+    .toLowerCase()
+    .replace(/[^a-zÀ-ÖØ-öø-ÿ\s-]+/g," ")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+
+    if(words.length < 2){
+        return false;
+    }
+
+    return words.some(word=>word.length >= 6) && !words.every(word=>word.length <= 5);
+}
+
+
+
 function romanizedTitleItemHasExplicitRomanizationType(item){
     const type = String(item && item.type ? item.type : "").toLowerCase();
 
@@ -1559,6 +1610,10 @@ function isLikelyUsefulRomanizedAlternative(item,details,mainTitle){
         return false;
     }
 
+    if(titleLooksLikeEpisodeOrSpecialTitle(title,mainTitle)){
+        return false;
+    }
+
     const type = String(item && item.type ? item.type : "").toLowerCase();
     const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
     const originCountries = getOriginCountries(details);
@@ -1566,21 +1621,21 @@ function isLikelyUsefulRomanizedAlternative(item,details,mainTitle){
     const hasExplicitRomanizationType = romanizedTitleItemHasExplicitRomanizationType(item);
     const hasOriginalTitleType = romanizedTitleItemHasOriginalTitleType(item);
     const hasRomanizedMarker = titleHasRomanizedStructureMarker(title);
-    const wordCount = title.split(/\s+/).filter(Boolean).length;
+    const hasUsefulOriginalShape = titleLooksLikeUsefulOriginalRomanization(title);
 
     if(/translation|translated|local|regional|release/.test(type)){
         return false;
     }
 
     if(hasOriginalTitleType){
-        return Boolean(isOriginCountry && (hasRomanizedMarker || wordCount >= 2));
+        return Boolean(isOriginCountry && hasRomanizedMarker);
     }
 
     if(hasExplicitRomanizationType){
-        return Boolean(isOriginCountry || hasRomanizedMarker || wordCount >= 3);
+        return Boolean(isOriginCountry && (hasRomanizedMarker || hasUsefulOriginalShape));
     }
 
-    if(isOriginCountry && (hasRomanizedMarker || wordCount >= 3)){
+    if(isOriginCountry && hasRomanizedMarker){
         return true;
     }
 
@@ -1688,7 +1743,22 @@ function isStoredRomanizedTitleDisplayable(show){
         return false;
     }
 
-    if(!isCleanRomanizedTitle(show.romanized_title,show.title || show.name || "")){
+    const mainTitle = show.title || show.name || "";
+    const subtitle = show.romanized_title || "";
+
+    if(Number(show._romanized_title_validation_version || 0) < ROMANIZED_TITLE_VALIDATION_VERSION){
+        return false;
+    }
+
+    if(!isCleanRomanizedTitle(subtitle,mainTitle)){
+        return false;
+    }
+
+    if(titleLooksLikeShortLoanwordReading(subtitle,mainTitle)){
+        return false;
+    }
+
+    if(titleLooksLikeEpisodeOrSpecialTitle(subtitle,mainTitle)){
         return false;
     }
 
@@ -1696,7 +1766,7 @@ function isStoredRomanizedTitleDisplayable(show){
         return true;
     }
 
-    return Number(show._romanized_title_validation_version || 0) >= ROMANIZED_TITLE_VALIDATION_VERSION;
+    return true;
 }
 
 
@@ -1709,7 +1779,11 @@ function applyRomanizedTitleCandidate(show,candidate){
     const cleanTitle = normalizeTitleText(candidate && candidate.title);
     const mainTitle = show.title || show.name || "";
 
-    if(!isCleanRomanizedTitle(cleanTitle,mainTitle)){
+    if(
+        !isCleanRomanizedTitle(cleanTitle,mainTitle) ||
+        titleLooksLikeShortLoanwordReading(cleanTitle,mainTitle) ||
+        titleLooksLikeEpisodeOrSpecialTitle(cleanTitle,mainTitle)
+    ){
         return clearRomanizedTitle(show);
     }
 
@@ -1740,12 +1814,11 @@ async function ensureRomanizedTitleForShow(show,options={}){
         return false;
     }
 
-    if(
-        !show.romanized_title &&
-        Number(show._romanized_title_validation_version || 0) >= ROMANIZED_TITLE_VALIDATION_VERSION
-    ){
-        return false;
-    }
+    const hadRejectedSavedSubtitle = Boolean(
+        show.romanized_title ||
+        show._romanized_title_source ||
+        show._romanized_title_validation_version
+    );
 
     const showId = String(show.tmdb_id);
 
@@ -1771,12 +1844,22 @@ async function ensureRomanizedTitleForShow(show,options={}){
 
         const changed = applyRomanizedTitleCandidate(show,candidate);
 
-        if(changed && options.skipSave !== true){
+        if((changed || hadRejectedSavedSubtitle) && options.skipSave !== true){
             await saveData({showIds:[showId]});
         }
 
-        return changed;
+        return changed || hadRejectedSavedSubtitle;
     }catch(error){
+        if(hadRejectedSavedSubtitle){
+            const changed = clearRomanizedTitle(show);
+
+            if(changed && options.skipSave !== true){
+                await saveData({showIds:[showId]});
+            }
+
+            return changed;
+        }
+
         return false;
     }
 }
@@ -1870,7 +1953,6 @@ async function openDiscoverShowModal(searchShow){
     try{
         const details = await tmdbGetShowDetails(searchShow.id);
         const showObject = createShowObject(details,"plan");
-        await ensureRomanizedTitleForShow(showObject,{skipSave:true});
         await loadSeasonData(showObject,1);
 
         discoverPreviewShow = showObject;
@@ -1880,6 +1962,7 @@ async function openDiscoverShowModal(searchShow){
 
         renderDiscoverShowModal(showObject);
         await revealPreparedModal();
+        enrichShowWithRomanizedTitle(showObject,{skipSave:true});
         loadDiscoverPreviewSeason(showObject,1);
     }catch(error){
         const content = document.getElementById("show-modal-content");
