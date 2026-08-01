@@ -4095,30 +4095,35 @@ body.favorite-reordering{
 
 .view-more-button{
     display:block;
-    width:min(260px,100%);
+    width:auto;
+    min-width:132px;
     margin:18px auto 4px;
-    padding:12px 22px;
-    border:1px solid rgba(255,255,255,0.18);
+    padding:7px 26px 8px;
+    border:1px solid rgba(255,255,255,0.92);
     border-radius:999px;
-    background:linear-gradient(180deg,rgba(255,255,255,0.11),rgba(255,255,255,0.04));
-    color:#f5f5f5;
-    font-family:var(--font-display,inherit);
-    font-size:0.92rem;
-    letter-spacing:0.08em;
+    background:#f4f4f0;
+    color:#050505;
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:32px;
+    line-height:1;
+    letter-spacing:0.035em;
     text-transform:uppercase;
     cursor:pointer;
-    transition:background 0.18s ease,border-color 0.18s ease,transform 0.18s ease;
+    box-shadow:0 12px 28px rgba(0,0,0,0.34), inset 0 -1px 0 rgba(0,0,0,0.18);
+    transition:background 0.18s ease,border-color 0.18s ease,color 0.18s ease,box-shadow 0.18s ease,transform 0.18s ease;
 }
 
 .view-more-button:hover,
 .view-more-button:focus-visible{
-    background:linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.07));
-    border-color:rgba(255,255,255,0.34);
+    background:#fff;
+    border-color:#fff;
+    color:#000;
+    box-shadow:0 14px 32px rgba(0,0,0,0.42),0 0 0 2px rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.2);
     transform:translateY(-1px);
 }
 
 .view-more-button:disabled{
-    opacity:0.55;
+    opacity:0.62;
     cursor:wait;
     transform:none;
 }
