@@ -1450,7 +1450,7 @@ function titleUsesNonLatinScript(value){
 
 
 
-const ROMANIZED_TITLE_VALIDATION_VERSION = 3;
+const ROMANIZED_TITLE_VALIDATION_VERSION = 4;
 
 
 
@@ -1520,10 +1520,6 @@ function titleLooksLikeShortLoanwordReading(candidate,mainTitle){
         return false;
     }
 
-    if(titleHasRomanizedStructureMarker(candidate)){
-        return false;
-    }
-
     const allCandidateWordsShort = candidateWords.every(word=>word.length >= 2 && word.length <= 5);
     const allMainWordsShort = mainWords.every(word=>word.length >= 2 && word.length <= 8);
 
@@ -1544,15 +1540,11 @@ function titleLooksLikeEpisodeOrSpecialTitle(candidate,mainTitle){
         return true;
     }
 
-    if(candidateComparison.startsWith(mainComparison + " ")){
+    if(candidateComparison.startsWith(mainComparison) || candidateComparison.endsWith(mainComparison)){
         return true;
     }
 
-    if(candidateComparison.endsWith(" " + mainComparison)){
-        return true;
-    }
-
-    return /\b(episode|special|ova|ona|movie|film|recap|summary|side story|spin off|spinoff|fan letter)\b/.test(candidateComparison);
+    return /(episode|special|ova|ona|movie|film|recap|summary|sidestory|spinoff|fanletter)/.test(candidateComparison);
 }
 
 
@@ -3561,24 +3553,65 @@ function getAiredEpisodeNumbersInSeason(show,seasonNumber){
 
 
 
-function isSeasonFullyWatched(show,seasonNumber,airedEpisodeNumbers=null){
+function getKnownSeasonEpisodeNumbers(show,seasonNumber){
+    const seasonKey = String(seasonNumber);
 
-    const aired = Array.isArray(airedEpisodeNumbers)
-    ? airedEpisodeNumbers
-    : getAiredEpisodeNumbersInSeason(show,seasonNumber);
+    const episodeList =
+    show &&
+    show._episode_list &&
+    Array.isArray(show._episode_list[seasonKey])
+    ? show._episode_list[seasonKey]
+    : [];
 
-    if(aired.length === 0){
-        return false;
+    const fromEpisodeList = episodeList
+    .map(ep=>Number(ep && ep.episode_number))
+    .filter(Number.isFinite)
+    .sort((a,b)=>a-b);
+
+    if(fromEpisodeList.length){
+        return fromEpisodeList;
     }
+
+    const storedCount = Number(
+        show &&
+        show._season_episodes &&
+        show._season_episodes[seasonKey]
+    );
+    const knownCount = Number.isFinite(storedCount)
+    ? Math.max(0,Math.floor(storedCount))
+    : 0;
+
+    if(knownCount){
+        return Array.from({length:knownCount},(_,index)=>index + 1);
+    }
+
+    return [];
+}
+
+
+
+function isSeasonFullyWatched(show,seasonNumber,airedEpisodeNumbers=null){
 
     const watchedEpisodes =
     show &&
     show.episodes_watched &&
     Array.isArray(show.episodes_watched[String(seasonNumber)])
-    ? show.episodes_watched[String(seasonNumber)]
+    ? show.episodes_watched[String(seasonNumber)].map(Number).filter(Number.isFinite)
     : [];
 
-    return aired.every(episodeNumber=>{
+    if(watchedEpisodes.length === 0){
+        return false;
+    }
+
+    const requiredEpisodes = Array.isArray(airedEpisodeNumbers) && airedEpisodeNumbers.length
+    ? airedEpisodeNumbers.map(Number).filter(Number.isFinite)
+    : getKnownSeasonEpisodeNumbers(show,seasonNumber);
+
+    if(requiredEpisodes.length === 0){
+        return false;
+    }
+
+    return requiredEpisodes.every(episodeNumber=>{
         return watchedEpisodes.includes(Number(episodeNumber));
     });
 

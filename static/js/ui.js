@@ -42,6 +42,92 @@ function trackerBackgroundImage(path,size="original"){
     return url ? `url("${escapeHTML(url)}")` : "";
 }
 
+function trackerHeroBackground(path){
+    return path
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(path,"original")}`
+    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+}
+
+function getEpisodeHeroImageCandidates(show,episodeData){
+    const rawCandidates = [
+        {type:"episode",path:episodeData && episodeData.still_path},
+        {type:"backdrop",path:show && show.backdrop_path},
+        {type:"poster",path:show && show.poster_path}
+    ];
+
+    const seen = new Set();
+
+    return rawCandidates.filter(candidate=>{
+        const path = String(candidate.path || "").trim();
+
+        if(!path){
+            return false;
+        }
+
+        const key = path.toLowerCase();
+
+        if(seen.has(key)){
+            return false;
+        }
+
+        seen.add(key);
+        candidate.path = path;
+        return true;
+    });
+}
+
+function episodeStillLooksWeakForHero(image){
+    if(!image){
+        return true;
+    }
+
+    const width = Number(image.naturalWidth || 0);
+    const height = Number(image.naturalHeight || 0);
+
+    if(width < 960 || height < 500){
+        return true;
+    }
+
+    if(width / Math.max(height,1) < 1.35){
+        return true;
+    }
+
+    return false;
+}
+
+function applyEpisodeHeroImageQualityFallback(hero,candidates){
+    if(!hero || !Array.isArray(candidates) || candidates.length < 2){
+        return;
+    }
+
+    const first = candidates[0];
+
+    if(!first || first.type !== "episode"){
+        return;
+    }
+
+    const fallback = candidates.find(candidate=>candidate.type === "backdrop") || candidates.find(candidate=>candidate.type === "poster");
+
+    if(!fallback){
+        return;
+    }
+
+    const image = new Image();
+
+    image.onload = function(){
+        if(episodeStillLooksWeakForHero(image)){
+            hero.style.backgroundImage = trackerHeroBackground(fallback.path);
+        }
+    };
+
+    image.onerror = function(){
+        hero.style.backgroundImage = trackerHeroBackground(fallback.path);
+    };
+
+    image.src = trackerImageURL(first.path,"original");
+}
+
+
 function getCheckSuccessAnimationTarget(element){
 
     if(!element){
@@ -3050,11 +3136,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     const episodeTitle = episodeData.name || "Untitled Episode";
     const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
 
-    const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
-
-    const backdrop = imagePath
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(imagePath,"original")}`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    const heroImageCandidates = getEpisodeHeroImageCandidates(show,episodeData);
+    const imagePath = heroImageCandidates.length ? heroImageCandidates[0].path : "";
+    const backdrop = trackerHeroBackground(imagePath);
 
     const airDateText = episodeData.air_date
     ? formatAirDate(episodeData.air_date,episodeData)
@@ -3106,7 +3190,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     content.innerHTML = `
 
-        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
+        <div class="modal-hero episode-detail-hero" id="episode-detail-hero" style='background-image:${backdrop}'>
 
             <div class="modal-hero-content episode-detail-hero-content">
 
@@ -3200,6 +3284,11 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
         </div>
 
     `;
+
+    applyEpisodeHeroImageQualityFallback(
+        document.getElementById("episode-detail-hero"),
+        heroImageCandidates
+    );
 
     const openShowButton = document.getElementById("episode-open-show-button");
 

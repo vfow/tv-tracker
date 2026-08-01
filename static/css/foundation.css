@@ -2481,3 +2481,23 @@ Only the approved non-structural corrections remain below.
 .show-modal-overlay .show-modal{
     contain:layout paint;
 }
+
+/* ---------- v1.7 UI polish repair: Discover search rows ---------- */
+#discover-page .search-results .episode-title{
+    display:-webkit-box;
+    overflow:hidden;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:3;
+}
+
+@media (max-width:767.98px){
+    #discover-page .search-results{
+        margin-left:-16px;
+        margin-right:-16px;
+    }
+
+    #discover-page .search-results .show{
+        padding-left:16px;
+        padding-right:16px;
+    }
+}
