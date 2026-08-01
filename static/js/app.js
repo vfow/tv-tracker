@@ -676,6 +676,10 @@ function normalizeExistingData(){
             show._romanized_title_source = "";
         }
 
+        if(typeof show._romanized_title_validation_version === "undefined"){
+            show._romanized_title_validation_version = 0;
+        }
+
         delete show.date_only_episode_time_override;
         cleanLegacyMetadata(show);
 
@@ -1446,6 +1450,10 @@ function titleUsesNonLatinScript(value){
 
 
 
+const ROMANIZED_TITLE_VALIDATION_VERSION = 2;
+
+
+
 function isCleanRomanizedTitle(value,mainTitle){
     const title = normalizeTitleText(value);
 
@@ -1470,28 +1478,135 @@ function isCleanRomanizedTitle(value,mainTitle){
 
 
 
+function getOriginCountries(details){
+    return Array.isArray(details && details.origin_country)
+    ? details.origin_country.map(value=>String(value || "").toUpperCase()).filter(Boolean)
+    : [];
+}
+
+
+
+function titleHasRomanizedStructureMarker(value){
+    const normalized = ` ${normalizeTitleText(value).toLowerCase()} `;
+
+    return /[-'’āēīōū]/i.test(normalized) ||
+    /\b(no|wa|ga|wo|o|ni|de|to|ya|kara|made|dake|mono|hen|san|kun|chan|sama|sensei|senpai)\b/.test(normalized);
+}
+
+
+
+function titleLooksLikeShortLoanwordReading(candidate,mainTitle){
+    const candidateWords = normalizeTitleText(candidate)
+    .toLowerCase()
+    .replace(/[^a-zÀ-ÖØ-öø-ÿ\s-]+/g," ")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+
+    const mainWords = normalizeTitleText(mainTitle)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g," ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+    if(candidateWords.length < 1 || mainWords.length < 1){
+        return false;
+    }
+
+    if(candidateWords.length !== mainWords.length){
+        return false;
+    }
+
+    if(candidateWords.length > 3){
+        return false;
+    }
+
+    if(titleHasRomanizedStructureMarker(candidate)){
+        return false;
+    }
+
+    const allCandidateWordsShort = candidateWords.every(word=>word.length >= 2 && word.length <= 5);
+    const allMainWordsShort = mainWords.every(word=>word.length >= 2 && word.length <= 8);
+
+    return allCandidateWordsShort && allMainWordsShort;
+}
+
+
+
+function romanizedTitleItemHasExplicitRomanizationType(item){
+    const type = String(item && item.type ? item.type : "").toLowerCase();
+
+    return /romaji|romaniz|transliter|transcript/.test(type);
+}
+
+
+
+function romanizedTitleItemHasOriginalTitleType(item){
+    const type = String(item && item.type ? item.type : "").toLowerCase();
+
+    return /original/.test(type);
+}
+
+
+
+function isLikelyUsefulRomanizedAlternative(item,details,mainTitle){
+    const title = normalizeTitleText(item && item.title);
+
+    if(!isCleanRomanizedTitle(title,mainTitle)){
+        return false;
+    }
+
+    if(titleLooksLikeShortLoanwordReading(title,mainTitle)){
+        return false;
+    }
+
+    const type = String(item && item.type ? item.type : "").toLowerCase();
+    const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
+    const originCountries = getOriginCountries(details);
+    const isOriginCountry = country && originCountries.includes(country);
+    const hasExplicitRomanizationType = romanizedTitleItemHasExplicitRomanizationType(item);
+    const hasOriginalTitleType = romanizedTitleItemHasOriginalTitleType(item);
+    const hasRomanizedMarker = titleHasRomanizedStructureMarker(title);
+    const wordCount = title.split(/\s+/).filter(Boolean).length;
+
+    if(/translation|translated|local|regional|release/.test(type)){
+        return false;
+    }
+
+    if(hasOriginalTitleType){
+        return Boolean(isOriginCountry && (hasRomanizedMarker || wordCount >= 2));
+    }
+
+    if(hasExplicitRomanizationType){
+        return Boolean(isOriginCountry || hasRomanizedMarker || wordCount >= 3);
+    }
+
+    if(isOriginCountry && (hasRomanizedMarker || wordCount >= 3)){
+        return true;
+    }
+
+    return false;
+}
+
+
+
 function getRomanizedTitleCandidateScore(item,details){
     const type = String(item && item.type ? item.type : "").toLowerCase();
     const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
-    const originCountries = Array.isArray(details && details.origin_country)
-    ? details.origin_country.map(value=>String(value || "").toUpperCase())
-    : [];
+    const originCountries = getOriginCountries(details);
 
     let score = 100;
 
-    if(/romaji|romaniz|transliter/.test(type)){
+    if(/romaji|romaniz|transliter|transcript/.test(type)){
         score = 0;
     }else if(/original/.test(type)){
-        score = 20;
-    }else if(/also known as|alternative|short/.test(type)){
-        score = 45;
+        score = 15;
     }
 
     if(country && originCountries.includes(country)){
         score -= 10;
     }
 
-    if(["JP","KR","CN","TW","HK"].includes(country)){
+    if(titleHasRomanizedStructureMarker(item && item.title)){
         score -= 5;
     }
 
@@ -1508,7 +1623,11 @@ function chooseRomanizedTitle(details,alternativeTitlePayload){
     const originalName = normalizeTitleText(details && details.original_name);
 
     if(isCleanRomanizedTitle(originalName,mainTitle)){
-        return {title:originalName,source:"original_name"};
+        return {
+            title:originalName,
+            source:"original_name",
+            validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION
+        };
     }
 
     const results = alternativeTitlePayload && Array.isArray(alternativeTitlePayload.results)
@@ -1519,13 +1638,14 @@ function chooseRomanizedTitle(details,alternativeTitlePayload){
     .map((item,index)=>{
         const title = normalizeTitleText(item && item.title);
 
-        if(!isCleanRomanizedTitle(title,mainTitle)){
+        if(!isLikelyUsefulRomanizedAlternative(item,details,mainTitle)){
             return null;
         }
 
         return {
             title:title,
             source:"alternative_titles",
+            validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION,
             score:getRomanizedTitleCandidateScore(item,details),
             index:index
         };
@@ -1538,29 +1658,75 @@ function chooseRomanizedTitle(details,alternativeTitlePayload){
         return a.index - b.index;
     });
 
-    return candidates[0] || {title:"",source:""};
+    return candidates[0] || {title:"",source:"",validationVersion:ROMANIZED_TITLE_VALIDATION_VERSION};
 }
 
 
 
-function setRomanizedTitle(show,title,source){
+function clearRomanizedTitle(show){
     if(!show){
         return false;
     }
 
-    const cleanTitle = normalizeTitleText(title);
+    const changed = Boolean(
+        show.romanized_title ||
+        show._romanized_title_source ||
+        show._romanized_title_validation_version
+    );
 
-    if(!isCleanRomanizedTitle(cleanTitle,show.title || show.name || "")){
+    show.romanized_title = "";
+    show._romanized_title_source = "";
+    show._romanized_title_validation_version = ROMANIZED_TITLE_VALIDATION_VERSION;
+
+    return changed;
+}
+
+
+
+function isStoredRomanizedTitleDisplayable(show){
+    if(!show){
         return false;
     }
 
-    if(show.romanized_title === cleanTitle){
+    if(!isCleanRomanizedTitle(show.romanized_title,show.title || show.name || "")){
         return false;
     }
+
+    if(show._romanized_title_source === "original_name"){
+        return true;
+    }
+
+    return Number(show._romanized_title_validation_version || 0) >= ROMANIZED_TITLE_VALIDATION_VERSION;
+}
+
+
+
+function applyRomanizedTitleCandidate(show,candidate){
+    if(!show){
+        return false;
+    }
+
+    const cleanTitle = normalizeTitleText(candidate && candidate.title);
+    const mainTitle = show.title || show.name || "";
+
+    if(!isCleanRomanizedTitle(cleanTitle,mainTitle)){
+        return clearRomanizedTitle(show);
+    }
+
+    const nextSource = candidate && candidate.source ? candidate.source : "tmdb";
+    const nextVersion = candidate && candidate.validationVersion
+    ? candidate.validationVersion
+    : ROMANIZED_TITLE_VALIDATION_VERSION;
+
+    const changed = show.romanized_title !== cleanTitle ||
+    show._romanized_title_source !== nextSource ||
+    Number(show._romanized_title_validation_version || 0) !== Number(nextVersion);
 
     show.romanized_title = cleanTitle;
-    show._romanized_title_source = source || "tmdb";
-    return true;
+    show._romanized_title_source = nextSource;
+    show._romanized_title_validation_version = nextVersion;
+
+    return changed;
 }
 
 
@@ -1570,7 +1736,14 @@ async function ensureRomanizedTitleForShow(show,options={}){
         return false;
     }
 
-    if(isCleanRomanizedTitle(show.romanized_title,show.title || "")){
+    if(isStoredRomanizedTitleDisplayable(show)){
+        return false;
+    }
+
+    if(
+        !show.romanized_title &&
+        Number(show._romanized_title_validation_version || 0) >= ROMANIZED_TITLE_VALIDATION_VERSION
+    ){
         return false;
     }
 
@@ -1578,7 +1751,7 @@ async function ensureRomanizedTitleForShow(show,options={}){
 
     if(romanizedTitleMemoryCache.has(showId)){
         const cached = romanizedTitleMemoryCache.get(showId);
-        const changed = setRomanizedTitle(show,cached.title,cached.source);
+        const changed = applyRomanizedTitleCandidate(show,cached);
 
         if(changed && options.skipSave !== true){
             await saveData({showIds:[showId]});
@@ -1596,7 +1769,7 @@ async function ensureRomanizedTitleForShow(show,options={}){
 
         romanizedTitleMemoryCache.set(showId,candidate);
 
-        const changed = setRomanizedTitle(show,candidate.title,candidate.source);
+        const changed = applyRomanizedTitleCandidate(show,candidate);
 
         if(changed && options.skipSave !== true){
             await saveData({showIds:[showId]});
@@ -1666,6 +1839,9 @@ function createShowObject(details,status){
         _romanized_title_source:isCleanRomanizedTitle(details.original_name,details.name)
         ? "original_name"
         : "",
+        _romanized_title_validation_version:isCleanRomanizedTitle(details.original_name,details.name)
+        ? ROMANIZED_TITLE_VALIDATION_VERSION
+        : 0,
         _tmdb_external_ids:null,
     };
 

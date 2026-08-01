@@ -260,6 +260,14 @@ function getShowRomanizedSubtitleHTML(show){
     }
 
     if(
+        typeof isStoredRomanizedTitleDisplayable === "function" &&
+        !isStoredRomanizedTitleDisplayable(show)
+    ){
+        return "";
+    }
+
+    if(
+        typeof isStoredRomanizedTitleDisplayable !== "function" &&
         typeof isCleanRomanizedTitle === "function" &&
         !isCleanRomanizedTitle(subtitle,show.title || show.name || "")
     ){
