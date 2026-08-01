@@ -551,6 +551,60 @@ body{
     margin-bottom:10px;
 }
 
+.modal-title-subtitle{
+    font-family:"League Gothic", Arial, Helvetica, sans-serif;
+    font-size:34px;
+    line-height:1;
+    color:#cfcfcf;
+    letter-spacing:.02em;
+    margin-top:-2px;
+    margin-bottom:10px;
+}
+
+.view-more-row{
+    display:flex;
+    justify-content:center;
+    margin:26px 0 10px;
+}
+
+.view-more-button{
+    background:#fff;
+    color:#000;
+    border:none;
+    border-radius:999px;
+    padding:9px 18px;
+    font-weight:bold;
+    cursor:pointer;
+    transition:background .18s ease, transform .18s ease, opacity .18s ease;
+}
+
+.view-more-button:hover:not(:disabled){
+    background:#d8d8d8;
+    transform:translateY(-1px);
+}
+
+.view-more-button:disabled{
+    opacity:.55;
+    cursor:default;
+}
+
+.discover-view-more-button{
+    flex:0 0 auto;
+    font-size:13px;
+    padding:8px 14px;
+}
+
+@media(max-width:600px){
+    .modal-title-subtitle{
+        font-size:28px;
+    }
+
+    .discover-section-heading{
+        align-items:flex-start;
+        flex-direction:column;
+    }
+}
+
 
 .modal-meta{
     color:#aaa;

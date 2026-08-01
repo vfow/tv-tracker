@@ -250,6 +250,27 @@ function renderShowsPage(){
 
 
 
+function getShowRomanizedSubtitleHTML(show){
+    const subtitle = show && show.romanized_title
+    ? String(show.romanized_title || "").trim()
+    : "";
+
+    if(!subtitle){
+        return "";
+    }
+
+    if(
+        typeof isCleanRomanizedTitle === "function" &&
+        !isCleanRomanizedTitle(subtitle,show.title || show.name || "")
+    ){
+        return "";
+    }
+
+    return `<div class="modal-title-subtitle">${escapeHTML(subtitle)}</div>`;
+}
+
+
+
 function renderDiscoverHub(){
 
     const results = document.getElementById("search-results");
@@ -371,6 +392,14 @@ function renderDiscoverHub(){
 
     });
 
+    document.querySelectorAll(".discover-view-more-button").forEach(button=>{
+
+        button.addEventListener("click",function(){
+            loadMoreDiscoverHubSection(this.dataset.sectionKey);
+        });
+
+    });
+
 }
 
 
@@ -401,6 +430,8 @@ function renderDiscoverHubSection(section){
     const repeatedShows = shows.length > 1
     ? [...shows,...shows,...shows]
     : shows;
+    const hasMore = Number(section.page || 1) < Number(section.total_pages || 1);
+    const loadingMore = section.loadingMore === true;
 
     return `
         <div class="discover-section">
@@ -408,6 +439,15 @@ function renderDiscoverHubSection(section){
                 <div>
                     <h3>${escapeHTML(section.title || "Shows")}</h3>
                 </div>
+                ${hasMore || loadingMore ? `
+                    <button
+                    type="button"
+                    class="view-more-button discover-view-more-button"
+                    data-section-key="${rowKey}"
+                    ${loadingMore ? "disabled" : ""}>
+                        ${loadingMore ? "Loading…" : "View More"}
+                    </button>
+                ` : ""}
             </div>
             <div class="discover-carousel-shell">
                 <div class="discover-card-row infinite-discover-row" data-discover-row="${rowKey}" data-original-count="${shows.length}">
@@ -422,6 +462,7 @@ function renderDiscoverHubSection(section){
     `;
 
 }
+
 
 
 function getDiscoverCarouselMetrics(row){
@@ -653,6 +694,27 @@ function renderSearchResults(shows){
         results.appendChild(card);
 
     });
+
+    const state = typeof searchPaginationState === "object" && searchPaginationState
+    ? searchPaginationState
+    : null;
+
+    if(state && Number(state.page || 1) < Number(state.totalPages || 1)){
+        const wrapper = document.createElement("div");
+        wrapper.className = "view-more-row";
+
+        const button = document.createElement("button");
+        button.className = "view-more-button search-view-more-button";
+        button.textContent = state.loading ? "Loading…" : "View More";
+        button.disabled = state.loading === true;
+
+        button.addEventListener("click",function(){
+            loadMoreSearchResults();
+        });
+
+        wrapper.appendChild(button);
+        results.appendChild(wrapper);
+    }
 
 }
 
@@ -2266,6 +2328,8 @@ function renderDiscoverShowModal(show){
                     ${escapeHTML(show.title)}
                 </div>
 
+                ${getShowRomanizedSubtitleHTML(show)}
+
             </div>
 
         </div>
@@ -2654,6 +2718,8 @@ function renderShowModal(show){
                 <div class="modal-title">
                     ${escapeHTML(show.title)}
                 </div>
+
+                ${getShowRomanizedSubtitleHTML(show)}
 
             </div>
 

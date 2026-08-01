@@ -35,6 +35,15 @@ var currentSearchController = null;
 var searchRequestId = 0;
 var lastDiscoverSearchQuery = "";
 var lastDiscoverSearchResults = [];
+var searchPaginationState = {
+    query:"",
+    displayQuery:"",
+    page:1,
+    totalPages:1,
+    loading:false,
+    results:[]
+};
+var romanizedTitleMemoryCache = new Map();
 var discoverHubState = {
     loaded:false,
     loading:false,
@@ -50,7 +59,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v3";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 
 
@@ -657,6 +666,14 @@ function normalizeExistingData(){
 
         if(typeof show._tmdb_external_ids === "undefined"){
             show._tmdb_external_ids = null;
+        }
+
+        if(typeof show.romanized_title !== "string"){
+            show.romanized_title = "";
+        }
+
+        if(typeof show._romanized_title_source !== "string"){
+            show._romanized_title_source = "";
         }
 
         delete show.date_only_episode_time_override;
@@ -1408,6 +1425,210 @@ async function autoUpdateStatuses(forceRefresh=false,allowRemoteRefresh=true){
 
 
 
+function normalizeTitleText(value){
+    return String(value || "").replace(/\s+/g," ").trim();
+}
+
+
+
+function normalizeTitleComparison(value){
+    return normalizeTitleText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,"")
+    .trim();
+}
+
+
+
+function titleUsesNonLatinScript(value){
+    return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u04ff\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u0e00-\u0e7f]/.test(String(value || ""));
+}
+
+
+
+function isCleanRomanizedTitle(value,mainTitle){
+    const title = normalizeTitleText(value);
+
+    if(!title || title.length > 160){
+        return false;
+    }
+
+    if(titleUsesNonLatinScript(title)){
+        return false;
+    }
+
+    if(!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(title)){
+        return false;
+    }
+
+    if(normalizeTitleComparison(title) === normalizeTitleComparison(mainTitle)){
+        return false;
+    }
+
+    return true;
+}
+
+
+
+function getRomanizedTitleCandidateScore(item,details){
+    const type = String(item && item.type ? item.type : "").toLowerCase();
+    const country = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase();
+    const originCountries = Array.isArray(details && details.origin_country)
+    ? details.origin_country.map(value=>String(value || "").toUpperCase())
+    : [];
+
+    let score = 100;
+
+    if(/romaji|romaniz|transliter/.test(type)){
+        score = 0;
+    }else if(/original/.test(type)){
+        score = 20;
+    }else if(/also known as|alternative|short/.test(type)){
+        score = 45;
+    }
+
+    if(country && originCountries.includes(country)){
+        score -= 10;
+    }
+
+    if(["JP","KR","CN","TW","HK"].includes(country)){
+        score -= 5;
+    }
+
+    return score;
+}
+
+
+
+function chooseRomanizedTitle(details,alternativeTitlePayload){
+    const mainTitle = normalizeTitleText(
+        details && (details.name || details.title)
+    );
+
+    const originalName = normalizeTitleText(details && details.original_name);
+
+    if(isCleanRomanizedTitle(originalName,mainTitle)){
+        return {title:originalName,source:"original_name"};
+    }
+
+    const results = alternativeTitlePayload && Array.isArray(alternativeTitlePayload.results)
+    ? alternativeTitlePayload.results
+    : [];
+
+    const candidates = results
+    .map((item,index)=>{
+        const title = normalizeTitleText(item && item.title);
+
+        if(!isCleanRomanizedTitle(title,mainTitle)){
+            return null;
+        }
+
+        return {
+            title:title,
+            source:"alternative_titles",
+            score:getRomanizedTitleCandidateScore(item,details),
+            index:index
+        };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>{
+        if(a.score !== b.score){
+            return a.score - b.score;
+        }
+        return a.index - b.index;
+    });
+
+    return candidates[0] || {title:"",source:""};
+}
+
+
+
+function setRomanizedTitle(show,title,source){
+    if(!show){
+        return false;
+    }
+
+    const cleanTitle = normalizeTitleText(title);
+
+    if(!isCleanRomanizedTitle(cleanTitle,show.title || show.name || "")){
+        return false;
+    }
+
+    if(show.romanized_title === cleanTitle){
+        return false;
+    }
+
+    show.romanized_title = cleanTitle;
+    show._romanized_title_source = source || "tmdb";
+    return true;
+}
+
+
+
+async function ensureRomanizedTitleForShow(show,options={}){
+    if(!show || !canUseTMDBShow(show)){
+        return false;
+    }
+
+    if(isCleanRomanizedTitle(show.romanized_title,show.title || "")){
+        return false;
+    }
+
+    const showId = String(show.tmdb_id);
+
+    if(romanizedTitleMemoryCache.has(showId)){
+        const cached = romanizedTitleMemoryCache.get(showId);
+        const changed = setRomanizedTitle(show,cached.title,cached.source);
+
+        if(changed && options.skipSave !== true){
+            await saveData({showIds:[showId]});
+        }
+
+        return changed;
+    }
+
+    try{
+        const details = await tmdbGetShowDetails(show.tmdb_id);
+        const alternativeTitles = typeof tmdbGetAlternativeTitles === "function"
+        ? await tmdbGetAlternativeTitles(show.tmdb_id)
+        : null;
+        const candidate = chooseRomanizedTitle(details,alternativeTitles);
+
+        romanizedTitleMemoryCache.set(showId,candidate);
+
+        const changed = setRomanizedTitle(show,candidate.title,candidate.source);
+
+        if(changed && options.skipSave !== true){
+            await saveData({showIds:[showId]});
+        }
+
+        return changed;
+    }catch(error){
+        return false;
+    }
+}
+
+
+
+async function enrichShowWithRomanizedTitle(show,options={}){
+    const changed = await ensureRomanizedTitleForShow(show,options);
+
+    if(changed && typeof renderShowModalPreservingScroll === "function"){
+        const isSelectedShow = selectedShowId && String(show.tmdb_id) === String(selectedShowId);
+        const isPreviewShow = discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === String(show.tmdb_id);
+
+        if(isSelectedShow){
+            renderShowModalPreservingScroll(show);
+        }else if(isPreviewShow && typeof renderDiscoverShowModalPreservingScroll === "function"){
+            renderDiscoverShowModalPreservingScroll(show);
+        }
+    }
+
+    return changed;
+}
+
+
+
 function createShowObject(details,status){
 
     return {
@@ -1439,6 +1660,12 @@ function createShowObject(details,status){
         _season_episodes:{},
         _episode_details:{},
         _episode_list:{},
+        romanized_title:isCleanRomanizedTitle(details.original_name,details.name)
+        ? normalizeTitleText(details.original_name)
+        : "",
+        _romanized_title_source:isCleanRomanizedTitle(details.original_name,details.name)
+        ? "original_name"
+        : "",
         _tmdb_external_ids:null,
     };
 
@@ -1467,6 +1694,7 @@ async function openDiscoverShowModal(searchShow){
     try{
         const details = await tmdbGetShowDetails(searchShow.id);
         const showObject = createShowObject(details,"plan");
+        await ensureRomanizedTitleForShow(showObject,{skipSave:true});
         await loadSeasonData(showObject,1);
 
         discoverPreviewShow = showObject;
@@ -1897,6 +2125,43 @@ function cancelActiveSearchRequest(){
 
 
 
+function resetSearchPagination(){
+    searchPaginationState = {
+        query:"",
+        displayQuery:"",
+        page:1,
+        totalPages:1,
+        loading:false,
+        results:[]
+    };
+}
+
+
+
+function mergeUniqueShows(existing,next){
+    const seen = new Set();
+    const output = [];
+
+    (existing || []).concat(next || []).forEach(show=>{
+        if(!show || !show.id){
+            return;
+        }
+
+        const id = String(show.id);
+
+        if(seen.has(id)){
+            return;
+        }
+
+        seen.add(id);
+        output.push(show);
+    });
+
+    return output;
+}
+
+
+
 function renderSearchIntro(){
 
     const results = document.getElementById("search-results");
@@ -2005,7 +2270,8 @@ function writeDiscoverHubCache(sections){
 async function tmdbGetDiscoverList(path,params={}){
 
     const searchParams = new URLSearchParams();
-    searchParams.set("page",String(params.page || 1));
+    const pageNumber = Math.max(1,Number(params.page || 1));
+    searchParams.set("page",String(pageNumber));
 
     Object.keys(params || {}).forEach(key=>{
 
@@ -2028,7 +2294,12 @@ async function tmdbGetDiscoverList(path,params={}){
     }
 
     const data = await response.json();
-    return data.results || [];
+    return {
+        results:data.results || [],
+        page:Number(data.page || pageNumber),
+        total_pages:Number(data.total_pages || pageNumber || 1),
+        total_results:Number(data.total_results || 0)
+    };
 
 }
 
@@ -2055,9 +2326,14 @@ function normalizeDiscoverHubShow(show){
 
 
 
-function buildDiscoverHubSection(key,title,subtitle,shows,usedIds){
+function buildDiscoverHubSection(key,title,subtitle,response,usedIds,path,params){
 
     const output = [];
+    const shows = response && Array.isArray(response.results)
+    ? response.results
+    : Array.isArray(response)
+    ? response
+    : [];
 
     (shows || []).forEach(raw=>{
 
@@ -2082,7 +2358,12 @@ function buildDiscoverHubSection(key,title,subtitle,shows,usedIds){
         key:key,
         title:title,
         subtitle:subtitle,
-        shows:output.slice(0,12)
+        shows:output.slice(0,12),
+        path:path || "",
+        params:params || {},
+        page:Number(response && response.page ? response.page : 1),
+        total_pages:Number(response && response.total_pages ? response.total_pages : 1),
+        loadingMore:false
     };
 
 }
@@ -2134,17 +2415,23 @@ async function loadDiscoverHub(force=false){
 
         const today = getLocalDateKey(new Date());
 
+        const comingSoonParams = {
+            "first_air_date.gte":today,
+            "sort_by":"popularity.desc",
+            "include_adult":"false",
+            "include_null_first_air_dates":"false"
+        };
+
         const [comingSoon,trendingWeek,airingNow,popular] = await Promise.all([
-            tmdbGetDiscoverList("discover/tv",{
-                "first_air_date.gte":today,
-                "sort_by":"popularity.desc",
-                "include_adult":"false",
-                "include_null_first_air_dates":"false"
-            }),
+            tmdbGetDiscoverList("discover/tv",comingSoonParams),
             tmdbGetDiscoverList("trending/tv/week"),
             tmdbGetDiscoverList("tv/on_the_air"),
             tmdbGetDiscoverList("tv/popular")
         ]);
+
+        comingSoon.results = (comingSoon.results || []).filter(show=>{
+            return show && show.first_air_date && show.first_air_date >= today;
+        });
 
         const usedIds = new Set();
 
@@ -2153,29 +2440,37 @@ async function loadDiscoverHub(force=false){
                 "coming-soon",
                 "Coming Soon",
                 "",
-                comingSoon.filter(show=>show && show.first_air_date && show.first_air_date >= today),
-                usedIds
+                comingSoon,
+                usedIds,
+                "discover/tv",
+                comingSoonParams
             ),
             buildDiscoverHubSection(
                 "trending-week",
                 "Trending This Week",
                 "",
                 trendingWeek,
-                usedIds
+                usedIds,
+                "trending/tv/week",
+                {}
             ),
             buildDiscoverHubSection(
                 "airing-now",
                 "Airing Now",
                 "",
                 airingNow,
-                usedIds
+                usedIds,
+                "tv/on_the_air",
+                {}
             ),
             buildDiscoverHubSection(
                 "popular",
                 "Popular",
                 "",
                 popular,
-                usedIds
+                usedIds,
+                "tv/popular",
+                {}
             )
         ];
 
@@ -2208,6 +2503,72 @@ async function loadDiscoverHub(force=false){
 
 
 
+async function loadMoreDiscoverHubSection(sectionKey){
+    if(!discoverHubState || !Array.isArray(discoverHubState.sections)){
+        return;
+    }
+
+    const section = discoverHubState.sections.find(item=>{
+        return item && String(item.key) === String(sectionKey);
+    });
+
+    if(!section || section.loadingMore || !section.path){
+        return;
+    }
+
+    const currentPage = Number(section.page || 1);
+    const totalPages = Number(section.total_pages || 1);
+
+    if(currentPage >= totalPages){
+        return;
+    }
+
+    section.loadingMore = true;
+
+    if(typeof renderDiscoverHub === "function"){
+        renderDiscoverHub();
+    }
+
+    try{
+        const nextPage = currentPage + 1;
+        const params = Object.assign({},section.params || {},{page:nextPage});
+        const response = await tmdbGetDiscoverList(section.path,params);
+        let nextShows = response.results || [];
+
+        if(section.key === "coming-soon"){
+            const today = getLocalDateKey(new Date());
+            nextShows = nextShows.filter(show=>{
+                return show && show.first_air_date && show.first_air_date >= today;
+            });
+        }
+
+        const normalized = nextShows
+        .map(normalizeDiscoverHubShow)
+        .filter(Boolean);
+
+        section.shows = mergeUniqueShows(section.shows || [],normalized);
+        section.page = Number(response.page || nextPage);
+        section.total_pages = Number(response.total_pages || section.total_pages || nextPage);
+        section.loadingMore = false;
+
+        writeDiscoverHubCache(discoverHubState.sections);
+
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+    }catch(error){
+        section.loadingMore = false;
+
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+
+        showToast(error && error.message ? error.message : "Could not load more shows");
+    }
+}
+
+
+
 async function searchShows(query){
 
     const results = document.getElementById("search-results");
@@ -2225,21 +2586,11 @@ async function searchShows(query){
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
+        resetSearchPagination();
         renderSearchIntro();
 
         return;
 
-    }
-
-    const cachedResults = typeof tmdbGetCachedSearchShows === "function"
-    ? tmdbGetCachedSearchShows(cleanQuery)
-    : null;
-
-    if(cachedResults && cachedResults.length){
-        lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = cachedResults.slice(0,10);
-        renderSearchResults(lastDiscoverSearchResults);
-        return;
     }
 
     cancelActiveSearchRequest();
@@ -2255,14 +2606,25 @@ async function searchShows(query){
 
     try{
 
-        const shows = await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined});
+        const pageData = typeof tmdbSearchShowsPage === "function"
+        ? await tmdbSearchShowsPage(cleanQuery,1,{signal:controller ? controller.signal : undefined})
+        : {results:await tmdbSearchShows(cleanQuery,{signal:controller ? controller.signal : undefined}),page:1,total_pages:1};
 
         if(requestId !== searchRequestId){
             return;
         }
 
+        const shows = pageData.results || [];
         lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = (shows || []).slice(0,10);
+        lastDiscoverSearchResults = shows;
+        searchPaginationState = {
+            query:cacheKey,
+            displayQuery:cleanQuery,
+            page:Number(pageData.page || 1),
+            totalPages:Number(pageData.total_pages || 1),
+            loading:false,
+            results:shows
+        };
 
         renderSearchResults(lastDiscoverSearchResults);
 
@@ -2284,6 +2646,43 @@ async function searchShows(query){
             currentSearchController = null;
         }
 
+    }
+
+}
+
+
+
+async function loadMoreSearchResults(){
+
+    if(!searchPaginationState || searchPaginationState.loading){
+        return;
+    }
+
+    const nextPage = Number(searchPaginationState.page || 1) + 1;
+    const totalPages = Number(searchPaginationState.totalPages || 1);
+
+    if(nextPage > totalPages){
+        return;
+    }
+
+    searchPaginationState.loading = true;
+    renderSearchResults(searchPaginationState.results || []);
+
+    try{
+        const pageData = await tmdbSearchShowsPage(searchPaginationState.displayQuery,nextPage);
+        const merged = mergeUniqueShows(searchPaginationState.results || [],pageData.results || []);
+
+        searchPaginationState.results = merged;
+        searchPaginationState.page = Number(pageData.page || nextPage);
+        searchPaginationState.totalPages = Number(pageData.total_pages || searchPaginationState.totalPages || nextPage);
+        searchPaginationState.loading = false;
+        lastDiscoverSearchResults = merged;
+
+        renderSearchResults(merged);
+    }catch(error){
+        searchPaginationState.loading = false;
+        renderSearchResults(searchPaginationState.results || []);
+        showToast(error && error.message ? error.message : "Could not load more results");
     }
 
 }
@@ -2435,6 +2834,7 @@ async function openShowModal(showId){
     expandedSeasons[selectedShowId] = expandedSeasons[selectedShowId] || {};
     renderShowModal(show);
     await revealPreparedModal();
+    enrichShowWithRomanizedTitle(show);
 }
 
 

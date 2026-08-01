@@ -20,7 +20,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
-        self.assertIn('1.7-candidate', template)
+        self.assertIn('1.7-title-polish', template)
 
     def test_backend_proxy_is_tmdb_only(self):
         app_py = self.read('app.py')
@@ -40,6 +40,20 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('Loading episode list...', ui)
         self.assertIn('seasonEpisodeListIsLoadedEmpty', ui)
         self.assertIn('Number(show._season_episodes[seasonKey] || 0) === 0', app_js)
+
+    def test_title_and_view_more_polish_exists(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        tmdb = self.read('static/js/tmdb.js')
+        css = self.read('static/css/style.css')
+        self.assertIn('romanized_title', app_js)
+        self.assertIn('ensureRomanizedTitleForShow', app_js)
+        self.assertIn('/alternative_titles', tmdb)
+        self.assertIn('modal-title-subtitle', ui)
+        self.assertIn('View More', ui)
+        self.assertIn('loadMoreSearchResults', app_js)
+        self.assertIn('loadMoreDiscoverHubSection', app_js)
+        self.assertIn('view-more-button', css)
 
 
 if __name__ == '__main__':
