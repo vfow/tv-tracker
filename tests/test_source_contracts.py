@@ -20,7 +20,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
-        self.assertIn('1.7-watch-log-repair', template)
+        self.assertIn('2.0-integration', template)
+        self.assertIn('v2-router.js', template)
+        self.assertNotIn('static-adapter.js', template)
 
     def test_backend_proxy_is_tmdb_only(self):
         app_py = self.read('app.py')
@@ -63,6 +65,50 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('-webkit-line-clamp:2', css)
         self.assertIn('view-more-button', css)
         self.assertIn('tmdbSearchShowsPage', tmdb_js)
+
+    def test_real_protected_page_routes_exist(self):
+        app_py = self.read('app.py')
+        router = self.read('static/js/v2-router.js')
+        template = self.read('templates/index.html')
+        self.assertIn('@app.get("/app/<path:app_path>")', app_py)
+        self.assertIn('/app/watchlist', app_py)
+        self.assertIn('/app/show/', router)
+        self.assertIn('/season/', router)
+        self.assertIn('/episode/', router)
+        self.assertNotIn('#/app', router)
+        self.assertIn('show-detail-page', template)
+        self.assertIn('episode-detail-page', template)
+
+    def test_auth_tabs_and_server_side_return_path_exist(self):
+        app_py = self.read('app.py')
+        login_template = self.read('templates/login.html')
+        db_js = self.read('static/js/db.js')
+        self.assertIn('post_login_path', app_py)
+        self.assertIn('@app.get("/signup")', app_py)
+        self.assertIn('Registration coming soon', login_template)
+        self.assertIn('data-auth-tab="login"', login_template)
+        self.assertIn('data-auth-tab="signup"', login_template)
+        self.assertNotIn('name="next"', login_template)
+        self.assertNotIn('login?next=', db_js)
+
+    def test_v2_uses_server_tmdb_proxy_without_browser_key_ui(self):
+        config = self.read('static/js/config.js')
+        tmdb = self.read('static/js/tmdb.js')
+        ui = self.read('static/js/ui.js')
+        template = self.read('templates/index.html')
+        self.assertIn('const TMDB_API_BASE = "/api/tmdb"', config)
+        self.assertIn('The key is held by Flask', tmdb)
+        self.assertNotIn('TMDB API KEY', ui)
+        self.assertNotIn('TVTrackerStaticAdapter', ui)
+        self.assertNotIn('static-adapter.js', template)
+
+    def test_v2_asset_paths_are_refresh_safe(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        self.assertNotIn('src="static/assets/', app_js)
+        self.assertNotIn('src="static/assets/', ui)
+        self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', app_js)
+        self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', ui)
 
 
 if __name__ == '__main__':

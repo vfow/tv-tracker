@@ -191,5 +191,72 @@ class RouteSecurityTests(unittest.TestCase):
         self.assertEqual(response.get_json()["code"], "backup_validation_failed")
 
 
+class V2RouteSecurityTests(unittest.TestCase):
+    def setUp(self):
+        self.schema_patch = patch.object(tracker, "ensure_schema", return_value=None)
+        self.cleanup_patch = patch.object(tracker, "cleanup_stored_tracker_data", return_value=None)
+        self.schema_patch.start()
+        self.cleanup_patch.start()
+        self.app = tracker.create_app()
+        self.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
+        self.client = self.app.test_client()
+        self.account = {
+            "username": "admin",
+            "password_hash": "unused",
+            "session_version": 1,
+            "updated_at": None,
+        }
+
+    def tearDown(self):
+        self.cleanup_patch.stop()
+        self.schema_patch.stop()
+
+    def test_root_redirects_logged_out_user_to_login(self):
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+
+    def test_protected_show_route_stores_server_side_return_path(self):
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/show/1399")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+        with self.client.session_transaction() as session:
+            self.assertEqual(session.get("post_login_path"), "/app/show/1399")
+
+    def test_authenticated_episode_route_renders_app_shell(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/show/1399/season/1/episode/3")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'episode-detail-page', response.data)
+        self.assertIn(b'meta name="app-route"', response.data)
+
+    def test_invalid_app_route_is_not_accepted(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/show/1399/private-notes")
+        self.assertEqual(response.status_code, 404)
+
+    def test_safe_next_url_rejects_external_and_sensitive_paths(self):
+        self.assertEqual(tracker.safe_next_url("https://example.com"), "/app/watchlist")
+        self.assertEqual(tracker.safe_next_url("//example.com"), "/app/watchlist")
+        self.assertEqual(tracker.safe_next_url("/api/state"), "/app/watchlist")
+        self.assertEqual(
+            tracker.safe_next_url("/app/show/1399/season/1/episode/3?token=secret"),
+            "/app/show/1399/season/1/episode/3",
+        )
+
+    def test_signup_redirect_selects_signup_tab(self):
+        response = self.client.get("/signup")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            login_response = self.client.get("/login")
+        self.assertEqual(login_response.status_code, 200)
+        self.assertIn(b'data-initial-auth-tab="signup"', login_response.data)
+
+
 if __name__ == "__main__":
     unittest.main()

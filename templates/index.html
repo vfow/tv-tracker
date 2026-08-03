@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
 <meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="app-route" content="{{ initial_app_path }}">
 
 <title>TV Tracker</title>
 
-<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/favicon.svg') }}">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='1.7-view-more-button-repair') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/foundation.css', v='1.7-watch-log-repair') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='2.0-integration') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/foundation.css', v='2.0-integration') }}">
 </head>
 
 <body class="app-shell">
@@ -114,7 +115,17 @@
         <input
         class="search-bar"
         id="search"
-        placeholder="Search TV shows..."
+        name="tv_tracker_show_search"
+        type="search"
+        placeholder="Search TV shows"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        inputmode="search"
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-form-type="other"
         >
 
         <div class="search-results" id="search-results"></div>
@@ -142,6 +153,25 @@
 <div id="settings-page" class="page">
 
     <div class="settings" id="settings-content"></div>
+
+</div>
+
+
+
+<!-- SHOW DETAIL PAGE -->
+
+<div id="show-detail-page" class="page show-detail-page">
+
+    <div class="show-detail-page-content" id="show-detail-content"></div>
+
+</div>
+
+
+<!-- EPISODE DETAIL PAGE -->
+
+<div id="episode-detail-page" class="page episode-detail-page">
+
+    <div class="episode-detail-page-content" id="episode-detail-content"></div>
 
 </div>
 
@@ -248,14 +278,15 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-<script src="{{ url_for('static', filename='js/shell.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/config.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/audit-utils.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/pending-save-store.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/db.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/tmdb.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/ui.js', v='1.7-watch-log-repair') }}"></script>
-<script src="{{ url_for('static', filename='js/app.js', v='1.7-watch-log-repair') }}"></script>
+<script src="{{ url_for('static', filename='js/shell.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/config.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/audit-utils.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/pending-save-store.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/db.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/tmdb.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js', v='2.0-integration') }}"></script>
+<script src="{{ url_for('static', filename='js/v2-router.js', v='2.0-integration') }}"></script>
 
 </body>
 </html>

@@ -20,4 +20,27 @@ assert(!app.includes('api.' + 'tv' + 'maze.com'));
 assert(app.includes('function cleanLegacyMetadata'));
 assert(app.includes('function syncNextEpisodeFromTMDB'));
 
-console.log('Frontend TMDB-only checks passed');
+
+const router = fs.readFileSync('static/js/v2-router.js','utf8');
+const template = fs.readFileSync('templates/index.html','utf8');
+const login = fs.readFileSync('templates/login.html','utf8');
+const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
+const ui = fs.readFileSync('static/js/ui.js','utf8');
+const db = fs.readFileSync('static/js/db.js','utf8');
+
+assert(router.includes('/app/watchlist'));
+assert(router.includes('/app/show/'));
+assert(!router.includes('#/app'));
+assert(template.includes('show-detail-page'));
+assert(template.includes('episode-detail-page'));
+assert(template.includes('v2-router.js'));
+assert(!template.includes('static-adapter.js'));
+assert(login.includes('Registration coming soon'));
+assert(!login.includes('name="next"'));
+assert(tmdb.includes('The key is held by Flask'));
+assert(!ui.includes('TVTrackerStaticAdapter'));
+assert(!db.includes('login?next='));
+assert(app.includes('history.pushState'));
+assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
+
+console.log('Frontend V2 integration checks passed');

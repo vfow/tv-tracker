@@ -1,47 +1,75 @@
-# TV Tracker v1.7 Candidate
+# TV Tracker V2 — Flask/PostgreSQL Integration
 
-Private Flask and PostgreSQL TV tracking website. TV Tracker uses TMDB for show search, show metadata, posters, backdrops, seasons, episodes, release dates, and upcoming schedule data.
+Private, single-admin TV tracking website. This build integrates the V2.9 interface and dedicated show/episode pages into the real Flask and PostgreSQL application.
 
-## What this project does
+## Core capabilities
 
-- Tracks shows across Watching, Paused, Completed, Plan To Watch, and Dropped.
-- Stores watched episodes, watch history, favorites, profile details, notes, posters, backdrops, and imported progress.
-- Imports native TV Tracker backups and compatible external JSON/CSV exports.
-- Exports a native App Backup JSON that can restore the tracker state.
-- Exports a readable HTML report of the current tracker data.
-- Uses optimistic server synchronization so multiple tabs/devices can work safely.
+- Tracks Watching, Paused, Completed, Plan To Watch, and Dropped shows.
+- Stores watched episodes, progress, history, favourites, profile details, notes, posters, backdrops, and imported data in PostgreSQL.
+- Uses TMDB for search, show/episode metadata, artwork, cast and crew, trailers, alternative titles, recommendations, similar shows, and Where to Watch.
+- Keeps the TMDB API key on the Flask server. It is never sent to the browser or placed in a URL.
+- Supports native App Backup JSON export/import and compatible external JSON/CSV imports.
+- Uses revision-based optimistic synchronization for multiple tabs/devices.
+
+## Protected application routes
+
+All application pages require a valid authenticated session:
+
+```text
+/app/watchlist
+/app/upcoming
+/app/history
+/app/discover
+/app/profile
+/app/settings
+/app/show/<tmdb_id>
+/app/show/<tmdb_id>/season/<season_number>/episode/<episode_number>
+```
+
+`/app` redirects to `/app/watchlist`. Direct refresh, browser back/forward navigation, show pages, and episode pages use real server-supported paths rather than hash-only routes.
+
+Show and episode URLs contain only public TMDB routing identifiers and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
+
+## Authentication
+
+- `/login` opens the public authentication page with the Login tab selected.
+- `/signup` redirects to the same page with the Sign Up tab selected.
+- Sign Up currently displays **Registration coming soon**.
+- Logged-out users cannot load `/app/...` pages or private API data.
+- A protected path requested before login is validated and stored in the server session. After a successful login, the user returns to that path; otherwise the destination is `/app/watchlist`.
 
 ## Data safety
 
-Native App Backup JSON import is an exact restore. It validates the full backup before replacing the current tracker data and does not recalculate statuses during restore.
+This integration keeps the existing schema version and PostgreSQL tables. V2 metadata is stored inside the existing JSONB show records, so no destructive database migration is required.
 
-The cleanup in this candidate removes only unused legacy metadata from imported data, saved data, and future exports. It does not remove shows, watched history, statuses, favorites, profile data, notes, TMDB identifiers, posters, backdrops, or manual user data.
+Existing data remains authoritative, including:
 
-`import_info` remains supported as harmless import history. It is kept in exports only when it already exists or when an import actually creates it.
+- shows and statuses
+- watched episodes and progress
+- history
+- favourites
+- notes
+- profile details
+- manual/imported metadata
+- native backup compatibility
 
-## Episode release behavior
-
-TMDB `air_date` is treated as the official calendar date. If there is no trusted exact release time, the episode remains Upcoming until that local calendar date ends, then becomes available after local midnight on the browser/device.
-
-No release-time setting is exposed in the interface.
+Export a fresh App Backup JSON before deployment, as with every major update.
 
 ## Project structure
 
 ```text
-app.py                 Flask backend, authentication, backup import/export, TMDB proxy, PostgreSQL sync
+app.py                 Flask backend, authentication, protected routes, backup/import, TMDB proxy, PostgreSQL sync
 wsgi.py                WSGI entrypoint
 requirements.txt       Python dependencies
-templates/             Flask templates
-static/js/             Frontend application code
-static/css/            Stylesheets
-static/assets/         Icons, favicon, local assets
-tests/                 Syntax, backend contract, and frontend regression checks
-tools/                 Admin/secret helper scripts
+templates/             Authentication and protected application templates
+static/js/             V2 UI, real-path router, TMDB client, persistence and synchronization
+static/css/            V2 and foundation styles
+static/assets/         Local fonts, favicon, UI and profile icons
+tests/                 Backend, route-security, source-contract and frontend checks
+tools/                 Admin and secret helper scripts
 ```
 
 ## Environment variables
-
-Required backend variables:
 
 ```text
 SECRET_KEY
@@ -55,37 +83,25 @@ ADMIN_PASSWORD_HASH
 TMDB_API_KEY
 ```
 
-`ADMIN_PASSWORD_HASH` should be generated with the helper tool in `tools/`.
+Generate `ADMIN_PASSWORD_HASH` with the helper under `tools/`. Do not place secrets in this project ZIP or commit them to source control.
 
-## Local/deployment notes
+## Deployment
 
-1. Install Python dependencies from `requirements.txt`.
-2. Configure the required environment variables.
-3. Start the Flask app through the WSGI entrypoint or your hosting provider.
-4. Open the site and confirm `/api/health` responds after signing in.
-5. Export an App Backup JSON before major updates.
+1. Export a fresh App Backup JSON from the currently deployed tracker.
+2. Keep the existing environment variables and PostgreSQL database.
+3. Replace the application source with this complete project copy.
+4. Install dependencies from `requirements.txt` if needed.
+5. Restart the WSGI application.
+6. Sign in and open `/api/health`.
+7. Hard-refresh the browser to clear older cached frontend assets.
+8. Test existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
 
-## Preferred install for this candidate
+## Tests
 
-Use the full ZIP as the new project source when possible. This produces the cleanest baseline for future work.
+Run:
 
-Alternative manual patch install:
+```text
+python tests/run_all.py
+```
 
-1. Export a fresh App Backup JSON.
-2. Extract the patch ZIP over the current project.
-3. Compare with the full ZIP and delete any obsolete files that are no longer part of the clean baseline.
-4. Commit, deploy, restart the website, and hard-refresh the browser.
-
-## Testing
-
-Before using this candidate as the final baseline, verify:
-
-- Settings no longer contains a Source section.
-- Native App Backup JSON import works.
-- Show statuses do not change during native backup restore.
-- Watched history, favorites, profile, and notes remain intact.
-- New App Backup JSON exports are clean and importable.
-- Show search, show details, season loading, Upcoming, and artwork work through TMDB.
-- `/api/health` reports the expected schema version.
-
-Future patches should be based on this cleaned TMDB-only baseline once it is confirmed live.
+The suite checks Python/backend contracts when Flask and psycopg are installed, JavaScript syntax/contracts through Node.js, protected route rules, server-side login return routing, V2 page containers, TMDB proxy use, and the absence of the standalone static adapter.

@@ -28,6 +28,13 @@ var pendingShow = null;
 var discoverPreviewShow = null;
 var selectedShowId = null;
 var selectedEpisodeContext = null;
+var showDetailPreview = null;
+var showDetailBackStack = [];
+var showDetailOpeningFromRoute = false;
+var showDetailScrollTopBeforeEpisode = 0;
+var showDetailScrollRestorePending = false;
+var appDataReady = false;
+var activeShowDetailsTabs = {};
 var expandedSeasons = {};
 var expandedUpcomingBatches = {};
 var searchTimer = null;
@@ -43,6 +50,12 @@ var discoverHubState = {
     sections:[]
 };
 var librarySearchQuery = "";
+var v2EpisodeDetailPendingLoads = new Map();
+var V2_EPISODE_DETAIL_CACHE_PREFIX = "tv-tracker-v2-episode-details:";
+var V2_EPISODE_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
+var libraryGenreFilter = "all";
+var libraryNetworkFilter = "all";
+var librarySortMode = "default";
 var isRefreshingUpcoming = false;
 var lastCompatibleImportPreview = null;
 var lastCompatibleCSVPreview = null;
@@ -211,7 +224,7 @@ function normalizeWatchedEpisodeArray(values){
     return output;
 }
 
-function normalizeShowEpisodeProgress(show){
+function normalizeShowEpisodeProgress(show,summary=null){
     if(!show || typeof show !== "object"){
         return;
     }
@@ -222,7 +235,11 @@ function normalizeShowEpisodeProgress(show){
 
     Object.keys(show.episodes_watched).forEach(seasonKey=>{
         const season = Number(seasonKey);
+        const original = Array.isArray(show.episodes_watched[seasonKey]) ? show.episodes_watched[seasonKey] : [];
         const clean = normalizeWatchedEpisodeArray(show.episodes_watched[seasonKey]);
+        if(summary && original.length > clean.length){
+            summary.duplicateProgressEntriesRemoved += original.length - clean.length;
+        }
         delete show.episodes_watched[seasonKey];
 
         if(Number.isFinite(season) && clean.length > 0){
@@ -277,7 +294,97 @@ function dedupeTrackerHistoryEntries(data){
     return Array.from(new Set(removedIds));
 }
 
-function normalizeTrackerDataForEpisodeIntegrity(data){
+
+function createDuplicateCleanupSummary(){
+    return {
+        duplicateShowsRemoved:0,
+        duplicateWatchedRecordsRemoved:0,
+        duplicateProgressEntriesRemoved:0,
+        invalidHistoryEntriesSkipped:0
+    };
+}
+
+function countWatchedProgressEntries(show){
+    if(!show || !show.episodes_watched || typeof show.episodes_watched !== "object"){
+        return 0;
+    }
+
+    return Object.values(show.episodes_watched).reduce((total,values)=>{
+        return total + (Array.isArray(values) ? values.length : 0);
+    },0);
+}
+
+function choosePreferredDuplicateShow(left,right){
+    if(!left){
+        return right;
+    }
+
+    if(!right){
+        return left;
+    }
+
+    const leftWatched = countWatchedProgressEntries(left);
+    const rightWatched = countWatchedProgressEntries(right);
+
+    if(rightWatched > leftWatched){
+        return right;
+    }
+
+    const leftHistory = Date.parse(left.last_activity_at || left.updated_at || left.date_added || "");
+    const rightHistory = Date.parse(right.last_activity_at || right.updated_at || right.date_added || "");
+    const leftTime = Number.isFinite(leftHistory) ? leftHistory : 0;
+    const rightTime = Number.isFinite(rightHistory) ? rightHistory : 0;
+
+    if(rightTime > leftTime){
+        return right;
+    }
+
+    return left;
+}
+
+function cleanupDuplicateShows(data,summary=null){
+    if(!data || !data.shows || typeof data.shows !== "object" || Array.isArray(data.shows)){
+        return;
+    }
+
+    const cleaned = {};
+    const seen = new Map();
+
+    Object.entries(data.shows).forEach(([key,show])=>{
+        if(!show || typeof show !== "object"){
+            return;
+        }
+
+        const id = String(show.tmdb_id || show.id || key || "").trim();
+
+        if(!id){
+            cleaned[key] = show;
+            return;
+        }
+
+        show.tmdb_id = show.tmdb_id || id;
+        show.id = show.id || Number(id) || id;
+
+        if(!seen.has(id)){
+            seen.set(id,show);
+            cleaned[id] = show;
+            return;
+        }
+
+        const previous = seen.get(id);
+        const preferred = choosePreferredDuplicateShow(previous,show);
+        seen.set(id,preferred);
+        cleaned[id] = preferred;
+
+        if(summary){
+            summary.duplicateShowsRemoved += 1;
+        }
+    });
+
+    data.shows = cleaned;
+}
+
+function normalizeTrackerDataForEpisodeIntegrity(data,summary=null){
     if(!data || typeof data !== "object"){
         return [];
     }
@@ -286,14 +393,22 @@ function normalizeTrackerDataForEpisodeIntegrity(data){
         data.shows = {};
     }
 
-    Object.values(data.shows).forEach(show=>normalizeShowEpisodeProgress(show));
+    cleanupDuplicateShows(data,summary);
+    Object.values(data.shows).forEach(show=>normalizeShowEpisodeProgress(show,summary));
 
     if(!Array.isArray(data.history)){
         data.history = [];
         return [];
     }
 
-    return dedupeTrackerHistoryEntries(data);
+    const beforeHistoryCount = data.history.length;
+    const removedIds = dedupeTrackerHistoryEntries(data);
+
+    if(summary && beforeHistoryCount > data.history.length){
+        summary.duplicateWatchedRecordsRemoved += beforeHistoryCount - data.history.length;
+    }
+
+    return removedIds;
 }
 
 function removeExistingHistoryEntriesForEpisode(showId,season,episode){
@@ -482,7 +597,7 @@ async function saveAdminAccountChanges(){
             })
         });
         await parseAPIResponse(response);
-        location.assign("/login?changed=1");
+        location.assign("/login");
     }catch(error){
         console.error("Could not update admin account",error);
         const message = typeof friendlyRequestError === "function"
@@ -622,8 +737,17 @@ async function init(){
     }
 
     normalizeExistingData();
+    if(typeof tmdbWarmImageConfiguration === "function"){
+        tmdbWarmImageConfiguration();
+    }
     setupEvents();
     renderAll();
+    appDataReady = true;
+
+    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+        setTimeout(()=>window.TVTrackerV2Router.applyRoute(),0);
+    }
+
     startDataSync();
     scheduleInitialBackgroundMaintenance();
 
@@ -785,11 +909,13 @@ function setupEvents(){
 
 
     document.getElementById("show-modal").addEventListener("click",function(event){
+        // Full-screen episode windows should not close from accidental outside clicks.
+    });
 
-        if(event.target.id === "show-modal"){
-            closeShowModal();
+    document.addEventListener("keydown",function(event){
+        if(event.key === "Escape" && selectedEpisodeContext){
+            closeEpisodeDetailsPage();
         }
-
     });
 
 
@@ -882,6 +1008,22 @@ function normalizeExistingData(){
 
         if(typeof show._tmdb_external_ids === "undefined"){
             show._tmdb_external_ids = null;
+        }
+
+        if(!Array.isArray(show._tmdb_cast)){
+            show._tmdb_cast = [];
+        }
+
+        if(typeof show._v2_cast_loaded_at === "undefined"){
+            show._v2_cast_loaded_at = "";
+        }
+
+        if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
+            show._episode_actor_credits = {};
+        }
+
+        if(!show._episode_v2_details || typeof show._episode_v2_details !== "object"){
+            show._episode_v2_details = {};
         }
 
         delete show.date_only_episode_time_override;
@@ -1303,6 +1445,7 @@ function applyTMDBDetailsToImportedShow(show,details,matchMethod){
     show.number_of_episodes = details.number_of_episodes || show.number_of_episodes || 0;
     show.next_episode_to_air = details.next_episode_to_air || null;
     show.last_episode_to_air = details.last_episode_to_air || null;
+    applyV2TMDBDetails(show,details);
     show.local_only = false;
     show.last_tmdb_refresh = new Date().toISOString();
 
@@ -1436,6 +1579,7 @@ async function refreshShowDetails(show){
         show.number_of_episodes = details.number_of_episodes || show.number_of_episodes || 0;
         show.next_episode_to_air = details.next_episode_to_air || null;
         show.last_episode_to_air = details.last_episode_to_air || null;
+        applyV2TMDBDetails(show,details);
         syncNextEpisodeFromTMDB(show);
         show.last_tmdb_refresh = new Date().toISOString();
 
@@ -1633,15 +1777,715 @@ async function autoUpdateStatuses(forceRefresh=false,allowRemoteRefresh=true){
 
 
 
-function createShowObject(details,status){
+
+function getStaticWatchRegion(){
+    return "US";
+}
+
+function normalizeCreatedBy(details){
+    return (Array.isArray(details && details.created_by) ? details.created_by : [])
+    .map(person=>{
+        return person && person.name ? String(person.name).trim() : "";
+    })
+    .filter(Boolean)
+    .slice(0,5);
+}
+
+function normalizeSpokenLanguages(details){
+    return (Array.isArray(details && details.spoken_languages) ? details.spoken_languages : [])
+    .map(language=>{
+        return language && (language.english_name || language.name)
+        ? String(language.english_name || language.name).trim()
+        : "";
+    })
+    .filter(Boolean)
+    .slice(0,5);
+}
+
+function pickUSContentRating(contentRatings){
+    const results = contentRatings && Array.isArray(contentRatings.results)
+    ? contentRatings.results
+    : [];
+
+    const us = results.find(item=>String(item.iso_3166_1 || "").toUpperCase() === "US" && item.rating);
+
+    if(us && us.rating){
+        return String(us.rating).trim();
+    }
+
+    const fallback = results.find(item=>item && item.rating);
+    return fallback && fallback.rating ? String(fallback.rating).trim() : "";
+}
+
+function normalizeTMDBVideos(videos){
+    const results = videos && Array.isArray(videos.results) ? videos.results : [];
+
+    return results
+    .filter(video=>{
+        return video &&
+        String(video.site || "").toLowerCase() === "youtube" &&
+        video.key &&
+        (String(video.type || "").toLowerCase() === "trailer" || String(video.type || "").toLowerCase() === "teaser");
+    })
+    .sort((a,b)=>{
+        const aOfficial = a.official === true ? 0 : 1;
+        const bOfficial = b.official === true ? 0 : 1;
+        if(aOfficial !== bOfficial){
+            return aOfficial - bOfficial;
+        }
+        const typeOrder = {trailer:0,teaser:1};
+        return (typeOrder[String(a.type || "").toLowerCase()] ?? 9) - (typeOrder[String(b.type || "").toLowerCase()] ?? 9);
+    })
+    .slice(0,4)
+    .map(video=>({
+        name:String(video.name || video.type || "Video"),
+        key:String(video.key || ""),
+        site:String(video.site || "YouTube"),
+        type:String(video.type || "Video"),
+        official:video.official === true,
+        published_at:video.published_at || ""
+    }));
+}
+
+function normalizeTMDBKeywords(keywords){
+    const results = keywords && Array.isArray(keywords.results) ? keywords.results : [];
+
+    return results
+    .map(keyword=>keyword && keyword.name ? String(keyword.name).trim() : "")
+    .filter(Boolean)
+    .slice(0,12);
+}
+
+function normalizeTMDBSimilarShows(similar,limit=10){
+    const results = similar && Array.isArray(similar.results) ? similar.results : [];
+
+    return results
+    .filter(show=>show && show.id && (show.name || show.original_name))
+    .slice(0,Number(limit || 10))
+    .map(show=>({
+        id:show.id,
+        name:show.name || show.original_name || "Untitled",
+        poster_path:show.poster_path || "",
+        backdrop_path:show.backdrop_path || "",
+        overview:show.overview || "",
+        first_air_date:show.first_air_date || "",
+        vote_average:Number(show.vote_average || 0),
+        popularity:Number(show.popularity || 0)
+    }));
+}
+
+function normalizeTMDBContentRatings(contentRatings){
+    const results = contentRatings && Array.isArray(contentRatings.results) ? contentRatings.results : [];
+
+    return results
+    .map(item=>({
+        iso_3166_1:String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase(),
+        rating:String(item && item.rating ? item.rating : "").trim()
+    }))
+    .filter(item=>item.iso_3166_1 && item.rating);
+}
+
+function normalizeTMDBAlternativeTitles(alternativeTitles){
+    const results = alternativeTitles && Array.isArray(alternativeTitles.results) ? alternativeTitles.results : [];
+    const seen = new Set();
+
+    return results
+    .map(item=>({
+        iso_3166_1:String(item && item.iso_3166_1 ? item.iso_3166_1 : "").toUpperCase(),
+        title:String(item && item.title ? item.title : "").trim(),
+        type:String(item && item.type ? item.type : "").trim()
+    }))
+    .filter(item=>{
+        if(!item.title){
+            return false;
+        }
+        const key = [item.iso_3166_1,item.title.toLowerCase()].join(":");
+        if(seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    })
+    .slice(0,20);
+}
+
+function normalizeCrewJob(value){
+    return String(value || "").trim();
+}
+
+function normalizeTMDBAggregateCrew(aggregateCredits){
+    const crew = aggregateCredits && Array.isArray(aggregateCredits.crew) ? aggregateCredits.crew : [];
+    const grouped = {
+        creators:[],
+        directors:[],
+        writers:[],
+        producers:[],
+        music:[],
+        other:[]
+    };
+    const seen = new Set();
+
+    crew.forEach(person=>{
+        if(!person || !person.name){
+            return;
+        }
+
+        const jobs = Array.isArray(person.jobs) ? person.jobs : [];
+        const jobNames = jobs.map(job=>normalizeCrewJob(job && job.job)).filter(Boolean);
+        const department = String(person.department || person.known_for_department || "").toLowerCase();
+        const combined = jobNames.join(" / ") || normalizeCrewJob(person.job) || "Crew";
+        const lowerJobs = combined.toLowerCase();
+        let group = "other";
+
+        if(lowerJobs.includes("creator") || lowerJobs.includes("created by")){
+            group = "creators";
+        }else if(lowerJobs.includes("director") || department === "directing"){
+            group = "directors";
+        }else if(lowerJobs.includes("writer") || lowerJobs.includes("screenplay") || lowerJobs.includes("teleplay") || department === "writing"){
+            group = "writers";
+        }else if(lowerJobs.includes("producer") || department === "production"){
+            group = "producers";
+        }else if(lowerJobs.includes("music") || lowerJobs.includes("composer") || department === "sound"){
+            group = "music";
+        }
+
+        const key = [group,person.id || person.name,combined].join(":");
+        if(seen.has(key)){
+            return;
+        }
+        seen.add(key);
+
+        grouped[group].push({
+            id:Number(person.id || 0),
+            name:String(person.name || "").trim(),
+            job:combined,
+            profile_path:person.profile_path || "",
+            episode_count:Number(person.total_episode_count || jobs.reduce((total,job)=>total + Number(job && job.episode_count || 0),0) || person.episode_count || 0)
+        });
+    });
+
+    Object.keys(grouped).forEach(key=>{
+        grouped[key] = grouped[key]
+        .sort((a,b)=>Number(b.episode_count || 0) - Number(a.episode_count || 0))
+        .slice(0,12);
+    });
+
+    return grouped;
+}
+
+function normalizeTMDBExternalIds(details){
+    const ids = details && details.external_ids ? details.external_ids : details;
 
     return {
+        imdb_id:ids && ids.imdb_id ? String(ids.imdb_id) : "",
+        tvdb_id:ids && ids.tvdb_id ? String(ids.tvdb_id) : ""
+    };
+}
+
+function normalizeActorCharacter(value){
+    const text = String(value || "").trim();
+    return text || "Unknown Role";
+}
+
+function normalizeAggregateCastMember(person){
+    if(!person || !person.name){
+        return null;
+    }
+
+    const roles = Array.isArray(person.roles) ? person.roles : [];
+    const characters = roles
+    .map(role=>normalizeActorCharacter(role && role.character))
+    .filter(Boolean);
+
+    const uniqueCharacters = Array.from(new Set(characters)).slice(0,3);
+    const episodeCount = Number(
+        person.total_episode_count ||
+        roles.reduce((total,role)=>total + Number(role && role.episode_count || 0),0) ||
+        person.episode_count ||
+        0
+    );
+
+    return {
+        id:Number(person.id || 0),
+        name:String(person.name || "").trim(),
+        character:uniqueCharacters.length ? uniqueCharacters.join(" / ") : normalizeActorCharacter(person.character),
+        profile_path:person.profile_path || "",
+        episode_count:episodeCount,
+        order:Number.isFinite(Number(person.order)) ? Number(person.order) : 9999
+    };
+}
+
+function normalizeTMDBAggregateCast(aggregateCredits){
+    const cast = aggregateCredits && Array.isArray(aggregateCredits.cast) ? aggregateCredits.cast : [];
+
+    return cast
+    .map(normalizeAggregateCastMember)
+    .filter(Boolean)
+    .sort((a,b)=>{
+        if(a.order !== b.order){
+            return a.order - b.order;
+        }
+        return Number(b.episode_count || 0) - Number(a.episode_count || 0);
+    })
+    .slice(0,12);
+}
+
+function normalizeEpisodeActorMember(person){
+    if(!person || !person.name){
+        return null;
+    }
+
+    return {
+        id:Number(person.id || 0),
+        name:String(person.name || "").trim(),
+        character:normalizeActorCharacter(person.character),
+        profile_path:person.profile_path || "",
+        order:Number.isFinite(Number(person.order)) ? Number(person.order) : 9999
+    };
+}
+
+function normalizeTMDBEpisodeActors(credits){
+    const combined = []
+    .concat(Array.isArray(credits && credits.cast) ? credits.cast : [])
+    .concat(Array.isArray(credits && credits.guest_stars) ? credits.guest_stars : []);
+
+    const seen = new Set();
+
+    return combined
+    .map(normalizeEpisodeActorMember)
+    .filter(actor=>{
+        if(!actor){
+            return false;
+        }
+        const key = actor.id ? String(actor.id) : actor.name.toLowerCase();
+        if(seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    })
+    .sort((a,b)=>a.order - b.order);
+}
+
+
+function normalizeTMDBEpisodeExternalIds(details){
+    const ids = details && details.external_ids ? details.external_ids : details;
+
+    return {
+        imdb_id:ids && ids.imdb_id ? String(ids.imdb_id) : "",
+        tvdb_id:ids && ids.tvdb_id ? String(ids.tvdb_id) : ""
+    };
+}
+
+function normalizeV2EpisodeDetails(details){
+    if(!details || typeof details !== "object"){
+        return null;
+    }
+
+    return {
+        episode_number:Number(details.episode_number || 0),
+        season_number:Number(details.season_number || 0),
+        name:details.name || "",
+        overview:details.overview || "",
+        air_date:details.air_date || "",
+        runtime:details.runtime || null,
+        still_path:details.still_path || "",
+        vote_average:Number(details.vote_average || 0),
+        vote_count:Number(details.vote_count || 0),
+        external_ids:normalizeTMDBEpisodeExternalIds(details),
+        loaded_at:new Date().toISOString()
+    };
+}
+
+function mergeV2EpisodeDetails(show,seasonNumber,episodeNumber,details){
+    if(!show || !details){
+        return false;
+    }
+
+    const key = getEpisodeActorCreditsKey(seasonNumber,episodeNumber);
+    const normalized = normalizeV2EpisodeDetails(details);
+
+    if(!normalized){
+        return false;
+    }
+
+    if(!show._episode_v2_details || typeof show._episode_v2_details !== "object"){
+        show._episode_v2_details = {};
+    }
+
+    if(!show._episode_details || typeof show._episode_details !== "object"){
+        show._episode_details = {};
+    }
+
+    const existing = show._episode_details[key] || {};
+
+    show._episode_details[key] = {
+        ...existing,
+        name:normalized.name || existing.name || "",
+        air_date:normalized.air_date || existing.air_date || "",
+        runtime:normalized.runtime || existing.runtime || null,
+        still_path:normalized.still_path || existing.still_path || "",
+        overview:normalized.overview || existing.overview || "",
+        vote_average:Number(normalized.vote_average || existing.vote_average || 0),
+        vote_count:Number(normalized.vote_count || existing.vote_count || 0),
+        external_ids:normalized.external_ids,
+        air_time:existing.air_time || "",
+        air_timestamp:existing.air_timestamp || "",
+        _v2_episode_loaded_at:normalized.loaded_at
+    };
+
+    if(show._episode_list && Array.isArray(show._episode_list[String(seasonNumber)])){
+        show._episode_list[String(seasonNumber)] = show._episode_list[String(seasonNumber)].map(ep=>{
+            if(Number(ep.episode_number) !== Number(episodeNumber)){
+                return ep;
+            }
+
+            return {
+                ...ep,
+                name:normalized.name || ep.name || "",
+                air_date:normalized.air_date || ep.air_date || "",
+                runtime:normalized.runtime || ep.runtime || null,
+                still_path:normalized.still_path || ep.still_path || "",
+                overview:normalized.overview || ep.overview || "",
+                vote_average:Number(normalized.vote_average || ep.vote_average || 0),
+                vote_count:Number(normalized.vote_count || ep.vote_count || 0),
+                external_ids:normalized.external_ids,
+                _v2_episode_loaded_at:normalized.loaded_at
+            };
+        });
+    }
+
+    show._episode_v2_details[key] = normalized;
+
+    if(details.credits){
+        if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
+            show._episode_actor_credits = {};
+        }
+        show._episode_actor_credits[key] = normalizeTMDBEpisodeActors(details.credits);
+    }
+
+    return true;
+}
+
+function getEpisodeActorCreditsKey(seasonNumber,episodeNumber){
+    return `${Number(seasonNumber)}-${Number(episodeNumber)}`;
+}
+
+function getV2EpisodeDetailCacheKey(showId,seasonNumber,episodeNumber){
+    return [
+        String(showId || "").trim(),
+        String(Number(seasonNumber)),
+        String(Number(episodeNumber))
+    ].join(":");
+}
+
+function readCachedV2EpisodeDetails(showId,seasonNumber,episodeNumber){
+    if(typeof sessionStorage === "undefined"){
+        return null;
+    }
+
+    const key = getV2EpisodeDetailCacheKey(showId,seasonNumber,episodeNumber);
+
+    if(!key || key.indexOf("::") === 0){
+        return null;
+    }
+
+    try{
+        const raw = sessionStorage.getItem(V2_EPISODE_DETAIL_CACHE_PREFIX + key);
+
+        if(!raw){
+            return null;
+        }
+
+        const cached = JSON.parse(raw);
+
+        if(!cached || !cached.data || Date.now() - Number(cached.savedAt || 0) > V2_EPISODE_DETAIL_CACHE_TTL){
+            sessionStorage.removeItem(V2_EPISODE_DETAIL_CACHE_PREFIX + key);
+            return null;
+        }
+
+        return cached.data;
+    }catch(error){
+        return null;
+    }
+}
+
+function writeCachedV2EpisodeDetails(showId,seasonNumber,episodeNumber,details){
+    if(typeof sessionStorage === "undefined" || !details){
+        return;
+    }
+
+    const key = getV2EpisodeDetailCacheKey(showId,seasonNumber,episodeNumber);
+
+    if(!key || key.indexOf("::") === 0){
+        return;
+    }
+
+    try{
+        sessionStorage.setItem(
+            V2_EPISODE_DETAIL_CACHE_PREFIX + key,
+            JSON.stringify({savedAt:Date.now(),data:details})
+        );
+    }catch(error){}
+}
+
+function hasLoadedV2EpisodeDetails(show,seasonNumber,episodeNumber){
+    if(!show || !show._episode_v2_details){
+        return false;
+    }
+
+    return !!show._episode_v2_details[getEpisodeActorCreditsKey(seasonNumber,episodeNumber)];
+}
+
+function applyV2TMDBDetails(show,details){
+    if(!show || !details){
+        return show;
+    }
+
+    show.original_name = details.original_name || show.original_name || "";
+    show.type = details.type || show.type || "";
+    show.last_air_date = details.last_air_date || show.last_air_date || "";
+    show.episode_run_time = Array.isArray(details.episode_run_time) ? details.episode_run_time : (Array.isArray(show.episode_run_time) ? show.episode_run_time : []);
+    show.homepage = details.homepage || show.homepage || "";
+    show.tagline = details.tagline || show.tagline || "";
+    show.original_language = details.original_language || show.original_language || "";
+    show.origin_country = Array.isArray(details.origin_country) ? details.origin_country.slice(0,4) : (Array.isArray(show.origin_country) ? show.origin_country : []);
+    show.spoken_languages = normalizeSpokenLanguages(details).length ? normalizeSpokenLanguages(details) : (Array.isArray(show.spoken_languages) ? show.spoken_languages : []);
+    show.created_by = normalizeCreatedBy(details).length ? normalizeCreatedBy(details) : (Array.isArray(show.created_by) ? show.created_by : []);
+    show.popularity = Number(details.popularity || show.popularity || 0);
+    show.in_production = typeof details.in_production === "boolean" ? details.in_production : show.in_production === true;
+    show.content_rating = pickUSContentRating(details.content_ratings) || show.content_rating || "";
+    show._tmdb_content_ratings = normalizeTMDBContentRatings(details.content_ratings);
+    show._tmdb_alternative_titles = normalizeTMDBAlternativeTitles(details.alternative_titles);
+    show._tmdb_external_ids = normalizeTMDBExternalIds(details);
+    show._tmdb_videos = normalizeTMDBVideos(details.videos);
+    show._tmdb_keywords = normalizeTMDBKeywords(details.keywords);
+    show._tmdb_watch_providers = details["watch/providers"] || show._tmdb_watch_providers || null;
+    show._tmdb_recommendations = normalizeTMDBSimilarShows(details.recommendations,10);
+    show._tmdb_similar = normalizeTMDBSimilarShows(details.similar,10);
+    show._tmdb_cast = normalizeTMDBAggregateCast(details.aggregate_credits);
+    show._tmdb_crew = normalizeTMDBAggregateCrew(details.aggregate_credits);
+    show._v2_cast_loaded_at = new Date().toISOString();
+    show._v2_bundle7_loaded_at = new Date().toISOString();
+    show._v2_bundle7_2_loaded_at = new Date().toISOString();
+    if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
+        show._episode_actor_credits = {};
+    }
+    show._v2_api_loaded_at = new Date().toISOString();
+
+    return show;
+}
+
+function showHasV2APIDetails(show){
+    if(!show){
+        return false;
+    }
+
+    if(!show._v2_cast_loaded_at || !show._v2_bundle7_loaded_at || !show._v2_bundle7_2_loaded_at){
+        return false;
+    }
+
+    return !!(
+        show._v2_api_loaded_at ||
+        show.content_rating ||
+        (show._tmdb_external_ids && (show._tmdb_external_ids.imdb_id || show._tmdb_external_ids.tvdb_id)) ||
+        (Array.isArray(show._tmdb_videos) && show._tmdb_videos.length) ||
+        (show._tmdb_watch_providers && show._tmdb_watch_providers.results) ||
+        (Array.isArray(show._tmdb_similar) && show._tmdb_similar.length) ||
+        (Array.isArray(show._tmdb_cast) && show._tmdb_cast.length)
+    );
+}
+
+async function ensureShowV2APIDetails(show,{skipSave=false}={}){
+    if(!show || !canUseTMDBShow(show)){
+        return false;
+    }
+
+    if(showHasV2APIDetails(show)){
+        return false;
+    }
+
+    const details = await tmdbGetShowDetails(show.tmdb_id);
+
+    if(!details){
+        return false;
+    }
+
+    show.title = details.name || show.title || "";
+    show.poster_path = details.poster_path || show.poster_path || "";
+    show.backdrop_path = details.backdrop_path || show.backdrop_path || "";
+    show.overview = details.overview || show.overview || "";
+    show.first_air_date = details.first_air_date || show.first_air_date || "";
+    show.genres = (details.genres || []).map(genre=>genre.name);
+    show.networks = normalizeTMDBNetworks(details);
+    show._network_metadata_version = 1;
+    show.tmdb_status = details.status || show.tmdb_status || "";
+    show.tmdb_rating = details.vote_average || show.tmdb_rating || 0;
+    show.tmdb_vote_count = details.vote_count || show.tmdb_vote_count || 0;
+    show.number_of_seasons = details.number_of_seasons || show.number_of_seasons || 0;
+    show.number_of_episodes = details.number_of_episodes || show.number_of_episodes || 0;
+    show.next_episode_to_air = details.next_episode_to_air || null;
+    show.last_episode_to_air = details.last_episode_to_air || null;
+    applyV2TMDBDetails(show,details);
+    syncNextEpisodeFromTMDB(show);
+    show.last_tmdb_refresh = new Date().toISOString();
+
+    if(!skipSave){
+        await saveData({showIds:[String(show.tmdb_id)]});
+    }
+
+    return true;
+}
+
+async function refreshOpenShowV2Details(showId){
+    const id = String(showId || "");
+    const show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+
+    if(!show){
+        return;
+    }
+
+    try{
+        const changed = await ensureShowV2APIDetails(show);
+        if(changed && selectedShowId === id && selectedEpisodeContext === null){
+            renderShowDetailsPagePreservingScroll(show);
+        }
+    }catch(error){
+        if(selectedShowId === id){
+            showToast(error && error.message ? error.message : "Could not load extra show info");
+        }
+    }
+}
+
+async function ensureEpisodeActorCredits(show,seasonNumber,episodeNumber,{skipSave=false}={}){
+    return await ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{skipSave});
+}
+
+async function ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{skipSave=false}={}){
+    if(!show || !canUseTMDBShow(show)){
+        return false;
+    }
+
+    if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
+        show._episode_actor_credits = {};
+    }
+
+    if(!show._episode_v2_details || typeof show._episode_v2_details !== "object"){
+        show._episode_v2_details = {};
+    }
+
+    const key = getEpisodeActorCreditsKey(seasonNumber,episodeNumber);
+
+    if(show._episode_v2_details[key]){
+        return false;
+    }
+
+    const loadKey = getV2EpisodeDetailCacheKey(show.tmdb_id,seasonNumber,episodeNumber);
+
+    if(v2EpisodeDetailPendingLoads.has(loadKey)){
+        return await v2EpisodeDetailPendingLoads.get(loadKey);
+    }
+
+    const cachedDetails = readCachedV2EpisodeDetails(show.tmdb_id,seasonNumber,episodeNumber);
+
+    if(cachedDetails){
+        const changedFromCache = mergeV2EpisodeDetails(show,seasonNumber,episodeNumber,cachedDetails);
+
+        if(changedFromCache && !skipSave && DATA.shows && DATA.shows[String(show.tmdb_id)]){
+            await saveData({showIds:[String(show.tmdb_id)]});
+        }
+
+        return changedFromCache;
+    }
+
+    const loadPromise = (async()=>{
+        const details = await tmdbGetEpisodeDetails(show.tmdb_id,seasonNumber,episodeNumber);
+        writeCachedV2EpisodeDetails(show.tmdb_id,seasonNumber,episodeNumber,details);
+
+        const changed = mergeV2EpisodeDetails(show,seasonNumber,episodeNumber,details);
+
+        if(changed && !skipSave && DATA.shows && DATA.shows[String(show.tmdb_id)]){
+            await saveData({showIds:[String(show.tmdb_id)]});
+        }
+
+        return changed;
+    })();
+
+    v2EpisodeDetailPendingLoads.set(loadKey,loadPromise);
+
+    try{
+        return await loadPromise;
+    }finally{
+        v2EpisodeDetailPendingLoads.delete(loadKey);
+    }
+}
+
+function prefetchEpisodeV2Details(showId,seasonNumber,episodeNumber,options={}){
+    const id = String(showId || "");
+    const show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+
+    if(!show || hasLoadedV2EpisodeDetails(show,seasonNumber,episodeNumber)){
+        return;
+    }
+
+    ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{
+        skipSave:!!(options && options.discoverPreview)
+    }).catch(()=>{});
+}
+
+async function waitBrieflyForEpisodeV2Details(loadPromise,maxWait=450){
+    if(!loadPromise || typeof loadPromise.then !== "function"){
+        return false;
+    }
+
+    try{
+        return await Promise.race([
+            loadPromise.then(()=>true).catch(()=>false),
+            new Promise(resolve=>setTimeout(()=>resolve(false),maxWait))
+        ]);
+    }catch(error){
+        return false;
+    }
+}
+
+function isStillSelectedEpisode(show,seasonNumber,episodeNumber){
+    return !!(
+        selectedEpisodeContext &&
+        String(selectedEpisodeContext.showId) === String(show && show.tmdb_id) &&
+        Number(selectedEpisodeContext.season) === Number(seasonNumber) &&
+        Number(selectedEpisodeContext.episode) === Number(episodeNumber)
+    );
+}
+
+async function refreshOpenEpisodeActors(show,seasonNumber,episodeNumber,context={}){
+    try{
+        const changed = await ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{
+            skipSave:!!(context && context.discoverPreview)
+        });
+
+        if(changed && isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+            renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+        }
+    }catch(error){
+        if(isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+            showToast(error && error.message ? error.message : "Could not load episode details");
+        }
+    }
+}
+
+
+function createShowObject(details,status){
+
+    const showObject = {
         tmdb_id:details.id,
         title:details.name,
+        original_name:details.original_name || "",
         poster_path:details.poster_path,
         backdrop_path:details.backdrop_path,
         overview:details.overview || "",
         first_air_date:details.first_air_date || "",
+        last_air_date:details.last_air_date || "",
+        episode_run_time:Array.isArray(details.episode_run_time) ? details.episode_run_time : [],
         genres:(details.genres || []).map(genre=>genre.name),
         networks:normalizeTMDBNetworks(details),
         _network_metadata_version:1,
@@ -1665,7 +2509,24 @@ function createShowObject(details,status){
         _episode_details:{},
         _episode_list:{},
         _tmdb_external_ids:null,
+        _tmdb_videos:[],
+        _tmdb_keywords:[],
+        _tmdb_recommendations:[],
+        _tmdb_similar:[],
+        _tmdb_content_ratings:[],
+        _tmdb_alternative_titles:[],
+        _tmdb_watch_providers:null,
+        _tmdb_cast:[],
+        _tmdb_crew:{creators:[],directors:[],writers:[],producers:[],music:[],other:[]},
+        _v2_cast_loaded_at:"",
+        _v2_bundle7_loaded_at:"",
+        _v2_bundle7_2_loaded_at:"",
+        _episode_actor_credits:{},
+        _episode_v2_details:{}
     };
+
+    applyV2TMDBDetails(showObject,details);
+    return showObject;
 
 }
 
@@ -1678,43 +2539,7 @@ async function openDiscoverShowModal(searchShow){
         return;
     }
 
-    const existingShow = DATA.shows[String(searchShow.id)];
-
-    if(existingShow){
-        openShowModal(searchShow.id);
-        return;
-    }
-
-    selectedShowId = null;
-    discoverPreviewShow = null;
-    prepareModalForOpen("show");
-
-    try{
-        const details = await tmdbGetShowDetails(searchShow.id);
-        const showObject = createShowObject(details,"plan");
-        await loadSeasonData(showObject,1);
-
-        discoverPreviewShow = showObject;
-
-        const previewKey = "discover-" + String(showObject.tmdb_id || "preview");
-        expandedSeasons[previewKey] = {"1":true};
-
-        renderDiscoverShowModal(showObject);
-        await revealPreparedModal();
-        loadDiscoverPreviewSeason(showObject,1);
-    }catch(error){
-        const content = document.getElementById("show-modal-content");
-        content.innerHTML = `
-            <div class="modal-body">
-                <div class="empty-state">
-                    <h2>Could not load show details.</h2>
-                </div>
-            </div>
-            </div>
-        `;
-        await revealPreparedModal();
-        showToast(error.message || "Network error");
-    }
+    await openShowDetailsPage(searchShow.id);
 }
 
 async function loadDiscoverPreviewSeason(show,seasonNumber){
@@ -1995,6 +2820,35 @@ async function savePreparedShow(showObject,status){
 
 
 
+
+
+async function addShowDetailPreviewWithStatus(showId,status){
+    const id = String(showId || "");
+    const showObject = getShowForDetailPage(id);
+
+    if(!showObject){
+        showToast("Could not add show");
+        return;
+    }
+
+    if(DATA.shows && DATA.shows[id]){
+        await updateShowStatus(id,status);
+        return;
+    }
+
+    try{
+        await savePreparedShow(showObject,status);
+        showObject._preview_only = false;
+        showDetailPreview = null;
+        selectedShowId = id;
+        if(activePage === "show-detail"){
+            const savedShow = DATA.shows[id] || showObject;
+            renderShowDetailsPage(savedShow,{preview:false});
+        }
+    }catch(error){
+        showToast(error && error.message ? error.message : "Could not add show");
+    }
+}
 
 function hasAnyAiredEpisode(show){
 
@@ -2555,6 +3409,26 @@ async function loadDiscoverHub(force=false){
 
 
 
+
+function friendlyTMDBSearchError(error){
+    const message = String(error && error.message ? error.message : "").trim();
+    const lower = message.toLowerCase();
+
+    if(lower.includes("api key") || lower.includes("invalid api key") || lower.includes("401")){
+        return "TMDB access is unavailable. Check the server configuration.";
+    }
+
+    if(lower.includes("not found") || lower.includes("404")){
+        return "No matching TV show found.";
+    }
+
+    if(lower.includes("failed to fetch") || lower.includes("network")){
+        return "TMDB search could not connect. Check your connection.";
+    }
+
+    return message || "TMDB search failed.";
+}
+
 async function searchShows(query){
 
     const results = document.getElementById("search-results");
@@ -2623,7 +3497,7 @@ async function searchShows(query){
         }
 
         discoverSearchState.loading = false;
-        showToast(error.message || "Network error");
+        showToast(friendlyTMDBSearchError(error));
 
     }finally{
 
@@ -2799,6 +3673,19 @@ async function loadSeasonData(show,seasonNumber){
 
         show._season_episodes[String(seasonNumber)] = cleanEpisodes.length;
 
+        if(!show._season_details){
+            show._season_details = {};
+        }
+
+        show._season_details[String(seasonNumber)] = {
+            name:season.name || "Season " + seasonNumber,
+            overview:season.overview || "",
+            air_date:season.air_date || "",
+            poster_path:season.poster_path || "",
+            vote_average:Number(season.vote_average || 0),
+            external_ids:season.external_ids || null
+        };
+
         show._episode_list[String(seasonNumber)] = cleanEpisodes;
 
         cleanEpisodes.forEach(ep=>{
@@ -2827,123 +3714,522 @@ async function loadSeasonData(show,seasonNumber){
 
 
 
-async function openShowModal(showId){
-    selectedEpisodeContext = null;
-    selectedShowId = String(showId);
+function getCurrentAppRoute(){
+    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.currentRoute === "function"){
+        return window.TVTrackerV2Router.currentRoute();
+    }
 
-    const show = DATA.shows[selectedShowId];
+    const path = String(window.location.pathname || "");
+    return path.startsWith("/app") ? path : "/app/watchlist";
+}
 
-    if(!show){
+function setAppHashRoute(route,replace=false){
+    const cleanRoute = String(route || "/app/watchlist");
+
+    if(window.location.pathname === cleanRoute && !window.location.search && !window.location.hash){
         return;
     }
 
-    prepareModalForOpen("show");
-    expandedSeasons[selectedShowId] = expandedSeasons[selectedShowId] || {};
-    renderShowModal(show);
-    await revealPreparedModal();
+    if(replace){
+        history.replaceState({tvTrackerRoute:true},"",cleanRoute);
+    }else{
+        history.pushState({tvTrackerRoute:true},"",cleanRoute);
+    }
 }
 
+function getShowDetailRoute(showId){
+    return "/app/show/" + encodeURIComponent(String(showId || ""));
+}
 
-function closeShowModal(){
+function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber){
+    return getShowDetailRoute(showId) +
+    "/season/" + encodeURIComponent(String(Number(seasonNumber))) +
+    "/episode/" + encodeURIComponent(String(Number(episodeNumber)));
+}
+
+function restoreShowDetailScrollPositionIfNeeded(){
+    if(!showDetailScrollRestorePending){
+        return;
+    }
+
+    showDetailScrollRestorePending = false;
+
+    requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+            const page = document.getElementById("show-detail-page");
+            if(page){
+                page.scrollTop = Math.max(0,Number(showDetailScrollTopBeforeEpisode || 0));
+            }
+        });
+    });
+}
+
+function getShowForDetailPage(showId){
+    const id = String(showId || selectedShowId || "");
+
+    if(DATA && DATA.shows && DATA.shows[id]){
+        return DATA.shows[id];
+    }
+
+    if(showDetailPreview && String(showDetailPreview.tmdb_id) === id){
+        return showDetailPreview;
+    }
+
+    return null;
+}
+
+function showShowDetailPageShell(){
+    activePage = "show-detail";
+
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+
+    const pageElement = document.getElementById("show-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+
+    if(typeof closeMobileNavigation === "function"){
+        closeMobileNavigation();
+    }
+}
+
+function renderShowDetailLoading(showId){
+    const content = document.getElementById("show-detail-content");
+    if(!content){
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="show-detail-page-inner">
+            <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <div class="empty-state show-detail-loading-state">
+                <h2>Loading show...</h2>
+            </div>
+        </div>
+    `;
+
+    const backButton = document.getElementById("show-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",closeShowDetailsPage);
+    }
+}
+
+function renderShowDetailError(message){
+    const content = document.getElementById("show-detail-content");
+    if(!content){
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="show-detail-page-inner">
+            <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <div class="empty-state show-detail-loading-state">
+                <h2>Could not load show details.</h2>
+                <p>${escapeHTML(message || "Try again later.")}</p>
+            </div>
+        </div>
+    `;
+
+    const backButton = document.getElementById("show-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",closeShowDetailsPage);
+    }
+}
+
+function pushShowDetailBackRoute(showId){
+    const current = getCurrentAppRoute();
+    const currentShow = getShowDetailRoute(showId);
+
+    if(current && current !== currentShow){
+        showDetailBackStack.push(current);
+        if(showDetailBackStack.length > 20){
+            showDetailBackStack = showDetailBackStack.slice(-20);
+        }
+    }
+}
+
+async function openShowDetailsPage(showId,options={}){
+    const id = String(showId || "");
+
+    if(!id){
+        return;
+    }
+
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    const returningEpisodeContext = selectedEpisodeContext && String(selectedEpisodeContext.showId) === id
+    ? selectedEpisodeContext
+    : null;
+
+    if(returningEpisodeContext){
+        expandedSeasons[id] = expandedSeasons[id] || {};
+        expandedSeasons[id][String(returningEpisodeContext.season)] = true;
+        showDetailScrollRestorePending = true;
+    }
+
+    selectedEpisodeContext = null;
+    selectedShowId = id;
+    discoverPreviewShow = null;
+
+    if(!fromRoute){
+        pushShowDetailBackRoute(id);
+    }
+
+    showShowDetailPageShell();
+    renderShowDetailLoading(id);
+
+    if(!fromRoute){
+        setAppHashRoute(getShowDetailRoute(id),replaceRoute);
+    }
+
+    const trackedShow = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+
+    if(trackedShow){
+        showDetailPreview = null;
+        expandedSeasons[id] = expandedSeasons[id] || {};
+        renderShowDetailsPage(trackedShow,{preview:false});
+        restoreShowDetailScrollPositionIfNeeded();
+        refreshOpenShowV2Details(id);
+        return;
+    }
+
+    if(showDetailPreview && String(showDetailPreview.tmdb_id) === id){
+        expandedSeasons[id] = expandedSeasons[id] || {};
+        renderShowDetailsPage(showDetailPreview,{preview:true});
+        restoreShowDetailScrollPositionIfNeeded();
+        return;
+    }
+
+    try{
+        const details = await tmdbGetShowDetails(id);
+        if(String(selectedShowId || "") !== id){
+            return;
+        }
+        const showObject = createShowObject(details,"");
+        showObject.status = "";
+        showObject._preview_only = true;
+        showDetailPreview = showObject;
+        expandedSeasons[id] = expandedSeasons[id] || {};
+        renderShowDetailsPage(showObject,{preview:true});
+        restoreShowDetailScrollPositionIfNeeded();
+    }catch(error){
+        renderShowDetailError(friendlyTMDBSearchError(error));
+        showToast(friendlyTMDBSearchError(error));
+    }
+}
+
+async function openShowModal(showId){
+    return openShowDetailsPage(showId);
+}
+
+function renderActiveShowDetailPage(){
+    const show = getShowForDetailPage(selectedShowId);
+
+    if(show){
+        renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show.tmdb_id)])});
+    }else if(selectedShowId){
+        renderShowDetailLoading(selectedShowId);
+    }
+}
+
+function closeShowDetailsPage(){
+    const fallback = "/app/watchlist";
+    const target = showDetailBackStack.length ? showDetailBackStack.pop() : fallback;
 
     selectedShowId = null;
     selectedEpisodeContext = null;
-    discoverPreviewShow = null;
+    showDetailPreview = null;
 
-    const modal = document.getElementById("show-modal");
-    modal.classList.remove("episode-detail-overlay");
-    modal.classList.remove("show-detail-overlay");
-    modal.classList.remove("modal-preparing");
-    modal.style.display = "none";
+    setAppHashRoute(target || fallback,false);
 
-    document.getElementById("show-modal-content").innerHTML = "";
-
+    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+        window.TVTrackerV2Router.applyRoute();
+    }else{
+        showPage("shows");
+    }
 }
 
+function closeShowModal(){
+    selectedEpisodeContext = null;
 
+    const modal = document.getElementById("show-modal");
+    if(modal){
+        modal.classList.remove("episode-detail-overlay");
+        modal.classList.remove("show-detail-overlay");
+        modal.classList.remove("modal-preparing");
+        modal.style.display = "none";
+    }
 
+    const modalContent = document.getElementById("show-modal-content");
+    if(modalContent){
+        modalContent.innerHTML = "";
+    }
 
-async function openEpisodeModal(showId,season,episode,options={}){
-    const id = String(showId);
-    const show = DATA.shows[id];
+    const episodeContent = document.getElementById("episode-detail-content");
+    if(episodeContent){
+        episodeContent.innerHTML = "";
+    }
+}
 
-    if(!show){
+function showEpisodeDetailPageShell(){
+    activePage = "episode-detail";
+
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+
+    const pageElement = document.getElementById("episode-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+
+    if(typeof closeMobileNavigation === "function"){
+        closeMobileNavigation();
+    }
+}
+
+function renderEpisodeDetailLoading(showId,seasonNumber,episodeNumber){
+    const content = document.getElementById("episode-detail-content");
+    if(!content){
         return;
     }
 
+    content.innerHTML = `
+        <div class="episode-detail-page-inner">
+            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <div class="empty-state episode-detail-loading-state">
+                <h2>Loading episode...</h2>
+                <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
+            </div>
+        </div>
+    `;
+
+    const backButton = document.getElementById("episode-open-show-button");
+    if(backButton){
+        backButton.addEventListener("click",closeEpisodeDetailsPage);
+    }
+}
+
+function renderEpisodeDetailError(message){
+    const content = document.getElementById("episode-detail-content");
+    if(!content){
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="episode-detail-page-inner">
+            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <div class="empty-state episode-detail-loading-state">
+                <h2>Could not load episode details.</h2>
+                <p>${escapeHTML(message || "Try again later.")}</p>
+            </div>
+        </div>
+    `;
+
+    const backButton = document.getElementById("episode-open-show-button");
+    if(backButton){
+        backButton.addEventListener("click",closeEpisodeDetailsPage);
+    }
+}
+
+function closeEpisodeDetailsPage(){
+    const context = selectedEpisodeContext;
+    const showId = context ? String(context.showId || selectedShowId || "") : "";
+    const seasonNumber = context ? Number(context.season) : 0;
+    const targetRoute = showId ? getShowDetailRoute(showId) : "/app/watchlist";
+
+    if(showId){
+        expandedSeasons[showId] = expandedSeasons[showId] || {};
+        expandedSeasons[showId][String(seasonNumber)] = true;
+        showDetailScrollRestorePending = true;
+    }
+
+    setAppHashRoute(targetRoute,true);
+
+    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+        window.TVTrackerV2Router.applyRoute();
+    }else if(showId){
+        openShowDetailsPage(showId,{fromRoute:true});
+    }else{
+        showPage("shows");
+    }
+}
+
+function renderActiveEpisodeDetailPage(){
+    if(!selectedEpisodeContext){
+        return;
+    }
+
+    const id = String(selectedEpisodeContext.showId || "");
+    const show = (DATA.shows && DATA.shows[id]) ||
+    (showDetailPreview && String(showDetailPreview.tmdb_id) === id ? showDetailPreview : null) ||
+    (discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === id ? discoverPreviewShow : null);
+
+    if(show){
+        selectedEpisodeContext.discoverPreview = !(DATA.shows && DATA.shows[id]);
+        renderEpisodeModal(
+            show,
+            selectedEpisodeContext.season,
+            selectedEpisodeContext.episode,
+            selectedEpisodeContext
+        );
+    }else{
+        renderEpisodeDetailLoading(id,selectedEpisodeContext.season,selectedEpisodeContext.episode);
+    }
+}
+
+async function openEpisodeModal(showId,season,episode,options={}){
+    const id = String(showId || "");
     const seasonNumber = Number(season);
     const episodeNumber = Number(episode);
 
-    if(!Number.isFinite(seasonNumber) || !Number.isFinite(episodeNumber)){
+    if(!id || !Number.isFinite(seasonNumber) || !Number.isFinite(episodeNumber)){
         return;
     }
 
-    const backToShow = typeof options === "object" ? !!options.backToShow : !!options;
+    const fromRoute = typeof options === "object" && options.fromRoute === true;
     const replaceInPlace = typeof options === "object" && options.replaceInPlace === true;
-    const modal = document.getElementById("show-modal");
-    const canReplaceInPlace = !!(
-        replaceInPlace &&
-        modal &&
-        modal.style.display !== "none" &&
-        modal.classList.contains("episode-detail-overlay")
-    );
+    const replaceRoute = typeof options === "object" && options.replaceRoute === true;
+    const requestedPreview = typeof options === "object" && options.discoverPreview === true;
+    const backToShow = typeof options === "object" ? options.backToShow !== false : true;
+
+    if(activePage === "show-detail"){
+        const showPage = document.getElementById("show-detail-page");
+        showDetailScrollTopBeforeEpisode = showPage ? showPage.scrollTop : 0;
+    }else if(activePage !== "episode-detail"){
+        showDetailScrollTopBeforeEpisode = 0;
+    }
 
     selectedShowId = id;
     selectedEpisodeContext = {
         showId:id,
         season:seasonNumber,
         episode:episodeNumber,
-        backToShow:backToShow
+        backToShow:backToShow,
+        discoverPreview:requestedPreview
     };
 
-    if(!canReplaceInPlace){
-        prepareModalForOpen("episode");
+    showEpisodeDetailPageShell();
+    renderEpisodeDetailLoading(id,seasonNumber,episodeNumber);
+
+    if(!fromRoute){
+        setAppHashRoute(
+            getEpisodeDetailRoute(id,seasonNumber,episodeNumber),
+            replaceInPlace || replaceRoute
+        );
     }
+
+    let show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+
+    if(!show && showDetailPreview && String(showDetailPreview.tmdb_id) === id){
+        show = showDetailPreview;
+    }
+
+    if(!show && discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === id){
+        show = discoverPreviewShow;
+    }
+
+    if(!show){
+        try{
+            const details = await tmdbGetShowDetails(id);
+            if(!selectedEpisodeContext || String(selectedEpisodeContext.showId) !== id){
+                return;
+            }
+            const previewShow = createShowObject(details,"");
+            previewShow.status = "";
+            previewShow._preview_only = true;
+            showDetailPreview = previewShow;
+            discoverPreviewShow = previewShow;
+            show = previewShow;
+        }catch(error){
+            if(selectedEpisodeContext && String(selectedEpisodeContext.showId) === id){
+                renderEpisodeDetailError(friendlyTMDBSearchError(error));
+                showToast(friendlyTMDBSearchError(error));
+            }
+            return;
+        }
+    }
+
+    if(DATA.shows && DATA.shows[id]){
+        show = DATA.shows[id];
+    }
+
+    const isDiscoverPreview = !(DATA.shows && DATA.shows[id]);
+    selectedEpisodeContext.discoverPreview = isDiscoverPreview;
 
     const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
     const neededLoad = !seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh);
+    const needsEpisodeV2Details = !hasLoadedV2EpisodeDetails(show,seasonNumber,episodeNumber);
+    const episodeDetailsPromise = needsEpisodeV2Details
+    ? ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{skipSave:isDiscoverPreview})
+    : Promise.resolve(false);
 
-    await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
-    renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
-
-    if(!canReplaceInPlace){
-        await revealPreparedModal();
+    try{
+        await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
+        await waitBrieflyForEpisodeV2Details(episodeDetailsPromise,450);
+    }catch(error){
+        if(isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+            renderEpisodeDetailError(error && error.message ? error.message : "Could not load episode details");
+        }
+        return;
     }
 
-    if(neededLoad){
+    if(!isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+        return;
+    }
+
+    renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+
+    if(neededLoad && !isDiscoverPreview){
         saveData({showIds:[id]});
+    }
+
+    if(needsEpisodeV2Details){
+        episodeDetailsPromise.then(changed=>{
+            if(changed && isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+                renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+            }
+        }).catch(error=>{
+            if(isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
+                showToast(error && error.message ? error.message : "Could not load episode details");
+            }
+        });
     }
 }
 
-
 async function openDiscoverEpisodeModal(showId,season,episode){
-    const show = discoverPreviewShow;
-
-    if(!show || String(show.tmdb_id) !== String(showId)){
-        return;
-    }
-
-    const seasonNumber = Number(season);
-    const episodeNumber = Number(episode);
-
-    if(!Number.isFinite(seasonNumber) || !Number.isFinite(episodeNumber)){
-        return;
-    }
-
-    selectedShowId = null;
-    selectedEpisodeContext = {
-        showId:String(show.tmdb_id),
-        season:seasonNumber,
-        episode:episodeNumber,
+    return openEpisodeModal(showId,season,episode,{
         backToShow:true,
         discoverPreview:true
-    };
-
-    prepareModalForOpen("episode");
-    const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
-    await ensureSeasonLoaded(show,seasonNumber,forceRefresh,{skipSave:true});
-    renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
-    await revealPreparedModal();
+    });
 }
 
 
@@ -2978,7 +4264,7 @@ async function removeShow(showId){
         return String(entry.tmdb_id) !== id;
     });
 
-    closeShowModal();
+    closeShowDetailsPage();
     refreshInterfaceForDataChanges({
         showIds:[id],
         historyChanged:deletedHistoryIds.length > 0,
@@ -3001,7 +4287,7 @@ async function removeShow(showId){
 
 async function toggleSeason(showId,seasonNumber){
     const id = String(showId);
-    const show = DATA.shows[id];
+    const show = getShowForDetailPage(id);
 
     if(!show){
         return;
@@ -3014,12 +4300,14 @@ async function toggleSeason(showId,seasonNumber){
     const key = String(seasonNumber);
     const willOpen = !expandedSeasons[id][key];
     expandedSeasons[id][key] = willOpen;
-    renderShowModalPreservingScroll(show);
+    renderShowDetailsPagePreservingScroll(show);
 
     if(willOpen && !seasonDataAlreadyLoaded(show,seasonNumber,false)){
         await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
-        renderShowModalPreservingScroll(show);
-        saveData({showIds:[id]});
+        renderShowDetailsPagePreservingScroll(show);
+        if(DATA.shows && DATA.shows[id]){
+            saveData({showIds:[id]});
+        }
     }
 }
 
@@ -3562,9 +4850,21 @@ function seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh=false){
         Object.prototype.hasOwnProperty.call(show._season_episodes,seasonKey)
     );
 
+    const hasSeasonDetails = !!(
+        show._season_details &&
+        show._season_details[seasonKey] &&
+        typeof show._season_details[seasonKey] === "object" &&
+        (
+            Object.prototype.hasOwnProperty.call(show._season_details[seasonKey],"overview") ||
+            Object.prototype.hasOwnProperty.call(show._season_details[seasonKey],"air_date") ||
+            Object.prototype.hasOwnProperty.call(show._season_details[seasonKey],"vote_average")
+        )
+    );
+
     return (
         !forceRefresh &&
         Array.isArray(list) &&
+        hasSeasonDetails &&
         (
             (
                 list.length === 0 &&
@@ -6496,6 +7796,42 @@ function exportNativeBackupJSON(){
 
 
 
+
+async function showImportCompleteSummary(summary,cleanup){
+    const cleanSummary = summary || {};
+    const clean = cleanup || createDuplicateCleanupSummary();
+    const duplicateShows = Number(clean.duplicateShowsRemoved || 0);
+    const duplicateHistory = Number(clean.duplicateWatchedRecordsRemoved || 0);
+    const duplicateProgress = Number(clean.duplicateProgressEntriesRemoved || 0);
+    const fixedTotal = duplicateShows + duplicateHistory + duplicateProgress;
+
+    const lines = [
+        `Shows imported: ${Number(cleanSummary.shows || 0).toLocaleString()}`,
+        `History entries imported: ${Number(cleanSummary.historyEntries || 0).toLocaleString()}`,
+        `Favorites imported: ${Number(cleanSummary.favorites || 0).toLocaleString()}`,
+        ""
+    ];
+
+    if(fixedTotal > 0){
+        lines.push(`Duplicate shows removed: ${duplicateShows.toLocaleString()}`);
+        lines.push(`Duplicate watched records removed: ${duplicateHistory.toLocaleString()}`);
+        lines.push(`Duplicate progress entries removed: ${duplicateProgress.toLocaleString()}`);
+    }else{
+        lines.push("No duplicate records found.");
+    }
+
+    if(typeof showAppAlert === "function"){
+        await showAppAlert({
+            title:"Import Complete",
+            message:lines.join(String.fromCharCode(10)),
+            confirmLabel:"OK"
+        });
+        return;
+    }
+
+    showToast("Import complete");
+}
+
 function importNativeBackupJSON(){
 
     const input = document.createElement("input");
@@ -6555,13 +7891,27 @@ function importNativeBackupJSON(){
 
             showToast("Validating and importing backup...");
 
+            const importCleanupSummary = createDuplicateCleanupSummary();
+            const preparedImportData = JSON.parse(JSON.stringify(backup.data || {}));
+            normalizeTrackerDataForEpisodeIntegrity(preparedImportData,importCleanupSummary);
+
+            const preparedBackup = JSON.parse(JSON.stringify(backup));
+            preparedBackup.data = preparedImportData;
+            preparedBackup.summary = {
+                shows:Object.keys(preparedImportData.shows || {}).length,
+                historyEntries:Array.isArray(preparedImportData.history) ? preparedImportData.history.length : 0,
+                favorites:preparedImportData.profile && Array.isArray(preparedImportData.profile.favorite_shows)
+                ? preparedImportData.profile.favorite_shows.length
+                : 0
+            };
+
             await prepareAndCommitTrackerData(
-                backup.data,
-                backup,
+                preparedImportData,
+                preparedBackup,
                 {updateStatuses:false}
             );
                     renderAll();
-            showToast("App backup imported");
+            await showImportCompleteSummary(preparedBackup.summary,importCleanupSummary);
 
         }catch(error){
 
@@ -6730,10 +8080,6 @@ function validateNativeBackupObject(backup){
             seenIds.add(id);
         }
     });
-
-    if(duplicateIds.size > 0){
-        return {valid:false,message:"Backup contains duplicate History identifiers"};
-    }
 
     return {
         valid:true,

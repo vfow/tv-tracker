@@ -1,0 +1,37 @@
+TV Tracker V2 integration file changes
+
+Compared with: tv-tracker-main(real project).zip
+Frontend source: v2.9.zip
+
+MODIFIED (15)
+- README.md
+- app.py
+- requirements.txt
+- static/css/style.css
+- static/js/app.js
+- static/js/db.js
+- static/js/login.js
+- static/js/tmdb.js
+- static/js/ui.js
+- templates/index.html
+- templates/login.html
+- tests/run_all.py
+- tests/test_backend.py
+- tests/test_frontend.js
+- tests/test_source_contracts.py
+
+ADDED (11)
+- V2_CHANGED_FILES.txt
+- V2_INTEGRATION_REPORT.md
+- static/assets/icons/EPISODES WATCHED.svg
+- static/assets/icons/WATCH TIME.svg
+- static/assets/icons/arrow-narrow-left.svg
+- static/assets/icons/favicon.svg
+- static/assets/icons/filter.svg
+- static/assets/icons/ui-play.svg
+- static/js/v2-router.js
+- tests/test_route_contracts.py
+- tests/test_router.js
+
+REMOVED (1)
+- static/js/source-provider.js

@@ -42,6 +42,18 @@ SCHEMA_VERSION = 4
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
+APP_SHOW_PATH_RE = re.compile(r"^/app/show/([1-9][0-9]{0,11})$")
+APP_EPISODE_PATH_RE = re.compile(
+    r"^/app/show/([1-9][0-9]{0,11})/season/([0-9]{1,5})/episode/([1-9][0-9]{0,5})$"
+)
+APP_SECTION_PATHS = {
+    "/app/watchlist",
+    "/app/upcoming",
+    "/app/history",
+    "/app/discover",
+    "/app/profile",
+    "/app/settings",
+}
 PASSWORD_HASHER = PasswordHasher()
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
@@ -342,14 +354,18 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not authenticated():
-            session.clear()
             if request.path.startswith("/api/"):
+                session.clear()
                 return jsonify({
                     "ok": False,
                     "error": "Authentication required",
                     "code": "session_expired",
                 }), 401
-            return redirect(url_for("login", next=request.full_path.rstrip("?")))
+
+            destination = safe_next_url(request.path)
+            session.clear()
+            session["post_login_path"] = destination
+            return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapped
@@ -1320,10 +1336,27 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
 
 
 def safe_next_url(value: str | None) -> str:
-    candidate = str(value or "")
-    if candidate.startswith("/") and not candidate.startswith("//"):
+    """Return a validated internal application route for post-login use."""
+    candidate = str(value or "").strip().split("?", 1)[0].split("#", 1)[0]
+
+    if candidate in {"/app", "/app/"}:
+        return "/app/watchlist"
+    if candidate in APP_SECTION_PATHS:
         return candidate
-    return "/"
+    if APP_SHOW_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_EPISODE_PATH_RE.fullmatch(candidate):
+        return candidate
+    return "/app/watchlist"
+
+
+def valid_app_path(value: str | None) -> bool:
+    candidate = str(value or "").strip()
+    return (
+        candidate in APP_SECTION_PATHS
+        or APP_SHOW_PATH_RE.fullmatch(candidate) is not None
+        or APP_EPISODE_PATH_RE.fullmatch(candidate) is not None
+    )
 
 
 def create_app() -> Flask:
@@ -1374,7 +1407,11 @@ def create_app() -> Flask:
             "max-age=31536000; includeSubDomains"
         )
 
-        if request.path.startswith("/api/") or request.path in {"/", "/login"}:
+        if (
+            request.path.startswith("/api/")
+            or request.path.startswith("/app")
+            or request.path in {"/", "/login", "/signup"}
+        ):
             response.headers["Cache-Control"] = "no-store"
         elif request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
@@ -1412,19 +1449,31 @@ def create_app() -> Flask:
     @app.get("/login")
     def login():
         if authenticated():
-            return redirect("/")
-        notice = (
-            "Admin account updated. Sign in again."
-            if request.args.get("changed") == "1"
-            else ""
-        )
+            destination = safe_next_url(session.pop("post_login_path", None))
+            return redirect(destination)
+
+        notice = ""
+        if session.pop("account_changed_notice", False):
+            notice = "Admin account updated. Sign in again."
+
+        initial_tab = session.pop("auth_tab", "login")
+        if initial_tab not in {"login", "signup"}:
+            initial_tab = "login"
+
         return render_template(
             "login.html",
             csrf_token=session["csrf_token"],
-            next_url=safe_next_url(request.args.get("next")),
             error="",
             notice=notice,
+            initial_tab=initial_tab,
         )
+
+    @app.get("/signup")
+    def signup():
+        if authenticated():
+            return redirect("/app/watchlist")
+        session["auth_tab"] = "signup"
+        return redirect(url_for("login"))
 
     @app.post("/login")
     def login_post():
@@ -1435,9 +1484,9 @@ def create_app() -> Flask:
             return render_template(
                 "login.html",
                 csrf_token=session["csrf_token"],
-                next_url=safe_next_url(request.form.get("next")),
                 error="Too many failed attempts. Try again later.",
                 notice="",
+                initial_tab="login",
             ), 429
 
         username = str(request.form.get("username", ""))
@@ -1458,13 +1507,13 @@ def create_app() -> Flask:
             return render_template(
                 "login.html",
                 csrf_token=session["csrf_token"],
-                next_url=safe_next_url(request.form.get("next")),
                 error="Invalid username or password.",
                 notice="",
+                initial_tab="login",
             ), 401
 
         clear_login_failures(key)
-        destination = safe_next_url(request.form.get("next"))
+        destination = safe_next_url(session.get("post_login_path"))
         session.clear()
         session["authenticated"] = True
         session["session_version"] = account["session_version"]
@@ -1480,9 +1529,31 @@ def create_app() -> Flask:
         return redirect(url_for("login"))
 
     @app.get("/")
+    def root():
+        if authenticated():
+            return redirect("/app/watchlist")
+        return redirect(url_for("login"))
+
+    @app.get("/app")
+    @app.get("/app/")
     @login_required
-    def index():
-        return render_template("index.html", csrf_token=session["csrf_token"])
+    def app_root():
+        return redirect("/app/watchlist")
+
+    @app.get("/app/<path:app_path>")
+    @login_required
+    def app_page(app_path: str):
+        raw_path = "/app/" + str(app_path or "")
+        requested_path = "/app/" + str(app_path or "").strip("/")
+        if not valid_app_path(requested_path):
+            abort(404)
+        if raw_path != requested_path:
+            return redirect(requested_path)
+        return render_template(
+            "index.html",
+            csrf_token=session["csrf_token"],
+            initial_app_path=requested_path,
+        )
 
     @app.get("/robots.txt")
     def robots():
@@ -1641,6 +1712,7 @@ def create_app() -> Flask:
 
         invalidate_admin_account_cache()
         session.clear()
+        session["account_changed_notice"] = True
         return jsonify({
             "ok": True,
             "reauthenticate": True,

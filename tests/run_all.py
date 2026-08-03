@@ -15,4 +15,5 @@ node = shutil.which("node")
 if not node:
     raise SystemExit("Node.js is required for the frontend regression tests.")
 subprocess.run([node, str(ROOT / "tests" / "test_frontend.js")], cwd=ROOT, check=True)
-print("All TV Tracker v1.7 Candidate tests passed.")
+subprocess.run([node, str(ROOT / "tests" / "test_router.js")], cwd=ROOT, check=True)
+print("All TV Tracker V2 integration tests passed.")

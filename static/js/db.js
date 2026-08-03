@@ -191,8 +191,11 @@ function csrfToken(){
 }
 
 function redirectToLogin(){
-    const next = encodeURIComponent(location.pathname + location.search);
-    location.assign("/login?next=" + next);
+    if(String(location.pathname || "").startsWith("/app")){
+        location.reload();
+        return;
+    }
+    location.assign("/login");
 }
 
 function friendlyRequestError(error,fallback="Request failed"){
