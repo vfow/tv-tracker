@@ -38,8 +38,9 @@
             .subtitle{margin-bottom:22px}
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-integration') }}">
 </head>
-<body data-initial-auth-tab="{{ initial_tab }}">
+<body class="tw-antialiased" data-initial-auth-tab="{{ initial_tab }}">
 <main>
     <h1>TV TRACKER</h1>
     <p class="subtitle">Private access</p>
