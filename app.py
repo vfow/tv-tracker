@@ -92,6 +92,18 @@ def required_env(name: str, *, strip: bool = True) -> str:
     return value
 
 
+def bootstrap_admin_credentials() -> tuple[str, str]:
+    username = (
+        os.environ.get("APP_USERNAME")
+        or os.environ.get("ADMIN_USERNAME", "")
+    ).strip()
+    password_hash = (
+        os.environ.get("APP_PASSWORD_HASH")
+        or os.environ.get("ADMIN_PASSWORD_HASH", "")
+    ).strip()
+    return username, password_hash
+
+
 def database_connection() -> psycopg.Connection[Any]:
     return psycopg.connect(
         host=required_env("DB_HOST"),
@@ -171,8 +183,7 @@ def ensure_schema() -> None:
     with database_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(statements)
-            bootstrap_username = os.environ.get("APP_USERNAME", "").strip()
-            bootstrap_password_hash = os.environ.get("APP_PASSWORD_HASH", "").strip()
+            bootstrap_username, bootstrap_password_hash = bootstrap_admin_credentials()
             if bootstrap_username and bootstrap_password_hash:
                 cursor.execute(
                     """
@@ -190,7 +201,8 @@ def ensure_schema() -> None:
             if cursor.fetchone() is None:
                 raise RuntimeError(
                     "The admin account is not initialized. Configure APP_USERNAME and "
-                    "APP_PASSWORD_HASH for first startup, or run tools/reset_admin.py "
+                    "APP_PASSWORD_HASH, or ADMIN_USERNAME and ADMIN_PASSWORD_HASH, "
+                    "for first startup. You can also run tools/reset_admin.py "
                     "over SSH to recreate the missing singleton account."
                 )
 
@@ -615,9 +627,11 @@ def backup_int(
 ) -> int:
     if isinstance(value, bool):
         raise BackupValidationError(f"{field} must be a number")
-    try:
-        number = int(value)
-    except (TypeError, ValueError, OverflowError):
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
+        number = int(value.strip())
+    else:
         raise BackupValidationError(f"{field} must be a number") from None
     if minimum is not None and number < minimum:
         raise BackupValidationError(f"{field} is outside the supported range")
@@ -1492,7 +1506,7 @@ def create_app() -> Flask:
         username = str(request.form.get("username", ""))
         password = str(request.form.get("password", ""))
         account = read_admin_account()
-        valid_username = hmac.compare_digest(username, account["username"])
+        valid_username = username == str(account["username"])
         valid_password = False
 
         try:
@@ -1668,9 +1682,7 @@ def create_app() -> Flask:
                     "code": "password_too_short",
                 }), 400
 
-        username_changed = not hmac.compare_digest(
-            requested_username, account["username"]
-        )
+        username_changed = requested_username != str(account["username"])
         password_changed = changing_password
 
         if not username_changed and not password_changed:
@@ -1812,7 +1824,7 @@ def create_app() -> Flask:
     @login_required
     def patch_state():
         check_csrf()
-        payload = request.get_json(silent=False)
+        payload = request.get_json(silent=True)
 
         if not isinstance(payload, dict):
             return jsonify({"ok": False, "error": "Invalid JSON body"}), 400

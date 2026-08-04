@@ -71,6 +71,21 @@ def authenticated_session(client):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_admin_bootstrap_accepts_legacy_env_names(self):
+        with patch.dict(
+            os.environ,
+            {
+                "APP_USERNAME": "",
+                "APP_PASSWORD_HASH": "",
+                "ADMIN_USERNAME": "legacy-admin",
+                "ADMIN_PASSWORD_HASH": "legacy-hash",
+            },
+        ):
+            self.assertEqual(
+                tracker.bootstrap_admin_credentials(),
+                ("legacy-admin", "legacy-hash"),
+            )
+
     def test_impossible_date_is_rejected(self):
         with self.assertRaises(tracker.BackupValidationError):
             tracker.validate_calendar_date("2026-02-31", "date")
@@ -84,6 +99,13 @@ class ValidationTests(unittest.TestCase):
     def test_sync_rejects_null_show(self):
         with self.assertRaises(tracker.BackupValidationError):
             tracker.validate_sync_delta_payload({"showsUpsert": {"123": None}})
+
+    def test_integer_validation_rejects_fractional_values(self):
+        for value in (1.5, "1.5"):
+            with self.subTest(value=value):
+                with self.assertRaises(tracker.BackupValidationError):
+                    tracker.backup_int(value, "episode")
+        self.assertEqual(tracker.backup_int("2", "episode"), 2)
 
     def test_sync_normalizes_valid_records(self):
         values = tracker.validate_sync_delta_payload({
@@ -175,6 +197,38 @@ class RouteSecurityTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["code"], "invalid_sync_record")
+
+    def test_malformed_json_patch_returns_json_error(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.patch(
+                "/api/state",
+                data="{",
+                content_type="application/json",
+                headers={"X-CSRF-Token": "csrf-test-token"},
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "Invalid JSON body")
+
+    def test_non_ascii_username_login_fails_without_crashing(self):
+        with self.client.session_transaction() as session:
+            session["csrf_token"] = "csrf-test-token"
+        hasher = MagicMock()
+        hasher.verify.return_value = False
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "login_is_limited", return_value=False
+        ), patch.object(tracker, "PASSWORD_HASHER", hasher), patch.object(
+            tracker, "record_login_failure", return_value=None
+        ):
+            response = self.client.post(
+                "/login",
+                data={
+                    "csrf_token": "csrf-test-token",
+                    "username": "admín",
+                    "password": "wrong-password",
+                },
+            )
+        self.assertEqual(response.status_code, 401)
 
     def test_backup_export_blocks_poisoned_database_records(self):
         authenticated_session(self.client)

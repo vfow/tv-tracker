@@ -8,6 +8,8 @@ confirmation = getpass("Repeat the password: ")
 
 if not password:
     raise SystemExit("Password cannot be empty.")
+if len(password) < 8:
+    raise SystemExit("Password must contain at least 8 characters.")
 if password != confirmation:
     raise SystemExit("Passwords do not match.")
 

@@ -78,12 +78,12 @@ DB_PORT
 DB_NAME
 DB_USER
 DB_PASSWORD
-ADMIN_USERNAME
-ADMIN_PASSWORD_HASH
+APP_USERNAME (or ADMIN_USERNAME fallback)
+APP_PASSWORD_HASH (or ADMIN_PASSWORD_HASH fallback)
 TMDB_API_KEY
 ```
 
-Generate `ADMIN_PASSWORD_HASH` with the helper under `tools/`. Do not place secrets in this project ZIP or commit them to source control.
+Generate `APP_PASSWORD_HASH` with the helper under `tools/`. Existing deployments that already use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` are also supported. Do not place secrets in this project ZIP or commit them to source control.
 
 ## Deployment
 
