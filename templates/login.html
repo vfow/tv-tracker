@@ -57,9 +57,9 @@
         <form method="post" action="{{ url_for('login_post') }}" autocomplete="on">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label for="username">Username</label>
-            <input class="tw-rounded-lg" id="username" name="username" type="text" required autofocus autocomplete="username">
+            <input class="tw-rounded-lg" id="username" name="username" type="text" required autofocus autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" aria-label="Username">
             <label for="password">Password</label>
-            <input class="tw-rounded-lg" id="password" name="password" type="password" required autocomplete="current-password">
+            <input class="tw-rounded-lg" id="password" name="password" type="password" required autocomplete="current-password" aria-label="Password">
             <button class="submit-button tw-rounded-lg tw-transition" id="sign-in-button" type="submit" disabled>SIGN IN</button>
             <p class="helper-text">Your watch history stays private to this signed-in session.</p>
         </form>
