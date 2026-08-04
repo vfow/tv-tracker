@@ -296,8 +296,8 @@ function renderDiscoverHub(){
 
         results.innerHTML = `
             <div class="empty-state">
-                <h2>Could not load Discover.</h2>
-                <p>${escapeHTML(state.error)}</p>
+                <h2>Discover failed to load</h2>
+                <p>Try again later.</p>
             </div>
         `;
 

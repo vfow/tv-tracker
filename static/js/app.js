@@ -2998,8 +2998,25 @@ function renderSearchLoading(query){
 
     results.innerHTML = `
         <div class="empty-state">
-            <h2>Searching…</h2>
-            <p>${escapeHTML(query)}</p>
+            <h2>Searching</h2>
+            <p>Looking for matches.</p>
+        </div>
+    `;
+
+}
+
+function renderSearchError(){
+
+    const results = document.getElementById("search-results");
+
+    if(!results){
+        return;
+    }
+
+    results.innerHTML = `
+        <div class="empty-state">
+            <h2>Search failed</h2>
+            <p>Try again in a moment.</p>
         </div>
     `;
 
@@ -3497,6 +3514,7 @@ async function searchShows(query){
         }
 
         discoverSearchState.loading = false;
+        renderSearchError();
         showToast(friendlyTMDBSearchError(error));
 
     }finally{
@@ -3816,7 +3834,8 @@ function renderShowDetailLoading(showId){
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
             <div class="empty-state show-detail-loading-state">
-                <h2>Loading show...</h2>
+                <h2>Loading show</h2>
+                <p>Getting details.</p>
             </div>
         </div>
     `;
@@ -3839,8 +3858,8 @@ function renderShowDetailError(message){
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
             <div class="empty-state show-detail-loading-state">
-                <h2>Could not load show details.</h2>
-                <p>${escapeHTML(message || "Try again later.")}</p>
+                <h2>Show details failed to load</h2>
+                <p>Try again later.</p>
             </div>
         </div>
     `;
@@ -4024,7 +4043,7 @@ function renderEpisodeDetailLoading(showId,seasonNumber,episodeNumber){
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
             <div class="empty-state episode-detail-loading-state">
-                <h2>Loading episode...</h2>
+                <h2>Loading episode</h2>
                 <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
             </div>
         </div>
@@ -4048,8 +4067,8 @@ function renderEpisodeDetailError(message){
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
             <div class="empty-state episode-detail-loading-state">
-                <h2>Could not load episode details.</h2>
-                <p>${escapeHTML(message || "Try again later.")}</p>
+                <h2>Episode details failed to load</h2>
+                <p>Try again later.</p>
             </div>
         </div>
     `;
