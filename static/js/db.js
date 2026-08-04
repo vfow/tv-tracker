@@ -204,7 +204,7 @@ function friendlyRequestError(error,fallback="Request failed"){
     }
 
     if(error && error.status === 401){
-        return "Your login session has expired.";
+        return "Your session expired. Sign in again.";
     }
 
     const code = error && error.payload ? String(error.payload.code || "") : "";
@@ -221,7 +221,7 @@ function friendlyRequestError(error,fallback="Request failed"){
         return "The selected file is too large to upload.";
     }
     if(error && error.status === 409){
-        return error.message || "Another device changed the same tracker data.";
+        return error.message || "Updated from another tab or device.";
     }
     if(error instanceof TypeError){
         return "Could not reach the TV Tracker server. Check your connection.";
@@ -230,10 +230,35 @@ function friendlyRequestError(error,fallback="Request failed"){
     return error && error.message ? error.message : fallback;
 }
 
+function friendlySaveError(error){
+    if(typeof navigator !== "undefined" && navigator.onLine === false){
+        return "Could not save changes. Check your connection.";
+    }
+
+    if(error && error.status === 401){
+        return "Your session expired. Sign in again.";
+    }
+
+    const code = error && error.payload ? String(error.payload.code || "") : "";
+    if(code === "database_unavailable"){
+        return "Could not save changes. Try again shortly.";
+    }
+
+    if(error && error.status === 409){
+        return "Updated from another tab or device.";
+    }
+
+    if(error instanceof TypeError){
+        return "Could not save changes. Check your connection.";
+    }
+
+    return "Could not save changes. Try again.";
+}
+
 async function parseAPIResponse(response){
     if(response.status === 401){
         redirectToLogin();
-        const sessionError = new Error("Your session has expired.");
+        const sessionError = new Error("Your session expired. Sign in again.");
         sessionError.status = 401;
         throw sessionError;
     }
@@ -1581,6 +1606,9 @@ function processPendingSaveQueue(){
             }catch(error){
                 console.error("TV Tracker has an unsaved operation",error);
                 PENDING_SAVE_FAILURES += 1;
+                if(PENDING_SAVE_FAILURES === 1 && typeof showToast === "function"){
+                    showToast(friendlySaveError(error),{duration:3600});
+                }
                 updateUnsavedStateIndicator();
                 schedulePendingSaveRetry();
                 return false;
