@@ -10,22 +10,23 @@
         @font-face{font-family:"League Gothic";src:url("{{ url_for('static', filename='assets/league-gothic.regular.ttf') }}") format("truetype");font-display:swap}
         *{box-sizing:border-box}
         html{min-width:320px;background:#000;color-scheme:dark}
-        body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));overflow-x:hidden;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif}
-        main{width:min(430px,100%);border:1px solid #242424;background:#080808;padding:32px}
+        body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));overflow-x:hidden;background:radial-gradient(circle at top,#151515 0,#000 42%,#000 100%);color:#fff;font-family:Arial,Helvetica,sans-serif}
+        main{width:min(430px,100%);border:1px solid #242424;background:linear-gradient(180deg,#0b0b0b 0,#070707 100%);padding:34px}
         h1{margin:0 0 8px;font-family:"League Gothic",sans-serif;font-size:64px;font-weight:400;letter-spacing:.5px;line-height:1}
-        .subtitle{margin:0 0 24px;color:#888}
-        .auth-tabs{display:grid;grid-template-columns:1fr 1fr;border:1px solid #262626;margin-bottom:26px}
-        .auth-tab{min-height:44px;border:0;background:#0d0d0d;color:#777;font-weight:800;letter-spacing:.04em;cursor:pointer}
+        .subtitle{margin:0 0 26px;color:#9a9a9a;line-height:1.5}
+        .auth-tabs{display:grid;grid-template-columns:1fr 1fr;border:1px solid #262626;margin-bottom:26px;overflow:hidden}
+        .auth-tab{min-height:46px;border:0;background:#0d0d0d;color:#777;font-weight:800;letter-spacing:.04em;cursor:pointer;transition:background .16s ease,color .16s ease}
         .auth-tab+.auth-tab{border-left:1px solid #262626}
         .auth-tab.active{background:#fff;color:#000}
         .auth-tab:focus-visible,input:focus-visible,.submit-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
         .auth-panel[hidden]{display:none!important}
         label{display:block;margin:16px 0 7px;color:#bbb;font-size:13px;text-transform:uppercase;letter-spacing:1px}
-        input{width:100%;min-height:46px;border:1px solid #2b2b2b;border-radius:0;background:#111;color:#fff;padding:13px 14px;font-size:16px;outline:none;box-shadow:none}
-        input:focus{border-color:#777;box-shadow:none}
-        .submit-button{width:100%;min-height:46px;margin-top:24px;border:1px solid #2b2b2b;border-radius:0;background:#111;color:#555;padding:13px;font-weight:700;cursor:not-allowed;transition:background .16s ease,border-color .16s ease,color .16s ease}
+        input{width:100%;min-height:48px;border:1px solid #2b2b2b;background:#111;color:#fff;padding:13px 14px;font-size:16px;outline:none;box-shadow:none;transition:border-color .16s ease,background .16s ease}
+        input:focus{border-color:#8b8b8b;background:#141414;box-shadow:none}
+        .submit-button{width:100%;min-height:48px;margin-top:24px;border:1px solid #2b2b2b;background:#111;color:#666;padding:13px;font-weight:700;cursor:not-allowed;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
         .submit-button.is-ready{border-color:#fff;background:#fff;color:#000;cursor:pointer}
-        .submit-button.is-ready:hover{background:#d8d8d8}
+        .submit-button.is-ready:hover{background:#d8d8d8;transform:translateY(-1px)}
+        .helper-text{margin:14px 0 0;color:#737373;font-size:13px;line-height:1.5;text-align:center}
         .error{margin:0 0 16px;padding:10px 12px;border:1px solid #632626;background:#210d0d;color:#ffb8b8;font-size:14px}
         .notice{margin:0 0 16px;padding:10px 12px;border:1px solid #285c39;background:#0d2114;color:#b8ffd0;font-size:14px}
         .coming-soon{min-height:210px;display:flex;flex-direction:column;justify-content:center;border:1px solid #222;background:#0d0d0d;padding:28px;text-align:center}
@@ -33,7 +34,7 @@
         .coming-soon p{margin:0;color:#888;line-height:1.6}
         @media (max-width:480px){
             body{place-items:center stretch}
-            main{padding:24px 20px}
+            main{padding:26px 22px}
             h1{font-size:56px}
             .subtitle{margin-bottom:22px}
         }
@@ -41,13 +42,13 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-integration') }}">
 </head>
 <body class="tw-antialiased" data-initial-auth-tab="{{ initial_tab }}">
-<main>
+<main class="tw-rounded-2xl tw-shadow-2xl tw-shadow-black/60">
     <h1>TV TRACKER</h1>
-    <p class="subtitle">Private access</p>
+    <p class="subtitle">Track shows, episodes, and watch history in one private dashboard.</p>
 
-    <div class="auth-tabs" role="tablist" aria-label="Account access">
-        <button class="auth-tab{% if initial_tab != 'signup' %} active{% endif %}" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="{{ 'false' if initial_tab == 'signup' else 'true' }}" data-auth-tab="login">LOGIN</button>
-        <button class="auth-tab{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
+    <div class="auth-tabs tw-rounded-xl" role="tablist" aria-label="Account access">
+        <button class="auth-tab tw-transition-colors{% if initial_tab != 'signup' %} active{% endif %}" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="{{ 'false' if initial_tab == 'signup' else 'true' }}" data-auth-tab="login">LOGIN</button>
+        <button class="auth-tab tw-transition-colors{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
     </div>
 
     <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
@@ -56,15 +57,16 @@
         <form method="post" action="{{ url_for('login_post') }}" autocomplete="on">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label for="username">Username</label>
-            <input id="username" name="username" type="text" required autofocus autocomplete="username">
+            <input class="tw-rounded-lg" id="username" name="username" type="text" required autofocus autocomplete="username">
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" required autocomplete="current-password">
-            <button class="submit-button" id="sign-in-button" type="submit" disabled>SIGN IN</button>
+            <input class="tw-rounded-lg" id="password" name="password" type="password" required autocomplete="current-password">
+            <button class="submit-button tw-rounded-lg tw-transition" id="sign-in-button" type="submit" disabled>SIGN IN</button>
+            <p class="helper-text">Your watch history stays private to this signed-in session.</p>
         </form>
     </section>
 
     <section class="auth-panel" id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"{% if initial_tab != 'signup' %} hidden{% endif %}>
-        <div class="coming-soon">
+        <div class="coming-soon tw-rounded-xl">
             <h2>Registration coming soon</h2>
             <p>New account creation is not available yet.</p>
         </div>
