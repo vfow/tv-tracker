@@ -321,8 +321,8 @@ function renderDiscoverHub(){
 
         results.innerHTML = `
             <div class="empty-state">
-                <h2>Nothing new here right now.</h2>
-                <p>Search for a show above or check Discover again later.</p>
+                <h2>Nothing new right now</h2>
+                <p>Try again later.</p>
             </div>
         `;
 
@@ -612,8 +612,8 @@ function renderSearchResults(shows){
 
         results.innerHTML = `
             <div class="empty-state">
-                <h2>No results found.</h2>
-                ${query ? `<p>No TV shows matched “${escapeHTML(query)}”.</p>` : ""}
+                <h2>No matches found</h2>
+                ${query ? `<p>Try another title.</p>` : ""}
             </div>
         `;
 
@@ -712,30 +712,30 @@ function getWatchlistEmptyHTML(){
 
     const messages = {
         watching:{
-            title:"Nothing to watch right now.",
-            text:"You are caught up. New or missed episodes will appear here."
+            title:"Nothing in watching",
+            text:"Add a show when you start watching."
         },
         paused:{
-            title:"No paused shows.",
-            text:"Shows you pause will wait here until you are ready to continue."
+            title:"No paused shows",
+            text:"Paused shows will appear here."
         },
         finished:{
-            title:"No completed shows yet.",
-            text:"When you finish everything currently available, it will appear here."
+            title:"No completed shows",
+            text:"Finished shows will appear here."
         },
         plan:{
-            title:"No planned shows yet.",
-            text:"Add shows from Discover and choose Plan To Watch."
+            title:"No planned shows",
+            text:"Shows saved for later will appear here."
         },
         dropped:{
-            title:"No dropped shows.",
+            title:"No dropped shows",
             text:"Shows you stop watching will appear here."
         }
     };
 
     const message = messages[activeFilter] || {
-        title:"Nothing here yet.",
-        text:"Add or update shows to fill this section."
+        title:"Nothing here yet",
+        text:"Shows will appear here."
     };
 
     return `
@@ -1753,8 +1753,8 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
         list.innerHTML = `
             <div class="empty-state">
-                <h2>Your schedule is clear.</h2>
-                <p>Missed episodes and future releases with real dates will appear here.</p>
+                <h2>No upcoming episodes</h2>
+                <p>New releases will appear here.</p>
             </div>
         `;
 
@@ -2405,8 +2405,8 @@ function renderHistory(){
 
         list.innerHTML = `
             <div class="empty-state">
-                <h2>No watch history yet.</h2>
-                <p>Use a circle on any episode to start building your history.</p>
+                <h2>No watch history</h2>
+                <p>Watched episodes will appear here.</p>
             </div>
         `;
 
