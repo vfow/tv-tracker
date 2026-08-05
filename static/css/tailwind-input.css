@@ -1,3 +1,32 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base{
+    *,
+    *::before,
+    *::after{
+        box-sizing:border-box;
+    }
+
+    @font-face{
+        font-family:"League Gothic";
+        src:url("../assets/league-gothic.regular.ttf") format("truetype");
+        font-display:swap;
+    }
+
+    button,
+    input,
+    select,
+    textarea{
+        font:inherit;
+    }
+
+    button,
+    a,
+    input,
+    select,
+    textarea{
+        -webkit-tap-highlight-color:transparent;
+    }
+}

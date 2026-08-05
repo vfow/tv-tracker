@@ -1,70 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="tw-min-w-[320px] tw-bg-black tw-[color-scheme:dark]">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
     <title>TV Tracker — Access</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
-    <style>
-        @font-face{font-family:"League Gothic";src:url("{{ url_for('static', filename='assets/league-gothic.regular.ttf') }}") format("truetype");font-display:swap}
-        *{box-sizing:border-box}
-        html{min-width:320px;background:#000;color-scheme:dark}
-        body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));overflow-x:hidden;background:radial-gradient(circle at top,#151515 0,#000 42%,#000 100%);color:#fff;font-family:Arial,Helvetica,sans-serif}
-        main{width:min(430px,100%);border:1px solid #242424;background:linear-gradient(180deg,#0b0b0b 0,#070707 100%);padding:34px}
-        h1{margin:0 0 8px;font-family:"League Gothic",sans-serif;font-size:64px;font-weight:400;letter-spacing:.5px;line-height:1}
-        .subtitle{margin:0 0 26px;color:#9a9a9a;line-height:1.5}
-        .auth-tabs{display:grid;grid-template-columns:1fr 1fr;border:1px solid #262626;margin-bottom:26px;overflow:hidden}
-        .auth-tab{min-height:46px;border:0;background:#0d0d0d;color:#777;font-weight:800;letter-spacing:.04em;cursor:pointer;transition:background .16s ease,color .16s ease}
-        .auth-tab+.auth-tab{border-left:1px solid #262626}
-        .auth-tab.active{background:#fff;color:#000}
-        .auth-tab:focus-visible,input:focus-visible,.submit-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
-        .auth-panel[hidden]{display:none!important}
-        label{display:block;margin:16px 0 7px;color:#bbb;font-size:13px;text-transform:uppercase;letter-spacing:1px}
-        input{width:100%;min-height:48px;border:1px solid #2b2b2b;background:#111;color:#fff;padding:13px 14px;font-size:16px;outline:none;box-shadow:none;transition:border-color .16s ease,background .16s ease}
-        input:focus{border-color:#8b8b8b;background:#141414;box-shadow:none}
-        .submit-button{width:100%;min-height:48px;margin-top:24px;border:1px solid #2b2b2b;background:#111;color:#666;padding:13px;font-weight:700;cursor:not-allowed;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
-        .submit-button.is-ready{border-color:#fff;background:#fff;color:#000;cursor:pointer}
-        .submit-button.is-ready:hover{background:#d8d8d8;transform:translateY(-1px)}
-        .error{margin:0 0 16px;padding:10px 12px;border:1px solid #632626;background:#210d0d;color:#ffb8b8;font-size:14px}
-        .notice{margin:0 0 16px;padding:10px 12px;border:1px solid #285c39;background:#0d2114;color:#b8ffd0;font-size:14px}
-        .coming-soon{min-height:210px;display:flex;flex-direction:column;justify-content:center;border:1px solid #222;background:#0d0d0d;padding:28px;text-align:center}
-        .coming-soon h2{margin:0;font-family:"League Gothic",sans-serif;font-size:45px;font-weight:400;letter-spacing:.03em}
-        @media (max-width:480px){
-            body{place-items:center stretch}
-            main{padding:26px 22px}
-            h1{font-size:56px}
-            .subtitle{margin-bottom:22px}
-        }
-    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-integration') }}">
 </head>
-<body class="tw-antialiased" data-initial-auth-tab="{{ initial_tab }}">
-<main class="tw-rounded-2xl tw-shadow-2xl tw-shadow-black/60">
-    <h1>TV TRACKER</h1>
-    <p class="subtitle">Track your Movies, Shows and Anime all in one place</p>
+<body class="tw-m-0 tw-grid tw-min-h-screen tw-min-h-[100dvh] tw-place-items-center tw-overflow-x-hidden tw-bg-black tw-bg-[radial-gradient(circle_at_top,#151515_0,#000_42%,#000_100%)] tw-p-[max(18px,env(safe-area-inset-top))_max(18px,env(safe-area-inset-right))_max(18px,env(safe-area-inset-bottom))_max(18px,env(safe-area-inset-left))] tw-font-sans tw-text-white tw-antialiased max-[480px]:tw-justify-items-stretch" data-initial-auth-tab="{{ initial_tab }}">
+<main class="tw-w-[min(430px,100%)] tw-rounded-2xl tw-border tw-border-solid tw-border-tt-border tw-bg-[linear-gradient(180deg,#0b0b0b_0,#070707_100%)] tw-p-[34px] tw-shadow-2xl tw-shadow-black/60 max-[480px]:tw-px-[22px] max-[480px]:tw-py-[26px]">
+    <h1 class="tw-m-0 tw-mb-2 tw-font-league tw-text-[64px] tw-font-normal tw-leading-none tw-tracking-[.5px] max-[480px]:tw-text-[56px]">TV TRACKER</h1>
+    <p class="tw-m-0 tw-mb-[26px] tw-text-tt-muted tw-leading-[1.5] max-[480px]:tw-mb-[22px]">Track your Movies, Shows and Anime all in one place</p>
 
-    <div class="auth-tabs tw-rounded-xl" role="tablist" aria-label="Account access">
-        <button class="auth-tab tw-transition-colors{% if initial_tab != 'signup' %} active{% endif %}" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="{{ 'false' if initial_tab == 'signup' else 'true' }}" data-auth-tab="login">LOGIN</button>
-        <button class="auth-tab tw-transition-colors{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
+    <div class="tw-mb-[26px] tw-grid tw-grid-cols-2 tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-[#262626]" role="tablist" aria-label="Account access">
+        <button class="auth-tab tw-min-h-[46px] tw-cursor-pointer tw-border-0 tw-bg-[#0d0d0d] tw-font-extrabold tw-tracking-[.04em] tw-text-[#777] tw-transition-colors focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.active]:tw-bg-white [&.active]:tw-text-black{% if initial_tab != 'signup' %} active{% endif %}" id="login-tab" type="button" role="tab" aria-controls="login-panel" aria-selected="{{ 'false' if initial_tab == 'signup' else 'true' }}" data-auth-tab="login">LOGIN</button>
+        <button class="auth-tab tw-min-h-[46px] tw-cursor-pointer tw-border-0 tw-border-l tw-border-solid tw-border-[#262626] tw-bg-[#0d0d0d] tw-font-extrabold tw-tracking-[.04em] tw-text-[#777] tw-transition-colors focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.active]:tw-bg-white [&.active]:tw-text-black{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
     </div>
 
     <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
-        {% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        {% if notice %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-noticeBorder tw-bg-tt-noticeBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-notice">{{ notice }}</div>{% endif %}
+        {% if error %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-dangerBorder tw-bg-tt-dangerBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-danger">{{ error }}</div>{% endif %}
         <form method="post" action="{{ url_for('login_post') }}" autocomplete="on">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <label for="username">Username</label>
-            <input class="tw-rounded-lg" id="username" name="username" type="text" required autofocus autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" aria-label="Username">
-            <label for="password">Password</label>
-            <input class="tw-rounded-lg" id="password" name="password" type="password" required autocomplete="current-password" aria-label="Password">
-            <button class="submit-button tw-rounded-lg tw-transition" id="sign-in-button" type="submit" disabled>SIGN IN</button>
+            <label class="tw-mt-4 tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="username">Username</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-py-[13px] tw-text-base tw-text-white tw-shadow-none tw-outline-none tw-transition-colors focus:tw-border-[#8b8b8b] focus:tw-bg-[#141414] focus:tw-shadow-none focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" id="username" name="username" type="text" required autofocus autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" aria-label="Username">
+            <label class="tw-mt-4 tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="password">Password</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-py-[13px] tw-text-base tw-text-white tw-shadow-none tw-outline-none tw-transition-colors focus:tw-border-[#8b8b8b] focus:tw-bg-[#141414] focus:tw-shadow-none focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" id="password" name="password" type="password" required autocomplete="current-password" aria-label="Password">
+            <button class="submit-button tw-mt-6 tw-w-full tw-min-h-[48px] tw-cursor-not-allowed tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-p-[13px] tw-font-bold tw-text-[#666] tw-transition focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.is-ready]:tw-cursor-pointer [&.is-ready]:tw-border-white [&.is-ready]:tw-bg-white [&.is-ready]:tw-text-black [&.is-ready:hover]:tw-translate-y-[-1px] [&.is-ready:hover]:tw-bg-[#d8d8d8]" id="sign-in-button" type="submit" disabled>SIGN IN</button>
         </form>
     </section>
 
     <section class="auth-panel" id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"{% if initial_tab != 'signup' %} hidden{% endif %}>
-        <div class="coming-soon tw-rounded-xl">
-            <h2>Registration coming soon</h2>
+        <div class="tw-flex tw-min-h-[210px] tw-flex-col tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-[#222] tw-bg-[#0d0d0d] tw-p-7 tw-text-center">
+            <h2 class="tw-m-0 tw-font-league tw-text-[45px] tw-font-normal tw-tracking-[.03em]">Registration coming soon</h2>
         </div>
     </section>
 </main>

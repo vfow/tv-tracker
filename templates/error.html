@@ -1,32 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="tw-min-w-[320px] tw-bg-black tw-[color-scheme:dark]">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
     <title>{{ status_code }} - TV Tracker</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
-    <style>
-        @font-face{font-family:"League Gothic";src:url("{{ url_for('static', filename='assets/league-gothic.regular.ttf') }}") format("truetype");font-display:swap}
-        *{box-sizing:border-box}
-        html{min-width:320px;background:#000;color-scheme:dark}
-        body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));overflow-x:hidden;background:radial-gradient(circle at top,#151515 0,#000 42%,#000 100%);color:#fff;font-family:Arial,Helvetica,sans-serif;text-align:center}
-        main{width:min(500px,100%);border:1px solid #242424;background:linear-gradient(180deg,#0b0b0b 0,#070707 100%);padding:38px 34px;border-radius:18px;box-shadow:0 25px 70px rgba(0,0,0,.62)}
-        .status{margin:0 0 12px;color:#777;font-size:13px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}
-        h1{margin:0 0 12px;font-family:"League Gothic",sans-serif;font-size:58px;font-weight:400;letter-spacing:.03em;line-height:.95}
-        p{margin:0 auto;color:#aaa;font-size:16px;line-height:1.6}
-        a{display:inline-flex;align-items:center;justify-content:center;min-height:46px;margin-top:28px;border:1px solid #fff;background:#fff;color:#000;padding:12px 18px;border-radius:10px;font-weight:800;text-decoration:none;transition:background .16s ease,transform .16s ease}
-        a:hover{background:#d8d8d8;transform:translateY(-1px)}
-        a:focus-visible{outline:2px solid #fff;outline-offset:3px}
-        @media (max-width:480px){main{padding:30px 24px}h1{font-size:48px}}
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-integration') }}">
 </head>
-<body>
-<main>
-    <p class="status">{{ status_code }}</p>
-    <h1>{{ error_title }}</h1>
-    <p>{{ error_text }}</p>
-    <a href="{{ action_url }}">{{ action_label }}</a>
+<body class="tw-m-0 tw-grid tw-min-h-screen tw-min-h-[100dvh] tw-place-items-center tw-overflow-x-hidden tw-bg-black tw-bg-[radial-gradient(circle_at_top,#151515_0,#000_42%,#000_100%)] tw-p-[max(18px,env(safe-area-inset-top))_max(18px,env(safe-area-inset-right))_max(18px,env(safe-area-inset-bottom))_max(18px,env(safe-area-inset-left))] tw-text-center tw-font-sans tw-text-white tw-antialiased">
+<main class="tw-w-[min(500px,100%)] tw-rounded-[18px] tw-border tw-border-solid tw-border-tt-border tw-bg-[linear-gradient(180deg,#0b0b0b_0,#070707_100%)] tw-px-[34px] tw-py-[38px] tw-shadow-tt-elevated max-[480px]:tw-px-6 max-[480px]:tw-py-[30px]">
+    <p class="tw-m-0 tw-mb-3 tw-text-[13px] tw-font-extrabold tw-uppercase tw-tracking-[.18em] tw-text-[#777]">{{ status_code }}</p>
+    <h1 class="tw-m-0 tw-mb-3 tw-font-league tw-text-[58px] tw-font-normal tw-leading-[.95] tw-tracking-[.03em] max-[480px]:tw-text-[48px]">{{ error_title }}</h1>
+    <p class="tw-mx-auto tw-my-0 tw-text-base tw-leading-[1.6] tw-text-[#aaa]">{{ error_text }}</p>
+    <a class="tw-mt-7 tw-inline-flex tw-min-h-[46px] tw-items-center tw-justify-center tw-rounded-[10px] tw-border tw-border-solid tw-border-white tw-bg-white tw-px-[18px] tw-py-3 tw-font-extrabold tw-text-black tw-no-underline tw-transition hover:tw-translate-y-[-1px] hover:tw-bg-[#d8d8d8] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" href="{{ action_url }}">{{ action_label }}</a>
 </main>
 </body>
 </html>
