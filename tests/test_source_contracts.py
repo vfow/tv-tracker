@@ -20,7 +20,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
-        self.assertIn('2.0-integration', template)
+        self.assertIn('2.0-tailwind', template)
         self.assertIn('v2-router.js', template)
         self.assertNotIn('static-adapter.js', template)
 
@@ -66,11 +66,16 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('view-more-button', css)
         self.assertIn('tmdbSearchShowsPage', tmdb_js)
 
-    def test_phase5_removes_legacy_frontend_assets(self):
-        template = self.read('templates/index.html')
+    def test_frontend_uses_tailwind_only_assets(self):
+        template = "\n".join([
+            self.read('templates/index.html'),
+            self.read('templates/login.html'),
+            self.read('templates/error.html'),
+        ])
         ui = self.read('static/js/ui.js')
         self.assertIn('tailwind.css', template)
-        self.assertIn('2.0-integration-phase5', template)
+        self.assertIn('2.0-tailwind', template)
+        self.assertNotIn('2.0-integration', template)
         self.assertNotIn('bootstrap.min.css', template)
         self.assertNotIn('bootstrap.bundle.min.js', template)
         self.assertNotIn('css/style.css', template)
@@ -80,6 +85,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertFalse((ROOT / 'static/css/style.css').exists())
         self.assertFalse((ROOT / 'static/css/foundation.css').exists())
         self.assertFalse((ROOT / 'static/js/shell.js').exists())
+        self.assertFalse((ROOT / 'static/assets/favicon.svg').exists())
+        self.assertFalse((ROOT / 'static/assets/WATCH TIME.svg').exists())
+        self.assertFalse((ROOT / 'static/assets/EPISODES WATCHED.svg').exists())
 
     def test_real_protected_page_routes_exist(self):
         app_py = self.read('app.py')

@@ -3,11 +3,12 @@ TV Tracker V2 integration file changes
 Compared with: tv-tracker-main(real project).zip
 Frontend source: v2.9.zip
 
-MODIFIED (15)
+MODIFIED (16)
 - README.md
 - app.py
 - requirements.txt
-- static/css/style.css
+- static/css/tailwind-input.css
+- static/css/tailwind.css
 - static/js/app.js
 - static/js/db.js
 - static/js/login.js
@@ -33,5 +34,8 @@ ADDED (11)
 - tests/test_route_contracts.py
 - tests/test_router.js
 
-REMOVED (1)
+REMOVED/CLEANED
+- duplicate root SVG assets under static/assets/
+- legacy frontend stylesheet files
+- legacy shell fallback file
 - static/js/source-provider.js
