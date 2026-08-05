@@ -87,21 +87,23 @@ Generate `APP_PASSWORD_HASH` with the helper under `tools/`. Existing deployment
 
 ## Deployment
 
-Pushing to `main` triggers the GitHub Actions deploy workflow in `.github/workflows/deploy.yml`. The workflow connects to Alwaysdata with the `ALWAYSDATA_SSH_KEY` repository secret and runs only:
+Pushing to `main` triggers the GitHub Actions deploy workflow in `.github/workflows/deploy.yml`. The workflow installs dependencies, runs `python tests/run_all.py`, connects to Alwaysdata with the `ALWAYSDATA_SSH_KEY` repository secret, pulls the latest code, and verifies the live app at `https://broghgf7.alwaysdata.net/healthz`.
+
+The SSH deploy step runs:
 
 ```text
 cd ~/www/tv-tracker
 git pull --ff-only origin main
 ```
 
-Use the same command manually over SSH if the workflow is unavailable or if you want to deploy by hand. Dependency installs, WSGI restarts, and health checks are still manual unless the workflow is expanded later.
+Use the same command manually over SSH if the workflow is unavailable or if you want to deploy by hand. After a manual pull, open `/healthz` to confirm the public deployment health check returns `{"ok":true}`. Dependency installs and WSGI restarts are still manual unless the workflow is expanded later.
 
 1. Export a fresh App Backup JSON from the currently deployed tracker.
 2. Keep the existing environment variables and PostgreSQL database.
 3. Replace the application source with this complete project copy.
 4. Install dependencies from `requirements.txt` if needed.
 5. Restart the WSGI application.
-6. Sign in and open `/api/health`.
+6. Open `/healthz`, then sign in and open `/api/health` for the detailed private check.
 7. Hard-refresh the browser to clear older cached frontend assets.
 8. Test existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
 

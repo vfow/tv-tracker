@@ -131,6 +131,21 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', app_js)
         self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', ui)
 
+    def test_deploy_workflow_tests_and_checks_healthz(self):
+        app_py = self.read('app.py')
+        workflow = self.read('.github/workflows/deploy.yml')
+        readme = self.read('README.md')
+        run_all = self.read('tests/run_all.py')
+
+        self.assertIn('@app.get("/healthz")', app_py)
+        self.assertIn('@app.get("/api/health")', app_py)
+        self.assertIn('python tests/run_all.py', workflow)
+        self.assertIn('appleboy/ssh-action', workflow)
+        self.assertIn('git pull --ff-only origin main', workflow)
+        self.assertIn('https://broghgf7.alwaysdata.net/healthz', workflow)
+        self.assertIn('/healthz', readme)
+        self.assertIn('test_sync_reliability.js', run_all)
+
 
 if __name__ == '__main__':
     unittest.main()

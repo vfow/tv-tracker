@@ -70,6 +70,15 @@ def authenticated_session(client):
         session["csrf_token"] = "csrf-test-token"
 
 
+def mocked_database_connection(*fetchone_values):
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    cursor = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    cursor.fetchone.side_effect = list(fetchone_values)
+    return connection, cursor
+
+
 class ValidationTests(unittest.TestCase):
     def test_admin_bootstrap_accepts_legacy_env_names(self):
         with patch.dict(
@@ -196,6 +205,42 @@ class RouteSecurityTests(unittest.TestCase):
             response = self.client.get("/api/state")
         self.assertEqual(response.status_code, 401)
 
+    def test_healthz_is_public_and_minimal(self):
+        connection, _cursor = mocked_database_connection((1,), (tracker.SCHEMA_VERSION,))
+
+        with patch.object(tracker, "database_connection", return_value=connection):
+            response = self.client.get("/healthz")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"ok": True})
+
+    def test_healthz_reports_unhealthy_without_details(self):
+        connection, _cursor = mocked_database_connection((1,), (0,))
+
+        with patch.object(tracker, "database_connection", return_value=connection):
+            response = self.client.get("/healthz")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"ok": False})
+
+    def test_api_health_remains_private_and_detailed(self):
+        unauthenticated = self.client.get("/api/health")
+        self.assertEqual(unauthenticated.status_code, 401)
+
+        authenticated_session(self.client)
+        connection, _cursor = mocked_database_connection((1,), (tracker.SCHEMA_VERSION,))
+
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "database_connection", return_value=connection
+        ):
+            response = self.client.get("/api/health")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["app"], tracker.APP_NAME)
+        self.assertTrue(payload["database"])
+        self.assertEqual(payload["schemaVersion"], tracker.SCHEMA_VERSION)
+
     def test_patch_requires_csrf(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
@@ -266,6 +311,58 @@ class RouteSecurityTests(unittest.TestCase):
             response = self.client.get("/api/backup")
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.get_json()["code"], "backup_validation_failed")
+
+    def test_backup_export_returns_native_restore_payload(self):
+        authenticated_session(self.client)
+        data = {
+            "shows": {"123": VALID_SHOW},
+            "history": [VALID_HISTORY],
+            "profile": {"username": "Owner", "favorite_shows": ["123"]},
+        }
+
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "read_tracker_data", return_value=(data, 7)
+        ):
+            response = self.client.get("/api/backup")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["app"], tracker.APP_NAME)
+        self.assertEqual(payload["backupType"], "native-app-backup")
+        self.assertEqual(payload["summary"]["shows"], 1)
+        self.assertEqual(payload["data"]["shows"]["123"]["title"], "Example")
+        self.assertIn("tv-tracker-online-backup.json", response.headers["Content-Disposition"])
+
+    def test_backup_import_restores_valid_native_payload(self):
+        authenticated_session(self.client)
+        backup = {
+            "app": tracker.APP_NAME,
+            "backupType": "native-app-backup",
+            "backupVersion": tracker.BACKUP_VERSION,
+            "schemaVersion": tracker.SCHEMA_VERSION,
+            "data": {
+                "shows": {"123": VALID_SHOW},
+                "history": [VALID_HISTORY],
+                "profile": {"username": "Owner", "favorite_shows": ["123"]},
+            },
+        }
+
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "replace_tracker_data_transactionally", return_value=8
+        ) as replace_data:
+            response = self.client.post(
+                "/api/backup/import",
+                json=backup,
+                headers={"X-CSRF-Token": "csrf-test-token"},
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["revision"], 8)
+        self.assertEqual(payload["summary"]["shows"], 1)
+        replace_data.assert_called_once()
+        restored_data = replace_data.call_args.args[0]
+        self.assertEqual(restored_data["shows"]["123"]["title"], "Example")
 
     def test_sync_rate_limit_errors_include_code(self):
         authenticated_session(self.client)

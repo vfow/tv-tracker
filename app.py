@@ -232,6 +232,32 @@ def current_revision(cursor: psycopg.Cursor[Any]) -> int:
     return int(row[0] if row else 0)
 
 
+def tracker_health_status() -> dict[str, Any]:
+    database_ok = False
+    schema_version = 0
+
+    try:
+        with database_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                database_ok = cursor.fetchone() == (1,)
+                cursor.execute(
+                    "SELECT schema_version FROM tv_tracker_schema_meta "
+                    "WHERE singleton_id = 1"
+                )
+                row = cursor.fetchone()
+                schema_version = int(row[0] if row else 0)
+    except (psycopg.Error, RuntimeError, TypeError, ValueError):
+        database_ok = False
+        schema_version = 0
+
+    return {
+        "ok": database_ok and schema_version == SCHEMA_VERSION,
+        "database": database_ok,
+        "schemaVersion": schema_version,
+    }
+
+
 def read_tracker_data() -> tuple[dict[str, Any], int]:
     with database_connection() as connection:
         with connection.cursor() as cursor:
@@ -1633,28 +1659,22 @@ def create_app() -> Flask:
     def robots():
         return Response("User-agent: *\nDisallow: /\n", mimetype="text/plain")
 
+    @app.get("/healthz")
+    def healthz():
+        status = tracker_health_status()
+        return jsonify({"ok": status["ok"]}), 200 if status["ok"] else 503
+
     @app.get("/api/health")
     @login_required
     def health():
-        with database_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                database_ok = cursor.fetchone() == (1,)
-                cursor.execute(
-                    "SELECT schema_version FROM tv_tracker_schema_meta "
-                    "WHERE singleton_id = 1"
-                )
-                row = cursor.fetchone()
-                schema_version = int(row[0] if row else 0)
-
-        healthy = database_ok and schema_version == SCHEMA_VERSION
+        status = tracker_health_status()
         response = jsonify({
-            "ok": healthy,
+            "ok": status["ok"],
             "app": APP_NAME,
-            "database": database_ok,
-            "schemaVersion": schema_version,
+            "database": status["database"],
+            "schemaVersion": status["schemaVersion"],
         })
-        return (response, 200 if healthy else 503)
+        return (response, 200 if status["ok"] else 503)
 
     @app.get("/api/admin/account")
     @login_required
