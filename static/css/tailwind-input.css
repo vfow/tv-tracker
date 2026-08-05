@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base{
+    :root{
+        --tt-content-gutter:clamp(16px,3vw,36px);
+        --tt-mobile-bottom-nav-height:64px;
+        --tt-mobile-bar-height:64px;
+        --tt-sidebar-width:160px;
+    }
+
     *,
     *::before,
     *::after{
@@ -28,6 +35,36 @@
     select,
     textarea{
         -webkit-tap-highlight-color:transparent;
+    }
+
+    html{
+        height:100%;
+        background:#000;
+        color-scheme:dark;
+    }
+
+    body{
+        min-width:320px;
+        min-height:100%;
+        background:#000;
+        color:#fff;
+        line-height:1.45;
+        text-rendering:optimizeLegibility;
+        -webkit-font-smoothing:antialiased;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible{
+        outline:2px solid #fff;
+        outline-offset:3px;
+    }
+
+    ::selection{
+        background:#fff;
+        color:#000;
     }
 }
 
@@ -1199,6 +1236,132 @@
         .upcoming-time{
             @apply tw-ml-[90px] tw-basis-[calc(100%_-_90px)];
         }
+    }
+}
+
+@layer components{
+    .show-modal-overlay.modal-preparing{
+        visibility:hidden;
+        pointer-events:none;
+    }
+
+    .show-modal-overlay .show-modal{
+        contain:layout paint;
+    }
+
+    #show-list .watchlist-card,
+    #show-list .history-entry-card,
+    #show-list .upcoming-show,
+    #show-list .upcoming-row{
+        content-visibility:auto;
+        contain-intrinsic-size:auto 122px;
+    }
+
+    .compact-loading-state{
+        @apply tw-min-h-[180px];
+    }
+
+    .modal-status-section{
+        @apply tw-mb-[26px];
+    }
+
+    .show-detail-hero{
+        @apply tw-pb-4;
+    }
+
+    .modal-meta-under-status{
+        @apply tw-mt-[15px] tw-min-h-7;
+    }
+
+    .network-inline-group{
+        @apply tw-inline-flex tw-items-center tw-gap-1.5;
+    }
+
+    .network-logo-chip{
+        @apply tw-inline-flex tw-h-[23px] tw-min-w-[34px] tw-max-w-[82px] tw-items-center tw-justify-center tw-rounded-[3px] tw-bg-white/95 tw-px-1.5 tw-py-[3px];
+    }
+
+    .network-logo-inline{
+        @apply tw-block tw-max-h-[17px] tw-max-w-[70px] tw-object-contain;
+    }
+
+    .network-name-inline{
+        @apply tw-text-[13px] tw-text-[#ddd];
+    }
+
+    .discover-preview-check-button{
+        @apply tw-flex-[0_0_28px];
+    }
+
+    .discover-season-all-button{
+        @apply tw-flex-[0_0_32px];
+    }
+
+    .discover-season-all-button:disabled,
+    .discover-season-all-button:disabled:hover{
+        @apply tw-cursor-not-allowed tw-border-[#444] tw-bg-tt-control tw-opacity-65;
+    }
+
+    .app-dialog-overlay{
+        @apply tw-fixed tw-inset-0 tw-z-[500] tw-flex tw-items-center tw-justify-center tw-bg-black/80 tw-p-6;
+    }
+
+    .app-dialog{
+        @apply tw-w-[min(460px,calc(100vw_-_48px))] tw-rounded-[10px] tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-6 tw-shadow-[0_22px_80px_rgba(0,0,0,.65)];
+    }
+
+    .app-dialog h2{
+        @apply tw-m-0 tw-mb-4 tw-font-league tw-text-[42px] tw-font-normal tw-leading-[.9] tw-text-white;
+    }
+
+    .app-dialog-message{
+        @apply tw-mb-[22px] tw-whitespace-pre-line tw-text-sm tw-leading-[1.5] tw-text-[#bdbdbd];
+    }
+
+    .app-dialog-input{
+        @apply tw-mb-[22px] tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-[#333] tw-bg-black tw-px-[13px] tw-py-3 tw-font-sans tw-text-[15px] tw-text-white tw-outline-none;
+    }
+
+    .app-dialog-input:focus{
+        @apply tw-border-tt-subtle;
+    }
+
+    .app-dialog-actions{
+        @apply tw-flex tw-justify-end tw-gap-[10px];
+    }
+
+    .app-dialog-button{
+        @apply tw-cursor-pointer tw-rounded-md tw-border tw-border-solid tw-border-[#333] tw-px-[15px] tw-py-[10px] tw-font-sans tw-text-sm;
+    }
+
+    .app-dialog-button.primary,
+    .app-dialog-button.danger{
+        @apply tw-border-white tw-bg-white tw-text-black;
+    }
+
+    .app-dialog-button.secondary{
+        @apply tw-bg-tt-control tw-text-[#aaa];
+    }
+
+    .app-dialog-button.secondary:hover{
+        @apply tw-border-tt-dim tw-text-white;
+    }
+
+    .app-dialog-button.primary:hover,
+    .app-dialog-button.danger:hover{
+        @apply tw-border-[#ddd] tw-bg-[#ddd];
+    }
+
+    .search-source-label{
+        @apply tw-mt-2 tw-inline-block tw-font-sans tw-text-xs tw-text-tt-subtle;
+    }
+
+    .import-summary-message{
+        @apply tw-whitespace-pre-line;
+    }
+
+    .tmdb-attribution-line{
+        @apply tw-mt-[14px] tw-text-xs tw-text-tt-subtle;
     }
 }
 

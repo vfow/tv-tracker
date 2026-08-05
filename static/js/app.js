@@ -3817,9 +3817,6 @@ function showShowDetailPageShell(){
         updateShellTitle();
     }
 
-    if(typeof closeMobileNavigation === "function"){
-        closeMobileNavigation();
-    }
 }
 
 function renderShowDetailLoading(showId){
@@ -4026,9 +4023,6 @@ function showEpisodeDetailPageShell(){
         updateShellTitle();
     }
 
-    if(typeof closeMobileNavigation === "function"){
-        closeMobileNavigation();
-    }
 }
 
 function renderEpisodeDetailLoading(showId,seasonNumber,episodeNumber){

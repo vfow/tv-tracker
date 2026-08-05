@@ -56,7 +56,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_discover_description_and_view_more_polish_exists(self):
         ui = self.read('static/js/ui.js')
-        css = self.read('static/css/style.css')
+        css = self.read('static/css/tailwind-input.css')
         app_js = self.read('static/js/app.js')
         tmdb_js = self.read('static/js/tmdb.js')
         self.assertIn('View More', ui)
@@ -65,6 +65,21 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('-webkit-line-clamp:2', css)
         self.assertIn('view-more-button', css)
         self.assertIn('tmdbSearchShowsPage', tmdb_js)
+
+    def test_phase5_removes_legacy_frontend_assets(self):
+        template = self.read('templates/index.html')
+        ui = self.read('static/js/ui.js')
+        self.assertIn('tailwind.css', template)
+        self.assertIn('2.0-integration-phase5', template)
+        self.assertNotIn('bootstrap.min.css', template)
+        self.assertNotIn('bootstrap.bundle.min.js', template)
+        self.assertNotIn('css/style.css', template)
+        self.assertNotIn('css/foundation.css', template)
+        self.assertNotIn('js/shell.js', template)
+        self.assertNotIn('window.bootstrap', ui)
+        self.assertFalse((ROOT / 'static/css/style.css').exists())
+        self.assertFalse((ROOT / 'static/css/foundation.css').exists())
+        self.assertFalse((ROOT / 'static/js/shell.js').exists())
 
     def test_real_protected_page_routes_exist(self):
         app_py = self.read('app.py')

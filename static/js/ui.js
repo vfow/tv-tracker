@@ -131,35 +131,6 @@ function updateShellTitle(){
 
 }
 
-
-
-function closeMobileNavigation(){
-
-    if(window.innerWidth >= 992){
-        return;
-    }
-
-    if(window.TVTrackerShell){
-        window.TVTrackerShell.closeNavigation();
-        return;
-    }
-
-    const sidebar = document.getElementById("app-sidebar");
-
-    if(!sidebar || !window.bootstrap || !window.bootstrap.Offcanvas){
-        return;
-    }
-
-    const offcanvas = window.bootstrap.Offcanvas.getInstance(sidebar);
-
-    if(offcanvas){
-        offcanvas.hide();
-    }
-
-}
-
-
-
 function showPage(page){
 
     activePage = page;
@@ -192,7 +163,6 @@ function showPage(page){
     pageElement.classList.add("active-page");
 
     updateShellTitle();
-    closeMobileNavigation();
     renderAll();
 
 }
