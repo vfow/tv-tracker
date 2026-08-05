@@ -1,17 +1,99 @@
-# TV Tracker V2 — Flask/PostgreSQL Integration
+# TV Tracker
 
-Private, single-admin TV tracking website. This build integrates the V2.9 interface and dedicated show/episode pages into the real Flask and PostgreSQL application.
+Private, single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailwind-only frontend.
 
-## Core capabilities
+## Features
 
 - Tracks Watching, Paused, Completed, Plan To Watch, and Dropped shows.
-- Stores watched episodes, progress, history, favourites, profile details, notes, posters, backdrops, and imported data in PostgreSQL.
-- Uses TMDB for search, show/episode metadata, artwork, cast and crew, trailers, alternative titles, recommendations, similar shows, and Where to Watch.
+- Stores watched episodes, progress, history, favourites, notes, profile details, posters, backdrops, and imported metadata in PostgreSQL.
+- Uses TMDB for search, show and episode metadata, artwork, cast and crew, trailers, alternative titles, recommendations, similar shows, and Where to Watch.
 - Keeps the TMDB API key on the Flask server. It is never sent to the browser or placed in a URL.
 - Supports native App Backup JSON export/import and compatible external JSON/CSV imports.
-- Uses revision-based optimistic synchronization for multiple tabs/devices.
+- Uses revision-based optimistic synchronization for multiple tabs and devices.
+- Supports refresh-safe app, show, and episode URLs.
 
-## Protected application routes
+## Tech Stack
+
+- Backend: Flask, psycopg, PostgreSQL, Argon2 password hashing.
+- Frontend: plain JavaScript and Tailwind CSS.
+- Styling: `static/css/tailwind-input.css` compiled to `static/css/tailwind.css`.
+- Tests: Python unittest plus Node-based frontend contract checks.
+- Deployment: GitHub Actions deploy to Alwaysdata over SSH.
+
+## Project Structure
+
+```text
+app.py                 Flask app, auth, routes, backup/import, TMDB proxy, PostgreSQL sync
+wsgi.py                WSGI entrypoint
+requirements.txt       Python dependencies
+package.json           Tailwind build scripts
+templates/             Login, error, and protected app templates
+static/css/            Tailwind source and generated CSS
+static/js/             UI, router, TMDB client, persistence, and sync logic
+static/assets/         Local font and UI icons
+tests/                 Backend, route, source-contract, and frontend checks
+tools/                 Admin and secret helper scripts
+```
+
+## Environment
+
+Required variables are listed in `.env.example`:
+
+```text
+SECRET_KEY
+DB_HOST
+DB_PORT
+DB_NAME
+DB_USER
+DB_PASSWORD
+APP_USERNAME
+APP_PASSWORD_HASH
+TMDB_API_KEY
+```
+
+Existing deployments may still use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` as fallbacks. Generate `APP_PASSWORD_HASH` with the helper under `tools/`. Do not commit `.env`, database dumps, API keys, password hashes for real users, SSH keys, or deployment credentials.
+
+## Local Development
+
+Install Python dependencies:
+
+```text
+python -m pip install -r requirements.txt
+```
+
+Install frontend dependencies:
+
+```text
+npm install
+```
+
+Set the required environment variables in your shell or host config, then run Flask:
+
+```text
+flask --app app run --debug
+```
+
+The app expects a reachable PostgreSQL database and a valid TMDB API key for normal use.
+
+## Tailwind CSS
+
+Templates load only `static/css/tailwind.css` for application styling.
+
+Build CSS after editing `static/css/tailwind-input.css` or changing Tailwind class usage:
+
+```text
+npm run css:build
+```
+
+Watch Tailwind during UI work:
+
+```text
+npm run css:watch
+```
+
+On Windows PowerShell, use `npm.cmd run css:build` or `npm.cmd run css:watch` if script execution policy blocks `npm`.
+
+## Routes And Authentication
 
 All application pages require a valid authenticated session:
 
@@ -26,68 +108,31 @@ All application pages require a valid authenticated session:
 /app/show/<tmdb_id>/season/<season_number>/episode/<episode_number>
 ```
 
-`/app` redirects to `/app/watchlist`. Direct refresh, browser back/forward navigation, show pages, and episode pages use real server-supported paths rather than hash-only routes.
+`/app` redirects to `/app/watchlist`. `/login` opens the public authentication page. `/signup` redirects to the same page with the Sign Up tab selected, where registration currently displays `Registration coming soon`.
 
-Show and episode URLs contain only public TMDB routing identifiers and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
+Protected paths requested before login are validated and stored in the server session. After login, the user returns to the validated path; otherwise the destination is `/app/watchlist`.
 
-## Authentication
+Show and episode URLs contain only public TMDB identifiers and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
 
-- `/login` opens the public authentication page with the Login tab selected.
-- `/signup` redirects to the same page with the Sign Up tab selected.
-- Sign Up currently displays **Registration coming soon**.
-- Logged-out users cannot load `/app/...` pages or private API data.
-- A protected path requested before login is validated and stored in the server session. After a successful login, the user returns to that path; otherwise the destination is `/app/watchlist`.
+## Data Safety
 
-## Data safety
+The app keeps metadata in existing JSONB show records and preserves native backup compatibility. Existing data remains authoritative for shows, statuses, watched progress, history, favourites, notes, profile details, and imported metadata.
 
-This integration keeps the existing schema version and PostgreSQL tables. V2 metadata is stored inside the existing JSONB show records, so no destructive database migration is required.
+Export a fresh App Backup JSON before deploying major changes.
 
-Existing data remains authoritative, including:
+## Tests
 
-- shows and statuses
-- watched episodes and progress
-- history
-- favourites
-- notes
-- profile details
-- manual/imported metadata
-- native backup compatibility
-
-Export a fresh App Backup JSON before deployment, as with every major update.
-
-## Project structure
+Run the full local regression suite:
 
 ```text
-app.py                 Flask backend, authentication, protected routes, backup/import, TMDB proxy, PostgreSQL sync
-wsgi.py                WSGI entrypoint
-requirements.txt       Python dependencies
-templates/             Authentication and protected application templates
-static/js/             V2 UI, real-path router, TMDB client, persistence and synchronization
-static/css/            V2 and foundation styles
-static/assets/         Local fonts, favicon, UI and profile icons
-tests/                 Backend, route-security, source-contract and frontend checks
-tools/                 Admin and secret helper scripts
+python tests/run_all.py
 ```
 
-## Environment variables
-
-```text
-SECRET_KEY
-DB_HOST
-DB_PORT
-DB_NAME
-DB_USER
-DB_PASSWORD
-APP_USERNAME (or ADMIN_USERNAME fallback)
-APP_PASSWORD_HASH (or ADMIN_PASSWORD_HASH fallback)
-TMDB_API_KEY
-```
-
-Generate `APP_PASSWORD_HASH` with the helper under `tools/`. Existing deployments that already use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` are also supported. Do not place secrets in this project ZIP or commit them to source control.
+The suite checks backend contracts, route protection, source contracts, JavaScript syntax, frontend behavior, synchronization reliability, TMDB proxy usage, asset references, and the Tailwind-only frontend contract.
 
 ## Deployment
 
-Pushing to `main` triggers the GitHub Actions deploy workflow in `.github/workflows/deploy.yml`. The workflow installs dependencies, runs `python tests/run_all.py`, connects to Alwaysdata with the `ALWAYSDATA_SSH_KEY` repository secret, pulls the latest code, and verifies the live app at `https://broghgf7.alwaysdata.net/healthz`.
+Pushing to `main` triggers `.github/workflows/deploy.yml`. The workflow installs Python dependencies, runs `python tests/run_all.py`, connects to Alwaysdata with the `ALWAYSDATA_SSH_KEY` repository secret, pulls the latest code, and verifies the live app at `https://broghgf7.alwaysdata.net/healthz`.
 
 The SSH deploy step runs:
 
@@ -96,23 +141,15 @@ cd ~/www/tv-tracker
 git pull --ff-only origin main
 ```
 
-Use the same command manually over SSH if the workflow is unavailable or if you want to deploy by hand. After a manual pull, open `/healthz` to confirm the public deployment health check returns `{"ok":true}`. Dependency installs and WSGI restarts are still manual unless the workflow is expanded later.
+Use the same command manually over SSH if the workflow is unavailable. After a manual pull, open `/healthz` to confirm the public health check returns `{"ok":true}`, then sign in and open `/api/health` for the detailed private check.
+
+Deployment checklist:
 
 1. Export a fresh App Backup JSON from the currently deployed tracker.
 2. Keep the existing environment variables and PostgreSQL database.
-3. Replace the application source with this complete project copy.
+3. Pull or deploy the latest source.
 4. Install dependencies from `requirements.txt` if needed.
-5. Restart the WSGI application.
-6. Open `/healthz`, then sign in and open `/api/health` for the detailed private check.
+5. Rebuild and commit Tailwind CSS before deployment if frontend classes changed.
+6. Restart the WSGI application.
 7. Hard-refresh the browser to clear older cached frontend assets.
-8. Test existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
-
-## Tests
-
-Run:
-
-```text
-python tests/run_all.py
-```
-
-The suite checks Python/backend contracts when Flask and psycopg are installed, JavaScript syntax/contracts through Node.js, protected route rules, server-side login return routing, V2 page containers, TMDB proxy use, and the absence of the standalone static adapter.
+8. Test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
