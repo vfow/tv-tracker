@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pull latest code on Alwaysdata
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ssh-broghgf7.alwaysdata.net
+          username: broghgf7
+          key: ${{ secrets.ALWAYSDATA_SSH_KEY }}
+          script: |
+            cd ~/www/tv-tracker
+            git pull --ff-only origin main
