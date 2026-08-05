@@ -40,6 +40,10 @@ assert(!login.includes('name="next"'));
 assert(tmdb.includes('The key is held by Flask'));
 assert(!ui.includes('TVTrackerStaticAdapter'));
 assert(!db.includes('login?next='));
+assert(db.includes('const SYNC_CHANGE_PAGE_LIMIT = 50;'));
+assert(db.includes('baseRevision:Number(SERVER_REVISION || 0)'));
+assert(db.includes('let requestRevision = Number(operation.baseRevision || 0);'));
+assert(db.includes('operation.baseRevision = Number(SERVER_REVISION || 0);'));
 assert(app.includes('history.pushState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
 

@@ -24,7 +24,7 @@ const SYNC_CHANNEL_NAME = "tv-tracker-sync-v1";
 const MAX_SAVE_ATTEMPTS = 3;
 const MAX_SAVE_REQUEST_BYTES = 768 * 1024;
 const MAX_SINGLE_SAVE_REQUEST_BYTES = 2 * 1024 * 1024;
-const SYNC_CHANGE_PAGE_LIMIT = 1;
+const SYNC_CHANGE_PAGE_LIMIT = 50;
 const DELETE_VALUE = Symbol("delete-value");
 const PENDING_SAVE_STORAGE_KEY = "tv-tracker-pending-saves:v1";
 const MAX_PENDING_SAVE_OPERATIONS = 250;
@@ -120,6 +120,7 @@ function createPendingSaveOperation(options,operationId){
         id:String(operationId),
         createdAt:Date.now(),
         dirtyOptions,
+        baseRevision:Number(SERVER_REVISION || 0),
         generation:0,
         delta:cloneTrackerData(delta)
     };
@@ -1484,9 +1485,15 @@ async function persistQueuedSaveOperation(operation){
             return true;
         }
 
+        let requestRevision = Number(operation.baseRevision || 0);
+        if(!Number.isFinite(requestRevision) || requestRevision < 0){
+            requestRevision = 0;
+        }
+        operation.baseRevision = requestRevision;
+
         const batches = splitServerDeltaIntoBatches(
             operation.delta,
-            SERVER_REVISION,
+            requestRevision,
             operation.id + "-g" + String(Number(operation.generation || 0))
         );
 
@@ -1494,7 +1501,7 @@ async function persistQueuedSaveOperation(operation){
             for(const pendingBatch of batches){
                 const requestPayload = buildSaveRequestPayload(
                     pendingBatch.delta,
-                    SERVER_REVISION,
+                    requestRevision,
                     pendingBatch.operationId
                 );
                 if(jsonByteLength(requestPayload) > MAX_SINGLE_SAVE_REQUEST_BYTES){
@@ -1520,6 +1527,7 @@ async function persistQueuedSaveOperation(operation){
                     DATA = mergeTrackerSnapshots(oldBaseline,DATA,full.data || oldBaseline);
                     LAST_SAVED_DATA = cloneTrackerData(full.data || oldBaseline);
                     SERVER_REVISION = Number(full.revision || payload.revision || SERVER_REVISION);
+                    operation.baseRevision = Number(SERVER_REVISION || 0);
                     operation.generation = Number(operation.generation || 0) + 1;
                     operation.delta = operation.dirtyOptions
                     ? buildDirtyServerDelta(DATA,operation.dirtyOptions)
@@ -1564,6 +1572,7 @@ async function persistQueuedSaveOperation(operation){
                 DATA = mergeTrackerSnapshots(baseline,DATA,remoteSnapshot);
                 LAST_SAVED_DATA = cloneTrackerData(remoteSnapshot);
                 SERVER_REVISION = Number(remoteResult.revision || SERVER_REVISION);
+                operation.baseRevision = Number(SERVER_REVISION || 0);
                 operation.generation = Number(operation.generation || 0) + 1;
                 operation.delta = operation.dirtyOptions
                 ? buildDirtyServerDelta(DATA,operation.dirtyOptions)
