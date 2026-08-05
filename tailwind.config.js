@@ -4,6 +4,14 @@ module.exports = {
     './templates/**/*.html',
     './static/js/**/*.js'
   ],
+  safelist: [
+    'profile-header-default',
+    'profile-header-blue',
+    'profile-header-purple',
+    'profile-header-green',
+    'profile-header-amber',
+    'profile-header-monochrome'
+  ],
   prefix: 'tw-',
   corePlugins: {
     preflight: false

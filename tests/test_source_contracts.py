@@ -156,6 +156,24 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('"style-src \'self\' \'unsafe-inline\'"', app_py)
         self.assertNotIn('cdn.jsdelivr.net', app_py)
 
+    def test_profile_header_presets_survive_tailwind_purge(self):
+        config = self.read('tailwind.config.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        ui = self.read('static/js/ui.js')
+        self.assertIn('profile-header-${preset}', ui)
+        for class_name in (
+            'profile-header-default',
+            'profile-header-blue',
+            'profile-header-purple',
+            'profile-header-green',
+            'profile-header-amber',
+            'profile-header-monochrome',
+        ):
+            self.assertIn(class_name, config)
+            self.assertIn(f'.{class_name}', source_css)
+            self.assertIn(f'.{class_name}', built_css)
+
     def test_v2_asset_paths_are_refresh_safe(self):
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
