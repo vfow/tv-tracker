@@ -95,6 +95,11 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('padding:0;', css)
         self.assertIn('@apply tw-mt-auto tw-mb-[30px];', css)
 
+    def test_show_page_remove_button_stays_in_status_row(self):
+        css = self.read('static/css/tailwind-input.css')
+        self.assertIn('.show-page-status-buttons .remove-show-button', css)
+        self.assertIn('@apply tw-ml-0;', css)
+
     def test_real_protected_page_routes_exist(self):
         app_py = self.read('app.py')
         router = self.read('static/js/v2-router.js')

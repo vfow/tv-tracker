@@ -2548,6 +2548,10 @@
         @apply tw-min-h-[38px];
     }
 
+    .show-page-status-buttons .remove-show-button{
+        @apply tw-ml-0;
+    }
+
     .show-detail-tabs-section{
         @apply tw-border-0 tw-border-t tw-border-solid tw-border-white/10 tw-pt-[18px];
     }
