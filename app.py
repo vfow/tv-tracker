@@ -1452,8 +1452,8 @@ def create_app() -> Flask:
         response.headers["Content-Security-Policy"] = "; ".join(
             [
                 "default-src 'self'",
-                "script-src 'self' https://cdn.jsdelivr.net",
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+                "script-src 'self'",
+                "style-src 'self' 'unsafe-inline'",
                 "img-src 'self' data: blob: https://image.tmdb.org",
                 "font-src 'self' data:",
                 "connect-src 'self'",

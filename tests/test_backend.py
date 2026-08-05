@@ -440,6 +440,15 @@ class V2RouteSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'meta name="app-route" content="/app/discover"', response.data)
 
+    def test_security_headers_use_local_frontend_sources(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/watchlist")
+        csp = response.headers.get("Content-Security-Policy", "")
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+        self.assertNotIn("cdn.jsdelivr.net", csp)
+
     def test_trailing_app_route_redirects_to_canonical_path(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):

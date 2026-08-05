@@ -146,6 +146,16 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('TVTrackerStaticAdapter', ui)
         self.assertNotIn('static-adapter.js', template)
 
+    def test_frontend_security_hardening_exists(self):
+        app_py = self.read('app.py')
+        ui = self.read('static/js/ui.js')
+        self.assertIn('function safeExternalURL', ui)
+        self.assertIn('const homepageURL = show ? safeExternalURL(show.homepage) : "";', ui)
+        self.assertNotIn('href="${escapeHTML(show.homepage)}"', ui)
+        self.assertIn('"script-src \'self\'"', app_py)
+        self.assertIn('"style-src \'self\' \'unsafe-inline\'"', app_py)
+        self.assertNotIn('cdn.jsdelivr.net', app_py)
+
     def test_v2_asset_paths_are_refresh_safe(self):
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')

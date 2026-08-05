@@ -1,4 +1,5 @@
 const assert = require('assert');
+const vm = require('vm');
 
 function dateOnlyRelease(dateString){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ''))){
@@ -39,6 +40,22 @@ assert(login.includes('Registration coming soon'));
 assert(!login.includes('name="next"'));
 assert(tmdb.includes('The key is held by Flask'));
 assert(!ui.includes('TVTrackerStaticAdapter'));
+assert(ui.includes('function safeExternalURL'));
+assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
+assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
+
+const safeExternalURLSource = ui.slice(
+  ui.indexOf('function safeExternalURL'),
+  ui.indexOf('function getCheckSuccessAnimationTarget')
+);
+const securityContext = {URL};
+vm.createContext(securityContext);
+vm.runInContext(safeExternalURLSource, securityContext);
+assert.strictEqual(securityContext.safeExternalURL('https://example.com/path'), 'https://example.com/path');
+assert.strictEqual(securityContext.safeExternalURL('http://example.com/'), 'http://example.com/');
+assert.strictEqual(securityContext.safeExternalURL('javascript:alert(1)'), '');
+assert.strictEqual(securityContext.safeExternalURL('//example.com/path'), '');
+
 assert(!db.includes('login?next='));
 assert(db.includes('const SYNC_CHANGE_PAGE_LIMIT = 50;'));
 assert(db.includes('baseRevision:Number(SERVER_REVISION || 0)'));

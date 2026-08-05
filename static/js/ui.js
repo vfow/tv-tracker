@@ -35,6 +35,23 @@ function trackerBackgroundImage(path,size="original"){
     return url ? `url("${escapeHTML(url)}")` : "";
 }
 
+function safeExternalURL(value){
+    const raw = String(value || "").trim();
+
+    if(!raw){
+        return "";
+    }
+
+    try{
+        const parsed = new URL(raw);
+        return parsed.protocol === "https:" || parsed.protocol === "http:"
+        ? parsed.href
+        : "";
+    }catch(error){
+        return "";
+    }
+}
+
 function getCheckSuccessAnimationTarget(element){
 
     if(!element){
@@ -2712,8 +2729,10 @@ function renderV2ShowInfoLinksLineHTML(show){
         links.push(`<a class="v2-clean-link v2-external-pill" href="https://www.themoviedb.org/tv/${escapeHTML(show.tmdb_id)}" target="_blank" rel="noopener noreferrer">TMDB</a>`);
     }
 
-    if(show && show.homepage){
-        links.push(`<a class="v2-clean-link v2-external-pill" href="${escapeHTML(show.homepage)}" target="_blank" rel="noopener noreferrer">Official Site ↗</a>`);
+    const homepageURL = show ? safeExternalURL(show.homepage) : "";
+
+    if(homepageURL){
+        links.push(`<a class="v2-clean-link v2-external-pill" href="${escapeHTML(homepageURL)}" target="_blank" rel="noopener noreferrer">Official Site ↗</a>`);
     }
 
     if(!links.length){
