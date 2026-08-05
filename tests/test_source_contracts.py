@@ -89,6 +89,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertFalse((ROOT / 'static/assets/WATCH TIME.svg').exists())
         self.assertFalse((ROOT / 'static/assets/EPISODES WATCHED.svg').exists())
 
+    def test_tailwind_preserves_legacy_layout_reset(self):
+        css = self.read('static/css/tailwind-input.css')
+        self.assertIn('margin:0;', css)
+        self.assertIn('padding:0;', css)
+        self.assertIn('@apply tw-mt-auto tw-mb-[30px];', css)
+
     def test_real_protected_page_routes_exist(self):
         app_py = self.read('app.py')
         router = self.read('static/js/v2-router.js')

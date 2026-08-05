@@ -13,6 +13,8 @@
     *,
     *::before,
     *::after{
+        margin:0;
+        padding:0;
         box-sizing:border-box;
     }
 
@@ -94,7 +96,7 @@
     }
 
     .sidebar-settings-button{
-        @apply tw-mt-auto;
+        @apply tw-mt-auto tw-mb-[30px];
     }
 
     .main{
