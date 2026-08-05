@@ -151,6 +151,28 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(tracker.BackupValidationError):
             tracker.validate_and_normalize_backup(backup)
 
+    def test_read_tracker_data_uses_consistent_read_snapshot(self):
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        cursor = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        cursor.fetchall.side_effect = [
+            [("123", VALID_SHOW)],
+            [("history-12345678", VALID_HISTORY)],
+            [("profile", {"username": "Owner", "favorite_shows": []})],
+        ]
+        cursor.fetchone.return_value = (7,)
+
+        with patch.object(tracker, "database_connection", return_value=connection):
+            data, revision = tracker.read_tracker_data()
+
+        self.assertEqual(revision, 7)
+        self.assertEqual(data["shows"]["123"]["title"], "Example")
+        self.assertEqual(
+            cursor.execute.call_args_list[0].args[0],
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        )
+
 
 class RouteSecurityTests(unittest.TestCase):
     def setUp(self):
@@ -179,6 +201,7 @@ class RouteSecurityTests(unittest.TestCase):
         with patch.object(tracker, "read_admin_account", return_value=self.account):
             response = self.client.patch("/api/state", json={})
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["code"], "csrf_rejected")
 
     def test_malformed_sync_is_rejected_before_database_write(self):
         authenticated_session(self.client)
@@ -243,6 +266,32 @@ class RouteSecurityTests(unittest.TestCase):
             response = self.client.get("/api/backup")
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.get_json()["code"], "backup_validation_failed")
+
+    def test_sync_rate_limit_errors_include_code(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "sync_request_is_limited", return_value=True
+        ):
+            revision_response = self.client.get("/api/revision")
+            changes_response = self.client.get("/api/changes")
+
+        self.assertEqual(revision_response.status_code, 429)
+        self.assertEqual(revision_response.get_json()["code"], "sync_rate_limited")
+        self.assertEqual(changes_response.status_code, 429)
+        self.assertEqual(changes_response.get_json()["code"], "sync_rate_limited")
+
+    def test_invalid_changes_query_errors_include_code(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
+            tracker, "sync_request_is_limited", return_value=False
+        ):
+            revision_response = self.client.get("/api/changes?since=bad")
+            limit_response = self.client.get("/api/changes?limit=999")
+
+        self.assertEqual(revision_response.status_code, 400)
+        self.assertEqual(revision_response.get_json()["code"], "invalid_revision")
+        self.assertEqual(limit_response.status_code, 400)
+        self.assertEqual(limit_response.get_json()["code"], "invalid_change_limit")
 
 
 class V2RouteSecurityTests(unittest.TestCase):

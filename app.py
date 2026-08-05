@@ -235,6 +235,7 @@ def current_revision(cursor: psycopg.Cursor[Any]) -> int:
 def read_tracker_data() -> tuple[dict[str, Any], int]:
     with database_connection() as connection:
         with connection.cursor() as cursor:
+            cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             cursor.execute("SELECT show_id, data FROM tv_tracker_shows")
             shows = {str(row[0]): row[1] for row in cursor.fetchall()}
 
@@ -1799,7 +1800,11 @@ def create_app() -> Flask:
     @login_required
     def get_revision():
         if sync_request_is_limited(client_key()):
-            return jsonify({"ok": False, "error": "Too many sync requests"}), 429
+            return jsonify({
+                "ok": False,
+                "error": "Too many sync requests",
+                "code": "sync_rate_limited",
+            }), 429
 
         with database_connection() as connection:
             with connection.cursor() as cursor:
@@ -1811,12 +1816,20 @@ def create_app() -> Flask:
     @login_required
     def get_changes():
         if sync_request_is_limited(client_key()):
-            return jsonify({"ok": False, "error": "Too many sync requests"}), 429
+            return jsonify({
+                "ok": False,
+                "error": "Too many sync requests",
+                "code": "sync_rate_limited",
+            }), 429
 
         try:
             since_revision = int(request.args.get("since", "0"))
         except (TypeError, ValueError):
-            return jsonify({"ok": False, "error": "Invalid revision"}), 400
+            return jsonify({
+                "ok": False,
+                "error": "Invalid revision",
+                "code": "invalid_revision",
+            }), 400
 
         raw_limit = request.args.get("limit")
         if raw_limit is None:
@@ -1825,13 +1838,25 @@ def create_app() -> Flask:
             try:
                 change_limit = int(raw_limit)
             except (TypeError, ValueError):
-                return jsonify({"ok": False, "error": "Invalid change limit"}), 400
+                return jsonify({
+                    "ok": False,
+                    "error": "Invalid change limit",
+                    "code": "invalid_change_limit",
+                }), 400
 
             if change_limit < 1 or change_limit > 50:
-                return jsonify({"ok": False, "error": "Invalid change limit"}), 400
+                return jsonify({
+                    "ok": False,
+                    "error": "Invalid change limit",
+                    "code": "invalid_change_limit",
+                }), 400
 
         if since_revision < 0:
-            return jsonify({"ok": False, "error": "Invalid revision"}), 400
+            return jsonify({
+                "ok": False,
+                "error": "Invalid revision",
+                "code": "invalid_revision",
+            }), 400
 
         with database_connection() as connection:
             with connection.cursor() as cursor:
@@ -2231,7 +2256,11 @@ def create_app() -> Flask:
                 mimetype="application/json",
             )
         except (URLError, TimeoutError):
-            return jsonify({"ok": False, "error": "TMDB is unavailable"}), 502
+            return jsonify({
+                "ok": False,
+                "error": "TMDB is unavailable",
+                "code": "tmdb_unavailable",
+            }), 502
 
     @app.errorhandler(psycopg.Error)
     def database_error(error):
@@ -2278,7 +2307,11 @@ def create_app() -> Flask:
     @app.errorhandler(403)
     def forbidden(_error):
         if request.path.startswith("/api/"):
-            return jsonify({"ok": False, "error": "Security token rejected"}), 403
+            return jsonify({
+                "ok": False,
+                "error": "Security token rejected",
+                "code": "csrf_rejected",
+            }), 403
         return "Forbidden", 403
 
     return app
