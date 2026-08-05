@@ -54,6 +54,10 @@ APP_SECTION_PATHS = {
     "/app/profile",
     "/app/settings",
 }
+ERROR_PAGE_MESSAGES = {
+    404: ("We're not in Kansas anymore", "This page is off the map."),
+    500: ("Houston, we have a problem", "Something went wrong. Try again in a moment."),
+}
 PASSWORD_HASHER = PasswordHasher()
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
@@ -1352,6 +1356,8 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
 def safe_next_url(value: str | None) -> str:
     """Return a validated internal application route for post-login use."""
     candidate = str(value or "").strip().split("?", 1)[0].split("#", 1)[0]
+    if candidate.startswith("/app/") and candidate != "/app/":
+        candidate = candidate.rstrip("/")
 
     if candidate in {"/app", "/app/"}:
         return "/app/watchlist"
@@ -1371,6 +1377,20 @@ def valid_app_path(value: str | None) -> bool:
         or APP_SHOW_PATH_RE.fullmatch(candidate) is not None
         or APP_EPISODE_PATH_RE.fullmatch(candidate) is not None
     )
+
+
+def render_page_error(status_code: int):
+    message_code = 404 if status_code == 404 else 500
+    error_title, error_text = ERROR_PAGE_MESSAGES[message_code]
+    signed_in = session.get("authenticated") is True
+    return render_template(
+        "error.html",
+        status_code=status_code,
+        error_title=error_title,
+        error_text=error_text,
+        action_url="/app/watchlist" if signed_in else url_for("login"),
+        action_label="Back to app" if signed_in else "Back to sign in",
+    ), status_code
 
 
 def create_app() -> Flask:
@@ -1554,20 +1574,59 @@ def create_app() -> Flask:
     def app_root():
         return redirect("/app/watchlist")
 
-    @app.get("/app/<path:app_path>")
-    @login_required
-    def app_page(app_path: str):
-        raw_path = "/app/" + str(app_path or "")
-        requested_path = "/app/" + str(app_path or "").strip("/")
-        if not valid_app_path(requested_path):
-            abort(404)
-        if raw_path != requested_path:
-            return redirect(requested_path)
+    def render_app_shell(initial_app_path: str):
         return render_template(
             "index.html",
             csrf_token=session["csrf_token"],
-            initial_app_path=requested_path,
+            initial_app_path=initial_app_path,
         )
+
+    @app.get("/app/watchlist", strict_slashes=False)
+    @app.get("/app/upcoming", strict_slashes=False)
+    @app.get("/app/history", strict_slashes=False)
+    @app.get("/app/discover", strict_slashes=False)
+    @app.get("/app/profile", strict_slashes=False)
+    @app.get("/app/settings", strict_slashes=False)
+    @login_required
+    def app_section_page():
+        requested_path = request.path.rstrip("/")
+        if requested_path not in APP_SECTION_PATHS:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/show/<int:tmdb_id>", strict_slashes=False)
+    @login_required
+    def app_show_page(tmdb_id: int):
+        requested_path = request.path.rstrip("/")
+        if tmdb_id <= 0 or APP_SHOW_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get(
+        "/app/show/<int:tmdb_id>/season/<int:season_number>/episode/<int:episode_number>",
+        strict_slashes=False,
+    )
+    @login_required
+    def app_episode_page(
+        tmdb_id: int,
+        season_number: int,
+        episode_number: int,
+    ):
+        requested_path = request.path.rstrip("/")
+        if (
+            tmdb_id <= 0
+            or season_number < 0
+            or episode_number <= 0
+            or APP_EPISODE_PATH_RE.fullmatch(requested_path) is None
+        ):
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
 
     @app.get("/robots.txt")
     def robots():
@@ -2186,7 +2245,27 @@ def create_app() -> Flask:
                 "error": "The database is temporarily unavailable",
                 "code": "database_unavailable",
             }), 503
-        return "Database temporarily unavailable", 503
+        return render_page_error(503)
+
+    @app.errorhandler(404)
+    def not_found(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "ok": False,
+                "error": "Not found",
+                "code": "not_found",
+            }), 404
+        return render_page_error(404)
+
+    @app.errorhandler(500)
+    def server_error(_error):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "ok": False,
+                "error": "Something went wrong",
+                "code": "server_error",
+            }), 500
+        return render_page_error(500)
 
     @app.errorhandler(413)
     def body_too_large(_error):

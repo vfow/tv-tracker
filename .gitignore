@@ -60,6 +60,9 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
 
 # Flask stuff:
 instance/
@@ -127,6 +130,9 @@ ipython_config.py
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 
+# Node / frontend tooling
+node_modules/
+
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
@@ -149,6 +155,9 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.sample
 .envrc
 .venv
 env/
@@ -216,3 +225,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.bak
+*.tmp

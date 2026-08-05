@@ -70,7 +70,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
         app_py = self.read('app.py')
         router = self.read('static/js/v2-router.js')
         template = self.read('templates/index.html')
-        self.assertIn('@app.get("/app/<path:app_path>")', app_py)
+        self.assertIn('@app.get("/app/watchlist", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/upcoming", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/history", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/discover", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/show/<int:tmdb_id>", strict_slashes=False)', app_py)
+        self.assertIn('"/app/show/<int:tmdb_id>/season/<int:season_number>/episode/<int:episode_number>"', app_py)
+        self.assertNotIn('@app.get("/app/<path:app_path>")', app_py)
         self.assertIn('/app/watchlist', app_py)
         self.assertIn('/app/show/', router)
         self.assertIn('/season/', router)
@@ -78,6 +86,16 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('#/app', router)
         self.assertIn('show-detail-page', template)
         self.assertIn('episode-detail-page', template)
+
+    def test_friendly_error_page_copy_exists(self):
+        app_py = self.read('app.py')
+        error_template = self.read('templates/error.html')
+        self.assertIn("We're not in Kansas anymore", app_py)
+        self.assertIn('This page is off the map.', app_py)
+        self.assertIn('Houston, we have a problem', app_py)
+        self.assertIn('Something went wrong. Try again in a moment.', app_py)
+        self.assertIn('{{ error_title }}', error_template)
+        self.assertIn('{{ error_text }}', error_template)
 
     def test_auth_tabs_and_server_side_return_path_exist(self):
         app_py = self.read('app.py')

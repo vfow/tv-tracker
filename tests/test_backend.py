@@ -287,11 +287,68 @@ class V2RouteSecurityTests(unittest.TestCase):
         self.assertIn(b'episode-detail-page', response.data)
         self.assertIn(b'meta name="app-route"', response.data)
 
+    def test_authenticated_section_route_renders_app_shell(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/discover")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'meta name="app-route" content="/app/discover"', response.data)
+
+    def test_trailing_app_route_redirects_to_canonical_path(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/show/1399/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/app/show/1399")
+
     def test_invalid_app_route_is_not_accepted(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
             response = self.client.get("/app/show/1399/private-notes")
         self.assertEqual(response.status_code, 404)
+
+    def test_invalid_numeric_app_route_is_not_accepted(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/show/0")
+        self.assertEqual(response.status_code, 404)
+
+    def test_page_not_found_uses_friendly_error_page(self):
+        response = self.client.get("/not-a-real-page")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn(b"We&#39;re not in Kansas anymore", response.data)
+        self.assertIn(b"This page is off the map.", response.data)
+        self.assertIn(b"Back to sign in", response.data)
+
+    def test_api_not_found_returns_json(self):
+        response = self.client.get("/api/not-a-real-endpoint")
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(response.is_json)
+        self.assertEqual(response.get_json()["code"], "not_found")
+
+    def test_page_server_error_uses_friendly_error_page(self):
+        self.app.config["PROPAGATE_EXCEPTIONS"] = False
+
+        @self.app.get("/test-500")
+        def test_500():
+            raise RuntimeError("test failure")
+
+        response = self.client.get("/test-500")
+        self.assertEqual(response.status_code, 500)
+        self.assertIn(b"Houston, we have a problem", response.data)
+        self.assertIn(b"Something went wrong. Try again in a moment.", response.data)
+
+    def test_api_server_error_returns_json(self):
+        self.app.config["PROPAGATE_EXCEPTIONS"] = False
+
+        @self.app.get("/api/test-500")
+        def api_test_500():
+            raise RuntimeError("test failure")
+
+        response = self.client.get("/api/test-500")
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(response.is_json)
+        self.assertEqual(response.get_json()["code"], "server_error")
 
     def test_safe_next_url_rejects_external_and_sensitive_paths(self):
         self.assertEqual(tracker.safe_next_url("https://example.com"), "/app/watchlist")

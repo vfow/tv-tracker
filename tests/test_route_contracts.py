@@ -82,6 +82,14 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app"), "/app/watchlist")
         self.assertEqual(safe_next_url("/app/"), "/app/watchlist")
 
+    def test_trailing_app_destinations_normalize(self):
+        self.assertEqual(safe_next_url("/app/watchlist/"), "/app/watchlist")
+        self.assertEqual(safe_next_url("/app/show/1399/"), "/app/show/1399")
+        self.assertEqual(
+            safe_next_url("/app/show/1399/season/1/episode/3/"),
+            "/app/show/1399/season/1/episode/3",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
