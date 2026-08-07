@@ -3030,8 +3030,9 @@ function renderV2ShowAPISectionsHTML(show){
     return "";
 }
 
-function attachV2ShowModalEvents(show){
-    document.querySelectorAll("[data-v2-similar-open]").forEach(button=>{
+function attachV2ShowModalEvents(show,container){
+    const root = container || document;
+    root.querySelectorAll("[data-v2-similar-open]").forEach(button=>{
         button.addEventListener("click",async function(event){
             event.stopPropagation();
             const id = this.getAttribute("data-v2-similar-open");
@@ -3182,7 +3183,7 @@ function renderDiscoverShowModal(show){
 
     `;
 
-    document.querySelectorAll(".discover-add-status-button").forEach(button=>{
+    content.querySelectorAll(".discover-add-status-button").forEach(button=>{
 
         button.addEventListener("click",function(){
             addDiscoverPreviewShow(this.dataset.status);
@@ -3190,7 +3191,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    document.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
+    content.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
 
         const activate = function(event){
             if(event){
@@ -3209,7 +3210,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    document.querySelectorAll(".discover-season-all-button").forEach(button=>{
+    content.querySelectorAll(".discover-season-all-button").forEach(button=>{
 
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
@@ -3245,7 +3246,7 @@ function renderDiscoverShowModal(show){
 
 
 
-    document.querySelectorAll(".discover-preview-check-button").forEach(button=>{
+    content.querySelectorAll(".discover-preview-check-button").forEach(button=>{
 
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
@@ -3280,7 +3281,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    document.querySelectorAll(".discover-episode-row").forEach(row=>{
+    content.querySelectorAll(".discover-episode-row").forEach(row=>{
 
         row.addEventListener("click",async function(event){
 
@@ -3298,7 +3299,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    attachV2ShowModalEvents(show);
+    attachV2ShowModalEvents(show,content);
 
 }
 
@@ -3798,7 +3799,7 @@ function renderShowDetailsPage(show,options={}){
     `;
 
     attachShowDetailsPageEvents(show,isTracked);
-    attachV2ShowModalEvents(show);
+    attachV2ShowModalEvents(show,document.getElementById("show-detail-content"));
 }
 
 function renderShowModal(show){
@@ -3813,12 +3814,17 @@ function stopNestedSeasonAction(event){
 
 
 function attachShowDetailsPageEvents(show,isTracked){
+    const root = document.getElementById("show-detail-content");
+    if(!root){
+        return;
+    }
+
     const backButton = document.getElementById("show-page-back-button");
     if(backButton){
         backButton.addEventListener("click",closeShowDetailsPage);
     }
 
-    document.querySelectorAll(".show-page-add-status-button").forEach(button=>{
+    root.querySelectorAll(".show-page-add-status-button").forEach(button=>{
         button.addEventListener("click",async function(){
             if(this.disabled){
                 return;
@@ -3834,20 +3840,20 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
+    root.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
         button.addEventListener("click",function(){
             updateShowStatus(show.tmdb_id,this.dataset.status);
         });
     });
 
-    document.querySelectorAll(".show-detail-tab").forEach(button=>{
+    root.querySelectorAll(".show-detail-tab").forEach(button=>{
         button.addEventListener("click",function(){
             activeShowDetailsTabs[String(show.tmdb_id)] = this.dataset.showDetailTab || "Cast";
             renderShowDetailsPagePreservingScroll(show);
         });
     });
 
-    document.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
+    root.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
         const activate = function(event){
             if(event){
                 event.preventDefault();
@@ -3864,7 +3870,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".season-all-button").forEach(button=>{
+    root.querySelectorAll(".season-all-button").forEach(button=>{
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
                 event.stopPropagation();
@@ -3892,7 +3898,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".episode-check-button").forEach(button=>{
+    root.querySelectorAll(".episode-check-button").forEach(button=>{
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
                 event.stopPropagation();
@@ -3921,7 +3927,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
+    root.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
         const warmEpisodeDetails = function(){
             if(typeof prefetchEpisodeV2Details === "function"){
                 prefetchEpisodeV2Details(show.tmdb_id,Number(row.dataset.season),Number(row.dataset.episode));
