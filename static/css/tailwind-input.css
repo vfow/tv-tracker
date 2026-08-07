@@ -24,6 +24,46 @@
         font-display:swap;
     }
 
+    @font-face{
+        font-family:"Graphik";
+        src:url("../assets/fonts/Graphik-Regular-Trial.otf") format("opentype");
+        font-weight:400;
+        font-style:normal;
+        font-display:swap;
+    }
+
+    @font-face{
+        font-family:"Graphik";
+        src:url("../assets/fonts/Graphik-Semibold-Trial.otf") format("opentype");
+        font-weight:600;
+        font-style:normal;
+        font-display:swap;
+    }
+
+    @font-face{
+        font-family:"Graphik";
+        src:url("../assets/fonts/Graphik-Bold-Trial.otf") format("opentype");
+        font-weight:700;
+        font-style:normal;
+        font-display:swap;
+    }
+
+    @font-face{
+        font-family:"Graphik";
+        src:url("../assets/fonts/Graphik-Black-Trial.otf") format("opentype");
+        font-weight:800;
+        font-style:normal;
+        font-display:swap;
+    }
+
+    @font-face{
+        font-family:"Graphik";
+        src:url("../assets/fonts/Graphik-RegularItalic-Trial.otf") format("opentype");
+        font-weight:400;
+        font-style:italic;
+        font-display:swap;
+    }
+
     button,
     input,
     select,
@@ -3706,7 +3746,9 @@
     }
 
     .season-toggle-area{
-        @apply tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-bg-transparent tw-text-left;
+        @apply tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-bg-transparent tw-p-0 tw-text-left;
+        border:0;
+        color:inherit;
     }
 
     .season-toggle-area:focus-visible{

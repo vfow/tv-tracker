@@ -3192,15 +3192,18 @@ function renderDiscoverShowModal(show){
 
     document.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
 
-        const activate = function(){
+        const activate = function(event){
+            if(event){
+                event.preventDefault();
+                event.stopPropagation();
+            }
             toggleDiscoverPreviewSeason(show,Number(this.dataset.season));
         };
 
         toggle.addEventListener("click",activate);
         toggle.addEventListener("keydown",function(event){
             if(event.key === "Enter" || event.key === " "){
-                event.preventDefault();
-                activate.call(this);
+                activate.call(this,event);
             }
         });
 
@@ -3208,13 +3211,15 @@ function renderDiscoverShowModal(show){
 
     document.querySelectorAll(".discover-season-all-button").forEach(button=>{
 
-        button.addEventListener("pointerdown",function(event){
-            event.stopPropagation();
+        ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
+            button.addEventListener(eventName,function(event){
+                event.stopPropagation();
+            });
         });
 
         button.addEventListener("click",async function(event){
 
-            event.stopPropagation();
+            stopNestedSeasonAction(event);
 
             if(this.disabled){
                 return;
@@ -3242,9 +3247,15 @@ function renderDiscoverShowModal(show){
 
     document.querySelectorAll(".discover-preview-check-button").forEach(button=>{
 
+        ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
+            button.addEventListener(eventName,function(event){
+                event.stopPropagation();
+            });
+        });
+
         button.addEventListener("click",async function(event){
 
-            event.stopPropagation();
+            stopNestedSeasonAction(event);
 
             if(this.disabled){
                 return;
@@ -3271,7 +3282,11 @@ function renderDiscoverShowModal(show){
 
     document.querySelectorAll(".discover-episode-row").forEach(row=>{
 
-        row.addEventListener("click",async function(){
+        row.addEventListener("click",async function(event){
+
+            if(event.target && event.target.closest("button, a, input, select, textarea")){
+                return;
+            }
 
             await openDiscoverEpisodeModal(
                 show.tmdb_id,
@@ -3332,23 +3347,22 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
         html += `
 
-            <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
+            <div class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
                 <div class="season-header collapse-title">
 
-                    <div
+                    <button
+                    type="button"
                     class="season-toggle-area discover-season-toggle"
                     data-season="${season}"
-                    role="button"
-                    tabindex="0"
                     aria-expanded="${isOpen ? "true" : "false"}">
-                        <div class="season-left">
-                            <div class="season-title-stack">
-                                <div class="season-title">Season ${season}</div>
+                        <span class="season-left">
+                            <span class="season-title-stack">
+                                <span class="season-title">Season ${season}</span>
                                 ${seasonMetaHTML}
-                            </div>
-                        </div>
-                    </div>
+                            </span>
+                        </span>
+                    </button>
 
                     <button
                     type="button"
@@ -3791,6 +3805,13 @@ function renderShowModal(show){
     renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show && show.tmdb_id)])});
 }
 
+function stopNestedSeasonAction(event){
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+
+
 function attachShowDetailsPageEvents(show,isTracked){
     const backButton = document.getElementById("show-page-back-button");
     if(backButton){
@@ -3827,27 +3848,31 @@ function attachShowDetailsPageEvents(show,isTracked){
     });
 
     document.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
-        const activate = function(){
+        const activate = function(event){
+            if(event){
+                event.preventDefault();
+                event.stopPropagation();
+            }
             toggleSeason(show.tmdb_id,Number(this.dataset.season));
         };
 
         toggle.addEventListener("click",activate);
         toggle.addEventListener("keydown",function(event){
             if(event.key === "Enter" || event.key === " "){
-                event.preventDefault();
-                activate.call(this);
+                activate.call(this,event);
             }
         });
     });
 
     document.querySelectorAll(".season-all-button").forEach(button=>{
-        button.addEventListener("pointerdown",function(event){
-            event.stopPropagation();
+        ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
+            button.addEventListener(eventName,function(event){
+                event.stopPropagation();
+            });
         });
 
         button.addEventListener("click",async function(event){
-            event.preventDefault();
-            event.stopPropagation();
+            stopNestedSeasonAction(event);
 
             if(this.disabled || !isTracked){
                 return;
@@ -3868,13 +3893,14 @@ function attachShowDetailsPageEvents(show,isTracked){
     });
 
     document.querySelectorAll(".episode-check-button").forEach(button=>{
-        button.addEventListener("pointerdown",function(event){
-            event.stopPropagation();
+        ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
+            button.addEventListener(eventName,function(event){
+                event.stopPropagation();
+            });
         });
 
         button.addEventListener("click",async function(event){
-            event.preventDefault();
-            event.stopPropagation();
+            stopNestedSeasonAction(event);
 
             if(this.disabled || !isTracked){
                 return;
@@ -3904,7 +3930,10 @@ function attachShowDetailsPageEvents(show,isTracked){
 
         row.addEventListener("pointerenter",warmEpisodeDetails,{once:true});
         row.addEventListener("focusin",warmEpisodeDetails,{once:true});
-        row.addEventListener("click",function(){
+        row.addEventListener("click",function(event){
+            if(event.target && event.target.closest("button, a, input, select, textarea")){
+                return;
+            }
             openEpisodeModal(show.tmdb_id,Number(this.dataset.season),Number(this.dataset.episode),{backToShow:true});
         });
     });
@@ -4368,33 +4397,32 @@ function renderSeasonsHTML(show){
 
         html += `
 
-            <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
+            <div class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
                 <div class="season-header collapse-title">
 
-                    <div
+                    <button
+                    type="button"
                     class="season-toggle-area"
                     data-season="${season}"
-                    role="button"
-                    tabindex="0"
                     aria-expanded="${isOpen ? "true" : "false"}">
 
-                        <div class="season-left">
+                        <span class="season-left">
 
-                            <div class="season-title-stack">
-                                <div class="season-title">
+                            <span class="season-title-stack">
+                                <span class="season-title">
                                     Season ${season}
-                                </div>
+                                </span>
                                 ${seasonMetaHTML}
-                            </div>
+                            </span>
 
-                        </div>
+                        </span>
 
-                        <div class="season-count">
+                        <span class="season-count">
                             ${total ? `${watched} / ${total}` : ""}
-                        </div>
+                        </span>
 
-                    </div>
+                    </button>
 
                     <button
                         type="button"

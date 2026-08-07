@@ -4374,6 +4374,24 @@ async function confirmEpisodeUnwatch(show,season,episode){
 }
 
 
+async function confirmSeasonWatch(seasonNumber){
+    if(typeof showAppConfirm !== "function"){
+        return true;
+    }
+
+    return await showAppConfirm({
+        title:"Mark Season Watched",
+        message:
+        "Mark every aired episode in Season " +
+        seasonNumber +
+        " as watched? This will add those entries to History.",
+        confirmLabel:"Mark Watched",
+        cancelLabel:"Cancel"
+    });
+}
+
+
+
 async function updateEpisodeWatched(showId,season,episode,isWatched){
     const id = String(showId);
     const show = DATA.shows[id];
@@ -4494,6 +4512,12 @@ async function markSeasonWatched(showId,seasonNumber){
 
     if(newlyMarkedEpisodes.length === 0){
         showToast("No aired episodes to log");
+        return;
+    }
+
+    const confirmed = await confirmSeasonWatch(seasonNumber);
+
+    if(!confirmed){
         return;
     }
 
