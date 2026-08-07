@@ -59,6 +59,15 @@ ERROR_PAGE_MESSAGES = {
     500: ("Houston, we have a problem", "Something went wrong. Try again in a moment."),
 }
 PASSWORD_HASHER = PasswordHasher()
+MIN_ADMIN_PASSWORD_CHARS = 16
+MAX_AVATAR_DATA_URL_CHARS = 3 * 1024 * 1024
+MAX_HEADER_DATA_URL_CHARS = 5 * 1024 * 1024
+ALLOWED_PROFILE_IMAGE_PREFIXES = {
+    "data:image/png;base64",
+    "data:image/jpeg;base64",
+    "data:image/webp;base64",
+}
+BASE64_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
 ACCOUNT_CHANGE_WINDOW_SECONDS = 60 * 60
@@ -106,6 +115,13 @@ def bootstrap_admin_credentials() -> tuple[str, str]:
         or os.environ.get("ADMIN_PASSWORD_HASH", "")
     ).strip()
     return username, password_hash
+
+
+def env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def database_connection() -> psycopg.Connection[Any]:
@@ -1002,6 +1018,25 @@ def find_logical_duplicate_history_ids(
     return [str(row[0]) for row in cursor.fetchall()]
 
 
+def validate_profile_image_data_url(value: Any, field: str, maximum: int) -> str:
+    if value in (None, ""):
+        return ""
+    if not isinstance(value, str) or len(value) > maximum:
+        raise BackupValidationError(f"Profile field {field} is invalid")
+
+    prefix, separator, payload = value.partition(",")
+    if (
+        separator != ","
+        or prefix not in ALLOWED_PROFILE_IMAGE_PREFIXES
+        or not payload
+        or len(payload) % 4 != 0
+        or BASE64_RE.fullmatch(payload) is None
+    ):
+        raise BackupValidationError(f"Profile field {field} is invalid")
+
+    return value
+
+
 def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
     if not isinstance(raw_profile, dict):
         raise BackupValidationError("Profile data is invalid")
@@ -1033,15 +1068,30 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
         "username": 160,
         "avatar_type": 40,
         "avatar_preset": 120,
-        "avatar_data": MAX_JSON_STRING_CHARS,
         "header_type": 40,
         "header_preset": 120,
-        "header_image": MAX_JSON_STRING_CHARS,
     }
     for field, limit in limits.items():
         if field in profile and profile[field] is not None:
             if not isinstance(profile[field], str) or len(profile[field]) > limit:
                 raise BackupValidationError(f"Profile field {field} is invalid")
+
+    if profile.get("avatar_type") not in (None, "", "initial", "preset", "upload"):
+        raise BackupValidationError("Profile field avatar_type is invalid")
+    if profile.get("header_type") not in (None, "", "preset", "upload"):
+        raise BackupValidationError("Profile field header_type is invalid")
+
+    profile["avatar_data"] = validate_profile_image_data_url(
+        profile.get("avatar_data"),
+        "avatar_data",
+        MAX_AVATAR_DATA_URL_CHARS,
+    )
+    profile["header_image"] = validate_profile_image_data_url(
+        profile.get("header_image"),
+        "header_image",
+        MAX_HEADER_DATA_URL_CHARS,
+    )
+
     return profile
 
 
@@ -1422,7 +1472,8 @@ def render_page_error(status_code: int):
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    if env_flag("TRUST_PROXY_HEADERS"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config.update(
         SECRET_KEY=required_env("SECRET_KEY"),
         MAX_CONTENT_LENGTH=MAX_BODY_BYTES,
@@ -1661,6 +1712,11 @@ def create_app() -> Flask:
 
     @app.get("/healthz")
     def healthz():
+        expected_token = os.environ.get("HEALTHZ_SECRET", "").strip()
+        supplied_token = request.headers.get("X-Healthcheck-Token", "")
+        if expected_token and not hmac.compare_digest(expected_token, supplied_token):
+            return jsonify({"ok": False}), 404
+
         status = tracker_health_status()
         return jsonify({"ok": status["ok"]}), 200 if status["ok"] else 503
 
@@ -1755,10 +1811,10 @@ def create_app() -> Flask:
                     "error": "New passwords do not match",
                     "code": "password_mismatch",
                 }), 400
-            if len(new_password) < 8:
+            if len(new_password) < MIN_ADMIN_PASSWORD_CHARS:
                 return jsonify({
                     "ok": False,
-                    "error": "New password must contain at least 8 characters",
+                    "error": f"New password must contain at least {MIN_ADMIN_PASSWORD_CHARS} characters",
                     "code": "password_too_short",
                 }), 400
 

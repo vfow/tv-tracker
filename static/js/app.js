@@ -566,8 +566,8 @@ async function saveAdminAccountChanges(){
         confirmPasswordInput.focus();
         return;
     }
-    if(newPassword && newPassword.length < 8){
-        showToast("New password must contain at least 8 characters");
+    if(newPassword && newPassword.length < 16){
+        showToast("New password must contain at least 16 characters");
         newPasswordInput.focus();
         return;
     }

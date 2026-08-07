@@ -51,7 +51,14 @@ APP_PASSWORD_HASH
 TMDB_API_KEY
 ```
 
-Existing deployments may still use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` as fallbacks. Generate `APP_PASSWORD_HASH` with the helper under `tools/`. Do not commit `.env`, database dumps, API keys, password hashes for real users, SSH keys, or deployment credentials.
+Optional production hardening variables:
+
+```text
+TRUST_PROXY_HEADERS=1       # Set only behind a trusted reverse proxy such as Alwaysdata.
+HEALTHZ_SECRET=<token>      # When set, /healthz requires X-Healthcheck-Token.
+```
+
+Existing deployments may still use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` as fallbacks. Generate `APP_PASSWORD_HASH` with the helper under `tools/`. New admin passwords must contain at least 16 characters. Do not commit `.env`, database dumps, API keys, password hashes for real users, SSH keys, or deployment credentials.
 
 ## Local Development
 
@@ -64,7 +71,7 @@ python -m pip install -r requirements.txt
 Install frontend dependencies:
 
 ```text
-npm install
+npm ci
 ```
 
 Set the required environment variables in your shell or host config, then run Flask:
@@ -132,16 +139,32 @@ The suite checks backend contracts, route protection, source contracts, JavaScri
 
 ## Deployment
 
-Pushing to `main` triggers `.github/workflows/deploy.yml`. The workflow installs Python dependencies, runs `python tests/run_all.py`, connects to Alwaysdata with the `ALWAYSDATA_SSH_KEY` repository secret, pulls the latest code, and verifies the live app at `https://broghgf7.alwaysdata.net/healthz`.
+Pushing to `main` triggers `.github/workflows/deploy.yml`. The workflow installs Python and frontend dependencies, builds Tailwind CSS, confirms the generated CSS is committed, runs `python tests/run_all.py`, connects to Alwaysdata with repository secrets, pulls the latest code, and verifies the live health endpoint.
+
+Configure these GitHub Actions **Secrets**:
+
+```text
+ALWAYSDATA_HOST
+ALWAYSDATA_USER
+ALWAYSDATA_SSH_KEY
+ALWAYSDATA_HEALTH_TOKEN    # Only required if HEALTHZ_SECRET is set in production.
+```
+
+Configure these GitHub Actions **Variables**:
+
+```text
+ALWAYSDATA_APP_DIR         # Example: ~/www/tv-tracker
+ALWAYSDATA_HEALTH_URL      # Example: https://your-site.alwaysdata.net/healthz
+```
 
 The SSH deploy step runs:
 
 ```text
-cd ~/www/tv-tracker
+cd "$ALWAYSDATA_APP_DIR"
 git pull --ff-only origin main
 ```
 
-Use the same command manually over SSH if the workflow is unavailable. After a manual pull, open `/healthz` to confirm the public health check returns `{"ok":true}`, then sign in and open `/api/health` for the detailed private check.
+Use the same `git pull --ff-only origin main` command manually over SSH if the workflow is unavailable. After a manual pull, open `/healthz` to confirm the health check returns `{"ok":true}`. If `HEALTHZ_SECRET` is set, include the `X-Healthcheck-Token` header. Then sign in and open `/api/health` for the detailed private check.
 
 Deployment checklist:
 

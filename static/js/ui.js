@@ -5682,10 +5682,10 @@ function renderSettings(){
                     <input class="profile-settings-input" id="admin-current-password-input" type="password" autocomplete="current-password">
 
                     <label class="profile-settings-label" for="admin-new-password-input">New Password</label>
-                    <input class="profile-settings-input" id="admin-new-password-input" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current password">
+                    <input class="profile-settings-input" id="admin-new-password-input" type="password" minlength="16" autocomplete="new-password" placeholder="Leave blank to keep current password">
 
                     <label class="profile-settings-label" for="admin-confirm-password-input">Confirm New Password</label>
-                    <input class="profile-settings-input" id="admin-confirm-password-input" type="password" minlength="8" autocomplete="new-password">
+                    <input class="profile-settings-input" id="admin-confirm-password-input" type="password" minlength="16" autocomplete="new-password">
                 </div>
 
                 <p class="settings-small-note admin-account-status" id="admin-account-status" aria-live="polite"></p>

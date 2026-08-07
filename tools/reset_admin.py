@@ -225,8 +225,8 @@ def main() -> int:
     if password != confirmation:
         print("Passwords do not match.", file=sys.stderr)
         return 2
-    if len(password) < 8:
-        print("Password must contain at least 8 characters.", file=sys.stderr)
+    if len(password) < 16:
+        print("Password must contain at least 16 characters.", file=sys.stderr)
         return 2
 
     password_hash = PasswordHasher().hash(password)
