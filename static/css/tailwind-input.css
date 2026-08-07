@@ -3649,3 +3649,99 @@
         }
     }
 }
+
+@layer components{
+    .show-page-info-section{
+        @apply tw-flex tw-flex-col;
+    }
+
+    .show-page-info-section .modal-meta,
+    .show-page-info-section .v2-show-action-line,
+    .show-page-info-section .show-page-actions-wrap{
+        @apply tw-clear-both tw-w-full;
+    }
+
+    .show-page-info-section .modal-meta{
+        @apply tw-mb-0 tw-gap-x-2 tw-gap-y-2 tw-leading-[1.65];
+    }
+
+    .show-page-info-section .v2-show-action-line{
+        @apply tw-mb-0 tw-mt-3 tw-gap-x-2 tw-gap-y-2;
+    }
+
+    .show-page-info-section .show-page-actions-wrap{
+        @apply tw-mb-7 tw-mt-3;
+    }
+
+    .show-page-status-buttons{
+        @apply tw-gap-x-[10px] tw-gap-y-[10px];
+    }
+
+    .show-page-status-buttons .modal-status-button,
+    .show-page-status-buttons .remove-show-button,
+    .v2-show-action-line .v2-external-pill,
+    .v2-show-action-line .v2-trailer-link{
+        @apply tw-shrink-0;
+    }
+
+    .network-logo-chip{
+        @apply tw-my-0.5;
+    }
+
+    .season-box.collapse{
+        @apply tw-relative tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface;
+    }
+
+    .season-box.collapse:focus,
+    .season-box.collapse:focus-visible{
+        @apply tw-outline-none;
+    }
+
+    .season-box.collapse:focus-visible{
+        box-shadow:0 0 0 2px rgba(255,255,255,.36);
+    }
+
+    .season-header.collapse-title{
+        @apply tw-relative tw-min-h-0 tw-w-full tw-gap-3 tw-py-[14px] tw-pl-12 tw-pr-4;
+    }
+
+    .season-box.collapse-arrow > .collapse-title::after{
+        content:"";
+        position:absolute;
+        left:1.15rem;
+        top:50%;
+        width:.55rem;
+        height:.55rem;
+        border-right:2px solid #777;
+        border-bottom:2px solid #777;
+        transform:translateY(-50%) rotate(-45deg);
+        transition:transform .18s ease,border-color .18s ease;
+        pointer-events:none;
+    }
+
+    .season-box.collapse-open > .collapse-title::after,
+    .season-box.open > .collapse-title::after{
+        transform:translateY(-50%) rotate(45deg);
+        border-color:#fff;
+    }
+
+    .season-box.collapse .collapse-content.season-episodes{
+        @apply tw-p-0;
+    }
+
+    .season-box.collapse-close .collapse-content{
+        @apply tw-hidden;
+    }
+
+    .season-box.collapse-open .collapse-content{
+        @apply tw-block;
+    }
+
+    .season-box.collapse .season-left{
+        @apply tw-min-w-0;
+    }
+
+    .season-box.collapse .season-right{
+        @apply tw-shrink-0;
+    }
+}

@@ -3320,12 +3320,11 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
         html += `
 
-            <div class="season-box ${isOpen ? "open" : ""}">
+            <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
-                <div class="season-header discover-season-header" data-season="${season}">
+                <div class="season-header collapse-title discover-season-header" data-season="${season}" role="button" aria-expanded="${isOpen ? "true" : "false"}">
 
                     <div class="season-left">
-                        <div class="season-arrow">▸</div>
                         <div class="season-title-stack">
                             <div class="season-title">Season ${season}</div>
                             ${seasonMetaHTML}
@@ -3345,7 +3344,7 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
                 ${
                 isOpen
-                ? `<div class="season-episodes">${renderV2SeasonOverviewHTML(show,season)}${renderDiscoverPreviewEpisodesHTML(show,season,episodeList)}</div>`
+                ? `<div class="season-episodes collapse-content">${renderV2SeasonOverviewHTML(show,season)}${renderDiscoverPreviewEpisodesHTML(show,season,episodeList)}</div>`
                 : ""
                 }
 
@@ -4337,15 +4336,11 @@ function renderSeasonsHTML(show){
 
         html += `
 
-            <div class="season-box ${isOpen ? "open" : ""}">
+            <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
-                <div class="season-header" data-season="${season}">
+                <div class="season-header collapse-title" data-season="${season}" role="button" aria-expanded="${isOpen ? "true" : "false"}">
 
                     <div class="season-left">
-
-                        <div class="season-arrow">
-                            ▸
-                        </div>
 
                         <div class="season-title-stack">
                             <div class="season-title">
@@ -4375,7 +4370,7 @@ function renderSeasonsHTML(show){
 
                 ${
                 isOpen
-                ? `<div class="season-episodes">${renderV2SeasonOverviewHTML(show,season)}${renderSeasonEpisodesHTML(show,season)}</div>`
+                ? `<div class="season-episodes collapse-content">${renderV2SeasonOverviewHTML(show,season)}${renderSeasonEpisodesHTML(show,season)}</div>`
                 : ""
                 }
 

@@ -63,5 +63,26 @@ module.exports = {
       }
     }
   },
-  plugins: []
+  plugins: [require('daisyui')],
+  daisyui: {
+    styled: true,
+    themes: [
+      {
+        tvtracker: {
+          'base-100': '#080808',
+          'base-200': '#0b0b0b',
+          'base-300': '#242424',
+          'base-content': '#ffffff',
+          neutral: '#111111',
+          'neutral-content': '#ffffff',
+          primary: '#ffffff',
+          'primary-content': '#000000'
+        }
+      }
+    ],
+    base: false,
+    utils: true,
+    logs: false,
+    prefix: ''
+  }
 };
