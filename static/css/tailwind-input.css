@@ -2564,7 +2564,7 @@
     }
 
     .show-page-body{
-        @apply tw-mx-auto tw-max-w-[1180px] tw-px-[38px] tw-pb-20 tw-pt-[34px];
+        @apply tw-mx-auto tw-max-w-[1180px] tw-px-[38px] tw-pb-20 tw-pt-[16px];
     }
 
     .show-page-actions-wrap{
@@ -3256,7 +3256,7 @@
         }
 
         .show-page-body{
-            @apply tw-px-[22px] tw-pb-[76px] tw-pt-7;
+            @apply tw-px-[22px] tw-pb-[76px] tw-pt-4;
         }
 
         .show-detail-release-row,

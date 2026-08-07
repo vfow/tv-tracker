@@ -3843,6 +3843,16 @@ function renderShowDetailLoading(showId){
     }
 }
 
+function resetShowDetailScrollPosition(){
+    const page = document.getElementById("show-detail-page");
+
+    if(page){
+        page.scrollTop = 0;
+    }
+}
+
+
+
 function renderShowDetailError(message){
     const content = document.getElementById("show-detail-content");
     if(!content){
@@ -3891,6 +3901,7 @@ async function openShowDetailsPage(showId,options={}){
     const returningEpisodeContext = selectedEpisodeContext && String(selectedEpisodeContext.showId) === id
     ? selectedEpisodeContext
     : null;
+    const shouldResetShowScroll = !returningEpisodeContext;
 
     if(returningEpisodeContext){
         expandedSeasons[id] = expandedSeasons[id] || {};
@@ -3907,7 +3918,16 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     showShowDetailPageShell();
+
+    if(shouldResetShowScroll){
+        resetShowDetailScrollPosition();
+    }
+
     renderShowDetailLoading(id);
+
+    if(shouldResetShowScroll){
+        resetShowDetailScrollPosition();
+    }
 
     if(!fromRoute){
         setAppHashRoute(getShowDetailRoute(id),replaceRoute);
@@ -3919,6 +3939,9 @@ async function openShowDetailsPage(showId,options={}){
         showDetailPreview = null;
         expandedSeasons[id] = expandedSeasons[id] || {};
         renderShowDetailsPage(trackedShow,{preview:false});
+        if(shouldResetShowScroll){
+            resetShowDetailScrollPosition();
+        }
         restoreShowDetailScrollPositionIfNeeded();
         refreshOpenShowV2Details(id);
         return;
@@ -3927,6 +3950,9 @@ async function openShowDetailsPage(showId,options={}){
     if(showDetailPreview && String(showDetailPreview.tmdb_id) === id){
         expandedSeasons[id] = expandedSeasons[id] || {};
         renderShowDetailsPage(showDetailPreview,{preview:true});
+        if(shouldResetShowScroll){
+            resetShowDetailScrollPosition();
+        }
         restoreShowDetailScrollPositionIfNeeded();
         return;
     }
@@ -3942,6 +3968,9 @@ async function openShowDetailsPage(showId,options={}){
         showDetailPreview = showObject;
         expandedSeasons[id] = expandedSeasons[id] || {};
         renderShowDetailsPage(showObject,{preview:true});
+        if(shouldResetShowScroll){
+            resetShowDetailScrollPosition();
+        }
         restoreShowDetailScrollPositionIfNeeded();
     }catch(error){
         renderShowDetailError(friendlyTMDBSearchError(error));
