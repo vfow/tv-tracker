@@ -3702,7 +3702,19 @@
     }
 
     .season-header.collapse-title{
-        @apply tw-relative tw-min-h-0 tw-w-full tw-gap-3 tw-py-[14px] tw-pl-12 tw-pr-4;
+        @apply tw-relative tw-min-h-0 tw-w-full tw-cursor-default tw-gap-3 tw-py-[14px] tw-pl-12 tw-pr-4;
+    }
+
+    .season-toggle-area{
+        @apply tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-bg-transparent tw-text-left;
+    }
+
+    .season-toggle-area:focus-visible{
+        @apply tw-rounded-lg tw-outline tw-outline-2 tw-outline-offset-[3px] tw-outline-white;
+    }
+
+    .season-toggle-area .season-count{
+        @apply tw-shrink-0;
     }
 
     .season-box.collapse-arrow > .collapse-title::after{

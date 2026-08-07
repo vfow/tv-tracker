@@ -3190,15 +3190,27 @@ function renderDiscoverShowModal(show){
 
     });
 
-    document.querySelectorAll(".discover-season-header").forEach(header=>{
+    document.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
 
-        header.addEventListener("click",function(){
+        const activate = function(){
             toggleDiscoverPreviewSeason(show,Number(this.dataset.season));
+        };
+
+        toggle.addEventListener("click",activate);
+        toggle.addEventListener("keydown",function(event){
+            if(event.key === "Enter" || event.key === " "){
+                event.preventDefault();
+                activate.call(this);
+            }
         });
 
     });
 
     document.querySelectorAll(".discover-season-all-button").forEach(button=>{
+
+        button.addEventListener("pointerdown",function(event){
+            event.stopPropagation();
+        });
 
         button.addEventListener("click",async function(event){
 
@@ -3322,12 +3334,19 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
             <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
-                <div class="season-header collapse-title discover-season-header" data-season="${season}" role="button" aria-expanded="${isOpen ? "true" : "false"}">
+                <div class="season-header collapse-title">
 
-                    <div class="season-left">
-                        <div class="season-title-stack">
-                            <div class="season-title">Season ${season}</div>
-                            ${seasonMetaHTML}
+                    <div
+                    class="season-toggle-area discover-season-toggle"
+                    data-season="${season}"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded="${isOpen ? "true" : "false"}">
+                        <div class="season-left">
+                            <div class="season-title-stack">
+                                <div class="season-title">Season ${season}</div>
+                                ${seasonMetaHTML}
+                            </div>
                         </div>
                     </div>
 
@@ -3807,16 +3826,25 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".season-header").forEach(header=>{
-        header.addEventListener("click",function(event){
-            if(event.target && event.target.closest("button,a,input,select,textarea")){
-                return;
-            }
+    document.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
+        const activate = function(){
             toggleSeason(show.tmdb_id,Number(this.dataset.season));
+        };
+
+        toggle.addEventListener("click",activate);
+        toggle.addEventListener("keydown",function(event){
+            if(event.key === "Enter" || event.key === " "){
+                event.preventDefault();
+                activate.call(this);
+            }
         });
     });
 
     document.querySelectorAll(".season-all-button").forEach(button=>{
+        button.addEventListener("pointerdown",function(event){
+            event.stopPropagation();
+        });
+
         button.addEventListener("click",async function(event){
             event.preventDefault();
             event.stopPropagation();
@@ -3840,6 +3868,10 @@ function attachShowDetailsPageEvents(show,isTracked){
     });
 
     document.querySelectorAll(".episode-check-button").forEach(button=>{
+        button.addEventListener("pointerdown",function(event){
+            event.stopPropagation();
+        });
+
         button.addEventListener("click",async function(event){
             event.preventDefault();
             event.stopPropagation();
@@ -4338,33 +4370,39 @@ function renderSeasonsHTML(show){
 
             <div tabindex="0" class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
 
-                <div class="season-header collapse-title" data-season="${season}" role="button" aria-expanded="${isOpen ? "true" : "false"}">
+                <div class="season-header collapse-title">
 
-                    <div class="season-left">
+                    <div
+                    class="season-toggle-area"
+                    data-season="${season}"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded="${isOpen ? "true" : "false"}">
 
-                        <div class="season-title-stack">
-                            <div class="season-title">
-                                Season ${season}
+                        <div class="season-left">
+
+                            <div class="season-title-stack">
+                                <div class="season-title">
+                                    Season ${season}
+                                </div>
+                                ${seasonMetaHTML}
                             </div>
-                            ${seasonMetaHTML}
+
                         </div>
-
-                    </div>
-
-                    <div class="season-right">
 
                         <div class="season-count">
                             ${total ? `${watched} / ${total}` : ""}
                         </div>
 
-                        <button
+                    </div>
+
+                    <button
+                        type="button"
                         class="season-all-button ${seasonIsFullyWatched ? "checked" : ""}"
                         data-season="${season}"
                         title="${isTrackedShow ? (seasonIsFullyWatched ? "Mark season as unwatched" : "Mark aired episodes as watched") : "Add this show before changing watched episodes"}"
                         ${isTrackedShow ? "" : "disabled"}>
                         </button>
-
-                    </div>
 
                 </div>
 
@@ -4419,6 +4457,7 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
                 </div>
 
                 <button
+                type="button"
                 class="${isWatched ? "episode-check-button checked" : "episode-check-button"}"
                 data-season="${seasonNumber}"
                 data-episode="${ep.episode_number}"

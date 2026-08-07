@@ -4354,6 +4354,26 @@ async function updateShowStatus(showId,status){
 }
 
 
+async function confirmEpisodeUnwatch(show,season,episode){
+    if(typeof showAppConfirm !== "function"){
+        return true;
+    }
+
+    const label = "Season " + Number(season) + ", Episode " + Number(episode);
+
+    return await showAppConfirm({
+        title:"Mark Episode Unwatched",
+        message:
+        "Mark " +
+        label +
+        " as unwatched? This will remove that entry from History.",
+        confirmLabel:"Mark Unwatched",
+        cancelLabel:"Cancel",
+        danger:true
+    });
+}
+
+
 async function updateEpisodeWatched(showId,season,episode,isWatched){
     const id = String(showId);
     const show = DATA.shows[id];
@@ -4369,6 +4389,14 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
     if(isWatched && !isEpisodeLoggable(episodeData,show,season)){
         showToast("This episode has not aired yet");
         return;
+    }
+
+    if(!isWatched && isEpisodeWatched(show,season,episode)){
+        const confirmed = await confirmEpisodeUnwatch(show,season,episode);
+
+        if(!confirmed){
+            return;
+        }
     }
 
     let newlyMarkedEpisodes = [];
