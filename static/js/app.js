@@ -2675,7 +2675,9 @@ async function openDiscoverShowModal(searchShow){
         return;
     }
 
-    await openShowDetailsPage(searchShow.id);
+    await openShowDetailsPage(searchShow.id,{
+        showName:searchShow.name || searchShow.title || searchShow.original_name || ""
+    });
 }
 
 async function loadDiscoverPreviewSeason(show,seasonNumber){
@@ -3891,8 +3893,130 @@ function setAppHashRoute(route,replace=false){
     }
 }
 
-function getShowDetailRoute(showId){
-    return "/app/show/" + encodeURIComponent(String(showId || ""));
+function buildRouteSlug(value){
+    return String(value || "")
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/&/g," and ")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"")
+    .replace(/-{2,}/g,"-");
+}
+
+function buildRouteKey(value,label=""){
+    const rawValue = String(value || "").trim();
+    const baseMatch = rawValue.match(/^([1-9][0-9]{0,11})/);
+    const id = baseMatch ? baseMatch[1] : "";
+    const slug = buildRouteSlug(label);
+    return id ? (slug ? `${id}-${slug}` : id) : "";
+}
+
+function parseRouteKey(value){
+    const clean = String(value || "").trim().toLowerCase();
+    const match = clean.match(/^([1-9][0-9]{0,11})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
+    if(!match){
+        return {id:"",slug:"",hasSlug:false,valid:false};
+    }
+    return {id:match[1],slug:match[2] || "",hasSlug:!!match[2],valid:true};
+}
+
+function routeSlugMatchesLabel(routeSlug,label){
+    const cleanRouteSlug = buildRouteSlug(routeSlug);
+    if(!cleanRouteSlug){
+        return true;
+    }
+    return cleanRouteSlug === buildRouteSlug(label);
+}
+
+function renderAppRouteNotFoundPage(){
+    activePage = "route-error";
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+    const page = document.getElementById("show-detail-page");
+    const content = document.getElementById("show-detail-content");
+    if(page){
+        page.classList.add("active-page");
+        page.scrollTop = 0;
+    }
+    if(content){
+        content.innerHTML = `
+            <div class="show-detail-page-inner">
+                <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div class="empty-state show-detail-loading-state">
+                    <h2>We're not in Kansas anymore</h2>
+                    <p>This page is off the map.</p>
+                </div>
+            </div>
+        `;
+        const backButton = document.getElementById("show-page-back-button");
+        if(backButton){
+            backButton.addEventListener("click",function(){
+                if(window.history.length > 1){
+                    window.history.back();
+                }else{
+                    setAppHashRoute("/app/watchlist",false);
+                    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+                        window.TVTrackerV2Router.applyRoute();
+                    }
+                }
+            });
+        }
+    }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+function showAppNotFound(routeLabel="page"){
+    showToast("Page not found.");
+    if(activePage === "show-detail"){
+        renderShowDetailNotFound();
+    }else if(activePage === "person-detail"){
+        personPageState.error = "Page not found.";
+        personPageState.loading = false;
+        renderActivePersonPage();
+    }else if(activePage === "genre-detail"){
+        genrePageState.error = "Page not found.";
+        genrePageState.loading = false;
+        renderActiveGenrePage();
+    }else if(activePage === "discovery-detail"){
+        discoveryPageState.error = "Page not found.";
+        discoveryPageState.loading = false;
+        renderActiveDiscoveryFilterPage();
+    }else{
+        renderAppRouteNotFoundPage();
+    }
+}
+
+function getKnownShowRouteLabel(showId,showInfo=""){
+    if(typeof showInfo === "string" && showInfo.trim()){
+        return showInfo.trim();
+    }
+    if(showInfo && typeof showInfo === "object"){
+        return String(showInfo.title || showInfo.name || showInfo.original_name || "").trim();
+    }
+    const id = String(showId || "");
+    if(DATA && DATA.shows && DATA.shows[id]){
+        return String(DATA.shows[id].title || DATA.shows[id].name || "").trim();
+    }
+    if(showDetailPreview && String(showDetailPreview.tmdb_id || showDetailPreview.id || "") === id){
+        return String(showDetailPreview.title || showDetailPreview.name || "").trim();
+    }
+    return "";
+}
+
+function getShowDetailRoute(showId,showInfo=""){
+    const key = buildRouteKey(showId,getKnownShowRouteLabel(showId,showInfo));
+    return key ? "/app/show/" + encodeURIComponent(key) : "/app/watchlist";
 }
 
 function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber){
@@ -3950,10 +4074,39 @@ function normalizeDiscoveryFilterValue(type,value){
     return "";
 }
 
-function getDiscoveryFilterDetailRoute(type,value){
+function getDiscoveryEntityRouteLabel(type,value,label=""){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
-    return cleanType && cleanValue ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(cleanValue)}` : "/app/watchlist";
+    const supplied = String(label || "").trim();
+    if(cleanType === "language"){
+        return getLanguageName(cleanValue);
+    }
+    if(cleanType === "country"){
+        return getDiscoveryCountryName(cleanValue);
+    }
+    if(supplied){
+        return supplied
+        .replace(/^Shows\s+from\s+/i,"")
+        .replace(/^Shows\s+about\s+/i,"")
+        .trim();
+    }
+    return "";
+}
+
+function getDiscoveryFilterDetailRoute(type,value,label=""){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    if(!cleanType || !cleanValue){
+        return "/app/watchlist";
+    }
+    const routeLabel = getDiscoveryEntityRouteLabel(cleanType,cleanValue,label);
+    if(cleanType === "network" || cleanType === "theme"){
+        const key = buildRouteKey(cleanValue,routeLabel);
+        return key ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}` : "/app/watchlist";
+    }
+    const slug = buildRouteSlug(routeLabel);
+    const key = slug ? `${cleanValue}-${slug}` : cleanValue;
+    return `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}`;
 }
 
 function getLanguageName(code){
@@ -4030,10 +4183,23 @@ function normalizePersonId(personId){
     return /^[1-9][0-9]{0,11}$/.test(clean) ? clean : "";
 }
 
-function getPersonDetailRoute(role,personId){
+function getKnownPersonRouteLabel(personId,label=""){
+    const supplied = String(label || "").trim();
+    if(supplied){
+        return supplied;
+    }
+    const cleanId = normalizePersonId(personId);
+    if(personPageState && personPageState.person && String(personPageState.person.id || "") === cleanId){
+        return String(personPageState.person.name || "").trim();
+    }
+    return "";
+}
+
+function getPersonDetailRoute(role,personId,label=""){
     const cleanRole = normalizePersonRoleSlug(role);
     const cleanId = normalizePersonId(personId);
-    return cleanRole && cleanId ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(cleanId)}` : "/app/watchlist";
+    const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
+    return cleanRole && key ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(key)}` : "/app/watchlist";
 }
 
 function getPersonPageTitle(role,media){
@@ -4215,6 +4381,15 @@ async function loadPersonPageResults(){
             throw new Error("Person not found.");
         }
 
+        if(personPageState.routeSlug && !routeSlugMatchesLabel(personPageState.routeSlug,person.name)){
+            personPageState.loading = false;
+            personPageState.error = "Page not found.";
+            personPageState.person = null;
+            personPageState.credits = [];
+            renderActivePersonPage();
+            return;
+        }
+
         personPageState = Object.assign({},personPageState,{
             role:cleanRole,
             personId:cleanId,
@@ -4228,7 +4403,7 @@ async function loadPersonPageResults(){
         renderActivePersonPage();
     }catch(error){
         personPageState.loading = false;
-        personPageState.error = error && error.message ? error.message : "Could not load person.";
+        personPageState.error = "Couldn’t load this page. Try again later.";
         renderActivePersonPage();
     }
 }
@@ -4243,6 +4418,8 @@ async function openPersonPage(role,personId,options={}){
 
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
+    const routeSlug = buildRouteSlug(options && options.routeSlug || "");
+    const routeLabel = String(options && (options.personName || options.routeLabel) || "").trim();
     const media = normalizePersonMediaType(options && options.media || (personPageState && personPageState.media) || "tv");
     const isSamePerson = activePage === "person-detail" &&
     selectedPersonContext &&
@@ -4261,6 +4438,7 @@ async function openPersonPage(role,personId,options={}){
         personPageState = {
             role:cleanRole,
             personId:cleanId,
+            routeSlug:routeSlug,
             media:"tv",
             loading:false,
             error:"",
@@ -4270,13 +4448,14 @@ async function openPersonPage(role,personId,options={}){
     }else{
         personPageState.role = cleanRole;
         personPageState.personId = cleanId;
+        personPageState.routeSlug = routeSlug;
         personPageState.media = media;
     }
 
     showPersonDetailPageShell();
 
     if(!fromRoute){
-        setAppHashRoute(getPersonDetailRoute(cleanRole,cleanId),replaceRoute);
+        setAppHashRoute(getPersonDetailRoute(cleanRole,cleanId,routeLabel),replaceRoute);
     }
 
     if(!isSamePerson || !personPageState.person){
@@ -4556,7 +4735,7 @@ async function loadGenrePageResults(options={}){
         renderActiveGenrePage();
     }catch(error){
         genrePageState.loading = false;
-        genrePageState.error = error && error.message ? error.message : "Could not load genre.";
+        genrePageState.error = "Couldn’t load this page. Try again later.";
         renderActiveGenrePage();
     }
 }
@@ -4770,6 +4949,26 @@ async function resolveDiscoveryFilterPageName(type,value,existingName=""){
     return supplied || fallback;
 }
 
+
+function getDiscoveryRouteValidationLabel(type,value,pageName){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    const name = String(pageName || "").trim();
+    if(cleanType === "language"){
+        return getLanguageName(cleanValue);
+    }
+    if(cleanType === "country"){
+        return getDiscoveryCountryName(cleanValue);
+    }
+    if(cleanType === "network"){
+        return name.replace(/^Shows\s+from\s+/i,"").trim();
+    }
+    if(cleanType === "theme"){
+        return name.replace(/^Shows\s+about\s+/i,"").trim();
+    }
+    return name;
+}
+
 async function loadDiscoveryFilterPageResults(options={}){
     const append = options && options.append === true;
     const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
@@ -4802,6 +5001,15 @@ async function loadDiscoveryFilterPageResults(options={}){
         let lastPage = nextPage;
 
         const resolvedName = await resolveDiscoveryFilterPageName(cleanType,cleanValue,discoveryPageState.name);
+        const validationLabel = getDiscoveryRouteValidationLabel(cleanType,cleanValue,resolvedName);
+
+        if(discoveryPageState.routeSlug && !routeSlugMatchesLabel(discoveryPageState.routeSlug,validationLabel)){
+            discoveryPageState.loading = false;
+            discoveryPageState.error = "Page not found.";
+            discoveryPageState.shows = [];
+            renderActiveDiscoveryFilterPage();
+            return;
+        }
 
         while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
             const params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
@@ -4840,7 +5048,7 @@ async function loadDiscoveryFilterPageResults(options={}){
         renderActiveDiscoveryFilterPage();
     }catch(error){
         discoveryPageState.loading = false;
-        discoveryPageState.error = error && error.message ? error.message : "Could not load shows.";
+        discoveryPageState.error = "Couldn’t load this page. Try again later.";
         renderActiveDiscoveryFilterPage();
     }
 }
@@ -4855,6 +5063,8 @@ async function openDiscoveryFilterPage(type,value,options={}){
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
     const suppliedName = String(options && options.name || "").trim();
+    const routeLabel = String(options && options.routeLabel || "").trim();
+    const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const isSamePage = activePage === "discovery-detail" &&
     selectedDiscoveryContext &&
     String(selectedDiscoveryContext.type || "") === cleanType &&
@@ -4873,6 +5083,7 @@ async function openDiscoveryFilterPage(type,value,options={}){
             type:cleanType,
             value:cleanValue,
             name:suppliedName || getDiscoveryFilterFallbackName(cleanType,cleanValue),
+            routeSlug:routeSlug,
             year:"",
             sort:"popularity.desc",
             page:1,
@@ -4884,6 +5095,7 @@ async function openDiscoveryFilterPage(type,value,options={}){
     }else{
         discoveryPageState.type = cleanType;
         discoveryPageState.value = cleanValue;
+        discoveryPageState.routeSlug = routeSlug;
         if(suppliedName){
             discoveryPageState.name = suppliedName;
         }
@@ -4892,7 +5104,7 @@ async function openDiscoveryFilterPage(type,value,options={}){
     showDiscoveryFilterPageShell();
 
     if(!fromRoute){
-        setAppHashRoute(getDiscoveryFilterDetailRoute(cleanType,cleanValue),replaceRoute);
+        setAppHashRoute(getDiscoveryFilterDetailRoute(cleanType,cleanValue,routeLabel || suppliedName),replaceRoute);
     }
 
     if(!isSamePage || !discoveryPageState.shows.length){
@@ -5071,9 +5283,40 @@ function renderShowDetailError(message){
     }
 }
 
-function pushShowDetailBackRoute(showId){
+function renderShowDetailNotFound(){
+    const content = document.getElementById("show-detail-content");
+    if(!content){
+        return;
+    }
+
+    content.innerHTML = `
+        <div class="show-detail-page-inner">
+            <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <div class="empty-state show-detail-loading-state">
+                <h2>We're not in Kansas anymore</h2>
+                <p>This page is off the map.</p>
+            </div>
+        </div>
+    `;
+
+    const backButton = document.getElementById("show-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",closeShowDetailsPage);
+    }
+}
+
+function showRouteSlugIsValid(show,routeSlug){
+    if(!routeSlug){
+        return true;
+    }
+    return routeSlugMatchesLabel(routeSlug,show && (show.title || show.name || show.original_name));
+}
+
+function pushShowDetailBackRoute(showId,showInfo=""){
     const current = getCurrentAppRoute();
-    const currentShow = getShowDetailRoute(showId);
+    const currentShow = getShowDetailRoute(showId,showInfo);
 
     if(current && current !== currentShow){
         showDetailBackStack.push(current);
@@ -5092,6 +5335,7 @@ async function openShowDetailsPage(showId,options={}){
 
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
+    const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const returningEpisodeContext = selectedEpisodeContext && String(selectedEpisodeContext.showId) === id
     ? selectedEpisodeContext
     : null;
@@ -5112,7 +5356,7 @@ async function openShowDetailsPage(showId,options={}){
     discoverPreviewShow = null;
 
     if(!fromRoute){
-        pushShowDetailBackRoute(id);
+        pushShowDetailBackRoute(id,options && options.showName || "");
     }
 
     showShowDetailPageShell();
@@ -5128,14 +5372,21 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     if(!fromRoute){
-        setAppHashRoute(getShowDetailRoute(id),replaceRoute);
+        setAppHashRoute(getShowDetailRoute(id,options && options.showName || ""),replaceRoute);
     }
 
     const trackedShow = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
 
     if(trackedShow){
+        if(!showRouteSlugIsValid(trackedShow,routeSlug)){
+            renderShowDetailNotFound();
+            return;
+        }
         showDetailPreview = null;
         expandedSeasons[id] = expandedSeasons[id] || {};
+        if(!fromRoute){
+            setAppHashRoute(getShowDetailRoute(id,trackedShow),true);
+        }
         renderShowDetailsPage(trackedShow,{preview:false});
         if(shouldResetShowScroll){
             resetShowDetailScrollPosition();
@@ -5146,7 +5397,14 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     if(showDetailPreview && String(showDetailPreview.tmdb_id) === id){
+        if(!showRouteSlugIsValid(showDetailPreview,routeSlug)){
+            renderShowDetailNotFound();
+            return;
+        }
         expandedSeasons[id] = expandedSeasons[id] || {};
+        if(!fromRoute){
+            setAppHashRoute(getShowDetailRoute(id,showDetailPreview),true);
+        }
         renderShowDetailsPage(showDetailPreview,{preview:true});
         if(shouldResetShowScroll){
             resetShowDetailScrollPosition();
@@ -5163,8 +5421,15 @@ async function openShowDetailsPage(showId,options={}){
         const showObject = createShowObject(details,"");
         showObject.status = "";
         showObject._preview_only = true;
+        if(!showRouteSlugIsValid(showObject,routeSlug)){
+            renderShowDetailNotFound();
+            return;
+        }
         showDetailPreview = showObject;
         expandedSeasons[id] = expandedSeasons[id] || {};
+        if(!fromRoute){
+            setAppHashRoute(getShowDetailRoute(id,showObject),true);
+        }
         renderShowDetailsPage(showObject,{preview:true});
         ensureShowV2Keywords(showObject,{skipSave:true}).then(changed=>{
             if(changed && showDetailPreview && String(showDetailPreview.tmdb_id) === id && selectedEpisodeContext === null){

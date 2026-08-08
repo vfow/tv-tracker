@@ -42,15 +42,16 @@ SCHEMA_VERSION = 4
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
-APP_SHOW_PATH_RE = re.compile(r"^/app/show/([1-9][0-9]{0,11})$")
+APP_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
+APP_SHOW_PATH_RE = re.compile(rf"^/app/show/({APP_ROUTE_ID_SLUG})$")
 APP_EPISODE_PATH_RE = re.compile(
-    r"^/app/show/([1-9][0-9]{0,11})/season/([0-9]{1,5})/episode/([1-9][0-9]{0,5})$"
+    rf"^/app/show/({APP_ROUTE_ID_SLUG})/season/([0-9]{{1,5}})/episode/([1-9][0-9]{{0,5}})$"
 )
 APP_GENRE_PATH_RE = re.compile(r"^/app/genre/[a-z0-9]+(?:-[a-z0-9]+)*$")
-APP_NETWORK_PATH_RE = re.compile(r"^/app/network/[1-9][0-9]{0,11}$")
-APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}$")
-APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}$")
-APP_THEME_PATH_RE = re.compile(r"^/app/theme/[1-9][0-9]{0,11}$")
+APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
+APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
 APP_PERSON_ROLE_SLUGS = {
     "actor",
     "creator",
@@ -62,7 +63,7 @@ APP_PERSON_ROLE_SLUGS = {
     "cinematographer",
 }
 APP_PERSON_PATH_RE = re.compile(
-    r"^/app/(actor|creator|director|writer|producer|editor|composer|cinematographer)/([1-9][0-9]{0,11})$"
+    rf"^/app/(actor|creator|director|writer|producer|editor|composer|cinematographer)/({APP_ROUTE_ID_SLUG})$"
 )
 APP_SECTION_PATHS = {
     "/app/watchlist",
@@ -1721,11 +1722,11 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/network/<int:network_id>", strict_slashes=False)
+    @app.get("/app/network/<network_key>", strict_slashes=False)
     @login_required
-    def app_network_page(network_id: int):
+    def app_network_page(network_key: str):
         requested_path = request.path.rstrip("/")
-        if network_id <= 0 or APP_NETWORK_PATH_RE.fullmatch(requested_path) is None:
+        if APP_NETWORK_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)
@@ -1752,23 +1753,22 @@ def create_app() -> Flask:
         return render_app_shell(requested_path)
 
 
-    @app.get("/app/theme/<int:theme_id>", strict_slashes=False)
+    @app.get("/app/theme/<theme_key>", strict_slashes=False)
     @login_required
-    def app_theme_page(theme_id: int):
+    def app_theme_page(theme_key: str):
         requested_path = request.path.rstrip("/")
-        if theme_id <= 0 or APP_THEME_PATH_RE.fullmatch(requested_path) is None:
+        if APP_THEME_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/<person_role>/<int:person_id>", strict_slashes=False)
+    @app.get("/app/<person_role>/<person_key>", strict_slashes=False)
     @login_required
-    def app_person_page(person_role: str, person_id: int):
+    def app_person_page(person_role: str, person_key: str):
         requested_path = request.path.rstrip("/")
         if (
             person_role not in APP_PERSON_ROLE_SLUGS
-            or person_id <= 0
             or APP_PERSON_PATH_RE.fullmatch(requested_path) is None
         ):
             abort(404)
@@ -1776,32 +1776,31 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/show/<int:tmdb_id>", strict_slashes=False)
+    @app.get("/app/show/<show_key>", strict_slashes=False)
     @login_required
-    def app_show_page(tmdb_id: int):
+    def app_show_page(show_key: str):
         requested_path = request.path.rstrip("/")
-        if tmdb_id <= 0 or APP_SHOW_PATH_RE.fullmatch(requested_path) is None:
+        if APP_SHOW_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
     @app.get(
-        "/app/show/<int:tmdb_id>/season/<int:season_number>/episode/<int:episode_number>",
+        "/app/show/<show_key>/season/<int:season_number>/episode/<int:episode_number>",
         strict_slashes=False,
     )
     @login_required
     def app_episode_page(
-        tmdb_id: int,
+        show_key: str,
         season_number: int,
         episode_number: int,
     ):
         requested_path = request.path.rstrip("/")
         if (
-            tmdb_id <= 0
+            APP_EPISODE_PATH_RE.fullmatch(requested_path) is None
             or season_number < 0
             or episode_number <= 0
-            or APP_EPISODE_PATH_RE.fullmatch(requested_path) is None
         ):
             abort(404)
         if request.path != requested_path:

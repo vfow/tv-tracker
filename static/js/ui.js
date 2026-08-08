@@ -136,7 +136,8 @@ function updateShellTitle(){
         : "Episode",
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
         "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
-        "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person"
+        "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person",
+        "route-error":"Page Not Found"
     };
 
     const showTabTitles = {
@@ -754,8 +755,8 @@ function renderThemeItemHTML(theme,extraClass=""){
         return "";
     }
     if(id > 0){
-        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("theme",id) : "";
-        return `<a class="show-detail-theme-chip show-detail-theme-link ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-discovery-type="theme" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows about ${name}`)}">${escapeHTML(name)}</a>`;
+        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("theme",id,name) : "";
+        return `<a class="show-detail-theme-chip show-detail-theme-link ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-discovery-type="theme" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows about ${name}`)}" data-discovery-label="${escapeHTML(name)}">${escapeHTML(name)}</a>`;
     }
     return `<span class="show-detail-theme-chip ${escapeHTML(extraClass)}">${escapeHTML(name)}</span>`;
 }
@@ -3096,12 +3097,13 @@ function renderShowEntityLinkHTML(label,type,value,options={}){
     if(!cleanLabel){
         return "";
     }
-    const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute(type,value) : "";
+    const routeLabel = String(options && options.routeLabel || cleanLabel).trim();
+    const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute(type,value,routeLabel) : "";
     const name = String(options && options.name || cleanLabel).trim();
     const className = options && options.className ? String(options.className) : "show-detail-entity-link";
 
     if(route && route !== "/app/watchlist"){
-        return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-name="${escapeHTML(name)}">${escapeHTML(cleanLabel)}</a>`;
+        return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-name="${escapeHTML(name)}" data-discovery-label="${escapeHTML(routeLabel)}">${escapeHTML(cleanLabel)}</a>`;
     }
 
     return `<span>${escapeHTML(cleanLabel)}</span>`;
@@ -3120,8 +3122,8 @@ function renderNetworkEntityHTML(network){
     const label = network && network.name ? String(network.name).trim() : "Network";
     const inner = renderNetworkLinkInnerHTML(network);
     if(id > 0){
-        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("network",id) : "";
-        return `<a class="show-detail-entity-link show-detail-network-link" href="${escapeHTML(route)}" data-discovery-type="network" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows from ${label}`)}" aria-label="Shows from ${escapeHTML(label)}">${inner}</a>`;
+        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("network",id,label) : "";
+        return `<a class="show-detail-entity-link show-detail-network-link" href="${escapeHTML(route)}" data-discovery-type="network" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows from ${label}`)}" data-discovery-label="${escapeHTML(label)}" aria-label="Shows from ${escapeHTML(label)}">${inner}</a>`;
     }
     return inner;
 }
@@ -3464,7 +3466,7 @@ function getPersonLinkNameHTML(person,role,fallbackName){
     const name = fallbackName || (person && person.name) || "Unknown";
 
     if(cleanRole && id > 0){
-        return `<button type="button" class="v2-person-link" data-person-role="${escapeHTML(cleanRole)}" data-person-id="${escapeHTML(id)}">${escapeHTML(name)}</button>`;
+        return `<button type="button" class="v2-person-link" data-person-role="${escapeHTML(cleanRole)}" data-person-id="${escapeHTML(id)}" data-person-name="${escapeHTML(name)}">${escapeHTML(name)}</button>`;
     }
 
     return `<span>${escapeHTML(name)}</span>`;
@@ -3518,7 +3520,7 @@ function renderV2ActorListHTML(actors,limit=12){
     return list.map(actor=>{
         const actorId = Number(actor && actor.id || 0);
         const linkAttributes = actorId > 0
-        ? ` role="button" tabindex="0" data-person-role="actor" data-person-id="${escapeHTML(actorId)}"`
+        ? ` role="button" tabindex="0" data-person-role="actor" data-person-id="${escapeHTML(actorId)}" data-person-name="${escapeHTML(actor && actor.name || "Unknown Actor")}"`
         : "";
         const linkClass = actorId > 0 ? " v2-person-card-link" : "";
 
@@ -3667,7 +3669,7 @@ function renderV2SimilarShowsHTML(show){
         : `<div class="poster-placeholder">TV</div>`;
 
         return `
-            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}">
+            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(item.name || "Untitled")}</div>
             </button>
@@ -3686,7 +3688,7 @@ function attachV2ShowModalEvents(show){
         button.addEventListener("click",async function(event){
             event.stopPropagation();
             const id = this.getAttribute("data-v2-similar-open");
-            await openShowDetailsPage(id);
+            await openShowDetailsPage(id,{showName:this.dataset.v2SimilarName || ""});
         });
     });
 
@@ -4233,7 +4235,7 @@ function renderV2CrewMemberRows(people,fallbackRole=""){
         : `<div class="v2-actor-placeholder">CREW</div>`;
 
         return `
-            <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}"` : ""}>
+            <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}" data-person-name="${escapeHTML(person.name || "Unknown")}"` : ""}>
                 <div class="v2-actor-list-photo">${photo}</div>
                 <div class="v2-actor-list-text">
                     <div class="v2-actor-name">${getPersonLinkNameHTML(person,routeRole,person.name || "Unknown")}</div>
@@ -4623,7 +4625,7 @@ function attachShowDetailsPageEvents(show,isTracked){
             }
             event.preventDefault();
             event.stopPropagation();
-            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || ""});
+            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || ""});
         });
     });
 
@@ -4645,7 +4647,7 @@ function attachShowDetailsPageEvents(show,isTracked){
             }
             event.preventDefault();
             event.stopPropagation();
-            openPersonPage(this.dataset.personRole,this.dataset.personId);
+            openPersonPage(this.dataset.personRole,this.dataset.personId,{personName:this.dataset.personName || this.textContent || ""});
         });
     });
 
@@ -4658,7 +4660,7 @@ function attachShowDetailsPageEvents(show,isTracked){
                 event.preventDefault();
                 event.stopPropagation();
             }
-            openPersonPage(this.dataset.personRole,this.dataset.personId);
+            openPersonPage(this.dataset.personRole,this.dataset.personId,{personName:this.dataset.personName || this.textContent || ""});
         };
 
         card.addEventListener("click",activate);

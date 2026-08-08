@@ -33,6 +33,7 @@ function createRouter(pathname){
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
     openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
+    renderAppRouteNotFoundPage(){ calls.push(['renderAppRouteNotFoundPage']); },
     document:{querySelectorAll(){ return []; }},
     history:{
       pushState(state,title,url){ context.window.location.pathname=url; calls.push(['pushState',url]); },
@@ -64,6 +65,15 @@ function createRouter(pathname){
 }
 
 {
+  const {calls,router}=createRouter('/app/show/1399-game-of-thrones');
+  assert.strictEqual(router.currentRoute(),'/app/show/1399-game-of-thrones');
+  const call=calls.find(item=>item[0]==='openShowDetailsPage');
+  assert(call,'pretty show route should open show page');
+  assert.strictEqual(call[1],'1399');
+  assert.strictEqual(call[2].routeSlug,'game-of-thrones');
+}
+
+{
   const {calls}=createRouter('/app/show/1399/season/1/episode/3');
   const call=calls.find(item=>item[0]==='openEpisodeModal');
   assert(call,'episode route should open episode page');
@@ -92,12 +102,30 @@ function createRouter(pathname){
 }
 
 {
+  const {calls,router}=createRouter('/app/network/213-netflix');
+  assert.strictEqual(router.currentRoute(),'/app/network/213-netflix');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'pretty network route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['network','213']);
+  assert.strictEqual(call[3].routeSlug,'netflix');
+}
+
+{
   const {calls,router}=createRouter('/app/language/ja');
   assert.strictEqual(router.currentRoute(),'/app/language/ja');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
   assert(call,'language route should open discovery filter page');
   assert.deepStrictEqual(call.slice(1,3),['language','ja']);
   assert.strictEqual(call[3].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/language/ja-japanese');
+  assert.strictEqual(router.currentRoute(),'/app/language/ja-japanese');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'pretty language route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['language','ja']);
+  assert.strictEqual(call[3].routeSlug,'japanese');
 }
 
 {
@@ -120,12 +148,30 @@ function createRouter(pathname){
 }
 
 {
+  const {calls,router}=createRouter('/app/theme/1234-war');
+  assert.strictEqual(router.currentRoute(),'/app/theme/1234-war');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'pretty theme route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
+  assert.strictEqual(call[3].routeSlug,'war');
+}
+
+{
   const {calls,router}=createRouter('/app/actor/123');
   assert.strictEqual(router.currentRoute(),'/app/actor/123');
   const call=calls.find(item=>item[0]==='openPersonPage');
   assert(call,'person route should open person page');
   assert.deepStrictEqual(call.slice(1,3),['actor','123']);
   assert.strictEqual(call[3].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/actor/123-leonardo-dicaprio');
+  assert.strictEqual(router.currentRoute(),'/app/actor/123-leonardo-dicaprio');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'pretty person route should open person page');
+  assert.deepStrictEqual(call.slice(1,3),['actor','123']);
+  assert.strictEqual(call[3].routeSlug,'leonardo-dicaprio');
 }
 
 {
@@ -141,8 +187,7 @@ function createRouter(pathname){
   calls.length=0;
   context.window.location.pathname='/app/private/notes';
   router.applyRoute();
-  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/watchlist'));
-  assert(calls.some(item=>item[0]==='showPage' && item[1]==='shows'));
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'));
 }
 
 console.log('Real-path router runtime checks passed');

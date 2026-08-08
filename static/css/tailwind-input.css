@@ -4594,3 +4594,18 @@
         }
     }
 }
+
+@layer components{
+    @media (min-width:992px){
+        .app-shell .sidebar{
+            display:flex !important;
+            visibility:visible;
+        }
+
+        .app-shell .main{
+            margin-left:var(--tt-sidebar-width);
+            width:calc(100vw - var(--tt-sidebar-width));
+            max-width:calc(100vw - var(--tt-sidebar-width));
+        }
+    }
+}
