@@ -3804,25 +3804,25 @@
         width:100%;
         max-width:none;
         margin:0;
-        padding:18px 48px 0;
+        padding:0;
     }
 
     .show-page-hero{
         display:block;
-        min-height:320px;
+        min-height:390px;
         padding:0;
-        border:1px solid rgba(255,255,255,.08);
-        border-radius:28px;
+        border:0;
+        border-radius:0;
         overflow:hidden;
         background-size:cover;
-        background-position:center;
-        box-shadow:0 24px 80px rgba(0,0,0,.42);
+        background-position:center 34%;
+        box-shadow:none;
     }
 
     .show-page-back-button{
         position:absolute;
-        top:34px;
-        left:66px;
+        top:28px;
+        left:48px;
         margin:0;
         z-index:45;
     }
@@ -3834,7 +3834,7 @@
         grid-template-columns:180px minmax(0,1fr);
         gap:26px;
         align-items:end;
-        margin:-88px 24px 0;
+        margin:-112px 48px 0;
     }
 
     .show-page-hero-poster{
@@ -4071,24 +4071,25 @@
 
     @media (max-width:767.98px){
         .show-page-hero-shell{
-            padding:12px 24px 0;
+            padding:0;
         }
 
         .show-page-hero{
-            min-height:220px;
-            border-radius:22px;
+            min-height:260px;
+            border-radius:0;
+            background-position:center top;
         }
 
         .show-page-back-button{
-            top:24px;
-            left:36px;
+            top:18px;
+            left:24px;
         }
 
         .show-page-identity-row{
             grid-template-columns:112px minmax(0,1fr);
             gap:14px;
             align-items:end;
-            margin:-54px 12px 0;
+            margin:-64px 24px 0;
         }
 
         .show-page-hero-poster{
@@ -4152,13 +4153,13 @@
 
     @media (max-width:419.98px){
         .show-page-hero{
-            min-height:190px;
+            min-height:230px;
         }
 
         .show-page-identity-row{
             grid-template-columns:96px minmax(0,1fr);
             gap:12px;
-            margin-top:-46px;
+            margin-top:-58px;
         }
 
         .show-page-hero-poster{

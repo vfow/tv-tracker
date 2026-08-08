@@ -3863,7 +3863,7 @@ function renderShowDetailsPage(show,options={}){
     ? `<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">${Number(show.tmdb_rating).toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
     const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, rgba(8,8,8,0.88) 0%, rgba(8,8,8,0.38) 52%, rgba(8,8,8,0.08) 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), linear-gradient(to right, #080808 0%, rgba(8,8,8,0.82) 8%, rgba(8,8,8,0.16) 26%, rgba(8,8,8,0.16) 74%, rgba(8,8,8,0.82) 92%, #080808 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
     : `linear-gradient(to top, #080808 0%, #141414 100%)`;
 
     selectedShowId = String(show.tmdb_id);
