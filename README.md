@@ -6,7 +6,7 @@ Private, single-admin TV tracking website built with Flask, PostgreSQL, TMDB, an
 
 - Tracks Watching, Paused, Completed, Plan To Watch, and Dropped shows.
 - Stores watched episodes, progress, history, favourites, notes, profile details, posters, backdrops, and imported metadata in PostgreSQL.
-- Uses TMDB for search, show and episode metadata, artwork, cast and crew, trailers, alternative titles, recommendations, similar shows, and Where to Watch.
+- Uses TMDB for search, show and episode metadata, artwork, cast and crew, trailers, alternative titles, similar shows, and Where to Watch.
 - Keeps the TMDB API key on the Flask server. It is never sent to the browser or placed in a URL.
 - Supports native App Backup JSON export/import and compatible external JSON/CSV imports.
 - Uses revision-based optimistic synchronization for multiple tabs and devices.

@@ -3377,7 +3377,7 @@ function renderDiscoverPreviewSeasonsHTML(show){
 
                 ${
                 isOpen
-                ? `<div class="season-episodes collapse-content">${renderV2SeasonOverviewHTML(show,season)}${renderDiscoverPreviewEpisodesHTML(show,season,episodeList)}</div>`
+                ? `<div class="season-episodes collapse-content">${renderDiscoverPreviewEpisodesHTML(show,season,episodeList)}</div>`
                 : ""
                 }
 
@@ -3678,7 +3678,65 @@ function renderProviderNamesForCountry(providerInfo){
 }
 
 function renderShowReleasesTabHTML(show){
-    return renderV2WatchProvidersHTML(show) || `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
+    const region = v2GetWatchRegion();
+    const providers = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
+    ? show._tmdb_watch_providers.results[region]
+    : null;
+
+    if(!providers){
+        return `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
+    }
+
+    const groups = [
+        renderV2ProvidersGroup("Streaming",providers.flatrate),
+        renderV2ProvidersGroup("Rent",providers.rent),
+        renderV2ProvidersGroup("Buy",providers.buy)
+    ].filter(Boolean).join("");
+
+    return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
+}
+
+function getShowInfoActiveTab(show){
+    const id = String(show && show.tmdb_id ? show.tmdb_id : selectedShowId || "");
+    const tab = activeShowInfoTabs && activeShowInfoTabs[id] ? activeShowInfoTabs[id] : "Cast";
+    return ["Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Cast";
+}
+
+function renderShowInfoSubTabsHTML(show){
+    const activeTab = getShowInfoActiveTab(show);
+    return `
+        <div class="show-info-subtabs" role="tablist" aria-label="Show info sections">
+            ${["Cast","Crew","Details","Genres","Releases"].map(tab=>`
+                <button type="button" class="show-info-subtab ${activeTab === tab ? "active" : ""}" data-show-info-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
+            `).join("")}
+        </div>
+    `;
+}
+
+function renderShowCastTabHTML(show){
+    const cast = Array.isArray(show && show._tmdb_cast) ? show._tmdb_cast : [];
+    const rows = renderV2ActorListHTML(cast,null);
+
+    return rows ? `<div class="v2-actor-list show-info-actor-list">${rows}</div>` : `<div class="v2-api-empty">No cast details available yet.</div>`;
+}
+
+function renderShowInfoSubTabContentHTML(show){
+    const activeTab = getShowInfoActiveTab(show);
+
+    if(activeTab === "Crew"){
+        return renderShowCrewTabHTML(show);
+    }
+    if(activeTab === "Details"){
+        return renderShowDetailsTabHTML(show);
+    }
+    if(activeTab === "Genres"){
+        return renderShowGenresTabHTML(show);
+    }
+    if(activeTab === "Releases"){
+        return renderShowReleasesTabHTML(show);
+    }
+
+    return renderShowCastTabHTML(show);
 }
 
 function getShowProgressSummary(show){
@@ -3709,15 +3767,15 @@ function renderShowProgressHTML(show){
 
 function renderShowInfoTabHTML(show){
     return `
-        <div class="show-info-tab-grid">
-            <div class="show-info-card show-info-overview-card">
+        <div class="show-info-tab-stack">
+            <section class="show-info-synopsis-section">
                 <h3 class="modal-section-heading">Synopsis</h3>
                 <div class="modal-overview">${escapeHTML(show.overview || "No overview available.")}</div>
-            </div>
-            <div class="show-info-card show-info-details-card">
-                <h3 class="modal-section-heading">Details</h3>
-                ${renderShowDetailsTabHTML(show)}
-            </div>
+            </section>
+            <section class="show-info-extra-section">
+                ${renderShowInfoSubTabsHTML(show)}
+                <div class="show-info-subtab-panel">${renderShowInfoSubTabContentHTML(show)}</div>
+            </section>
         </div>
     `;
 }
@@ -3739,31 +3797,6 @@ function renderShowDetailTabContentHTML(show){
     }
 
     return renderShowInfoTabHTML(show);
-}
-
-function renderV2RelatedShowsHTML(show){
-    const recommendations = Array.isArray(show && show._tmdb_recommendations) ? show._tmdb_recommendations : [];
-    const similar = Array.isArray(show && show._tmdb_similar) ? show._tmdb_similar : [];
-    const source = recommendations.length ? recommendations : similar;
-
-    if(!source.length){
-        return "";
-    }
-
-    const cards = source.slice(0,10).map(item=>{
-        const poster = item.poster_path
-        ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
-        : `<div class="poster-placeholder">TV</div>`;
-
-        return `
-            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}">
-                <div class="v2-similar-poster">${poster}</div>
-                <div class="v2-similar-title">${escapeHTML(item.name || "Untitled")}</div>
-            </button>
-        `;
-    }).join("");
-
-    return renderV2RailSectionHTML("Related Shows",cards,"v2-more-like-section v2-related-section");
 }
 
 function renderShowDetailsPage(show,options={}){
@@ -3815,7 +3848,6 @@ function renderShowDetailsPage(show,options={}){
                     <div class="show-detail-tab-panel">${renderShowDetailTabContentHTML(show)}</div>
                 </div>
 
-                ${renderV2RelatedShowsHTML(show)}
                 ${renderV2SimilarShowsHTML(show)}
             </div>
         </div>
@@ -3867,6 +3899,13 @@ function attachShowDetailsPageEvents(show,isTracked){
     document.querySelectorAll(".show-detail-tab").forEach(button=>{
         button.addEventListener("click",function(){
             activeShowDetailsTabs[String(show.tmdb_id)] = this.dataset.showDetailTab || "Info";
+            renderShowDetailsPagePreservingScroll(show);
+        });
+    });
+
+    document.querySelectorAll(".show-info-subtab").forEach(button=>{
+        button.addEventListener("click",function(){
+            activeShowInfoTabs[String(show.tmdb_id)] = this.dataset.showInfoTab || "Cast";
             renderShowDetailsPagePreservingScroll(show);
         });
     });

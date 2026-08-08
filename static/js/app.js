@@ -35,6 +35,7 @@ var showDetailScrollTopBeforeEpisode = 0;
 var showDetailScrollRestorePending = false;
 var appDataReady = false;
 var activeShowDetailsTabs = {};
+var activeShowInfoTabs = {};
 var expandedSeasons = {};
 var expandedUpcomingBatches = {};
 var searchTimer = null;
@@ -2261,7 +2262,6 @@ function applyV2TMDBDetails(show,details){
     show._tmdb_videos = normalizeTMDBVideos(details.videos);
     show._tmdb_keywords = normalizeTMDBKeywords(details.keywords);
     show._tmdb_watch_providers = details["watch/providers"] || show._tmdb_watch_providers || null;
-    show._tmdb_recommendations = normalizeTMDBSimilarShows(details.recommendations,10);
     show._tmdb_similar = normalizeTMDBSimilarShows(details.similar,10);
     show._tmdb_cast = normalizeTMDBAggregateCast(details.aggregate_credits);
     show._tmdb_crew = normalizeTMDBAggregateCrew(details.aggregate_credits);
@@ -2511,7 +2511,6 @@ function createShowObject(details,status){
         _tmdb_external_ids:null,
         _tmdb_videos:[],
         _tmdb_keywords:[],
-        _tmdb_recommendations:[],
         _tmdb_similar:[],
         _tmdb_content_ratings:[],
         _tmdb_alternative_titles:[],
@@ -3909,6 +3908,7 @@ async function openShowDetailsPage(showId,options={}){
         showDetailScrollRestorePending = true;
     }else{
         activeShowDetailsTabs[id] = "Info";
+        activeShowInfoTabs[id] = "Cast";
     }
 
     selectedEpisodeContext = null;

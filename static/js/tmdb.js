@@ -7,7 +7,6 @@ const TMDB_SHOW_APPEND_TO_RESPONSE = [
     "videos",
     "content_ratings",
     "watch/providers",
-    "recommendations",
     "similar",
     "aggregate_credits",
     "alternative_titles"
@@ -405,16 +404,6 @@ async function tmdbGetExternalIds(showId){
     return await tmdbFetchJSON("tv/" + encodeURIComponent(String(showId)) + "/external_ids");
 }
 
-
-async function tmdbGetShowRecommendations(showId,page=1,options={}){
-    const data = await tmdbFetchJSON(
-        "tv/" + encodeURIComponent(String(showId)) + "/recommendations",
-        {page:Math.max(1,Number(page || 1))},
-        options
-    );
-
-    return data;
-}
 
 async function tmdbGetSimilarShows(showId,page=1,options={}){
     const data = await tmdbFetchJSON(
