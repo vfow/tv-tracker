@@ -3863,7 +3863,7 @@ function renderShowDetailsPage(show,options={}){
     ? `<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">${Number(show.tmdb_rating).toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
     const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), linear-gradient(to right, #080808 0%, rgba(8,8,8,0.82) 8%, rgba(8,8,8,0.16) 26%, rgba(8,8,8,0.16) 74%, rgba(8,8,8,0.82) 92%, #080808 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
     : `linear-gradient(to top, #080808 0%, #141414 100%)`;
 
     selectedShowId = String(show.tmdb_id);
@@ -6297,7 +6297,7 @@ function renderProfileHomeView(profile,stats){
             : `<div class="profile-favorite-placeholder">📺</div>`;
 
             favoriteSlotsHTML += `
-                <button class="profile-favorite-slot filled" data-favorite-action="edit">
+                <button class="profile-favorite-slot filled" type="button" data-favorite-action="open" data-favorite-show-id="${escapeHTML(show.tmdb_id)}" aria-label="Open ${escapeHTML(show.title || "favorite show")}">
                     ${posterHTML}
                 </button>
             `;
@@ -6305,7 +6305,7 @@ function renderProfileHomeView(profile,stats){
         }else{
 
             favoriteSlotsHTML += `
-                <button class="profile-favorite-slot empty" data-favorite-action="edit">
+                <button class="profile-favorite-slot empty" type="button" data-favorite-action="edit" aria-label="Add favorite show">
                     +
                 </button>
             `;
@@ -6387,6 +6387,17 @@ function renderProfileHomeView(profile,stats){
 
         button.addEventListener("click",function(){
             openFavoritesPopup();
+        });
+
+    });
+
+    document.querySelectorAll("[data-favorite-action='open']").forEach(button=>{
+
+        button.addEventListener("click",function(){
+            const showId = this.dataset.favoriteShowId || "";
+            if(showId && typeof openShowDetailsPage === "function"){
+                openShowDetailsPage(showId);
+            }
         });
 
     });
