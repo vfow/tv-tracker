@@ -4488,3 +4488,103 @@
     }
 
 }
+
+@layer components{
+    .person-detail-layout{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) 280px;
+        gap:2rem;
+        align-items:start;
+    }
+
+    .person-detail-main{
+        min-width:0;
+    }
+
+    .person-detail-layout .person-detail-header{
+        display:block;
+    }
+
+    .person-detail-layout .person-profile-panel{
+        border:0;
+        background:transparent;
+        padding:0;
+        border-radius:0;
+    }
+
+    .person-profile-bio-wrap{
+        margin-top:.75rem;
+    }
+
+    .person-profile-bio-text{
+        margin:0;
+        font-size:.875rem;
+        line-height:1.55;
+        color:#cfcfcf;
+    }
+
+    .person-profile-bio-wrap.is-collapsed .person-profile-bio-text{
+        display:-webkit-box;
+        -webkit-line-clamp:4;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
+    }
+
+    .person-bio-more-button,
+    .show-detail-theme-more-button{
+        margin-top:.35rem;
+        border:0;
+        background:transparent;
+        padding:0;
+        color:#d6b56d;
+        font:inherit;
+        font-size:.8125rem;
+        font-weight:700;
+        cursor:pointer;
+    }
+
+    .person-bio-more-button:hover,
+    .person-bio-more-button:focus-visible,
+    .show-detail-theme-more-button:hover,
+    .show-detail-theme-more-button:focus-visible{
+        color:#ffffff;
+        outline:0;
+    }
+
+    .show-detail-theme-link{
+        text-decoration:none;
+        transition:border-color .15s ease, color .15s ease, background .15s ease;
+    }
+
+    .show-detail-theme-link:hover,
+    .show-detail-theme-link:focus-visible{
+        border-color:rgba(214,181,109,.5);
+        background:rgba(214,181,109,.08);
+        color:#ffffff;
+        outline:0;
+        text-decoration:none;
+    }
+
+    .show-detail-theme-extra-list{
+        display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        gap:.35rem;
+        margin-top:.55rem;
+    }
+
+    .show-detail-theme-extra-list[hidden]{
+        display:none;
+    }
+
+    .show-detail-theme-list-item{
+        width:max-content;
+        max-width:100%;
+    }
+
+    @media (max-width:900px){
+        .person-detail-layout{
+            grid-template-columns:1fr;
+        }
+    }
+}

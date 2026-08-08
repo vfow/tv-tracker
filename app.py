@@ -50,6 +50,7 @@ APP_GENRE_PATH_RE = re.compile(r"^/app/genre/[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_NETWORK_PATH_RE = re.compile(r"^/app/network/[1-9][0-9]{0,11}$")
 APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}$")
 APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}$")
+APP_THEME_PATH_RE = re.compile(r"^/app/theme/[1-9][0-9]{0,11}$")
 APP_PERSON_ROLE_SLUGS = {
     "actor",
     "creator",
@@ -1471,6 +1472,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_COUNTRY_PATH_RE.fullmatch(candidate):
         return candidate
+    if APP_THEME_PATH_RE.fullmatch(candidate):
+        return candidate
     return "/app/watchlist"
 
 
@@ -1485,6 +1488,7 @@ def valid_app_path(value: str | None) -> bool:
         or APP_NETWORK_PATH_RE.fullmatch(candidate) is not None
         or APP_LANGUAGE_PATH_RE.fullmatch(candidate) is not None
         or APP_COUNTRY_PATH_RE.fullmatch(candidate) is not None
+        or APP_THEME_PATH_RE.fullmatch(candidate) is not None
     )
 
 
@@ -1742,6 +1746,17 @@ def create_app() -> Flask:
     def app_country_page(country_code: str):
         requested_path = request.path.rstrip("/")
         if APP_COUNTRY_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+
+    @app.get("/app/theme/<int:theme_id>", strict_slashes=False)
+    @login_required
+    def app_theme_page(theme_id: int):
+        requested_path = request.path.rstrip("/")
+        if theme_id <= 0 or APP_THEME_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)

@@ -176,7 +176,7 @@
                 return;
             }
 
-            const discoveryMatch = route.match(/^\/app\/(network\/[1-9][0-9]{0,11}|language\/[a-z]{2,3}|country\/[a-z]{2})$/);
+            const discoveryMatch = route.match(/^\/app\/(network\/[1-9][0-9]{0,11}|language\/[a-z]{2,3}|country\/[a-z]{2}|theme\/[1-9][0-9]{0,11})$/);
             if(discoveryMatch){
                 const parts = discoveryMatch[1].split("/");
                 const routeDiscoveryType = parts[0];

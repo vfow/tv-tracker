@@ -18,6 +18,7 @@ def load_route_helpers():
         "APP_NETWORK_PATH_RE",
         "APP_LANGUAGE_PATH_RE",
         "APP_COUNTRY_PATH_RE",
+        "APP_THEME_PATH_RE",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -68,6 +69,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertTrue(valid_app_path("/app/network/213"))
         self.assertTrue(valid_app_path("/app/language/ja"))
         self.assertTrue(valid_app_path("/app/country/jp"))
+        self.assertTrue(valid_app_path("/app/theme/1234"))
         self.assertEqual(
             safe_next_url("/app/show/1399/season/1/episode/3"),
             "/app/show/1399/season/1/episode/3",
@@ -84,6 +86,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/network/213"), "/app/network/213")
         self.assertEqual(safe_next_url("/app/language/ja"), "/app/language/ja")
         self.assertEqual(safe_next_url("/app/country/jp"), "/app/country/jp")
+        self.assertEqual(safe_next_url("/app/theme/1234"), "/app/theme/1234")
 
     def test_sensitive_or_external_destinations_are_rejected(self):
         for value in (
@@ -105,6 +108,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/language/japanese",
             "/app/country/",
             "/app/country/jpn",
+            "/app/theme/",
+            "/app/theme/0",
+            "/app/theme/not-a-number",
             "/app/show/1399?status=watching",
         ):
             expected = (
@@ -130,6 +136,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/network/213/"), "/app/network/213")
         self.assertEqual(safe_next_url("/app/language/ja/"), "/app/language/ja")
         self.assertEqual(safe_next_url("/app/country/jp/"), "/app/country/jp")
+        self.assertEqual(safe_next_url("/app/theme/1234/"), "/app/theme/1234")
 
 
 if __name__ == "__main__":

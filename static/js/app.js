@@ -107,7 +107,7 @@ const TMDB_TV_GENRE_CACHE_KEY = "tv-tracker-tmdb-tv-genres:v1";
 const TMDB_TV_GENRE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
 const DISCOVERY_GRID_PAGE_SIZE = 21;
 const GENRE_PAGE_SORTS = new Set(["popularity.desc","vote_average.desc","first_air_date.desc"]);
-const DISCOVERY_PAGE_TYPES = new Set(["network","language","country"]);
+const DISCOVERY_PAGE_TYPES = new Set(["network","language","country","theme"]);
 const PERSON_MEDIA_TYPES = new Set(["tv","movie"]);
 const PERSON_ROLE_CONFIGS = {
     actor:{label:"Actor",titleTV:"Shows starring",titleMovie:"Movies starring",source:"cast"},
@@ -1925,17 +1925,31 @@ function normalizeTMDBKeywords(keywords){
     const results = keywords && Array.isArray(keywords.results)
     ? keywords.results
     : (keywords && Array.isArray(keywords.keywords) ? keywords.keywords : (Array.isArray(keywords) ? keywords : []));
+    const seen = new Set();
 
     return results
     .map(keyword=>{
         if(typeof keyword === "string"){
-            return keyword.trim();
+            const name = keyword.trim();
+            return name ? {id:0,name:name} : null;
         }
-        return keyword && keyword.name ? String(keyword.name).trim() : "";
+        if(!keyword){
+            return null;
+        }
+        const name = String(keyword.name || "").trim();
+        const id = Number(keyword.id || 0);
+        return name ? {id:Number.isFinite(id) ? id : 0,name:name} : null;
     })
     .filter(Boolean)
-    .filter((keyword,index,list)=>list.findIndex(item=>item.toLowerCase() === keyword.toLowerCase()) === index)
-    .slice(0,12);
+    .filter(keyword=>{
+        const key = keyword.id > 0 ? `id:${keyword.id}` : `name:${keyword.name.toLowerCase()}`;
+        if(seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    })
+    .slice(0,20);
 }
 
 function normalizeTMDBSimilarShows(similar,limit=10){
@@ -2347,6 +2361,9 @@ function applyV2TMDBDetails(show,details){
     }
     if(normalizedKeywords.length){
         show._v2_keywords_loaded_at = new Date().toISOString();
+        if(normalizedKeywords.some(keyword=>keyword && Number(keyword.id || 0) > 0)){
+            show._v2_keyword_ids_loaded_at = new Date().toISOString();
+        }
     }
     show._tmdb_watch_providers = details["watch/providers"] || show._tmdb_watch_providers || null;
     show._tmdb_similar = normalizeTMDBSimilarShows(details.similar,10);
@@ -2429,11 +2446,14 @@ async function ensureShowV2Keywords(show,{skipSave=false}={}){
         return false;
     }
 
-    if(Array.isArray(show._tmdb_keywords) && show._tmdb_keywords.length){
+    const existingKeywords = Array.isArray(show._tmdb_keywords) ? show._tmdb_keywords : [];
+    const hasClickableKeywords = existingKeywords.some(keyword=>keyword && typeof keyword === "object" && Number(keyword.id || 0) > 0 && keyword.name);
+
+    if(hasClickableKeywords){
         return false;
     }
 
-    if(show._v2_keywords_loaded_at){
+    if(show._v2_keyword_ids_loaded_at){
         return false;
     }
 
@@ -2444,6 +2464,7 @@ async function ensureShowV2Keywords(show,{skipSave=false}={}){
     const payload = await tmdbGetShowKeywords(show.tmdb_id);
     show._tmdb_keywords = normalizeTMDBKeywords(payload);
     show._v2_keywords_loaded_at = new Date().toISOString();
+    show._v2_keyword_ids_loaded_at = new Date().toISOString();
 
     if(!skipSave){
         await saveData({showIds:[String(show.tmdb_id)]});
@@ -3916,7 +3937,7 @@ function normalizeCountryCode(code){
 
 function normalizeDiscoveryFilterValue(type,value){
     const cleanType = normalizeDiscoveryFilterType(type);
-    if(cleanType === "network"){
+    if(cleanType === "network" || cleanType === "theme"){
         const clean = String(value || "").trim();
         return /^[1-9][0-9]{0,11}$/.test(clean) ? clean : "";
     }
@@ -3975,11 +3996,18 @@ function getDiscoveryFilterFallbackName(type,value){
     if(cleanType === "network"){
         return cleanValue ? `Shows from Network ${cleanValue}` : "Network Shows";
     }
+    if(cleanType === "theme"){
+        return cleanValue ? `Shows about Theme ${cleanValue}` : "Theme Shows";
+    }
     return "TV Shows";
 }
 
 async function tmdbGetNetworkDetails(networkId){
     return await tmdbFetchJSON("network/" + encodeURIComponent(String(networkId)));
+}
+
+async function tmdbGetKeywordDetails(keywordId){
+    return await tmdbFetchJSON("keyword/" + encodeURIComponent(String(keywordId)));
 }
 
 function normalizePersonRoleSlug(role){
@@ -4288,6 +4316,17 @@ function attachPersonDetailPageEvents(){
             }
         });
     }
+
+    document.querySelectorAll(".person-bio-more-button").forEach(button=>{
+        button.addEventListener("click",function(){
+            const wrap = this.closest(".person-profile-bio-wrap");
+            if(wrap){
+                wrap.classList.remove("is-collapsed");
+                wrap.classList.add("is-expanded");
+            }
+            this.remove();
+        });
+    });
 
     document.querySelectorAll(".person-result-card[data-media-id]").forEach(card=>{
         card.addEventListener("click",async function(){
@@ -4683,6 +4722,8 @@ function buildDiscoveryFilterRequest(type,value,filters,page){
         params.with_original_language = cleanValue;
     }else if(cleanType === "country"){
         params.with_origin_country = cleanValue.toUpperCase();
+    }else if(cleanType === "theme"){
+        params.with_keywords = cleanValue;
     }
 
     if(filters.year){
@@ -4710,6 +4751,18 @@ async function resolveDiscoveryFilterPageName(type,value,existingName=""){
             const network = await tmdbGetNetworkDetails(cleanValue);
             if(network && network.name){
                 return `Shows from ${network.name}`;
+            }
+        }catch(error){}
+    }
+
+    if(cleanType === "theme"){
+        if(supplied && !/^Shows about Theme \d+$/i.test(supplied)){
+            return supplied;
+        }
+        try{
+            const keyword = await tmdbGetKeywordDetails(cleanValue);
+            if(keyword && keyword.name){
+                return `Shows about ${keyword.name}`;
             }
         }catch(error){}
     }

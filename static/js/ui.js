@@ -696,6 +696,70 @@ function renderSearchResults(shows){
 
 
 
+function getShowDetailFilters(){
+    const filters = window.TVTrackerShowDetailFilters || {};
+    const normalizeList = function(value){
+        return Array.isArray(value)
+        ? value.map(item=>String(item || "").trim().toLowerCase()).filter(Boolean)
+        : [];
+    };
+
+    return {
+        hiddenAlternativeTitleCountries:normalizeList(filters.hiddenAlternativeTitleCountries),
+        hiddenAlternativeTitleNames:normalizeList(filters.hiddenAlternativeTitleNames)
+    };
+}
+
+function alternativeTitleCountryMatchesFilter(item,hiddenCountries){
+    const code = String(item && item.iso_3166_1 ? item.iso_3166_1 : "").trim().toLowerCase();
+    const countryName = code ? getCountryName(code).toLowerCase() : "";
+    const countryLabel = code ? getCountryLabel(code).toLowerCase() : "";
+
+    return hiddenCountries.some(hidden=>{
+        return hidden === code || hidden === countryName || countryLabel.includes(hidden);
+    });
+}
+
+function normalizeThemeItems(show){
+    const source = Array.isArray(show && show._tmdb_keywords) ? show._tmdb_keywords : [];
+    const seen = new Set();
+
+    return source.map(theme=>{
+        if(typeof theme === "string"){
+            const name = theme.trim();
+            return name ? {id:0,name:name} : null;
+        }
+        if(!theme){
+            return null;
+        }
+        const name = String(theme.name || "").trim();
+        const id = Number(theme.id || 0);
+        return name ? {id:Number.isFinite(id) ? id : 0,name:name} : null;
+    })
+    .filter(Boolean)
+    .filter(theme=>{
+        const key = theme.id > 0 ? `id:${theme.id}` : `name:${theme.name.toLowerCase()}`;
+        if(seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
+function renderThemeItemHTML(theme,extraClass=""){
+    const id = Number(theme && theme.id || 0);
+    const name = String(theme && theme.name || "").trim();
+    if(!name){
+        return "";
+    }
+    if(id > 0){
+        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("theme",id) : "";
+        return `<a class="show-detail-theme-chip show-detail-theme-link ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-discovery-type="theme" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows about ${name}`)}">${escapeHTML(name)}</a>`;
+    }
+    return `<span class="show-detail-theme-chip ${escapeHTML(extraClass)}">${escapeHTML(name)}</span>`;
+}
+
 function renderGenrePosterGridCard(show){
     const posterHTML = show && show.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML((show.name || "Show") + " poster")}">`
@@ -722,23 +786,20 @@ function renderGenrePosterGridCard(show){
 }
 
 function renderPersonProfileHTML(person,role){
-    const config = typeof getPersonRoleConfig === "function" ? getPersonRoleConfig(role) : null;
-    const roleLabel = config && config.label ? config.label : "Person";
     const photo = person && person.profile_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"h632"))}" alt="${escapeHTML((person.name || "Person") + " photo")}">`
     : `<div class="person-profile-placeholder">NO PHOTO</div>`;
     const biography = person && person.biography ? String(person.biography).trim() : "";
-    const facts = [
-        person && person.known_for_department ? person.known_for_department : roleLabel,
-        person && person.birthday ? `Born ${person.birthday}` : "",
-        person && person.place_of_birth ? person.place_of_birth : ""
-    ].filter(Boolean);
+    const hasLongBio = biography.length > 260;
+
     return `
         <aside class="person-profile-panel" aria-label="Person details">
             <div class="person-profile-photo">${photo}</div>
             <div class="person-profile-name">${escapeHTML(person && person.name || "Unknown Person")}</div>
-            ${facts.length ? `<div class="person-profile-facts">${facts.map(item=>`<span>${escapeHTML(item)}</span>`).join("")}</div>` : ""}
-            <p class="person-profile-bio">${escapeHTML(biography || "No biography available yet.")}</p>
+            <div class="person-profile-bio-wrap ${hasLongBio ? "is-collapsed" : ""}">
+                <p class="person-profile-bio-text">${escapeHTML(biography || "No biography available yet.")}</p>
+                ${hasLongBio ? `<button type="button" class="person-bio-more-button">more</button>` : ""}
+            </div>
         </aside>
     `;
 }
@@ -802,7 +863,7 @@ function renderPersonDetailPage(state){
     `
     : loading
     ? `
-        <div class="genre-tight-grid genre-tight-grid-loading">
+        <div class="genre-tight-grid genre-tight-grid-loading person-tight-grid">
             ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
         </div>
     `
@@ -815,31 +876,36 @@ function renderPersonDetailPage(state){
 
     content.innerHTML = `
         <div class="genre-detail-page-inner person-detail-page-inner">
-            <div class="genre-detail-header person-detail-header">
-                <div class="person-detail-title-area">
-                    <button type="button" class="show-page-back-button genre-page-back-button" id="person-page-back-button" aria-label="Back">
-                        <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-                    </button>
-                    <div>
-                        <div class="genre-detail-kicker">${escapeHTML(title)}</div>
-                        <h1 class="genre-detail-title person-detail-title">${escapeHTML(name)}</h1>
+            <div class="person-detail-layout">
+                <main class="person-detail-main">
+                    <div class="genre-detail-header person-detail-header">
+                        <div class="person-detail-title-area">
+                            <button type="button" class="show-page-back-button genre-page-back-button" id="person-page-back-button" aria-label="Back">
+                                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                            </button>
+                            <div>
+                                <div class="genre-detail-kicker">${escapeHTML(title)}</div>
+                                <h1 class="genre-detail-title person-detail-title">${escapeHTML(name)}</h1>
+                            </div>
+                        </div>
                     </div>
-                </div>
+
+                    <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
+                        <label class="genre-filter-field" for="person-media-filter">
+                            <span>Media</span>
+                            <select id="person-media-filter">
+                                <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
+                                <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="genre-result-content person-result-content">
+                        ${bodyHTML}
+                    </div>
+                </main>
+
                 ${person ? renderPersonProfileHTML(person,role) : ""}
-            </div>
-
-            <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
-                <label class="genre-filter-field" for="person-media-filter">
-                    <span>Media</span>
-                    <select id="person-media-filter">
-                        <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
-                        <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
-                    </select>
-                </label>
-            </div>
-
-            <div class="genre-result-content person-result-content">
-                ${bodyHTML}
             </div>
         </div>
     `;
@@ -3147,14 +3213,21 @@ function renderShowCountryDetailsHTML(show){
 }
 
 function renderShowThemesDetailsHTML(show){
-    const themes = (Array.isArray(show && show._tmdb_keywords) ? show._tmdb_keywords : [])
-    .map(theme=>String(theme || "").trim())
-    .filter(Boolean)
-    .slice(0,12);
+    const themes = normalizeThemeItems(show).slice(0,20);
     if(!themes.length){
         return "Unknown";
     }
-    return `<div class="show-detail-theme-list">${themes.map(theme=>`<span>${escapeHTML(theme)}</span>`).join("")}</div>`;
+
+    const visibleThemes = themes.slice(0,4);
+    const hiddenThemes = themes.slice(4);
+
+    return `
+        <div class="show-detail-theme-list">
+            ${visibleThemes.map(theme=>renderThemeItemHTML(theme)).join("")}
+            ${hiddenThemes.length ? `<button type="button" class="show-detail-theme-more-button" data-show-themes-more>...more</button>` : ""}
+        </div>
+        ${hiddenThemes.length ? `<div class="show-detail-theme-extra-list" data-show-themes-extra hidden>${hiddenThemes.map(theme=>renderThemeItemHTML(theme,"show-detail-theme-list-item")).join("")}</div>` : ""}
+    `;
 }
 
 function renderShowNetworkDetailsHTML(show){
@@ -4202,10 +4275,25 @@ function renderShowCrewTabHTML(show){
 
 function renderAlternativeTitlesForDetailsHTML(show){
     const titles = Array.isArray(show && show._tmdb_alternative_titles) ? show._tmdb_alternative_titles : [];
+    const filters = getShowDetailFilters();
+    const hiddenCountries = filters.hiddenAlternativeTitleCountries;
+    const hiddenTitleNames = filters.hiddenAlternativeTitleNames;
     const grouped = new Map();
 
     titles
-    .filter(item=>item && item.title)
+    .filter(item=>{
+        if(!item || !item.title){
+            return false;
+        }
+        const titleName = String(item.title || "").trim().toLowerCase();
+        if(hiddenTitleNames.includes(titleName)){
+            return false;
+        }
+        if(alternativeTitleCountryMatchesFilter(item,hiddenCountries)){
+            return false;
+        }
+        return true;
+    })
     .slice(0,12)
     .forEach(item=>{
         const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "Other";
@@ -4530,7 +4618,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".show-detail-entity-link[data-discovery-type][data-discovery-value]").forEach(link=>{
+    document.querySelectorAll("[data-discovery-type][data-discovery-value]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openDiscoveryFilterPage !== "function"){
                 return;
@@ -4538,6 +4626,17 @@ function attachShowDetailsPageEvents(show,isTracked){
             event.preventDefault();
             event.stopPropagation();
             openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || ""});
+        });
+    });
+
+    document.querySelectorAll("[data-show-themes-more]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const value = this.closest(".episode-detail-value") || this.parentElement;
+            const extra = value && value.querySelector ? value.querySelector("[data-show-themes-extra]") : null;
+            if(extra){
+                extra.hidden = false;
+            }
+            this.remove();
         });
     });
 

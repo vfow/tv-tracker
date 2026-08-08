@@ -109,6 +109,16 @@ function createRouter(pathname){
   assert.strictEqual(call[3].fromRoute,true);
 }
 
+
+{
+  const {calls,router}=createRouter('/app/theme/1234');
+  assert.strictEqual(router.currentRoute(),'/app/theme/1234');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'theme route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
+  assert.strictEqual(call[3].fromRoute,true);
+}
+
 {
   const {calls,router}=createRouter('/app/actor/123');
   assert.strictEqual(router.currentRoute(),'/app/actor/123');
