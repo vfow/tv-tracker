@@ -29,6 +29,16 @@ var discoverPreviewShow = null;
 var selectedShowId = null;
 var selectedEpisodeContext = null;
 var selectedGenreSlug = null;
+var selectedPersonContext = null;
+var personPageState = {
+    role:"",
+    personId:"",
+    media:"tv",
+    loading:false,
+    error:"",
+    person:null,
+    credits:[]
+};
 var genrePageState = {
     slug:"",
     name:"",
@@ -83,6 +93,17 @@ const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const TMDB_TV_GENRE_CACHE_KEY = "tv-tracker-tmdb-tv-genres:v1";
 const TMDB_TV_GENRE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
 const GENRE_PAGE_SORTS = new Set(["popularity.desc","vote_average.desc","first_air_date.desc"]);
+const PERSON_MEDIA_TYPES = new Set(["tv","movie"]);
+const PERSON_ROLE_CONFIGS = {
+    actor:{label:"Actor",titleTV:"Shows starring",titleMovie:"Movies starring",source:"cast"},
+    creator:{label:"Creator",titleTV:"Shows created by",titleMovie:"Movies created by",jobs:["creator","created by"]},
+    director:{label:"Director",titleTV:"Shows directed by",titleMovie:"Movies directed by",jobs:["director"]},
+    writer:{label:"Writer",titleTV:"Shows written by",titleMovie:"Movies written by",jobs:["writer","screenplay","teleplay","story"]},
+    producer:{label:"Producer",titleTV:"Shows produced by",titleMovie:"Movies produced by",jobs:["producer"]},
+    editor:{label:"Editor",titleTV:"Shows edited by",titleMovie:"Movies edited by",jobs:["editor"]},
+    composer:{label:"Composer",titleTV:"Shows composed by",titleMovie:"Movies composed by",jobs:["composer","music"]},
+    cinematographer:{label:"Cinematographer",titleTV:"Shows shot by",titleMovie:"Movies shot by",jobs:["cinematographer","cinematography","director of photography"]}
+};
 
 
 
@@ -933,6 +954,16 @@ function setupEvents(){
         if(event.key === "Escape" && selectedEpisodeContext){
             closeEpisodeDetailsPage();
         }
+    });
+
+    document.addEventListener("click",function(event){
+        const link = event.target && event.target.closest ? event.target.closest(".v2-person-link[data-person-role][data-person-id]") : null;
+        if(!link || typeof openPersonPage !== "function"){
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        openPersonPage(link.dataset.personRole,link.dataset.personId);
     });
 
 
@@ -3799,6 +3830,336 @@ function getGenreDetailRoute(slug){
     return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanSlug) : "/app/watchlist";
 }
 
+function normalizePersonRoleSlug(role){
+    const clean = String(role || "").trim().toLowerCase().replace(/[^a-z]/g,"");
+    return PERSON_ROLE_CONFIGS[clean] ? clean : "";
+}
+
+function getPersonRoleConfig(role){
+    const clean = normalizePersonRoleSlug(role);
+    return clean ? PERSON_ROLE_CONFIGS[clean] : null;
+}
+
+function normalizePersonMediaType(media){
+    const clean = String(media || "tv").trim().toLowerCase();
+    return PERSON_MEDIA_TYPES.has(clean) ? clean : "tv";
+}
+
+function normalizePersonId(personId){
+    const clean = String(personId || "").trim();
+    return /^[1-9][0-9]{0,11}$/.test(clean) ? clean : "";
+}
+
+function getPersonDetailRoute(role,personId){
+    const cleanRole = normalizePersonRoleSlug(role);
+    const cleanId = normalizePersonId(personId);
+    return cleanRole && cleanId ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(cleanId)}` : "/app/watchlist";
+}
+
+function getPersonPageTitle(role,media){
+    const config = getPersonRoleConfig(role);
+    const cleanMedia = normalizePersonMediaType(media);
+
+    if(!config){
+        return cleanMedia === "movie" ? "Movies" : "Shows";
+    }
+
+    return cleanMedia === "movie" ? (config.titleMovie || "Movies") : (config.titleTV || "Shows");
+}
+
+function normalizePersonCreditJob(value){
+    return String(value || "").trim().toLowerCase();
+}
+
+function personCrewJobMatchesRole(credit,role){
+    const config = getPersonRoleConfig(role);
+    if(!config || !Array.isArray(config.jobs)){
+        return false;
+    }
+
+    const job = normalizePersonCreditJob(credit && credit.job);
+    const department = normalizePersonCreditJob(credit && credit.department);
+    const knownFor = normalizePersonCreditJob(credit && credit.known_for_department);
+    const joined = [job,department,knownFor].filter(Boolean).join(" ");
+
+    return config.jobs.some(pattern=>joined.includes(pattern));
+}
+
+function normalizePersonCreditItem(credit,media){
+    if(!credit || !credit.id){
+        return null;
+    }
+
+    const cleanMedia = normalizePersonMediaType(media || credit.media_type);
+    const title = cleanMedia === "movie"
+    ? (credit.title || credit.original_title || "Untitled")
+    : (credit.name || credit.original_name || "Untitled");
+    const date = cleanMedia === "movie"
+    ? (credit.release_date || "")
+    : (credit.first_air_date || "");
+
+    return {
+        id:Number(credit.id || 0),
+        media_type:cleanMedia,
+        title:title,
+        poster_path:credit.poster_path || "",
+        backdrop_path:credit.backdrop_path || "",
+        overview:credit.overview || "",
+        date:date,
+        first_air_date:cleanMedia === "tv" ? date : "",
+        release_date:cleanMedia === "movie" ? date : "",
+        vote_average:Number(credit.vote_average || 0),
+        popularity:Number(credit.popularity || 0),
+        character:credit.character || "",
+        job:credit.job || ""
+    };
+}
+
+function getPersonCreditsForRole(person,role,media){
+    const cleanRole = normalizePersonRoleSlug(role);
+    const cleanMedia = normalizePersonMediaType(media);
+    const combined = person && person.combined_credits ? person.combined_credits : {};
+    const source = cleanRole === "actor" ? combined.cast : combined.crew;
+    const seen = new Set();
+
+    return (Array.isArray(source) ? source : [])
+    .filter(credit=>{
+        if(!credit || String(credit.media_type || "") !== cleanMedia){
+            return false;
+        }
+        if(cleanRole === "actor"){
+            return true;
+        }
+        return personCrewJobMatchesRole(credit,cleanRole);
+    })
+    .map(credit=>normalizePersonCreditItem(credit,cleanMedia))
+    .filter(item=>{
+        if(!item){
+            return false;
+        }
+        const key = `${item.media_type}:${item.id}`;
+        if(seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    })
+    .sort((a,b)=>{
+        if(Number(b.popularity || 0) !== Number(a.popularity || 0)){
+            return Number(b.popularity || 0) - Number(a.popularity || 0);
+        }
+        return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+}
+
+function normalizePersonDetails(person){
+    if(!person || !person.id){
+        return null;
+    }
+
+    return {
+        id:Number(person.id || 0),
+        name:person.name || "Unknown Person",
+        biography:person.biography || "",
+        birthday:person.birthday || "",
+        deathday:person.deathday || "",
+        place_of_birth:person.place_of_birth || "",
+        profile_path:person.profile_path || "",
+        known_for_department:person.known_for_department || "",
+        homepage:person.homepage || "",
+        external_ids:person.external_ids || null,
+        combined_credits:person.combined_credits || {cast:[],crew:[]}
+    };
+}
+
+async function tmdbGetPersonDetailsWithCredits(personId){
+    return await tmdbFetchJSON(
+        "person/" + encodeURIComponent(String(personId)),
+        {append_to_response:"combined_credits,external_ids"}
+    );
+}
+
+function showPersonDetailPageShell(){
+    activePage = "person-detail";
+
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+
+    const pageElement = document.getElementById("person-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+        pageElement.scrollTop = 0;
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+function renderActivePersonPage(){
+    if(typeof renderPersonDetailPage === "function"){
+        renderPersonDetailPage(personPageState);
+        attachPersonDetailPageEvents();
+    }
+}
+
+async function loadPersonPageResults(){
+    const cleanRole = normalizePersonRoleSlug(personPageState && personPageState.role);
+    const cleanId = normalizePersonId(personPageState && personPageState.personId);
+    const media = normalizePersonMediaType(personPageState && personPageState.media);
+
+    if(!cleanRole || !cleanId){
+        personPageState.error = "Person not found.";
+        personPageState.loading = false;
+        renderActivePersonPage();
+        return;
+    }
+
+    personPageState.loading = true;
+    personPageState.error = "";
+    personPageState.credits = [];
+    renderActivePersonPage();
+
+    try{
+        const rawPerson = await tmdbGetPersonDetailsWithCredits(cleanId);
+        const person = normalizePersonDetails(rawPerson);
+
+        if(!person){
+            throw new Error("Person not found.");
+        }
+
+        personPageState = Object.assign({},personPageState,{
+            role:cleanRole,
+            personId:cleanId,
+            media:media,
+            person:person,
+            credits:getPersonCreditsForRole(person,cleanRole,media),
+            loading:false,
+            error:""
+        });
+
+        renderActivePersonPage();
+    }catch(error){
+        personPageState.loading = false;
+        personPageState.error = error && error.message ? error.message : "Could not load person.";
+        renderActivePersonPage();
+    }
+}
+
+async function openPersonPage(role,personId,options={}){
+    const cleanRole = normalizePersonRoleSlug(role);
+    const cleanId = normalizePersonId(personId);
+
+    if(!cleanRole || !cleanId){
+        return;
+    }
+
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    const media = normalizePersonMediaType(options && options.media || (personPageState && personPageState.media) || "tv");
+    const isSamePerson = activePage === "person-detail" &&
+    selectedPersonContext &&
+    String(selectedPersonContext.role || "") === cleanRole &&
+    String(selectedPersonContext.personId || "") === cleanId;
+
+    selectedPersonContext = {role:cleanRole,personId:cleanId};
+    selectedShowId = null;
+    selectedEpisodeContext = null;
+    selectedGenreSlug = null;
+    showDetailPreview = null;
+    discoverPreviewShow = null;
+
+    if(!isSamePerson){
+        personPageState = {
+            role:cleanRole,
+            personId:cleanId,
+            media:"tv",
+            loading:false,
+            error:"",
+            person:null,
+            credits:[]
+        };
+    }else{
+        personPageState.role = cleanRole;
+        personPageState.personId = cleanId;
+        personPageState.media = media;
+    }
+
+    showPersonDetailPageShell();
+
+    if(!fromRoute){
+        setAppHashRoute(getPersonDetailRoute(cleanRole,cleanId),replaceRoute);
+    }
+
+    if(!isSamePerson || !personPageState.person){
+        await loadPersonPageResults();
+    }else{
+        personPageState.credits = getPersonCreditsForRole(personPageState.person,cleanRole,personPageState.media);
+        renderActivePersonPage();
+    }
+}
+
+function attachPersonDetailPageEvents(){
+    const backButton = document.getElementById("person-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",function(){
+            if(window.history.length > 1){
+                window.history.back();
+            }else{
+                setAppHashRoute("/app/discover",false);
+                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+                    window.TVTrackerV2Router.applyRoute();
+                }else{
+                    showPage("discover");
+                }
+            }
+        });
+    }
+
+    const mediaSelect = document.getElementById("person-media-filter");
+    if(mediaSelect){
+        mediaSelect.addEventListener("change",function(){
+            personPageState.media = normalizePersonMediaType(this.value);
+            if(personPageState.person){
+                personPageState.credits = getPersonCreditsForRole(personPageState.person,personPageState.role,personPageState.media);
+                renderActivePersonPage();
+            }else{
+                loadPersonPageResults();
+            }
+        });
+    }
+
+    document.querySelectorAll(".person-result-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            const mediaType = normalizePersonMediaType(this.dataset.mediaType || "tv");
+            const mediaId = Number(this.dataset.mediaId || 0);
+
+            if(!mediaId){
+                return;
+            }
+
+            if(mediaType === "movie"){
+                window.open(`https://www.themoviedb.org/movie/${encodeURIComponent(String(mediaId))}`,"_blank","noopener,noreferrer");
+                return;
+            }
+
+            await openDiscoverShowModal({
+                id:mediaId,
+                name:this.dataset.mediaName || "",
+                poster_path:this.dataset.posterPath || "",
+                overview:this.dataset.overview || "",
+                first_air_date:this.dataset.firstAirDate || ""
+            });
+        });
+    });
+}
+
 function getGenreSortLabel(sort){
     if(sort === "vote_average.desc"){
         return "Rating";
@@ -4007,6 +4368,7 @@ async function openGenrePage(slug,options={}){
     selectedGenreSlug = cleanSlug;
     selectedShowId = null;
     selectedEpisodeContext = null;
+    selectedPersonContext = null;
     showDetailPreview = null;
     discoverPreviewShow = null;
 
@@ -4243,6 +4605,7 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     selectedEpisodeContext = null;
+    selectedPersonContext = null;
     selectedShowId = id;
     discoverPreviewShow = null;
 

@@ -14,6 +14,7 @@ def load_route_helpers():
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
+        "APP_PERSON_PATH_RE",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -59,6 +60,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertTrue(valid_app_path("/app/show/1399"))
         self.assertTrue(valid_app_path("/app/show/1399/season/0/episode/1"))
         self.assertTrue(valid_app_path("/app/genre/action-adventure"))
+        self.assertTrue(valid_app_path("/app/actor/123"))
+        self.assertTrue(valid_app_path("/app/cinematographer/456"))
         self.assertEqual(
             safe_next_url("/app/show/1399/season/1/episode/3"),
             "/app/show/1399/season/1/episode/3",
@@ -66,6 +69,11 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/genre/action-adventure"),
             "/app/genre/action-adventure",
+        )
+        self.assertEqual(safe_next_url("/app/actor/123"), "/app/actor/123")
+        self.assertEqual(
+            safe_next_url("/app/cinematographer/456"),
+            "/app/cinematographer/456",
         )
 
     def test_sensitive_or_external_destinations_are_rejected(self):
@@ -77,6 +85,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/show/not-a-number",
             "/app/genre/",
             "/app/genre/action--adventure",
+            "/app/actor/",
+            "/app/actor/not-a-number",
+            "/app/actor/0",
+            "/app/unknownrole/123",
             "/app/show/1399?status=watching",
         ):
             expected = (
@@ -98,6 +110,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/show/1399/season/1/episode/3",
         )
         self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/action-adventure")
+        self.assertEqual(safe_next_url("/app/actor/123/"), "/app/actor/123")
 
 
 if __name__ == "__main__":

@@ -4330,3 +4330,88 @@
     }
 
 }
+
+@layer components{
+    .person-detail-header{
+        @apply tw-grid tw-grid-cols-[minmax(0,1fr)_280px] tw-items-end tw-gap-8;
+    }
+
+    .person-detail-title-area{
+        @apply tw-flex tw-items-end tw-gap-5;
+    }
+
+    .person-profile-panel{
+        @apply tw-rounded-[18px] tw-border tw-border-solid tw-border-white/10 tw-bg-black/30 tw-p-4;
+    }
+
+    .person-profile-photo{
+        @apply tw-mb-4 tw-overflow-hidden tw-rounded-[12px] tw-bg-tt-control;
+        aspect-ratio:2 / 3;
+    }
+
+    .person-profile-photo img{
+        @apply tw-block tw-h-full tw-w-full tw-object-cover;
+    }
+
+    .person-profile-placeholder{
+        @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-font-league tw-text-[38px] tw-text-tt-dim;
+    }
+
+    .person-profile-name{
+        @apply tw-mb-2 tw-text-lg tw-font-bold tw-text-white;
+    }
+
+    .person-profile-facts{
+        @apply tw-mb-3 tw-flex tw-flex-col tw-gap-1 tw-text-xs tw-text-tt-controlText;
+    }
+
+    .person-profile-bio{
+        @apply tw-m-0 tw-text-sm tw-leading-relaxed tw-text-[#cfcfcf];
+    }
+
+    .person-profile-link{
+        @apply tw-mt-4 tw-inline-flex tw-rounded-full tw-border tw-border-solid tw-border-white/15 tw-px-4 tw-py-2 tw-text-xs tw-font-bold tw-uppercase tw-tracking-[.08em] tw-text-white tw-no-underline;
+    }
+
+    .person-profile-link:hover,
+    .person-profile-link:focus-visible{
+        @apply tw-border-white/35 tw-bg-white/10 tw-outline-none;
+    }
+
+    .v2-person-link{
+        @apply tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-bold tw-text-white tw-underline-offset-4 tw-transition;
+        font:inherit;
+        font-weight:700;
+    }
+
+    .v2-person-link:hover,
+    .v2-person-link:focus-visible{
+        @apply tw-text-tt-gold tw-outline-none;
+        text-decoration:underline;
+        text-shadow:0 0 14px rgba(255,255,255,.16);
+    }
+
+    .person-result-role{
+        @apply tw-mt-1 tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap tw-text-xs tw-text-[#9b9b9b];
+    }
+
+    @media (max-width:900px){
+        .person-detail-header{
+            @apply tw-grid-cols-1 tw-items-start;
+        }
+
+        .person-profile-panel{
+            @apply tw-w-full;
+        }
+
+        .person-profile-photo{
+            @apply tw-max-w-[180px];
+        }
+    }
+
+    @media (max-width:767.98px){
+        .person-detail-title-area{
+            @apply tw-items-start tw-gap-3;
+        }
+    }
+}

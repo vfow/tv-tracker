@@ -134,7 +134,8 @@ function updateShellTitle(){
         "episode-detail":selectedEpisodeContext
         ? `S${selectedEpisodeContext.season}E${String(selectedEpisodeContext.episode).padStart(2,"0")}`
         : "Episode",
-        "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre"
+        "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
+        "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person"
     };
 
     const showTabTitles = {
@@ -716,6 +717,138 @@ function renderGenrePosterGridCard(show){
             <div class="genre-result-title">${escapeHTML(show && show.name || "Untitled")}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
         </button>
+    `;
+}
+
+function renderPersonProfileHTML(person,role){
+    const config = typeof getPersonRoleConfig === "function" ? getPersonRoleConfig(role) : null;
+    const roleLabel = config && config.label ? config.label : "Person";
+    const photo = person && person.profile_path
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"h632"))}" alt="${escapeHTML((person.name || "Person") + " photo")}">`
+    : `<div class="person-profile-placeholder">NO PHOTO</div>`;
+    const biography = person && person.biography ? String(person.biography).trim() : "";
+    const facts = [
+        person && person.known_for_department ? person.known_for_department : roleLabel,
+        person && person.birthday ? `Born ${person.birthday}` : "",
+        person && person.place_of_birth ? person.place_of_birth : ""
+    ].filter(Boolean);
+    const tmdbURL = person && person.id ? `https://www.themoviedb.org/person/${encodeURIComponent(String(person.id))}` : "";
+
+    return `
+        <aside class="person-profile-panel" aria-label="Person details">
+            <div class="person-profile-photo">${photo}</div>
+            <div class="person-profile-name">${escapeHTML(person && person.name || "Unknown Person")}</div>
+            ${facts.length ? `<div class="person-profile-facts">${facts.map(item=>`<span>${escapeHTML(item)}</span>`).join("")}</div>` : ""}
+            <p class="person-profile-bio">${escapeHTML(biography || "No biography available yet.")}</p>
+            ${tmdbURL ? `<a class="person-profile-link" href="${escapeHTML(tmdbURL)}" target="_blank" rel="noopener noreferrer">View on TMDB</a>` : ""}
+        </aside>
+    `;
+}
+
+function renderPersonResultCard(item){
+    const mediaType = item && item.media_type === "movie" ? "movie" : "tv";
+    const posterHTML = item && item.poster_path
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML((item.title || "Title") + " poster")}">`
+    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    const year = item && item.date ? String(item.date).slice(0,4) : "Unknown";
+    const rating = Number(item && item.vote_average || 0);
+    const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+    const roleMeta = item && item.character ? item.character : (item && item.job ? item.job : "");
+
+    return `
+        <button
+        type="button"
+        class="genre-result-card person-result-card"
+        data-media-type="${escapeHTML(mediaType)}"
+        data-media-id="${escapeHTML(item && item.id)}"
+        data-media-name="${escapeHTML(item && item.title || "")}"
+        data-poster-path="${escapeHTML(item && item.poster_path || "")}"
+        data-overview="${escapeHTML(item && item.overview || "")}"
+        data-first-air-date="${escapeHTML(item && item.first_air_date || "")}">
+            <div class="genre-result-poster">${posterHTML}</div>
+            <div class="genre-result-title">${escapeHTML(item && item.title || "Untitled")}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+            ${roleMeta ? `<div class="person-result-role">${escapeHTML(roleMeta)}</div>` : ""}
+        </button>
+    `;
+}
+
+function renderPersonDetailPage(state){
+    const content = document.getElementById("person-detail-content");
+    if(!content){
+        return;
+    }
+
+    const pageState = state || {};
+    const role = typeof normalizePersonRoleSlug === "function" ? normalizePersonRoleSlug(pageState.role) : String(pageState.role || "actor");
+    const media = typeof normalizePersonMediaType === "function" ? normalizePersonMediaType(pageState.media) : "tv";
+    const person = pageState.person || null;
+    const credits = Array.isArray(pageState.credits) ? pageState.credits : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+    const title = typeof getPersonPageTitle === "function" ? getPersonPageTitle(role,media) : (media === "movie" ? "Movies" : "Shows");
+    const name = person && person.name ? person.name : "Person";
+
+    const bodyHTML = error
+    ? `
+        <div class="empty-state genre-detail-empty">
+            <h2>Person could not load</h2>
+            <p>${escapeHTML(error)}</p>
+        </div>
+    `
+    : credits.length
+    ? `
+        <div class="genre-tight-grid person-tight-grid">
+            ${credits.map(renderPersonResultCard).join("")}
+        </div>
+    `
+    : loading
+    ? `
+        <div class="genre-tight-grid genre-tight-grid-loading">
+            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+        </div>
+    `
+    : `
+        <div class="empty-state genre-detail-empty">
+            <h2>No ${media === "movie" ? "movies" : "shows"} found</h2>
+            <p>Try switching the media filter.</p>
+        </div>
+    `;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner person-detail-page-inner">
+            <div class="genre-detail-header person-detail-header">
+                <div class="person-detail-title-area">
+                    <button type="button" class="show-page-back-button genre-page-back-button" id="person-page-back-button" aria-label="Back">
+                        <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                    </button>
+                    <div>
+                        <div class="genre-detail-kicker">${escapeHTML(title)}</div>
+                        <h1 class="genre-detail-title person-detail-title">${escapeHTML(name)}</h1>
+                        <p class="genre-detail-subtitle">${escapeHTML(media === "movie" ? "Movie credits from TMDB." : "TV credits from TMDB.")}</p>
+                    </div>
+                </div>
+                ${person ? renderPersonProfileHTML(person,role) : ""}
+            </div>
+
+            <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
+                <label class="genre-filter-field" for="person-media-filter">
+                    <span>Media</span>
+                    <select id="person-media-filter">
+                        <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
+                        <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="genre-result-summary person-result-summary">
+                ${loading && !credits.length ? "Loading credits…" : `${credits.length} ${media === "movie" ? (credits.length === 1 ? "movie" : "movies") : (credits.length === 1 ? "show" : "shows")}`}
+            </div>
+
+            <div class="genre-result-content person-result-content">
+                ${bodyHTML}
+            </div>
+        </div>
     `;
 }
 
@@ -3058,6 +3191,47 @@ function renderV2RailSectionHTML(title,cardsHTML,extraClass=""){
     `;
 }
 
+function getPersonLinkNameHTML(person,role,fallbackName){
+    const cleanRole = typeof normalizePersonRoleSlug === "function" ? normalizePersonRoleSlug(role) : String(role || "");
+    const id = person && Number(person.id || 0);
+    const name = fallbackName || (person && person.name) || "Unknown";
+
+    if(cleanRole && id > 0){
+        return `<button type="button" class="v2-person-link" data-person-role="${escapeHTML(cleanRole)}" data-person-id="${escapeHTML(id)}">${escapeHTML(name)}</button>`;
+    }
+
+    return `<span>${escapeHTML(name)}</span>`;
+}
+
+function getCrewRouteRole(person,fallbackRole){
+    const fallback = typeof normalizePersonRoleSlug === "function" ? normalizePersonRoleSlug(fallbackRole) : String(fallbackRole || "");
+    const job = String(person && person.job || "").toLowerCase();
+
+    if(job.includes("creator") || job.includes("created by")){
+        return "creator";
+    }
+    if(job.includes("director of photography") || job.includes("cinematograph")){
+        return "cinematographer";
+    }
+    if(job.includes("editor")){
+        return "editor";
+    }
+    if(job.includes("composer") || job.includes("music")){
+        return "composer";
+    }
+    if(job.includes("director")){
+        return "director";
+    }
+    if(job.includes("writer") || job.includes("screenplay") || job.includes("teleplay") || job.includes("story")){
+        return "writer";
+    }
+    if(job.includes("producer")){
+        return "producer";
+    }
+
+    return fallback;
+}
+
 function renderV2ActorImageHTML(actor){
     if(actor && actor.profile_path){
         return `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(actor.profile_path,"w185"))}" alt="">`;
@@ -3079,7 +3253,7 @@ function renderV2ActorListHTML(actors,limit=12){
             <div class="v2-actor-list-row">
                 <div class="v2-actor-list-photo">${renderV2ActorImageHTML(actor)}</div>
                 <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${escapeHTML(actor.name || "Unknown Actor")}</div>
+                    <div class="v2-actor-name">${getPersonLinkNameHTML(actor,"actor",actor.name || "Unknown Actor")}</div>
                     <div class="v2-actor-role">${escapeHTML(actor.character || "Unknown Role")}</div>
                 </div>
             </div>
@@ -3778,8 +3952,9 @@ function renderShowDetailTabsHTML(show){
     `;
 }
 
-function renderV2CrewMemberRows(people){
+function renderV2CrewMemberRows(people,fallbackRole=""){
     return (Array.isArray(people) ? people : []).map(person=>{
+        const routeRole = getCrewRouteRole(person,fallbackRole);
         const photo = person.profile_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"w185"))}" alt="">`
         : `<div class="v2-actor-placeholder">CREW</div>`;
@@ -3788,7 +3963,7 @@ function renderV2CrewMemberRows(people){
             <div class="v2-actor-list-row">
                 <div class="v2-actor-list-photo">${photo}</div>
                 <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${escapeHTML(person.name || "Unknown")}</div>
+                    <div class="v2-actor-name">${getPersonLinkNameHTML(person,routeRole,person.name || "Unknown")}</div>
                     <div class="v2-actor-role">${escapeHTML(person.job || "Crew")}${person.episode_count ? ` • ${Number(person.episode_count)} episodes` : ""}</div>
                 </div>
             </div>
@@ -3799,16 +3974,16 @@ function renderV2CrewMemberRows(people){
 function renderShowCrewTabHTML(show){
     const groups = show && show._tmdb_crew ? show._tmdb_crew : {};
     const order = [
-        ["Creators","creators"],
-        ["Directors","directors"],
-        ["Writers","writers"],
-        ["Producers","producers"],
-        ["Music","music"],
-        ["Other Crew","other"]
+        ["Creators","creators","creator"],
+        ["Directors","directors","director"],
+        ["Writers","writers","writer"],
+        ["Producers","producers","producer"],
+        ["Music","music","composer"],
+        ["Other Crew","other",""]
     ];
 
-    const html = order.map(([label,key])=>{
-        const rows = renderV2CrewMemberRows(groups[key] || []);
+    const html = order.map(([label,key,role])=>{
+        const rows = renderV2CrewMemberRows(groups[key] || [],role);
         if(!rows){
             return "";
         }
@@ -4149,6 +4324,17 @@ function attachShowDetailsPageEvents(show,isTracked){
             }
             event.preventDefault();
             openGenrePage(this.dataset.genreName || this.textContent || "");
+        });
+    });
+
+    document.querySelectorAll(".v2-person-link[data-person-role][data-person-id]").forEach(link=>{
+        link.addEventListener("click",function(event){
+            if(typeof openPersonPage !== "function"){
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            openPersonPage(this.dataset.personRole,this.dataset.personId);
         });
     });
 

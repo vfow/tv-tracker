@@ -18,6 +18,7 @@ function createRouter(pathname){
     selectedEpisodeContext:null,
     selectedShowId:null,
     selectedGenreSlug:null,
+    selectedPersonContext:null,
     appDataReady:true,
     showDetailBackStack:[],
     showDetailPreview:null,
@@ -29,6 +30,7 @@ function createRouter(pathname){
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
+    openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
     document:{querySelectorAll(){ return []; }},
     history:{
       pushState(state,title,url){ context.window.location.pathname=url; calls.push(['pushState',url]); },
@@ -75,6 +77,15 @@ function createRouter(pathname){
   assert(call,'genre route should open genre page');
   assert.strictEqual(call[1],'action-adventure');
   assert.strictEqual(call[2].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/actor/123');
+  assert.strictEqual(router.currentRoute(),'/app/actor/123');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'person route should open person page');
+  assert.deepStrictEqual(call.slice(1,3),['actor','123']);
+  assert.strictEqual(call[3].fromRoute,true);
 }
 
 {

@@ -27,6 +27,9 @@
             "/season/" + encodeURIComponent(String(selectedEpisodeContext.season)) +
             "/episode/" + encodeURIComponent(String(selectedEpisodeContext.episode));
         }
+        if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.role && selectedPersonContext.personId){
+            return "/app/" + encodeURIComponent(String(selectedPersonContext.role)) + "/" + encodeURIComponent(String(selectedPersonContext.personId));
+        }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
             return "/app/genre/" + encodeURIComponent(String(selectedGenreSlug));
         }
@@ -100,6 +103,9 @@
         if(typeof selectedGenreSlug !== "undefined"){
             selectedGenreSlug = null;
         }
+        if(typeof selectedPersonContext !== "undefined"){
+            selectedPersonContext = null;
+        }
     }
 
     function applyRoute(){
@@ -141,6 +147,25 @@
                         fromRoute:true,
                         backToShow:true
                     });
+                }
+                return;
+            }
+
+            const personMatch = route.match(/^\/app\/(actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11})$/);
+            if(personMatch){
+                const routePersonRole = personMatch[1];
+                const routePersonId = personMatch[2];
+                if(
+                    activePage === "person-detail" &&
+                    typeof selectedPersonContext !== "undefined" &&
+                    selectedPersonContext &&
+                    String(selectedPersonContext.role || "") === routePersonRole &&
+                    String(selectedPersonContext.personId || "") === routePersonId
+                ){
+                    return;
+                }
+                if(typeof openPersonPage === "function"){
+                    openPersonPage(routePersonRole,routePersonId,{fromRoute:true});
                 }
                 return;
             }
