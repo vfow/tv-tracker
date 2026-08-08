@@ -2,7 +2,13 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-function createRouter(pathname){
+function splitRoute(route){
+  const [pathname, query=''] = String(route || '/app/watchlist').split('?');
+  return {pathname, search:query ? '?' + query : ''};
+}
+
+function createRouter(route){
+  const initial = splitRoute(route);
   const queued = [];
   const calls = [];
   const listeners = {};
@@ -12,6 +18,7 @@ function createRouter(pathname){
     Array,
     Number,
     String,
+    URLSearchParams,
     encodeURIComponent,
     activePage:'shows',
     activeShowsTab:'watchlist',
@@ -20,6 +27,10 @@ function createRouter(pathname){
     selectedGenreSlug:null,
     selectedDiscoveryContext:null,
     selectedPersonContext:null,
+    selectedMovieId:null,
+    searchRouteState:{query:''},
+    moviePageState:{movie:null},
+    discoveryPageState:{name:''},
     appDataReady:true,
     showDetailBackStack:[],
     showDetailPreview:null,
@@ -28,7 +39,12 @@ function createRouter(pathname){
     renderShowsPage(){ calls.push(['renderShowsPage']); },
     updateShellTitle(){ calls.push(['updateShellTitle']); },
     closeShowModal(){ calls.push(['closeShowModal']); },
+    getSearchRoute(query=''){ return query ? '/app/search?q=' + encodeURIComponent(query) : '/app/search'; },
+    getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
+    getDiscoveryFilterDetailRoute(type,value){ return `/app/${type}/${value}`; },
+    openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
+    openMoviePage(id,options){ calls.push(['openMoviePage',id,options]); },
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
     openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
@@ -36,11 +52,11 @@ function createRouter(pathname){
     renderAppRouteNotFoundPage(){ calls.push(['renderAppRouteNotFoundPage']); },
     document:{querySelectorAll(){ return []; }},
     history:{
-      pushState(state,title,url){ context.window.location.pathname=url; calls.push(['pushState',url]); },
-      replaceState(state,title,url){ context.window.location.pathname=url; calls.push(['replaceState',url]); }
+      pushState(state,title,url){ const parts=splitRoute(url); context.window.location.pathname=parts.pathname; context.window.location.search=parts.search; calls.push(['pushState',url]); },
+      replaceState(state,title,url){ const parts=splitRoute(url); context.window.location.pathname=parts.pathname; context.window.location.search=parts.search; calls.push(['replaceState',url]); }
     },
     window:{
-      location:{pathname,search:'',hash:''},
+      location:{pathname:initial.pathname,search:initial.search,hash:''},
       addEventListener(type,handler){ listeners[type]=handler; },
       setTimeout(handler){ queued.push(handler); return queued.length; }
     }
@@ -49,10 +65,20 @@ function createRouter(pathname){
   context.window.history=context.history;
   context.window.document=context.document;
   context.window.showPage=context.showPage;
+  context.window.URLSearchParams=URLSearchParams;
   vm.createContext(context);
   vm.runInContext(fs.readFileSync('static/js/v2-router.js','utf8'),context);
   while(queued.length){ queued.shift()(); }
   return {context,calls,listeners,router:context.window.TVTrackerV2Router};
+}
+
+{
+  const {calls,router}=createRouter('/app/search?q=batman');
+  assert.strictEqual(router.currentRoute(),'/app/search?q=batman');
+  const call=calls.find(item=>item[0]==='openSearchPage');
+  assert(call,'search route should open search page');
+  assert.strictEqual(call[1],'batman');
+  assert.strictEqual(call[2].fromRoute,true);
 }
 
 {
@@ -81,6 +107,14 @@ function createRouter(pathname){
   assert.strictEqual(call[4].fromRoute,true);
 }
 
+{
+  const {calls,router}=createRouter('/app/movie/603-the-matrix');
+  assert.strictEqual(router.currentRoute(),'/app/movie/603-the-matrix');
+  const call=calls.find(item=>item[0]==='openMoviePage');
+  assert(call,'movie route should open movie page');
+  assert.strictEqual(call[1],'603');
+  assert.strictEqual(call[2].routeSlug,'the-matrix');
+}
 
 {
   const {calls,router}=createRouter('/app/genre/action-adventure');
@@ -91,32 +125,18 @@ function createRouter(pathname){
   assert.strictEqual(call[2].fromRoute,true);
 }
 
-
-{
-  const {calls,router}=createRouter('/app/network/213');
-  assert.strictEqual(router.currentRoute(),'/app/network/213');
+for (const [route,type,value,slug] of [
+  ['/app/network/213-netflix','network','213','netflix'],
+  ['/app/company/49-hbo','company','49','hbo'],
+  ['/app/provider/8-netflix','provider','8','netflix'],
+  ['/app/theme/1234-war','theme','1234','war'],
+]) {
+  const {calls,router}=createRouter(route);
+  assert.strictEqual(router.currentRoute(),route);
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'network route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['network','213']);
-  assert.strictEqual(call[3].fromRoute,true);
-}
-
-{
-  const {calls,router}=createRouter('/app/network/213-netflix');
-  assert.strictEqual(router.currentRoute(),'/app/network/213-netflix');
-  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'pretty network route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['network','213']);
-  assert.strictEqual(call[3].routeSlug,'netflix');
-}
-
-{
-  const {calls,router}=createRouter('/app/language/ja');
-  assert.strictEqual(router.currentRoute(),'/app/language/ja');
-  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'language route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['language','ja']);
-  assert.strictEqual(call[3].fromRoute,true);
+  assert(call,`${route} should open discovery filter page`);
+  assert.deepStrictEqual(call.slice(1,3),[type,value]);
+  assert.strictEqual(call[3].routeSlug,slug);
 }
 
 {
@@ -129,40 +149,44 @@ function createRouter(pathname){
 }
 
 {
-  const {calls,router}=createRouter('/app/country/jp');
-  assert.strictEqual(router.currentRoute(),'/app/country/jp');
+  const {calls,router}=createRouter('/app/country/jp-japan');
+  assert.strictEqual(router.currentRoute(),'/app/country/jp-japan');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'country route should open discovery filter page');
+  assert(call,'pretty country route should open discovery filter page');
   assert.deepStrictEqual(call.slice(1,3),['country','jp']);
-  assert.strictEqual(call[3].fromRoute,true);
+  assert.strictEqual(call[3].routeSlug,'japan');
 }
 
-
 {
-  const {calls,router}=createRouter('/app/theme/1234');
-  assert.strictEqual(router.currentRoute(),'/app/theme/1234');
+  const {calls,router}=createRouter('/app/year/2024');
+  assert.strictEqual(router.currentRoute(),'/app/year/2024');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'theme route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
-  assert.strictEqual(call[3].fromRoute,true);
+  assert(call,'year route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['year','2024']);
 }
 
 {
-  const {calls,router}=createRouter('/app/theme/1234-war');
-  assert.strictEqual(router.currentRoute(),'/app/theme/1234-war');
+  const {calls,router}=createRouter('/app/status/returning-series');
+  assert.strictEqual(router.currentRoute(),'/app/status/returning-series');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'pretty theme route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
-  assert.strictEqual(call[3].routeSlug,'war');
+  assert(call,'status route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['status','returning-series']);
 }
 
 {
-  const {calls,router}=createRouter('/app/actor/123');
-  assert.strictEqual(router.currentRoute(),'/app/actor/123');
-  const call=calls.find(item=>item[0]==='openPersonPage');
-  assert(call,'person route should open person page');
-  assert.deepStrictEqual(call.slice(1,3),['actor','123']);
-  assert.strictEqual(call[3].fromRoute,true);
+  const {calls,router}=createRouter('/app/certification/tv/tv-ma');
+  assert.strictEqual(router.currentRoute(),'/app/certification/tv/tv-ma');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'TV certification route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['certification','tv/tv-ma']);
+}
+
+{
+  const {calls,router}=createRouter('/app/certification/movie/pg-13');
+  assert.strictEqual(router.currentRoute(),'/app/certification/movie/pg-13');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'movie certification route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['certification','movie/pg-13']);
 }
 
 {
@@ -177,15 +201,17 @@ function createRouter(pathname){
 {
   const {context,calls,router}=createRouter('/app/watchlist');
   calls.length=0;
-  context.activePage='discover';
+  context.activePage='search';
+  context.searchRouteState={query:'batman'};
   router.updateRouteFromState(false);
-  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/discover'));
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/search?q=batman'));
 }
 
 {
   const {context,calls,router}=createRouter('/app/show/1399');
   calls.length=0;
   context.window.location.pathname='/app/private/notes';
+  context.window.location.search='';
   router.applyRoute();
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'));
 }

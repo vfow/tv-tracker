@@ -7,6 +7,7 @@
         "/app/upcoming",
         "/app/history",
         "/app/discover",
+        "/app/search",
         "/app/profile",
         "/app/settings"
     ]);
@@ -24,6 +25,14 @@
         return match ? {value:match[1],slug:match[2] || "",hasSlug:!!match[2]} : {value:"",slug:"",hasSlug:false};
     }
 
+    function currentSearchQuery(){
+        try{
+            return new URLSearchParams(String(window.location.search || "")).get("q") || "";
+        }catch(error){
+            return "";
+        }
+    }
+
     function showRouteNotFound(){
         if(typeof renderAppRouteNotFoundPage === "function"){
             renderAppRouteNotFoundPage();
@@ -38,7 +47,9 @@
 
     function currentRoute(){
         const path = String(window.location.pathname || "");
-        return path.startsWith("/app") ? path : "/app/watchlist";
+        const cleanPath = path.startsWith("/app") ? path : "/app/watchlist";
+        const search = String(window.location.search || "");
+        return cleanPath === "/app/search" && search ? cleanPath + search : cleanPath;
     }
 
     function routeForState(){
@@ -46,6 +57,13 @@
             return "/app/show/" + encodeURIComponent(String(selectedEpisodeContext.showId)) +
             "/season/" + encodeURIComponent(String(selectedEpisodeContext.season)) +
             "/episode/" + encodeURIComponent(String(selectedEpisodeContext.episode));
+        }
+        if(activePage === "movie-detail" && typeof selectedMovieId !== "undefined" && selectedMovieId){
+            if(typeof getMovieDetailRoute === "function"){
+                const movieName = typeof moviePageState !== "undefined" && moviePageState && moviePageState.movie ? moviePageState.movie.title : "";
+                return getMovieDetailRoute(selectedMovieId,movieName);
+            }
+            return "/app/movie/" + encodeURIComponent(String(selectedMovieId));
         }
         if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.role && selectedPersonContext.personId){
             if(typeof getPersonDetailRoute === "function"){
@@ -68,6 +86,10 @@
                 return getShowDetailRoute(selectedShowId);
             }
             return "/app/show/" + encodeURIComponent(String(selectedShowId));
+        }
+        if(activePage === "search"){
+            const query = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.query : "";
+            return typeof getSearchRoute === "function" ? getSearchRoute(query) : "/app/search";
         }
         if(activePage === "discover"){
             return "/app/discover";
@@ -92,7 +114,8 @@
 
     function setPathRoute(route,replace=false){
         const nextRoute = String(route || "/app/watchlist");
-        if(window.location.pathname === nextRoute && !window.location.search && !window.location.hash){
+        const current = String(window.location.pathname || "") + String(window.location.search || "");
+        if(current === nextRoute && !window.location.hash){
             return;
         }
         if(replace){
@@ -133,6 +156,9 @@
         discoverPreviewShow = null;
         selectedShowId = null;
         selectedEpisodeContext = null;
+        if(typeof selectedMovieId !== "undefined"){
+            selectedMovieId = null;
+        }
         if(typeof selectedGenreSlug !== "undefined"){
             selectedGenreSlug = null;
         }
@@ -149,12 +175,13 @@
             return;
         }
 
-        const route = currentRoute();
+        const route = String(window.location.pathname || "").startsWith("/app") ? String(window.location.pathname || "") : "/app/watchlist";
+        const fullRoute = currentRoute();
 
         if(
             Array.isArray(showDetailBackStack) &&
             showDetailBackStack.length &&
-            showDetailBackStack[showDetailBackStack.length - 1] === route
+            showDetailBackStack[showDetailBackStack.length - 1] === fullRoute
         ){
             showDetailBackStack.pop();
         }
@@ -162,6 +189,16 @@
         applyingRoute = true;
 
         try{
+            if(route === "/app/search"){
+                clearDetailState();
+                if(typeof openSearchPage === "function"){
+                    openSearchPage(currentSearchQuery(),{fromRoute:true});
+                }else{
+                    showPage("discover");
+                }
+                return;
+            }
+
             const episodeMatch = route.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)\/season\/(\d{1,5})\/episode\/([1-9][0-9]{0,5})$/);
             if(episodeMatch){
                 const routeShow = parseRouteIdSlug(episodeMatch[1]);
@@ -188,6 +225,15 @@
                 return;
             }
 
+            const movieMatch = route.match(/^\/app\/movie\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            if(movieMatch){
+                const routeMovie = parseRouteIdSlug(movieMatch[1]);
+                if(typeof openMoviePage === "function"){
+                    openMoviePage(routeMovie.id,{fromRoute:true,routeSlug:routeMovie.slug});
+                }
+                return;
+            }
+
             const personMatch = route.match(/^\/app\/(actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
             if(personMatch){
                 const routePersonRole = personMatch[1];
@@ -209,37 +255,48 @@
                 return;
             }
 
-            const discoveryMatch = route.match(/^\/app\/(network|theme)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$|^\/app\/(language)\/([a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$|^\/app\/(country)\/([a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
-            if(discoveryMatch){
-                const routeDiscoveryType = discoveryMatch[1] || discoveryMatch[3] || discoveryMatch[5];
-                const rawDiscoveryValue = discoveryMatch[2] || discoveryMatch[4] || discoveryMatch[6];
-                let routeDiscoveryValue = "";
-                let routeDiscoverySlug = "";
-                if(routeDiscoveryType === "network" || routeDiscoveryType === "theme"){
-                    const parsed = parseRouteIdSlug(rawDiscoveryValue);
-                    routeDiscoveryValue = parsed.id;
-                    routeDiscoverySlug = parsed.slug;
-                }else if(routeDiscoveryType === "language"){
-                    const parsed = parseRouteCodeSlug(rawDiscoveryValue,/^([a-z]{2,3})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
-                    routeDiscoveryValue = parsed.value;
-                    routeDiscoverySlug = parsed.slug;
-                }else{
-                    const parsed = parseRouteCodeSlug(rawDiscoveryValue,/^([a-z]{2})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
-                    routeDiscoveryValue = parsed.value;
-                    routeDiscoverySlug = parsed.slug;
-                }
-                if(
-                    activePage === "discovery-detail" &&
-                    typeof selectedDiscoveryContext !== "undefined" &&
-                    selectedDiscoveryContext &&
-                    String(selectedDiscoveryContext.type || "") === routeDiscoveryType &&
-                    String(selectedDiscoveryContext.value || "") === routeDiscoveryValue &&
-                    !routeDiscoverySlug
-                ){
-                    return;
-                }
+            const discoveryIdMatch = route.match(/^\/app\/(network|theme|company|provider)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            if(discoveryIdMatch){
+                const parsed = parseRouteIdSlug(discoveryIdMatch[2]);
                 if(typeof openDiscoveryFilterPage === "function"){
-                    openDiscoveryFilterPage(routeDiscoveryType,routeDiscoveryValue,{fromRoute:true,routeSlug:routeDiscoverySlug});
+                    openDiscoveryFilterPage(discoveryIdMatch[1],parsed.id,{fromRoute:true,routeSlug:parsed.slug});
+                }
+                return;
+            }
+
+            const discoveryCodeMatch = route.match(/^\/app\/(language)\/([a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$|^\/app\/(country)\/([a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            if(discoveryCodeMatch){
+                const routeDiscoveryType = discoveryCodeMatch[1] || discoveryCodeMatch[3];
+                const rawDiscoveryValue = discoveryCodeMatch[2] || discoveryCodeMatch[4];
+                const parsed = routeDiscoveryType === "language"
+                ? parseRouteCodeSlug(rawDiscoveryValue,/^([a-z]{2,3})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/)
+                : parseRouteCodeSlug(rawDiscoveryValue,/^([a-z]{2})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage(routeDiscoveryType,parsed.value,{fromRoute:true,routeSlug:parsed.slug});
+                }
+                return;
+            }
+
+            const yearMatch = route.match(/^\/app\/year\/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$/);
+            if(yearMatch){
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage("year",yearMatch[1],{fromRoute:true});
+                }
+                return;
+            }
+
+            const statusMatch = route.match(/^\/app\/status\/(returning-series|ended|canceled|in-production)$/);
+            if(statusMatch){
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage("status",statusMatch[1],{fromRoute:true});
+                }
+                return;
+            }
+
+            const certificationMatch = route.match(/^\/app\/certification\/(tv|movie)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            if(certificationMatch){
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage("certification",certificationMatch[1] + "/" + certificationMatch[2],{fromRoute:true});
                 }
                 return;
             }

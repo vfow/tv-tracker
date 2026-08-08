@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 from urllib.request import Request, urlopen
 
 import psycopg
@@ -52,6 +52,12 @@ APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
 APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
 APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
 APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
+APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
+APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/({APP_ROUTE_ID_SLUG})$")
+APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/({APP_ROUTE_ID_SLUG})$")
+APP_YEAR_PATH_RE = re.compile(r"^/app/year/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
+APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
+APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_PERSON_ROLE_SLUGS = {
     "actor",
     "creator",
@@ -70,6 +76,7 @@ APP_SECTION_PATHS = {
     "/app/upcoming",
     "/app/history",
     "/app/discover",
+    "/app/search",
     "/app/profile",
     "/app/settings",
 }
@@ -1451,12 +1458,22 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
 
 def safe_next_url(value: str | None) -> str:
     """Return a validated internal application route for post-login use."""
-    candidate = str(value or "").strip().split("?", 1)[0].split("#", 1)[0]
+    raw_value = str(value or "").strip().split("#", 1)[0]
+    raw_path, separator, raw_query = raw_value.partition("?")
+    candidate = raw_path
     if candidate.startswith("/app/") and candidate != "/app/":
         candidate = candidate.rstrip("/")
 
     if candidate in {"/app", "/app/"}:
         return "/app/watchlist"
+    if candidate == "/app/search":
+        query = ""
+        if separator:
+            for key, value in parse_qsl(raw_query, keep_blank_values=False):
+                if key == "q" and value.strip():
+                    query = value.strip()[:120]
+                    break
+        return "/app/search" + (("?" + urlencode({"q": query})) if query else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
     if APP_SHOW_PATH_RE.fullmatch(candidate):
@@ -1475,6 +1492,18 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_THEME_PATH_RE.fullmatch(candidate):
         return candidate
+    if APP_MOVIE_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_COMPANY_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_PROVIDER_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_YEAR_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_STATUS_PATH_RE.fullmatch(candidate):
+        return candidate
+    if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
+        return candidate
     return "/app/watchlist"
 
 
@@ -1490,6 +1519,12 @@ def valid_app_path(value: str | None) -> bool:
         or APP_LANGUAGE_PATH_RE.fullmatch(candidate) is not None
         or APP_COUNTRY_PATH_RE.fullmatch(candidate) is not None
         or APP_THEME_PATH_RE.fullmatch(candidate) is not None
+        or APP_MOVIE_PATH_RE.fullmatch(candidate) is not None
+        or APP_COMPANY_PATH_RE.fullmatch(candidate) is not None
+        or APP_PROVIDER_PATH_RE.fullmatch(candidate) is not None
+        or APP_YEAR_PATH_RE.fullmatch(candidate) is not None
+        or APP_STATUS_PATH_RE.fullmatch(candidate) is not None
+        or APP_CERTIFICATION_PATH_RE.fullmatch(candidate) is not None
     )
 
 
@@ -1700,6 +1735,7 @@ def create_app() -> Flask:
     @app.get("/app/upcoming", strict_slashes=False)
     @app.get("/app/history", strict_slashes=False)
     @app.get("/app/discover", strict_slashes=False)
+    @app.get("/app/search", strict_slashes=False)
     @app.get("/app/profile", strict_slashes=False)
     @app.get("/app/settings", strict_slashes=False)
     @login_required
@@ -1758,6 +1794,66 @@ def create_app() -> Flask:
     def app_theme_page(theme_key: str):
         requested_path = request.path.rstrip("/")
         if APP_THEME_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/movie/<movie_key>", strict_slashes=False)
+    @login_required
+    def app_movie_page(movie_key: str):
+        requested_path = request.path.rstrip("/")
+        if APP_MOVIE_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/company/<company_key>", strict_slashes=False)
+    @login_required
+    def app_company_page(company_key: str):
+        requested_path = request.path.rstrip("/")
+        if APP_COMPANY_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/provider/<provider_key>", strict_slashes=False)
+    @login_required
+    def app_provider_page(provider_key: str):
+        requested_path = request.path.rstrip("/")
+        if APP_PROVIDER_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/year/<int:year_value>", strict_slashes=False)
+    @login_required
+    def app_year_page(year_value: int):
+        requested_path = request.path.rstrip("/")
+        if APP_YEAR_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/status/<status_slug>", strict_slashes=False)
+    @login_required
+    def app_status_page(status_slug: str):
+        requested_path = request.path.rstrip("/")
+        if APP_STATUS_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/certification/<media_type>/<certification_slug>", strict_slashes=False)
+    @login_required
+    def app_certification_page(media_type: str, certification_slug: str):
+        requested_path = request.path.rstrip("/")
+        if APP_CERTIFICATION_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)

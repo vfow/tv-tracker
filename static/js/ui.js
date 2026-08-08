@@ -128,6 +128,7 @@ function updateShellTitle(){
 
     const pageTitles = {
         discover:"Discover",
+        search:"Search",
         profile:"Profile",
         settings:"Settings",
         "show-detail":(typeof getShowForDetailPage === "function" && getShowForDetailPage(selectedShowId) ? getShowForDetailPage(selectedShowId).title : "Show"),
@@ -137,6 +138,7 @@ function updateShellTitle(){
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
         "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
         "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person",
+        "movie-detail":moviePageState && moviePageState.movie && moviePageState.movie.title ? moviePageState.movie.title : "Movie",
         "route-error":"Page Not Found"
     };
 
@@ -216,6 +218,10 @@ function renderAll(){
 
     if(activePage === "episode-detail" && typeof renderActiveEpisodeDetailPage === "function"){
         renderActiveEpisodeDetailPage();
+    }
+
+    if(activePage === "movie-detail" && typeof renderActiveMoviePage === "function"){
+        renderActiveMoviePage();
     }
 
 }
@@ -588,9 +594,86 @@ function renderDiscoverHubCard(show){
 
 
 
+function getSearchResultPersonRole(result){
+    const department = String(result && result.known_for_department || "").toLowerCase();
+    if(department.includes("direct")){
+        return "director";
+    }
+    if(department.includes("writ")){
+        return "writer";
+    }
+    if(department.includes("production") || department.includes("produc")){
+        return "producer";
+    }
+    if(department.includes("sound") || department.includes("music")){
+        return "composer";
+    }
+    if(department.includes("editing")){
+        return "editor";
+    }
+    if(department.includes("camera") || department.includes("cinemat")){
+        return "cinematographer";
+    }
+    return "actor";
+}
+
+function renderSearchResultCard(result){
+    const mediaType = result && result.media_type ? String(result.media_type) : "tv";
+    const title = result && (result.title || result.name) ? String(result.title || result.name) : "Untitled";
+    const date = result && (result.date || result.first_air_date || result.release_date) ? String(result.date || result.first_air_date || result.release_date) : "";
+    const year = date ? date.slice(0,4) : "Unknown";
+    const rating = Number(result && result.vote_average || 0);
+    const ratingHTML = mediaType === "person" ? "" : (rating > 0 ? ` • ${rating.toFixed(1)}` : "");
+    const posterPath = mediaType === "person" ? (result && result.profile_path || result && result.poster_path || "") : (result && result.poster_path || "");
+    const placeholder = mediaType === "person" ? "PERSON" : (mediaType === "movie" ? "MOVIE" : "TV");
+    const posterHTML = posterPath
+    ? `<img class="poster" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(posterPath,mediaType === "person" ? "h632" : "w500"))}" alt="${escapeHTML(title)}">`
+    : `<div class="poster-placeholder">${escapeHTML(placeholder)}</div>`;
+    const meta = mediaType === "person"
+    ? (result && result.known_for_department ? result.known_for_department : "Person")
+    : (mediaType === "movie" ? `Movie • ${year}` : `TV Show • ${year}`);
+
+    return `
+        <button
+        type="button"
+        class="show search-result-card"
+        data-media-type="${escapeHTML(mediaType)}"
+        data-media-id="${escapeHTML(result && result.id)}"
+        data-media-name="${escapeHTML(title)}"
+        data-poster-path="${escapeHTML(posterPath)}"
+        data-overview="${escapeHTML(result && result.overview || "")}" 
+        data-first-air-date="${escapeHTML(result && result.first_air_date || "")}" 
+        data-release-date="${escapeHTML(result && result.release_date || "")}" 
+        data-person-role="${escapeHTML(getSearchResultPersonRole(result))}">
+            ${posterHTML}
+            <div class="info">
+                <div class="title">${escapeHTML(title)}</div>
+                <div class="episode">${escapeHTML(meta)}${escapeHTML(ratingHTML)}</div>
+                ${result && result.overview ? `<div class="episode-title">${escapeHTML(result.overview)}</div>` : ""}
+            </div>
+        </button>
+    `;
+}
+
+function renderSearchResultSection(title,items){
+    if(!items.length){
+        return "";
+    }
+    return `
+        <section class="search-result-section">
+            <h3 class="modal-section-heading search-result-section-title">${escapeHTML(title)}</h3>
+            <div class="search-result-list">${items.map(renderSearchResultCard).join("")}</div>
+        </section>
+    `;
+}
+
 function renderSearchResults(shows){
 
     const results = document.getElementById("search-results");
+
+    if(!results){
+        return;
+    }
 
     results.innerHTML = "";
 
@@ -604,7 +687,7 @@ function renderSearchResults(shows){
         results.innerHTML = `
             <div class="empty-state">
                 <h2>No matches found</h2>
-                ${query ? `<p>Try another title.</p>` : ""}
+                ${query ? `<p>Try another search.</p>` : ""}
             </div>
         `;
 
@@ -612,71 +695,51 @@ function renderSearchResults(shows){
 
     }
 
-    shows.forEach(show=>{
+    const groups = {
+        tv:[],
+        movie:[],
+        person:[]
+    };
 
-        const card = document.createElement("div");
-        card.className = "show";
-
-        const posterHTML = show.poster_path
-        ? `<img class="poster" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}">`
-        : `<div class="poster-placeholder">📺</div>`;
-
-        const alreadyTracked = DATA.shows[String(show.id)];
-
-        card.innerHTML = `
-
-            ${posterHTML}
-
-            <div class="info">
-
-                <div class="title">
-                    ${escapeHTML(show.name)}
-                </div>
-
-                <div class="episode">
-                    First aired: ${show.first_air_date || "Unknown"}
-                </div>
-
-                <div class="episode-title">
-                    ${escapeHTML(show.overview || "")}
-                </div>
-
-            </div>
-
-        `;
-
-        if(alreadyTracked){
-
-            const label = document.createElement("div");
-            label.className = "tracked-label";
-            label.textContent = "Added";
-            card.querySelector(".info").appendChild(label);
-
-            card.addEventListener("click",function(){
-                openShowModal(show.id);
-            });
-
-        }else{
-
-            const button = document.createElement("button");
-            button.className = "add-button";
-            button.textContent = "Add Show";
-
-            button.addEventListener("click",async function(event){
-                event.stopPropagation();
-                await handleAddShowClick(show);
-            });
-
-            card.addEventListener("click",async function(){
-                await openDiscoverShowModal(show);
-            });
-
-            card.querySelector(".info").appendChild(button);
-
+    shows.forEach(item=>{
+        const mediaType = item && item.media_type ? String(item.media_type) : "tv";
+        if(groups[mediaType]){
+            groups[mediaType].push(item);
         }
+    });
 
-        results.appendChild(card);
+    results.innerHTML = `
+        <div class="search-result-stack">
+            ${renderSearchResultSection("TV Shows",groups.tv)}
+            ${renderSearchResultSection("Movies",groups.movie)}
+            ${renderSearchResultSection("People",groups.person)}
+        </div>
+    `;
 
+    document.querySelectorAll(".search-result-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            const mediaType = String(this.dataset.mediaType || "tv");
+            const mediaId = Number(this.dataset.mediaId || 0);
+            const mediaName = this.dataset.mediaName || "";
+            if(!mediaId){
+                return;
+            }
+            if(mediaType === "movie" && typeof openMoviePage === "function"){
+                await openMoviePage(mediaId,{movieName:mediaName});
+                return;
+            }
+            if(mediaType === "person" && typeof openPersonPage === "function"){
+                await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:mediaName});
+                return;
+            }
+            await openDiscoverShowModal({
+                id:mediaId,
+                name:mediaName,
+                poster_path:this.dataset.posterPath || "",
+                overview:this.dataset.overview || "",
+                first_air_date:this.dataset.firstAirDate || ""
+            });
+        });
     });
 
     const state = typeof discoverSearchState === "object" && discoverSearchState
@@ -762,11 +825,14 @@ function renderThemeItemHTML(theme,extraClass=""){
 }
 
 function renderGenrePosterGridCard(show){
+    const mediaType = show && show.media_type === "movie" ? "movie" : "tv";
+    const title = show && (show.title || show.name) ? (show.title || show.name) : "Untitled";
+    const date = show && (show.date || show.release_date || show.first_air_date) ? String(show.date || show.release_date || show.first_air_date) : "";
     const posterHTML = show && show.poster_path
-    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML((show.name || "Show") + " poster")}">`
-    : `<div class="genre-card-placeholder">TV</div>`;
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
+    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
 
-    const year = show && show.first_air_date ? String(show.first_air_date).slice(0,4) : "Unknown";
+    const year = date ? date.slice(0,4) : "Unknown";
     const rating = Number(show && show.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
 
@@ -774,13 +840,16 @@ function renderGenrePosterGridCard(show){
         <button
         type="button"
         class="genre-result-card"
-        data-show-id="${escapeHTML(show && show.id)}"
-        data-show-name="${escapeHTML(show && show.name || "")}" 
+        data-media-type="${escapeHTML(mediaType)}"
+        data-media-id="${escapeHTML(show && show.id)}"
+        data-show-id="${mediaType === "tv" ? escapeHTML(show && show.id) : ""}"
+        data-media-name="${escapeHTML(title)}"
+        data-show-name="${escapeHTML(title)}" 
         data-poster-path="${escapeHTML(show && show.poster_path || "")}" 
         data-overview="${escapeHTML(show && show.overview || "")}" 
-        data-first-air-date="${escapeHTML(show && show.first_air_date || "")}">
+        data-first-air-date="${escapeHTML(show && (show.first_air_date || show.date) || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${escapeHTML(show && show.name || "Untitled")}</div>
+            <div class="genre-result-title">${escapeHTML(title)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
         </button>
     `;
@@ -962,7 +1031,6 @@ function renderGenreDetailPage(state){
                     <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
                 </button>
                 <div>
-                    <div class="genre-detail-kicker">TV Shows</div>
                     <h1 class="genre-detail-title">${escapeHTML(name)}</h1>
                 </div>
             </div>
@@ -1000,7 +1068,10 @@ function renderDiscoveryFilterDetailPage(state){
     }
 
     const pageState = state || {};
-    const title = String(pageState.name || "TV Shows").trim() || "TV Shows";
+    const type = typeof normalizeDiscoveryFilterType === "function" ? normalizeDiscoveryFilterType(pageState.type) : String(pageState.type || "");
+    const media = typeof getDiscoveryPageMediaFromState === "function" ? getDiscoveryPageMediaFromState() : (pageState.media === "movie" ? "movie" : "tv");
+    const mediaWord = media === "movie" ? "movies" : "shows";
+    const title = String(pageState.name || (media === "movie" ? "Movies" : "Shows")).trim() || (media === "movie" ? "Movies" : "Shows");
     const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
@@ -1009,11 +1080,14 @@ function renderDiscoveryFilterDetailPage(state){
     const page = Number(pageState.page || 1);
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
+    const supportsMedia = typeof discoveryFilterSupportsMediaSwitch === "function" && discoveryFilterSupportsMediaSwitch(type);
+    const showYearFilter = type !== "year";
+    const sortDateLabel = media === "movie" ? "Release Date" : "First Air Date";
 
     const bodyHTML = error
     ? `
         <div class="empty-state genre-detail-empty">
-            <h2>Shows could not load</h2>
+            <h2>Page could not load</h2>
             <p>${escapeHTML(error)}</p>
         </div>
     `
@@ -1023,7 +1097,7 @@ function renderDiscoveryFilterDetailPage(state){
             ${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card discovery-filter-result-card"')).join("")}
         </div>
         ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="discovery-filter-load-more-button">View More</button>` : ""}
-        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more shows…</div>` : ""}
+        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}
     `
     : loading
     ? `
@@ -1033,7 +1107,7 @@ function renderDiscoveryFilterDetailPage(state){
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No shows found</h2>
+            <h2>No ${mediaWord} found</h2>
             <p>Try a different year or sort option.</p>
         </div>
     `;
@@ -1045,22 +1119,32 @@ function renderDiscoveryFilterDetailPage(state){
                     <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
                 </button>
                 <div>
-                    <div class="genre-detail-kicker">TV Shows</div>
                     <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
                 </div>
             </div>
 
-            <div class="genre-filter-bar" aria-label="TV show filters">
-                <label class="genre-filter-field" for="discovery-filter-year-filter">
-                    <span>Year</span>
-                    <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
-                </label>
+            <div class="genre-filter-bar" aria-label="Page filters">
+                ${supportsMedia ? `
+                    <label class="genre-filter-field" for="discovery-filter-media-filter">
+                        <span>Media</span>
+                        <select id="discovery-filter-media-filter">
+                            <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
+                            <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
+                        </select>
+                    </label>
+                ` : ""}
+                ${showYearFilter ? `
+                    <label class="genre-filter-field" for="discovery-filter-year-filter">
+                        <span>Year</span>
+                        <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
+                    </label>
+                ` : ""}
                 <label class="genre-filter-field" for="discovery-filter-sort-filter">
                     <span>Sort</span>
                     <select id="discovery-filter-sort-filter">
                         <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
                         <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
-                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>First Air Date</option>
+                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
                     </select>
                 </label>
             </div>
@@ -3002,6 +3086,213 @@ function renderShowGenreLinksHTML(genres){
     }).join("")}</span>`;
 }
 
+function renderPlainInlineRouteLinkHTML(label,route,extraClass=""){
+    const text = String(label || "").trim();
+    const href = String(route || "").trim();
+    if(!text){
+        return "";
+    }
+    if(!href){
+        return `<span>${escapeHTML(text)}</span>`;
+    }
+    return `<a class="show-detail-entity-link show-detail-inline-link ${escapeHTML(extraClass)}" href="${escapeHTML(href)}">${escapeHTML(text)}</a>`;
+}
+
+function renderYearLinkHTML(year){
+    const cleanYear = String(year || "").trim();
+    const route = typeof getYearDetailRoute === "function" ? getYearDetailRoute(cleanYear) : "";
+    return cleanYear ? renderPlainInlineRouteLinkHTML(cleanYear,route,"show-detail-year-link") : "";
+}
+
+function renderCertificationLinkHTML(media,rating){
+    const cleanRating = String(rating || "").trim();
+    const cleanMedia = media === "movie" ? "movie" : "tv";
+    const route = typeof getCertificationDetailRoute === "function" ? getCertificationDetailRoute(cleanMedia,cleanRating) : "";
+    return cleanRating ? renderPlainInlineRouteLinkHTML(cleanRating,route,"show-detail-certification-link") : "";
+}
+
+function getTVStatusSlugFromLabel(label){
+    const clean = String(label || "").trim().toLowerCase();
+    if(clean === "returning series"){
+        return "returning-series";
+    }
+    if(clean === "ended"){
+        return "ended";
+    }
+    if(clean === "canceled" || clean === "cancelled"){
+        return "canceled";
+    }
+    if(clean === "in production"){
+        return "in-production";
+    }
+    return "";
+}
+
+function renderStatusLinkHTML(status){
+    const label = String(status || "").trim();
+    const slug = getTVStatusSlugFromLabel(label);
+    const route = slug && typeof getStatusDetailRoute === "function" ? getStatusDetailRoute(slug) : "";
+    return label ? renderPlainInlineRouteLinkHTML(label,route,"show-detail-status-link") : "Unknown";
+}
+
+function renderCreatedByHTML(show){
+    const people = Array.isArray(show && show.created_by_people) ? show.created_by_people : [];
+    if(people.length){
+        const links = people.slice(0,3).map((person,index)=>{
+            const id = Number(person && person.id || 0);
+            const name = String(person && person.name || "").trim();
+            const route = id && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("creator",id,name) : "";
+            return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${renderPlainInlineRouteLinkHTML(name,route,"show-detail-person-link")}`;
+        }).join("");
+        return links ? `<span>Created by ${links}</span>` : "";
+    }
+
+    const creators = Array.isArray(show && show.created_by) ? show.created_by.slice(0,3) : [];
+    if(!creators.length){
+        return "";
+    }
+    return `<span>Created by ${creators.map(escapeHTML).join(" • ")}</span>`;
+}
+
+function renderCompanyLinksHTML(companies){
+    const source = Array.isArray(companies) ? companies : [];
+    const items = source.map(company=>{
+        const id = Number(company && company.id || 0);
+        const name = String(company && company.name || "").trim();
+        const route = id && typeof getCompanyDetailRoute === "function" ? getCompanyDetailRoute(id,name) : "";
+        return name ? renderPlainInlineRouteLinkHTML(name,route,"show-detail-company-link") : "";
+    }).filter(Boolean);
+    return items.length ? `<span class="show-detail-inline-link-list">${items.join(`<span class="show-detail-inline-separator">/</span>`)}</span>` : "Unknown";
+}
+
+function getMovieCertification(movie){
+    const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
+    const us = results.find(item=>String(item.iso_3166_1 || "").toUpperCase() === "US");
+    const release = us && Array.isArray(us.release_dates) ? us.release_dates.find(item=>String(item.certification || "").trim()) : null;
+    return release ? String(release.certification || "").trim() : "";
+}
+
+function renderMovieGenresHTML(movie){
+    const genres = Array.isArray(movie && movie.genres) ? movie.genres : [];
+    return renderShowGenreLinksHTML(genres) || "Unknown";
+}
+
+function renderMovieExternalLinksHTML(movie){
+    const ids = movie && movie.external_ids ? movie.external_ids : {};
+    const links = [];
+    const homepageURL = movie ? safeExternalURL(movie.homepage) : "";
+    const trailer = movie && movie.videos && Array.isArray(movie.videos.results)
+    ? movie.videos.results.find(video=>String(video.site || "").toLowerCase() === "youtube" && String(video.type || "").toLowerCase().includes("trailer"))
+    : null;
+
+    if(trailer && trailer.key){
+        links.push(`<a class="v2-clean-link v2-trailer-link" href="https://www.youtube.com/watch?v=${escapeHTML(trailer.key)}" target="_blank" rel="noopener noreferrer"><img class="v2-play-icon" src="/static/assets/icons/ui-play.svg" alt="">Trailer</a>`);
+    }
+    if(ids.imdb_id){
+        links.push(`<a class="v2-clean-link v2-external-pill" href="https://www.imdb.com/title/${escapeHTML(ids.imdb_id)}/" target="_blank" rel="noopener noreferrer">IMDb</a>`);
+    }
+    if(movie && movie.id){
+        links.push(`<a class="v2-clean-link v2-external-pill" href="https://www.themoviedb.org/movie/${escapeHTML(movie.id)}" target="_blank" rel="noopener noreferrer">TMDB</a>`);
+    }
+    if(homepageURL){
+        links.push(`<a class="v2-clean-link v2-external-pill" href="${escapeHTML(homepageURL)}" target="_blank" rel="noopener noreferrer">Official Site ↗</a>`);
+    }
+
+    return links.length ? `<div class="modal-meta modal-meta-under-status v2-show-info-links-line v2-show-action-line">${links.map((item,index)=>`${index > 0 ? `<span class="modal-meta-separator">•</span>` : ""}${item}`).join("")}</div>` : "";
+}
+
+function renderMovieDetailPage(state){
+    const content = document.getElementById("show-detail-content");
+    if(!content){
+        return;
+    }
+    const pageState = state || {};
+    const movie = pageState.movie || null;
+    if(!movie){
+        content.innerHTML = `
+            <div class="show-detail-page-inner">
+                <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div class="empty-state show-detail-loading-state">
+                    <h2>${pageState.loading ? "Loading movie" : "Movie could not load"}</h2>
+                    <p>${escapeHTML(pageState.error || "Getting details.")}</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const title = movie.title || "Untitled";
+    const posterHTML = movie.poster_path
+    ? `<img class="show-page-poster-image" src="${escapeHTML(trackerImageURL(movie.poster_path,"w500"))}" alt="${escapeHTML(title)} poster">`
+    : `<div class="show-page-poster-placeholder">MOVIE</div>`;
+    const backdropStyle = movie.backdrop_path ? ` style="background-image:url('${escapeHTML(trackerImageURL(movie.backdrop_path,"original"))}')"` : "";
+    const certification = getMovieCertification(movie);
+    const rating = Number(movie.vote_average || 0);
+    const metaItems = [];
+    if(movie.year){
+        metaItems.push(renderYearLinkHTML(movie.year));
+    }
+    if(certification){
+        metaItems.push(renderCertificationLinkHTML("movie",certification));
+    }
+    if(movie.runtime){
+        metaItems.push(`<span>${escapeHTML(movie.runtime)} min</span>`);
+    }
+    if(rating > 0){
+        metaItems.push(`<span class="tmdb-rating-group"><span class="tmdb-rating-inline">${rating.toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`);
+    }
+    const metaHTML = metaItems.filter(Boolean).map((item,index)=>`${index > 0 ? `<span class="modal-meta-separator">•</span>` : ""}${item}`).join("");
+    const crew = Array.isArray(movie.crew) ? movie.crew : [];
+    const directors = crew.filter(member=>String(member.job || "").toLowerCase() === "director").slice(0,3);
+    const cast = Array.isArray(movie.cast) ? movie.cast.slice(0,8) : [];
+    const providerRegion = movie.watch_providers && movie.watch_providers.results ? movie.watch_providers.results[typeof v2GetWatchRegion === "function" ? v2GetWatchRegion() : "US"] : null;
+    const providerHTML = providerRegion ? [
+        renderV2ProvidersGroup("Streaming",providerRegion.flatrate,providerRegion),
+        renderV2ProvidersGroup("Rent",providerRegion.rent,providerRegion),
+        renderV2ProvidersGroup("Buy",providerRegion.buy,providerRegion)
+    ].filter(Boolean).join("") : "";
+
+    content.innerHTML = `
+        <div class="show-detail-page-inner show-v2-detail-page-inner movie-detail-page-inner">
+            <section class="show-page-hero"${backdropStyle}>
+                <div class="show-page-hero-overlay"></div>
+                <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div class="show-page-hero-content">
+                    <div class="show-page-poster-card">${posterHTML}</div>
+                    <div class="show-page-title-stack">
+                        <h1 class="show-page-title">${escapeHTML(title)}</h1>
+                        ${movie.tagline ? `<p class="show-detail-tagline">${escapeHTML(movie.tagline)}</p>` : ""}
+                        ${metaHTML ? `<div class="modal-meta show-page-meta">${metaHTML}</div>` : ""}
+                        ${renderMovieExternalLinksHTML(movie)}
+                    </div>
+                </div>
+            </section>
+
+            <section class="show-detail-section v2-show-info-section">
+                <h2 class="modal-section-heading">Synopsis</h2>
+                <p class="overview">${escapeHTML(movie.overview || "No synopsis available yet.")}</p>
+            </section>
+
+            <section class="show-detail-section v2-show-info-section">
+                <h2 class="modal-section-heading">Details</h2>
+                <div class="show-detail-fact-list">
+                    <div class="show-detail-fact-row"><div class="episode-detail-label">Status</div><div class="episode-detail-value">${escapeHTML(movie.status || "Unknown")}</div></div>
+                    <div class="show-detail-fact-row"><div class="episode-detail-label">Genres</div><div class="episode-detail-value">${renderMovieGenresHTML(movie)}</div></div>
+                    <div class="show-detail-fact-row"><div class="episode-detail-label">Production Companies</div><div class="episode-detail-value">${renderCompanyLinksHTML(movie.production_companies)}</div></div>
+                    ${directors.length ? `<div class="show-detail-fact-row"><div class="episode-detail-label">Directed by</div><div class="episode-detail-value">${directors.map((person,index)=>`${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${renderPlainInlineRouteLinkHTML(person.name,typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("director",person.id,person.name) : "","show-detail-person-link")}`).join("")}</div></div>` : ""}
+                </div>
+            </section>
+
+            ${cast.length ? `<section class="show-detail-section v2-show-info-section"><h2 class="modal-section-heading">Cast</h2><div class="v2-actor-list show-info-actor-list">${renderV2ActorListHTML(cast,null)}</div></section>` : ""}
+            ${providerHTML ? `<section class="show-detail-section v2-show-info-section"><h2 class="modal-section-heading">Where to Watch</h2><div class="show-release-provider-stack">${providerHTML}</div></section>` : ""}
+        </div>
+    `;
+}
+
 function getShowMetaHTML(show,year,genres,ratingHTML){
 
     const items = [];
@@ -3011,19 +3302,20 @@ function getShowMetaHTML(show,year,genres,ratingHTML){
     const cleanRatingHTML = String(ratingHTML || "").replace(/^<span class="modal-meta-separator">•<\/span>/,"");
 
     if(year){
-        items.push(`<span>${escapeHTML(year)}</span>`);
+        items.push(renderYearLinkHTML(year) || `<span>${escapeHTML(year)}</span>`);
     }
 
     if(contentRating){
-        items.push(`<span>${escapeHTML(contentRating)}</span>`);
+        items.push(renderCertificationLinkHTML("tv",contentRating) || `<span>${escapeHTML(contentRating)}</span>`);
     }
 
     if(networkHTML){
         items.push(networkHTML);
     }
 
-    if(creators){
-        items.push(`<span>Created by ${escapeHTML(creators)}</span>`);
+    const createdByHTML = renderCreatedByHTML(show);
+    if(createdByHTML){
+        items.push(createdByHTML);
     }
 
     if(genres){
@@ -3251,19 +3543,20 @@ function renderV2ShowInfoMetaLineHTML(show){
     const items = [];
 
     if(year){
-        items.push(`<span>${escapeHTML(year)}</span>`);
+        items.push(renderYearLinkHTML(year) || `<span>${escapeHTML(year)}</span>`);
     }
 
     if(contentRating){
-        items.push(`<span>${escapeHTML(contentRating)}</span>`);
+        items.push(renderCertificationLinkHTML("tv",contentRating) || `<span>${escapeHTML(contentRating)}</span>`);
     }
 
     if(networkHTML){
         items.push(networkHTML);
     }
 
-    if(creators){
-        items.push(`<span>Created by ${escapeHTML(creators)}</span>`);
+    const createdByHTML = renderCreatedByHTML(show);
+    if(createdByHTML){
+        items.push(createdByHTML);
     }
 
     if(genres){
@@ -3376,12 +3669,22 @@ function renderV2ProvidersGroup(label,providers,providerRegion=null){
         const logo = provider.logo_path
         ? `<img class="v2-provider-logo" src="${escapeHTML(trackerImageURL(provider.logo_path,"w92"))}" alt="">`
         : "";
-        const providerName = provider && provider.provider_name ? provider.provider_name : "Provider";
+        const providerName = provider && provider.provider_name ? provider.provider_name : (provider && provider.name ? provider.name : "Provider");
+        const providerId = Number(provider && (provider.provider_id || provider.id) || 0);
+        const providerRoute = providerId && typeof getProviderDetailRoute === "function" ? getProviderDetailRoute(providerId,providerName) : "";
         const watchLink = getV2ProviderWatchLink(provider,providerRegion);
         const innerHTML = `
             ${logo}
             <span>${escapeHTML(providerName)}</span>
         `;
+
+        if(providerRoute){
+            return `
+                <a class="v2-provider-pill v2-provider-pill-link" href="${escapeHTML(providerRoute)}" title="Browse ${escapeHTML(providerName)}">
+                    ${innerHTML}
+                </a>
+            `;
+        }
 
         if(watchLink){
             return `
@@ -4326,11 +4629,15 @@ function renderAlternativeTitlesForDetailsHTML(show){
 }
 
 function renderShowDetailsTabHTML(show){
+    const productionCompanies = Array.isArray(show && show._tmdb_production_companies) ? show._tmdb_production_companies : [];
+    const contentRating = String(show && show.content_rating ? show.content_rating : "").trim();
     const rows = [
-        {label:"Status",html:escapeHTML(show.tmdb_status || show.status || "Unknown")},
+        {label:"Status",html:renderStatusLinkHTML(show && (show.tmdb_status || show.status) || "Unknown")},
         {label:"Networks",html:renderShowNetworkDetailsHTML(show)},
         {label:"Language",html:renderShowLanguageDetailsHTML(show)},
         {label:"Country",html:renderShowCountryDetailsHTML(show)},
+        {label:"Certification",html:contentRating ? renderCertificationLinkHTML("tv",contentRating) : "Unknown"},
+        {label:"Production Companies",html:renderCompanyLinksHTML(productionCompanies)},
         {label:"Themes",html:renderShowThemesDetailsHTML(show)},
         {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show)}
     ];
