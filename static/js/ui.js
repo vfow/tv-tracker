@@ -135,6 +135,7 @@ function updateShellTitle(){
         ? `S${selectedEpisodeContext.season}E${String(selectedEpisodeContext.episode).padStart(2,"0")}`
         : "Episode",
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
+        "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
         "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person"
     };
 
@@ -732,15 +733,12 @@ function renderPersonProfileHTML(person,role){
         person && person.birthday ? `Born ${person.birthday}` : "",
         person && person.place_of_birth ? person.place_of_birth : ""
     ].filter(Boolean);
-    const tmdbURL = person && person.id ? `https://www.themoviedb.org/person/${encodeURIComponent(String(person.id))}` : "";
-
     return `
         <aside class="person-profile-panel" aria-label="Person details">
             <div class="person-profile-photo">${photo}</div>
             <div class="person-profile-name">${escapeHTML(person && person.name || "Unknown Person")}</div>
             ${facts.length ? `<div class="person-profile-facts">${facts.map(item=>`<span>${escapeHTML(item)}</span>`).join("")}</div>` : ""}
             <p class="person-profile-bio">${escapeHTML(biography || "No biography available yet.")}</p>
-            ${tmdbURL ? `<a class="person-profile-link" href="${escapeHTML(tmdbURL)}" target="_blank" rel="noopener noreferrer">View on TMDB</a>` : ""}
         </aside>
     `;
 }
@@ -825,7 +823,6 @@ function renderPersonDetailPage(state){
                     <div>
                         <div class="genre-detail-kicker">${escapeHTML(title)}</div>
                         <h1 class="genre-detail-title person-detail-title">${escapeHTML(name)}</h1>
-                        <p class="genre-detail-subtitle">${escapeHTML(media === "movie" ? "Movie credits from TMDB." : "TV credits from TMDB.")}</p>
                     </div>
                 </div>
                 ${person ? renderPersonProfileHTML(person,role) : ""}
@@ -839,10 +836,6 @@ function renderPersonDetailPage(state){
                         <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
                     </select>
                 </label>
-            </div>
-
-            <div class="genre-result-summary person-result-summary">
-                ${loading && !credits.length ? "Loading credits…" : `${credits.length} ${media === "movie" ? (credits.length === 1 ? "movie" : "movies") : (credits.length === 1 ? "show" : "shows")}`}
             </div>
 
             <div class="genre-result-content person-result-content">
@@ -906,7 +899,6 @@ function renderGenreDetailPage(state){
                 <div>
                     <div class="genre-detail-kicker">TV Shows</div>
                     <h1 class="genre-detail-title">${escapeHTML(name)}</h1>
-                    <p class="genre-detail-subtitle">Discover TV shows from TMDB.</p>
                 </div>
             </div>
 
@@ -925,10 +917,6 @@ function renderGenreDetailPage(state){
                 </label>
             </div>
 
-            <div class="genre-result-summary">
-                ${loading && !shows.length ? "Loading shows…" : `${shows.length} ${shows.length === 1 ? "show" : "shows"}${pageState.name ? ` sorted by ${escapeHTML(typeof getGenreSortLabel === "function" ? getGenreSortLabel(sort) : "Popularity")}` : ""}`}
-            </div>
-
             <div class="genre-result-content">
                 ${bodyHTML}
             </div>
@@ -937,6 +925,87 @@ function renderGenreDetailPage(state){
 }
 
 
+
+
+
+function renderDiscoveryFilterDetailPage(state){
+    const content = document.getElementById("genre-detail-content");
+    if(!content){
+        return;
+    }
+
+    const pageState = state || {};
+    const title = String(pageState.name || "TV Shows").trim() || "TV Shows";
+    const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+    const year = String(pageState.year || "").trim();
+    const sort = String(pageState.sort || "popularity.desc");
+    const page = Number(pageState.page || 1);
+    const totalPages = Number(pageState.totalPages || 1);
+    const canLoadMore = !loading && page < totalPages;
+
+    const bodyHTML = error
+    ? `
+        <div class="empty-state genre-detail-empty">
+            <h2>Shows could not load</h2>
+            <p>${escapeHTML(error)}</p>
+        </div>
+    `
+    : shows.length
+    ? `
+        <div class="genre-tight-grid">
+            ${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card discovery-filter-result-card"')).join("")}
+        </div>
+        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="discovery-filter-load-more-button">View More</button>` : ""}
+        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more shows…</div>` : ""}
+    `
+    : loading
+    ? `
+        <div class="genre-tight-grid genre-tight-grid-loading">
+            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+        </div>
+    `
+    : `
+        <div class="empty-state genre-detail-empty">
+            <h2>No shows found</h2>
+            <p>Try a different year or sort option.</p>
+        </div>
+    `;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner discovery-filter-page-inner">
+            <div class="genre-detail-header">
+                <button type="button" class="show-page-back-button genre-page-back-button" id="discovery-filter-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div>
+                    <div class="genre-detail-kicker">TV Shows</div>
+                    <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
+                </div>
+            </div>
+
+            <div class="genre-filter-bar" aria-label="TV show filters">
+                <label class="genre-filter-field" for="discovery-filter-year-filter">
+                    <span>Year</span>
+                    <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
+                </label>
+                <label class="genre-filter-field" for="discovery-filter-sort-filter">
+                    <span>Sort</span>
+                    <select id="discovery-filter-sort-filter">
+                        <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
+                        <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
+                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>First Air Date</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="genre-result-content">
+                ${bodyHTML}
+            </div>
+        </div>
+    `;
+}
 
 
 
@@ -2761,15 +2830,19 @@ function getShowNetworkItems(show){
 
         if(typeof network === "string"){
             return {
+                id:0,
                 name:String(network || "").trim(),
-                logo_path:""
+                logo_path:"",
+                origin_country:""
             };
         }
 
         if(network && network.name){
             return {
+                id:Number(network.id || 0),
                 name:String(network.name || "").trim(),
-                logo_path:network.logo_path || ""
+                logo_path:network.logo_path || "",
+                origin_country:network.origin_country || ""
             };
         }
 
@@ -2939,6 +3012,9 @@ function renderV2NetworkLogoOnlyHTML(show){
     }
 
     return `<span class="network-inline-group">${networks.map(network=>{
+        if(Number(network && network.id || 0) > 0){
+            return renderNetworkEntityHTML(network);
+        }
         if(network.logo_path){
             return `
                 <span class="network-logo-chip" title="${escapeHTML(network.name || "Network")}">
@@ -2951,6 +3027,120 @@ function renderV2NetworkLogoOnlyHTML(show){
     }).join("")}</span>`;
 }
 
+function renderShowEntityLinkHTML(label,type,value,options={}){
+    const cleanLabel = String(label || "").trim();
+    if(!cleanLabel){
+        return "";
+    }
+    const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute(type,value) : "";
+    const name = String(options && options.name || cleanLabel).trim();
+    const className = options && options.className ? String(options.className) : "show-detail-entity-link";
+
+    if(route && route !== "/app/watchlist"){
+        return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-name="${escapeHTML(name)}">${escapeHTML(cleanLabel)}</a>`;
+    }
+
+    return `<span>${escapeHTML(cleanLabel)}</span>`;
+}
+
+function renderNetworkLinkInnerHTML(network){
+    const label = network && network.name ? String(network.name).trim() : "Network";
+    if(network && network.logo_path){
+        return `<span class="network-logo-chip" title="${escapeHTML(label)}"><img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(label)}"></span>`;
+    }
+    return `<span class="v2-provider-pill">${escapeHTML(label)}</span>`;
+}
+
+function renderNetworkEntityHTML(network){
+    const id = Number(network && network.id || 0);
+    const label = network && network.name ? String(network.name).trim() : "Network";
+    const inner = renderNetworkLinkInnerHTML(network);
+    if(id > 0){
+        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("network",id) : "";
+        return `<a class="show-detail-entity-link show-detail-network-link" href="${escapeHTML(route)}" data-discovery-type="network" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows from ${label}`)}" aria-label="Shows from ${escapeHTML(label)}">${inner}</a>`;
+    }
+    return inner;
+}
+
+function getShowLanguageItems(show){
+    const items = [];
+    const seen = new Set();
+    const push = function(code,label){
+        const cleanCode = typeof normalizeLanguageCode === "function" ? normalizeLanguageCode(code) : String(code || "").trim().toLowerCase();
+        const cleanLabel = String(label || (typeof getLanguageName === "function" ? getLanguageName(cleanCode) : cleanCode)).trim();
+        const key = cleanCode || cleanLabel.toLowerCase();
+        if(!key || seen.has(key)){
+            return;
+        }
+        seen.add(key);
+        items.push({code:cleanCode,label:cleanLabel});
+    };
+
+    (Array.isArray(show && show.spoken_languages) ? show.spoken_languages : []).forEach(language=>{
+        if(typeof language === "string"){
+            push("",language);
+        }else if(language){
+            push(language.iso_639_1 || language.iso_639_2 || "",language.english_name || language.name || "");
+        }
+    });
+
+    if(!items.length && show && show.original_language){
+        const code = String(show.original_language || "").trim().toLowerCase();
+        push(code,typeof getLanguageName === "function" ? getLanguageName(code) : code.toUpperCase());
+    }
+
+    return items;
+}
+
+function renderShowLanguageDetailsHTML(show){
+    const languages = getShowLanguageItems(show);
+    if(!languages.length){
+        return "Unknown";
+    }
+    return `<span class="show-detail-inline-link-list">${languages.map((language,index)=>{
+        const label = language.label || (typeof getLanguageName === "function" ? getLanguageName(language.code) : language.code);
+        const link = language.code
+        ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} TV Shows`})
+        : `<span>${escapeHTML(label)}</span>`;
+        return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${link}`;
+    }).join("")}</span>`;
+}
+
+function renderShowCountryDetailsHTML(show){
+    const countries = (Array.isArray(show && show.origin_country) ? show.origin_country : [])
+    .map(code=>String(code || "").trim().toLowerCase())
+    .filter(Boolean);
+    const seen = new Set();
+    const unique = countries.filter(code=>{
+        if(seen.has(code)){
+            return false;
+        }
+        seen.add(code);
+        return true;
+    });
+
+    if(!unique.length){
+        return "Unknown";
+    }
+
+    return `<span class="show-detail-inline-link-list">${unique.map((code,index)=>{
+        const label = getCountryLabel(code);
+        const name = `TV Shows from ${getCountryName(code)}`;
+        return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${renderShowEntityLinkHTML(label,"country",code,{name:name})}`;
+    }).join("")}</span>`;
+}
+
+function renderShowThemesDetailsHTML(show){
+    const themes = (Array.isArray(show && show._tmdb_keywords) ? show._tmdb_keywords : [])
+    .map(theme=>String(theme || "").trim())
+    .filter(Boolean)
+    .slice(0,12);
+    if(!themes.length){
+        return "Unknown";
+    }
+    return `<div class="show-detail-theme-list">${themes.map(theme=>`<span>${escapeHTML(theme)}</span>`).join("")}</div>`;
+}
+
 function renderShowNetworkDetailsHTML(show){
     const networks = getShowNetworkItems(show);
 
@@ -2958,17 +3148,7 @@ function renderShowNetworkDetailsHTML(show){
         return "Unknown";
     }
 
-    return `<div class="v2-provider-list">${networks.map(network=>{
-        if(network.logo_path){
-            return `
-                <span class="network-logo-chip" title="${escapeHTML(network.name || "Network")}">
-                    <img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(network.name || "Network")}">
-                </span>
-            `;
-        }
-
-        return `<span class="v2-provider-pill">${escapeHTML(network.name || "Network")}</span>`;
-    }).join("")}</div>`;
+    return `<div class="v2-provider-list">${networks.map(renderNetworkEntityHTML).join("")}</div>`;
 }
 
 function renderV2ShowInfoMetaLineHTML(show){
@@ -3249,8 +3429,14 @@ function renderV2ActorListHTML(actors,limit=12){
     const list = limit === null ? source : source.slice(0,Number(limit || 12));
 
     return list.map(actor=>{
+        const actorId = Number(actor && actor.id || 0);
+        const linkAttributes = actorId > 0
+        ? ` role="button" tabindex="0" data-person-role="actor" data-person-id="${escapeHTML(actorId)}"`
+        : "";
+        const linkClass = actorId > 0 ? " v2-person-card-link" : "";
+
         return `
-            <div class="v2-actor-list-row">
+            <div class="v2-actor-list-row${linkClass}"${linkAttributes}>
                 <div class="v2-actor-list-photo">${renderV2ActorImageHTML(actor)}</div>
                 <div class="v2-actor-list-text">
                     <div class="v2-actor-name">${getPersonLinkNameHTML(actor,"actor",actor.name || "Unknown Actor")}</div>
@@ -3960,7 +4146,7 @@ function renderV2CrewMemberRows(people,fallbackRole=""){
         : `<div class="v2-actor-placeholder">CREW</div>`;
 
         return `
-            <div class="v2-actor-list-row">
+            <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}"` : ""}>
                 <div class="v2-actor-list-photo">${photo}</div>
                 <div class="v2-actor-list-text">
                     <div class="v2-actor-name">${getPersonLinkNameHTML(person,routeRole,person.name || "Unknown")}</div>
@@ -4039,8 +4225,9 @@ function renderShowDetailsTabHTML(show){
     const rows = [
         {label:"Status",html:escapeHTML(show.tmdb_status || show.status || "Unknown")},
         {label:"Networks",html:renderShowNetworkDetailsHTML(show)},
-        {label:"Language",html:escapeHTML((show.spoken_languages || []).map(item=>item.english_name || item.name).filter(Boolean).join(" / ") || show.original_language || "Unknown")},
-        {label:"Country",html:escapeHTML((show.origin_country || []).map(getCountryLabel).join(" / ") || "Unknown")},
+        {label:"Language",html:renderShowLanguageDetailsHTML(show)},
+        {label:"Country",html:renderShowCountryDetailsHTML(show)},
+        {label:"Themes",html:renderShowThemesDetailsHTML(show)},
         {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show)}
     ];
 
@@ -4327,6 +4514,17 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
+    document.querySelectorAll(".show-detail-entity-link[data-discovery-type][data-discovery-value]").forEach(link=>{
+        link.addEventListener("click",function(event){
+            if(typeof openDiscoveryFilterPage !== "function"){
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || ""});
+        });
+    });
+
     document.querySelectorAll(".v2-person-link[data-person-role][data-person-id]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openPersonPage !== "function"){
@@ -4335,6 +4533,26 @@ function attachShowDetailsPageEvents(show,isTracked){
             event.preventDefault();
             event.stopPropagation();
             openPersonPage(this.dataset.personRole,this.dataset.personId);
+        });
+    });
+
+    document.querySelectorAll(".v2-person-card-link[data-person-role][data-person-id]").forEach(card=>{
+        const activate = function(event){
+            if(typeof openPersonPage !== "function"){
+                return;
+            }
+            if(event){
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            openPersonPage(this.dataset.personRole,this.dataset.personId);
+        };
+
+        card.addEventListener("click",activate);
+        card.addEventListener("keydown",function(event){
+            if(event.key === "Enter" || event.key === " "){
+                activate.call(this,event);
+            }
         });
     });
 

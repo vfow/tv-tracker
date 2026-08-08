@@ -18,6 +18,7 @@ function createRouter(pathname){
     selectedEpisodeContext:null,
     selectedShowId:null,
     selectedGenreSlug:null,
+    selectedDiscoveryContext:null,
     selectedPersonContext:null,
     appDataReady:true,
     showDetailBackStack:[],
@@ -30,6 +31,7 @@ function createRouter(pathname){
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
+    openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
     document:{querySelectorAll(){ return []; }},
     history:{
@@ -77,6 +79,34 @@ function createRouter(pathname){
   assert(call,'genre route should open genre page');
   assert.strictEqual(call[1],'action-adventure');
   assert.strictEqual(call[2].fromRoute,true);
+}
+
+
+{
+  const {calls,router}=createRouter('/app/network/213');
+  assert.strictEqual(router.currentRoute(),'/app/network/213');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'network route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['network','213']);
+  assert.strictEqual(call[3].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/language/ja');
+  assert.strictEqual(router.currentRoute(),'/app/language/ja');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'language route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['language','ja']);
+  assert.strictEqual(call[3].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/country/jp');
+  assert.strictEqual(router.currentRoute(),'/app/country/jp');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'country route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['country','jp']);
+  assert.strictEqual(call[3].fromRoute,true);
 }
 
 {

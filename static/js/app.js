@@ -29,6 +29,7 @@ var discoverPreviewShow = null;
 var selectedShowId = null;
 var selectedEpisodeContext = null;
 var selectedGenreSlug = null;
+var selectedDiscoveryContext = null;
 var selectedPersonContext = null;
 var personPageState = {
     role:"",
@@ -43,6 +44,18 @@ var genrePageState = {
     slug:"",
     name:"",
     genreId:null,
+    year:"",
+    sort:"popularity.desc",
+    page:1,
+    totalPages:1,
+    loading:false,
+    error:"",
+    shows:[]
+};
+var discoveryPageState = {
+    type:"",
+    value:"",
+    name:"",
     year:"",
     sort:"popularity.desc",
     page:1,
@@ -92,7 +105,9 @@ const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const TMDB_TV_GENRE_CACHE_KEY = "tv-tracker-tmdb-tv-genres:v1";
 const TMDB_TV_GENRE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
+const DISCOVERY_GRID_PAGE_SIZE = 21;
 const GENRE_PAGE_SORTS = new Set(["popularity.desc","vote_average.desc","first_air_date.desc"]);
+const DISCOVERY_PAGE_TYPES = new Set(["network","language","country"]);
 const PERSON_MEDIA_TYPES = new Set(["tv","movie"]);
 const PERSON_ROLE_CONFIGS = {
     actor:{label:"Actor",titleTV:"Shows starring",titleMovie:"Movies starring",source:"cast"},
@@ -1842,9 +1857,20 @@ function normalizeCreatedBy(details){
 function normalizeSpokenLanguages(details){
     return (Array.isArray(details && details.spoken_languages) ? details.spoken_languages : [])
     .map(language=>{
-        return language && (language.english_name || language.name)
-        ? String(language.english_name || language.name).trim()
-        : "";
+        if(!language){
+            return null;
+        }
+        const code = String(language.iso_639_1 || language.iso_639_2 || "").trim().toLowerCase();
+        const englishName = String(language.english_name || language.name || code || "").trim();
+        const localName = String(language.name || "").trim();
+        if(!englishName && !code){
+            return null;
+        }
+        return {
+            iso_639_1:code,
+            english_name:englishName,
+            name:localName
+        };
     })
     .filter(Boolean)
     .slice(0,5);
@@ -3830,6 +3856,89 @@ function getGenreDetailRoute(slug){
     return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanSlug) : "/app/watchlist";
 }
 
+function normalizeDiscoveryFilterType(type){
+    const clean = String(type || "").trim().toLowerCase();
+    return DISCOVERY_PAGE_TYPES.has(clean) ? clean : "";
+}
+
+function normalizeLanguageCode(code){
+    const clean = String(code || "").trim().toLowerCase();
+    return /^[a-z]{2,3}$/.test(clean) ? clean : "";
+}
+
+function normalizeCountryCode(code){
+    const clean = String(code || "").trim().toLowerCase();
+    return /^[a-z]{2}$/.test(clean) ? clean : "";
+}
+
+function normalizeDiscoveryFilterValue(type,value){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    if(cleanType === "network"){
+        const clean = String(value || "").trim();
+        return /^[1-9][0-9]{0,11}$/.test(clean) ? clean : "";
+    }
+    if(cleanType === "language"){
+        return normalizeLanguageCode(value);
+    }
+    if(cleanType === "country"){
+        return normalizeCountryCode(value);
+    }
+    return "";
+}
+
+function getDiscoveryFilterDetailRoute(type,value){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    return cleanType && cleanValue ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(cleanValue)}` : "/app/watchlist";
+}
+
+function getLanguageName(code){
+    const clean = normalizeLanguageCode(code);
+    if(!clean){
+        return "Unknown";
+    }
+    try{
+        if(typeof Intl !== "undefined" && Intl.DisplayNames){
+            const names = new Intl.DisplayNames(["en"],{type:"language"});
+            return names.of(clean) || clean.toUpperCase();
+        }
+    }catch(error){}
+    return clean.toUpperCase();
+}
+
+function getDiscoveryCountryName(code){
+    const clean = normalizeCountryCode(code);
+    if(!clean){
+        return "Unknown";
+    }
+    try{
+        if(typeof Intl !== "undefined" && Intl.DisplayNames){
+            const names = new Intl.DisplayNames(["en"],{type:"region"});
+            return names.of(clean.toUpperCase()) || clean.toUpperCase();
+        }
+    }catch(error){}
+    return clean.toUpperCase();
+}
+
+function getDiscoveryFilterFallbackName(type,value){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    if(cleanType === "language"){
+        return `${getLanguageName(cleanValue)} TV Shows`;
+    }
+    if(cleanType === "country"){
+        return `TV Shows from ${getDiscoveryCountryName(cleanValue)}`;
+    }
+    if(cleanType === "network"){
+        return cleanValue ? `Shows from Network ${cleanValue}` : "Network Shows";
+    }
+    return "TV Shows";
+}
+
+async function tmdbGetNetworkDetails(networkId){
+    return await tmdbFetchJSON("network/" + encodeURIComponent(String(networkId)));
+}
+
 function normalizePersonRoleSlug(role){
     const clean = String(role || "").trim().toLowerCase().replace(/[^a-z]/g,"");
     return PERSON_ROLE_CONFIGS[clean] ? clean : "";
@@ -3949,7 +4058,8 @@ function getPersonCreditsForRole(person,role,media){
             return Number(b.popularity || 0) - Number(a.popularity || 0);
         }
         return String(b.date || "").localeCompare(String(a.date || ""));
-    });
+    })
+    .slice(0,DISCOVERY_GRID_PAGE_SIZE);
 }
 
 function normalizePersonDetails(person){
@@ -4072,6 +4182,7 @@ async function openPersonPage(role,personId,options={}){
     selectedShowId = null;
     selectedEpisodeContext = null;
     selectedGenreSlug = null;
+    selectedDiscoveryContext = null;
     showDetailPreview = null;
     discoverPreviewShow = null;
 
@@ -4321,18 +4432,31 @@ async function loadGenrePageResults(options={}){
             params["vote_count.gte"] = 20;
         }
 
-        const payload = await tmdbGetDiscoverPage("discover/tv",params);
         const existing = new Set((append ? genrePageState.shows : []).map(show=>String(show.id)));
         const fresh = [];
+        let totalPages = Number(genrePageState.totalPages || 1);
+        let currentPage = nextPage;
+        let lastPage = nextPage;
 
-        (payload.results || []).forEach(raw=>{
-            const show = normalizeDiscoverHubShow(raw);
-            if(!show || existing.has(String(show.id))){
-                return;
+        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+            const payload = await tmdbGetDiscoverPage("discover/tv",Object.assign({},params,{page:currentPage}));
+            totalPages = Number(payload.total_pages || currentPage || 1);
+            lastPage = Number(payload.page || currentPage);
+
+            (payload.results || []).forEach(raw=>{
+                const show = normalizeDiscoverHubShow(raw);
+                if(!show || existing.has(String(show.id)) || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                    return;
+                }
+                existing.add(String(show.id));
+                fresh.push(show);
+            });
+
+            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                break;
             }
-            existing.add(String(show.id));
-            fresh.push(show);
-        });
+            currentPage = lastPage + 1;
+        }
 
         genrePageState = Object.assign({},genrePageState,{
             slug:slug,
@@ -4340,8 +4464,8 @@ async function loadGenrePageResults(options={}){
             genreId:genre.id,
             year:filters.year,
             sort:filters.sort,
-            page:Number(payload.page || nextPage),
-            totalPages:Number(payload.total_pages || nextPage || 1),
+            page:lastPage,
+            totalPages:totalPages,
             loading:false,
             error:"",
             shows:append ? (genrePageState.shows || []).concat(fresh) : fresh
@@ -4369,6 +4493,7 @@ async function openGenrePage(slug,options={}){
     selectedShowId = null;
     selectedEpisodeContext = null;
     selectedPersonContext = null;
+    selectedDiscoveryContext = null;
     showDetailPreview = null;
     discoverPreviewShow = null;
 
@@ -4452,6 +4577,287 @@ function attachGenreDetailPageEvents(){
         moreButton.addEventListener("click",function(){
             if(!genrePageState.loading){
                 loadGenrePageResults({append:true});
+            }
+        });
+    }
+}
+
+function showDiscoveryFilterPageShell(){
+    activePage = "discovery-detail";
+
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+
+    const pageElement = document.getElementById("genre-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+        pageElement.scrollTop = 0;
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+function renderActiveDiscoveryFilterPage(){
+    if(typeof renderDiscoveryFilterDetailPage === "function"){
+        renderDiscoveryFilterDetailPage(discoveryPageState);
+        attachDiscoveryFilterPageEvents();
+    }
+}
+
+function getDiscoveryPageFiltersFromState(){
+    const year = String(discoveryPageState && discoveryPageState.year ? discoveryPageState.year : "").trim();
+    const sort = GENRE_PAGE_SORTS.has(String(discoveryPageState && discoveryPageState.sort || ""))
+    ? String(discoveryPageState.sort)
+    : "popularity.desc";
+
+    return {
+        year:/^\d{4}$/.test(year) ? year : "",
+        sort:sort
+    };
+}
+
+function buildDiscoveryFilterRequest(type,value,filters,page){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    const params = {
+        sort_by:filters.sort,
+        include_adult:"false",
+        include_null_first_air_dates:"false",
+        page:page
+    };
+
+    if(cleanType === "network"){
+        params.with_networks = cleanValue;
+    }else if(cleanType === "language"){
+        params.with_original_language = cleanValue;
+    }else if(cleanType === "country"){
+        params.with_origin_country = cleanValue.toUpperCase();
+    }
+
+    if(filters.year){
+        params.first_air_date_year = filters.year;
+    }
+
+    if(filters.sort === "vote_average.desc"){
+        params["vote_count.gte"] = 20;
+    }
+
+    return params;
+}
+
+async function resolveDiscoveryFilterPageName(type,value,existingName=""){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    const fallback = getDiscoveryFilterFallbackName(cleanType,cleanValue);
+    const supplied = String(existingName || "").trim();
+
+    if(cleanType === "network"){
+        if(supplied && !/^Shows from Network \d+$/i.test(supplied)){
+            return supplied;
+        }
+        try{
+            const network = await tmdbGetNetworkDetails(cleanValue);
+            if(network && network.name){
+                return `Shows from ${network.name}`;
+            }
+        }catch(error){}
+    }
+
+    return supplied || fallback;
+}
+
+async function loadDiscoveryFilterPageResults(options={}){
+    const append = options && options.append === true;
+    const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,discoveryPageState && discoveryPageState.value);
+
+    if(!cleanType || !cleanValue){
+        discoveryPageState.error = "Page not found.";
+        discoveryPageState.loading = false;
+        renderActiveDiscoveryFilterPage();
+        return;
+    }
+
+    const filters = getDiscoveryPageFiltersFromState();
+    let nextPage = append ? Number(discoveryPageState.page || 1) + 1 : 1;
+
+    discoveryPageState.loading = true;
+    discoveryPageState.error = "";
+    if(!append){
+        discoveryPageState.shows = [];
+        discoveryPageState.page = 1;
+        discoveryPageState.totalPages = 1;
+    }
+    renderActiveDiscoveryFilterPage();
+
+    try{
+        const existing = new Set((append ? discoveryPageState.shows : []).map(show=>String(show.id)));
+        const fresh = [];
+        let totalPages = Number(discoveryPageState.totalPages || 1);
+        let currentPage = nextPage;
+        let lastPage = nextPage;
+
+        const resolvedName = await resolveDiscoveryFilterPageName(cleanType,cleanValue,discoveryPageState.name);
+
+        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+            const params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
+            const payload = await tmdbGetDiscoverPage("discover/tv",params);
+            totalPages = Number(payload.total_pages || currentPage || 1);
+            lastPage = Number(payload.page || currentPage);
+
+            (payload.results || []).forEach(raw=>{
+                const show = normalizeDiscoverHubShow(raw);
+                if(!show || existing.has(String(show.id)) || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                    return;
+                }
+                existing.add(String(show.id));
+                fresh.push(show);
+            });
+
+            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                break;
+            }
+            currentPage = lastPage + 1;
+        }
+
+        discoveryPageState = Object.assign({},discoveryPageState,{
+            type:cleanType,
+            value:cleanValue,
+            name:resolvedName,
+            year:filters.year,
+            sort:filters.sort,
+            page:lastPage,
+            totalPages:totalPages,
+            loading:false,
+            error:"",
+            shows:append ? (discoveryPageState.shows || []).concat(fresh) : fresh
+        });
+
+        renderActiveDiscoveryFilterPage();
+    }catch(error){
+        discoveryPageState.loading = false;
+        discoveryPageState.error = error && error.message ? error.message : "Could not load shows.";
+        renderActiveDiscoveryFilterPage();
+    }
+}
+
+async function openDiscoveryFilterPage(type,value,options={}){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    if(!cleanType || !cleanValue){
+        return;
+    }
+
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    const suppliedName = String(options && options.name || "").trim();
+    const isSamePage = activePage === "discovery-detail" &&
+    selectedDiscoveryContext &&
+    String(selectedDiscoveryContext.type || "") === cleanType &&
+    String(selectedDiscoveryContext.value || "") === cleanValue;
+
+    selectedDiscoveryContext = {type:cleanType,value:cleanValue};
+    selectedShowId = null;
+    selectedEpisodeContext = null;
+    selectedGenreSlug = null;
+    selectedPersonContext = null;
+    showDetailPreview = null;
+    discoverPreviewShow = null;
+
+    if(!isSamePage){
+        discoveryPageState = {
+            type:cleanType,
+            value:cleanValue,
+            name:suppliedName || getDiscoveryFilterFallbackName(cleanType,cleanValue),
+            year:"",
+            sort:"popularity.desc",
+            page:1,
+            totalPages:1,
+            loading:false,
+            error:"",
+            shows:[]
+        };
+    }else{
+        discoveryPageState.type = cleanType;
+        discoveryPageState.value = cleanValue;
+        if(suppliedName){
+            discoveryPageState.name = suppliedName;
+        }
+    }
+
+    showDiscoveryFilterPageShell();
+
+    if(!fromRoute){
+        setAppHashRoute(getDiscoveryFilterDetailRoute(cleanType,cleanValue),replaceRoute);
+    }
+
+    if(!isSamePage || !discoveryPageState.shows.length){
+        await loadDiscoveryFilterPageResults({append:false});
+    }else{
+        renderActiveDiscoveryFilterPage();
+    }
+}
+
+function attachDiscoveryFilterPageEvents(){
+    const backButton = document.getElementById("discovery-filter-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",function(){
+            if(window.history.length > 1){
+                window.history.back();
+            }else{
+                setAppHashRoute("/app/discover",false);
+                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+                    window.TVTrackerV2Router.applyRoute();
+                }else{
+                    showPage("discover");
+                }
+            }
+        });
+    }
+
+    const yearInput = document.getElementById("discovery-filter-year-filter");
+    if(yearInput){
+        yearInput.addEventListener("change",function(){
+            const value = String(this.value || "").trim();
+            discoveryPageState.year = /^\d{4}$/.test(value) ? value : "";
+            this.value = discoveryPageState.year;
+            loadDiscoveryFilterPageResults({append:false});
+        });
+    }
+
+    const sortSelect = document.getElementById("discovery-filter-sort-filter");
+    if(sortSelect){
+        sortSelect.addEventListener("change",function(){
+            discoveryPageState.sort = GENRE_PAGE_SORTS.has(this.value) ? this.value : "popularity.desc";
+            loadDiscoveryFilterPageResults({append:false});
+        });
+    }
+
+    document.querySelectorAll(".discovery-filter-result-card[data-show-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            await openDiscoverShowModal({
+                id:Number(this.dataset.showId),
+                name:this.dataset.showName || "",
+                poster_path:this.dataset.posterPath || "",
+                overview:this.dataset.overview || "",
+                first_air_date:this.dataset.firstAirDate || ""
+            });
+        });
+    });
+
+    const moreButton = document.getElementById("discovery-filter-load-more-button");
+    if(moreButton){
+        moreButton.addEventListener("click",function(){
+            if(!discoveryPageState.loading){
+                loadDiscoveryFilterPageResults({append:true});
             }
         });
     }

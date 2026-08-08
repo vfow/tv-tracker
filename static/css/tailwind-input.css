@@ -4414,4 +4414,79 @@
             @apply tw-items-start tw-gap-3;
         }
     }
+
+    .show-detail-inline-link-list{
+        display:inline-flex;
+        flex-wrap:wrap;
+        align-items:center;
+        gap:.35rem .5rem;
+    }
+
+    .show-detail-inline-separator{
+        color:rgba(255,255,255,.35);
+    }
+
+    .show-detail-entity-link{
+        border:0;
+        background:transparent;
+        padding:0;
+        color:inherit;
+        font:inherit;
+        font-weight:700;
+        text-align:left;
+        text-decoration:none;
+        cursor:pointer;
+        transition:color .15s ease, opacity .15s ease;
+    }
+
+    .show-detail-entity-link:hover,
+    .show-detail-entity-link:focus-visible{
+        color:#ffffff;
+        opacity:.82;
+        outline:0;
+        text-decoration:none;
+        text-shadow:none;
+        box-shadow:none;
+    }
+
+    .show-detail-network-link{
+        display:inline-flex;
+        align-items:center;
+        vertical-align:middle;
+    }
+
+    .show-detail-network-link .network-logo-chip{
+        margin-top:0;
+    }
+
+    .show-detail-theme-list{
+        display:flex;
+        flex-wrap:wrap;
+        gap:.4rem .5rem;
+    }
+
+    .show-detail-theme-chip{
+        border-radius:9999px;
+        border:1px solid rgba(255,255,255,.12);
+        background:rgba(255,255,255,.04);
+        padding:.15rem .55rem;
+        font-size:.75rem;
+        font-weight:700;
+        color:#d6d6d6;
+    }
+
+    .v2-person-card-link{
+        cursor:pointer;
+    }
+
+    .v2-person-card-link:hover .v2-actor-name,
+    .v2-person-card-link:focus-visible .v2-actor-name{
+        color:#d6b56d;
+    }
+
+    .v2-person-card-link:focus-visible{
+        outline:1px solid rgba(214,181,109,.45);
+        outline-offset:3px;
+    }
+
 }

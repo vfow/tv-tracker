@@ -9,7 +9,8 @@ const TMDB_SHOW_APPEND_TO_RESPONSE = [
     "watch/providers",
     "similar",
     "aggregate_credits",
-    "alternative_titles"
+    "alternative_titles",
+    "keywords"
 ];
 
 const TMDB_EPISODE_APPEND_TO_RESPONSE = [

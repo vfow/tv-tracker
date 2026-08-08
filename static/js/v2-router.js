@@ -30,6 +30,9 @@
         if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.role && selectedPersonContext.personId){
             return "/app/" + encodeURIComponent(String(selectedPersonContext.role)) + "/" + encodeURIComponent(String(selectedPersonContext.personId));
         }
+        if(activePage === "discovery-detail" && typeof selectedDiscoveryContext !== "undefined" && selectedDiscoveryContext && selectedDiscoveryContext.type && selectedDiscoveryContext.value){
+            return "/app/" + encodeURIComponent(String(selectedDiscoveryContext.type)) + "/" + encodeURIComponent(String(selectedDiscoveryContext.value));
+        }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
             return "/app/genre/" + encodeURIComponent(String(selectedGenreSlug));
         }
@@ -106,6 +109,9 @@
         if(typeof selectedPersonContext !== "undefined"){
             selectedPersonContext = null;
         }
+        if(typeof selectedDiscoveryContext !== "undefined"){
+            selectedDiscoveryContext = null;
+        }
     }
 
     function applyRoute(){
@@ -166,6 +172,26 @@
                 }
                 if(typeof openPersonPage === "function"){
                     openPersonPage(routePersonRole,routePersonId,{fromRoute:true});
+                }
+                return;
+            }
+
+            const discoveryMatch = route.match(/^\/app\/(network\/[1-9][0-9]{0,11}|language\/[a-z]{2,3}|country\/[a-z]{2})$/);
+            if(discoveryMatch){
+                const parts = discoveryMatch[1].split("/");
+                const routeDiscoveryType = parts[0];
+                const routeDiscoveryValue = parts[1];
+                if(
+                    activePage === "discovery-detail" &&
+                    typeof selectedDiscoveryContext !== "undefined" &&
+                    selectedDiscoveryContext &&
+                    String(selectedDiscoveryContext.type || "") === routeDiscoveryType &&
+                    String(selectedDiscoveryContext.value || "") === routeDiscoveryValue
+                ){
+                    return;
+                }
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage(routeDiscoveryType,routeDiscoveryValue,{fromRoute:true});
                 }
                 return;
             }

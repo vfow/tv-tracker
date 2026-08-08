@@ -15,6 +15,9 @@ def load_route_helpers():
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
         "APP_PERSON_PATH_RE",
+        "APP_NETWORK_PATH_RE",
+        "APP_LANGUAGE_PATH_RE",
+        "APP_COUNTRY_PATH_RE",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -62,6 +65,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertTrue(valid_app_path("/app/genre/action-adventure"))
         self.assertTrue(valid_app_path("/app/actor/123"))
         self.assertTrue(valid_app_path("/app/cinematographer/456"))
+        self.assertTrue(valid_app_path("/app/network/213"))
+        self.assertTrue(valid_app_path("/app/language/ja"))
+        self.assertTrue(valid_app_path("/app/country/jp"))
         self.assertEqual(
             safe_next_url("/app/show/1399/season/1/episode/3"),
             "/app/show/1399/season/1/episode/3",
@@ -75,6 +81,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
             safe_next_url("/app/cinematographer/456"),
             "/app/cinematographer/456",
         )
+        self.assertEqual(safe_next_url("/app/network/213"), "/app/network/213")
+        self.assertEqual(safe_next_url("/app/language/ja"), "/app/language/ja")
+        self.assertEqual(safe_next_url("/app/country/jp"), "/app/country/jp")
 
     def test_sensitive_or_external_destinations_are_rejected(self):
         for value in (
@@ -89,6 +98,13 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/actor/not-a-number",
             "/app/actor/0",
             "/app/unknownrole/123",
+            "/app/network/",
+            "/app/network/0",
+            "/app/network/not-a-number",
+            "/app/language/",
+            "/app/language/japanese",
+            "/app/country/",
+            "/app/country/jpn",
             "/app/show/1399?status=watching",
         ):
             expected = (
@@ -111,6 +127,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
         )
         self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/action-adventure")
         self.assertEqual(safe_next_url("/app/actor/123/"), "/app/actor/123")
+        self.assertEqual(safe_next_url("/app/network/213/"), "/app/network/213")
+        self.assertEqual(safe_next_url("/app/language/ja/"), "/app/language/ja")
+        self.assertEqual(safe_next_url("/app/country/jp/"), "/app/country/jp")
 
 
 if __name__ == "__main__":
