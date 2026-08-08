@@ -2652,17 +2652,43 @@ function v2FirstTrailer(show){
 }
 
 function renderV2NetworkLogoOnlyHTML(show){
-    const networks = getShowNetworkItems(show).filter(network=>network && network.logo_path).slice(0,2);
+    const networks = getShowNetworkItems(show);
 
     if(!networks.length){
         return "";
     }
 
-    return `<span class="network-inline-group">${networks.map(network=>`
-        <span class="network-logo-chip" title="${escapeHTML(network.name || "Network")}">
-            <img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(network.name || "Network")}">
-        </span>
-    `).join("")}</span>`;
+    return `<span class="network-inline-group">${networks.map(network=>{
+        if(network.logo_path){
+            return `
+                <span class="network-logo-chip" title="${escapeHTML(network.name || "Network")}">
+                    <img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(network.name || "Network")}">
+                </span>
+            `;
+        }
+
+        return `<span class="network-name-inline">${escapeHTML(network.name || "Network")}</span>`;
+    }).join("")}</span>`;
+}
+
+function renderShowNetworkDetailsHTML(show){
+    const networks = getShowNetworkItems(show);
+
+    if(!networks.length){
+        return "Unknown";
+    }
+
+    return `<div class="v2-provider-list">${networks.map(network=>{
+        if(network.logo_path){
+            return `
+                <span class="network-logo-chip" title="${escapeHTML(network.name || "Network")}">
+                    <img class="network-logo-inline" src="${escapeHTML(trackerImageURL(network.logo_path,"w92"))}" alt="${escapeHTML(network.name || "Network")}">
+                </span>
+            `;
+        }
+
+        return `<span class="v2-provider-pill">${escapeHTML(network.name || "Network")}</span>`;
+    }).join("")}</div>`;
 }
 
 function renderV2ShowInfoMetaLineHTML(show){
@@ -3619,34 +3645,58 @@ function renderShowCrewTabHTML(show){
     return html || `<div class="v2-api-empty">No crew details available yet.</div>`;
 }
 
-function formatAlternativeTitlesForDetails(show){
+function renderAlternativeTitlesForDetailsHTML(show){
     const titles = Array.isArray(show && show._tmdb_alternative_titles) ? show._tmdb_alternative_titles : [];
-    const rows = titles
+    const grouped = new Map();
+
+    titles
     .filter(item=>item && item.title)
     .slice(0,12)
-    .map(item=>{
-        const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "";
-        return country ? `${country}: ${item.title}` : item.title;
+    .forEach(item=>{
+        const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "Other";
+        const key = country || "Other";
+        if(!grouped.has(key)){
+            grouped.set(key,[]);
+        }
+        const title = String(item.title || "").trim();
+        if(title && !grouped.get(key).includes(title)){
+            grouped.get(key).push(title);
+        }
     });
 
-    return rows.length ? rows.join(" / ") : "Unknown";
+    if(!grouped.size){
+        return "Unknown";
+    }
+
+    return `
+        <div class="show-release-provider-stack">
+            ${Array.from(grouped.entries()).map(([country,countryTitles])=>`
+                <div class="v2-provider-group">
+                    <div class="v2-provider-group-title">${escapeHTML(country)}</div>
+                    <div class="show-detail-release-meta">
+                        ${countryTitles.map(title=>`<span>${escapeHTML(title)}</span>`).join("")}
+                    </div>
+                </div>
+            `).join("")}
+        </div>
+    `;
 }
 
 function renderShowDetailsTabHTML(show){
     const rows = [
-        ["Status",show.tmdb_status || show.status || "Unknown"],
-        ["Networks",v2JoinList(getShowNetworkItems(show).map(item=>item.name),6) || "Unknown"],
-        ["Language",(show.spoken_languages || []).map(item=>item.english_name || item.name).filter(Boolean).join(" / ") || show.original_language || "Unknown"],
-        ["Country",(show.origin_country || []).map(getCountryLabel).join(" / ") || "Unknown"],
-        ["Alternative Titles",formatAlternativeTitlesForDetails(show)]
+        {label:"Status",html:escapeHTML(show.tmdb_status || show.status || "Unknown")},
+        {label:"Networks",html:renderShowNetworkDetailsHTML(show)},
+        {label:"Language",html:escapeHTML((show.spoken_languages || []).map(item=>item.english_name || item.name).filter(Boolean).join(" / ") || show.original_language || "Unknown")},
+        {label:"Country",html:escapeHTML((show.origin_country || []).map(getCountryLabel).join(" / ") || "Unknown")},
+        {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show)}
     ];
 
     return `
         <div class="show-detail-fact-list">
-            ${rows.map(([label,value])=>`
+            ${rows.map(row=>`
                 <div class="show-detail-fact-row">
-                    <div class="episode-detail-label">${escapeHTML(label)}</div>
-                    <div class="episode-detail-value">${escapeHTML(String(value))}</div>
+                    <div class="episode-detail-label">${escapeHTML(row.label)}</div>
+                    <div class="episode-detail-value">${row.html}</div>
                 </div>
             `).join("")}
         </div>
@@ -3783,7 +3833,6 @@ function renderShowInfoTabHTML(show){
 function renderShowEpisodesTabHTML(show){
     return `
         <div class="show-episodes-tab-stack">
-            ${renderShowProgressHTML(show)}
             <div class="seasons-list">${renderSeasonsHTML(show)}</div>
         </div>
     `;
