@@ -122,7 +122,8 @@ function createPendingSaveOperation(options,operationId){
         dirtyOptions,
         baseRevision:Number(SERVER_REVISION || 0),
         generation:0,
-        delta:cloneTrackerData(delta)
+        delta:cloneTrackerData(delta),
+        silent:!!(options && options.silent === true)
     };
 }
 
@@ -1615,7 +1616,11 @@ function processPendingSaveQueue(){
             }catch(error){
                 console.error("TV Tracker has an unsaved operation",error);
                 PENDING_SAVE_FAILURES += 1;
-                if(PENDING_SAVE_FAILURES === 1 && typeof showToast === "function"){
+                const shouldToast =
+                PENDING_SAVE_FAILURES === 1 &&
+                typeof showToast === "function" &&
+                !(operation && operation.silent);
+                if(shouldToast){
                     showToast(friendlySaveError(error),{duration:3600});
                 }
                 updateUnsavedStateIndicator();

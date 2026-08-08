@@ -4348,7 +4348,7 @@ async function toggleSeason(showId,seasonNumber){
         await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
         renderShowDetailsPagePreservingScroll(show);
         if(DATA.shows && DATA.shows[id]){
-            saveData({showIds:[id]});
+            saveData({showIds:[id], silent:true});
         }
     }
 }
