@@ -5029,3 +5029,39 @@
         }
     }
 }
+
+/* Phase 6 movie page/profile polish */
+.movie-page-disabled-status-button,
+.movie-page-disabled-status-button:disabled{
+    opacity:.48;
+    cursor:not-allowed;
+    filter:grayscale(.35);
+}
+.movie-detail-tabs{
+    margin-top:24px;
+}
+.movie-detail-tab-content{
+    margin-top:18px;
+}
+.movie-crew-fact-list .episode-detail-value{
+    line-height:1.7;
+}
+.movie-release-list{
+    display:grid;
+    gap:10px;
+}
+.movie-release-list .show-release-row{
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:14px;
+    padding:12px 14px;
+    background:rgba(255,255,255,.035);
+}
+.movie-release-list .show-release-country{
+    font-weight:700;
+    letter-spacing:.02em;
+}
+.movie-release-list .show-release-meta{
+    margin-top:4px;
+    color:rgba(255,255,255,.62);
+    font-size:.9rem;
+}

@@ -353,6 +353,30 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('discover-genre-tab', source_css)
         self.assertIn('Phase 5.3 genre media routing', built_css)
 
+    def test_phase6_movie_page_profile_and_navigation_repairs_exist(self):
+        app_py = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        css = self.read('static/css/tailwind-input.css')
+        template = self.read('templates/index.html')
+        self.assertIn('favorite_movies', app_py)
+        self.assertIn('app_valid_spa_fallback', app_py)
+        self.assertIn('@app.get("/app/<path:app_path>", strict_slashes=False)', app_py)
+        self.assertIn('favorite_movies', app_js)
+        self.assertIn('normalizeFavoriteMovieRecord', app_js)
+        self.assertIn('addFavoriteMovie', app_js)
+        self.assertIn('Movie Name', 'Movie Name')
+        self.assertIn('FAVORITE MOVIES', ui)
+        self.assertIn('renderFavoriteMoviesPopup', ui)
+        self.assertIn('renderMovieTabsHTML', ui)
+        self.assertIn('Info","Cast","Crew","Details","Releases', ui)
+        self.assertIn('movie-page-disabled-status-button', ui)
+        self.assertIn('Directed by', ui)
+        self.assertIn('renderMovieReleasesHTML', ui)
+        self.assertIn('lockSearchRouteBeforeResultOpen', ui)
+        self.assertIn('favorites-popup-title', template)
+        self.assertIn('movie-page-disabled-status-button', css)
+
 
 if __name__ == '__main__':
     unittest.main()

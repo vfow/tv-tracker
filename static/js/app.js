@@ -4,6 +4,7 @@ var DATA = {
     profile:{
         username:"Username",
         favorite_shows:[],
+        favorite_movies:[],
         avatar_type:"initial",
         avatar_preset:"silhouette-1",
         avatar_data:""
@@ -24,6 +25,7 @@ var activePage = "shows";
 var activeShowsTab = "watchlist";
 var activeFilter = "watching";
 var activeProfileView = "home";
+var activeFavoritesMode = "show";
 var pendingShow = null;
 var discoverPreviewShow = null;
 var selectedShowId = null;
@@ -83,6 +85,7 @@ var showDetailScrollTopBeforeEpisode = 0;
 var showDetailScrollRestorePending = false;
 var appDataReady = false;
 var activeShowDetailsTabs = {};
+var activeMovieDetailsTab = "Info";
 var activeShowInfoTabs = {};
 var expandedSeasons = {};
 var expandedUpcomingBatches = {};
@@ -6272,7 +6275,10 @@ function normalizeMovieDetails(movie){
         release_date:releaseDate,
         year:releaseDate ? releaseDate.slice(0,4) : "",
         runtime:Number(movie.runtime || 0),
+        budget:Number(movie.budget || 0),
+        revenue:Number(movie.revenue || 0),
         status:movie.status || "",
+        original_language:movie.original_language || "",
         tagline:movie.tagline || "",
         homepage:movie.homepage || "",
         vote_average:Number(movie.vote_average || 0),
@@ -6417,6 +6423,13 @@ function attachMovieDetailPageEvents(){
         backButton.addEventListener("click",closeMoviePage);
     }
 
+    document.querySelectorAll("[data-movie-detail-tab]").forEach(button=>{
+        button.addEventListener("click",function(){
+            activeMovieDetailsTab = this.dataset.movieDetailTab || "Info";
+            renderActiveMoviePage();
+        });
+    });
+
     document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openGenrePage !== "function"){
@@ -6465,6 +6478,8 @@ async function openMoviePage(movieId,options={}){
     if(!fromRoute){
         pushDetailBackRoute(getMovieDetailRoute(id,routeLabel));
     }
+
+    activeMovieDetailsTab = "Info";
 
     moviePageState = {
         movieId:id,
@@ -9714,6 +9729,10 @@ function ensureProfileData(){
         DATA.profile.favorite_shows = [];
     }
 
+    if(!DATA.profile.favorite_movies || !Array.isArray(DATA.profile.favorite_movies)){
+        DATA.profile.favorite_movies = [];
+    }
+
     const allowedAvatarTypes = ["initial","preset","upload"];
 
     if(!allowedAvatarTypes.includes(DATA.profile.avatar_type)){
@@ -9764,6 +9783,19 @@ function ensureProfileData(){
     .map(id=>String(id))
     .filter((id,index,array)=>{
         return DATA.shows[String(id)] && array.indexOf(id) === index;
+    })
+    .slice(0,8);
+
+    const seenFavoriteMovieIds = new Set();
+    DATA.profile.favorite_movies = DATA.profile.favorite_movies
+    .map(movie=>normalizeFavoriteMovieRecord(movie))
+    .filter(movie=>{
+        const id = String(movie && movie.id || "");
+        if(!id || seenFavoriteMovieIds.has(id)){
+            return false;
+        }
+        seenFavoriteMovieIds.add(id);
+        return true;
     })
     .slice(0,8);
 
@@ -10258,6 +10290,48 @@ function formatWatchTime(totalMinutes){
 
 
 
+
+
+function normalizeFavoriteMovieRecord(movie){
+
+    if(!movie || typeof movie !== "object"){
+        return null;
+    }
+
+    const id = normalizeRouteId(movie.id || movie.tmdb_id || "");
+    if(!id){
+        return null;
+    }
+
+    const releaseDate = String(movie.release_date || "").trim();
+    const year = String(movie.year || (releaseDate ? releaseDate.slice(0,4) : "")).trim();
+
+    return {
+        id:id,
+        tmdb_id:id,
+        title:String(movie.title || movie.name || movie.original_title || "Untitled").trim() || "Untitled",
+        poster_path:String(movie.poster_path || "").trim(),
+        backdrop_path:String(movie.backdrop_path || "").trim(),
+        release_date:releaseDate,
+        year:year
+    };
+
+}
+
+function normalizeFavoriteMovieFromSearch(item){
+
+    return normalizeFavoriteMovieRecord({
+        id:item && item.id,
+        tmdb_id:item && item.id,
+        title:item && (item.title || item.name),
+        poster_path:item && item.poster_path,
+        backdrop_path:item && item.backdrop_path,
+        release_date:item && (item.release_date || item.date),
+        year:item && (item.year || (item.release_date ? String(item.release_date).slice(0,4) : ""))
+    });
+
+}
+
 function getFavoriteShows(){
 
     ensureProfileData();
@@ -10283,6 +10357,103 @@ function getAvailableFavoriteShows(){
     .sort((a,b)=>{
         return String(a.title || "").localeCompare(String(b.title || ""));
     });
+
+}
+
+
+
+
+function getFavoriteMovies(){
+
+    ensureProfileData();
+
+    return DATA.profile.favorite_movies
+    .map(movie=>normalizeFavoriteMovieRecord(movie))
+    .filter(Boolean);
+
+}
+
+
+
+function getFavoriteMovieById(movieId){
+
+    const id = normalizeRouteId(movieId);
+    if(!id){
+        return null;
+    }
+
+    return getFavoriteMovies().find(movie=>String(movie.id) === id) || null;
+
+}
+
+
+
+async function addFavoriteMovie(movie){
+
+    ensureProfileData();
+
+    const record = normalizeFavoriteMovieRecord(movie);
+    if(!record){
+        return;
+    }
+
+    if(DATA.profile.favorite_movies.some(item=>String(item && (item.id || item.tmdb_id)) === record.id)){
+        return;
+    }
+
+    if(DATA.profile.favorite_movies.length >= 8){
+        showToast("You can only choose 8 favorite movies");
+        return;
+    }
+
+    DATA.profile.favorite_movies.push(record);
+
+    renderAll();
+    renderFavoritesPopup("movie");
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
+
+}
+
+
+
+async function removeFavoriteMovie(movieId){
+
+    ensureProfileData();
+
+    const id = normalizeRouteId(movieId);
+    DATA.profile.favorite_movies = DATA.profile.favorite_movies.filter(item=>{
+        return String(item && (item.id || item.tmdb_id)) !== id;
+    });
+
+    renderAll();
+    renderFavoritesPopup("movie");
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
+
+}
+
+
+
+async function saveFavoriteMoviesOrder(movieIds){
+
+    ensureProfileData();
+
+    const current = getFavoriteMovies();
+    const requested = Array.isArray(movieIds)
+    ? movieIds.map(id=>normalizeRouteId(id)).filter(Boolean)
+    : [];
+
+    const sameMembers = requested.length === current.length && requested.every(id=>current.some(movie=>String(movie.id) === id));
+    if(!sameMembers){
+        return false;
+    }
+
+    DATA.profile.favorite_movies = requested.map(id=>current.find(movie=>String(movie.id) === id)).filter(Boolean);
+    renderAll();
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile"]});
+    return true;
 
 }
 
@@ -10452,6 +10623,9 @@ function getBackupSummary(){
     const favorites = DATA.profile && Array.isArray(DATA.profile.favorite_shows)
     ? DATA.profile.favorite_shows
     : [];
+    const favoriteMovies = DATA.profile && Array.isArray(DATA.profile.favorite_movies)
+    ? DATA.profile.favorite_movies
+    : [];
 
     const specialHistoryEntries = history.filter(entry=>{
         return Number(entry.season) === 0 || entry.special === true;
@@ -10462,7 +10636,8 @@ function getBackupSummary(){
         historyEntries:history.length,
         regularHistoryEntries:history.length - specialHistoryEntries,
         specialHistoryEntries:specialHistoryEntries,
-        favorites:favorites.length
+        favorites:favorites.length,
+        favoriteMovies:favoriteMovies.length
     };
 
 }
@@ -10513,6 +10688,9 @@ async function commitTrackerDataTransactionally(data,backupTemplate=null){
         historyEntries:Array.isArray(replacement.history) ? replacement.history.length : 0,
         favorites:replacement.profile && Array.isArray(replacement.profile.favorite_shows)
         ? replacement.profile.favorite_shows.length
+        : 0,
+        favoriteMovies:replacement.profile && Array.isArray(replacement.profile.favorite_movies)
+        ? replacement.profile.favorite_movies.length
         : 0
     };
 
@@ -10587,7 +10765,8 @@ async function showImportCompleteSummary(summary,cleanup){
     const lines = [
         `Shows imported: ${Number(cleanSummary.shows || 0).toLocaleString()}`,
         `History entries imported: ${Number(cleanSummary.historyEntries || 0).toLocaleString()}`,
-        `Favorites imported: ${Number(cleanSummary.favorites || 0).toLocaleString()}`,
+        `Favorite shows imported: ${Number(cleanSummary.favorites || 0).toLocaleString()}`,
+        `Favorite movies imported: ${Number(cleanSummary.favoriteMovies || 0).toLocaleString()}`,
         ""
     ];
 
@@ -10681,6 +10860,9 @@ function importNativeBackupJSON(){
                 historyEntries:Array.isArray(preparedImportData.history) ? preparedImportData.history.length : 0,
                 favorites:preparedImportData.profile && Array.isArray(preparedImportData.profile.favorite_shows)
                 ? preparedImportData.profile.favorite_shows.length
+                : 0,
+                favoriteMovies:preparedImportData.profile && Array.isArray(preparedImportData.profile.favorite_movies)
+                ? preparedImportData.profile.favorite_movies.length
                 : 0
             };
 
@@ -10717,6 +10899,7 @@ function getEmptyTrackerData(){
         profile:{
             username:"Username",
             favorite_shows:[],
+            favorite_movies:[],
             avatar_type:"initial",
             avatar_preset:"silhouette-1",
             avatar_data:""
@@ -10843,6 +11026,9 @@ function validateNativeBackupObject(backup){
     const favorites = Array.isArray(profile.favorite_shows)
     ? profile.favorite_shows
     : [];
+    const favoriteMovies = Array.isArray(profile.favorite_movies)
+    ? profile.favorite_movies
+    : [];
 
     const history = Array.isArray(backup.data.history)
     ? backup.data.history
@@ -10866,6 +11052,7 @@ function validateNativeBackupObject(backup){
             shows:Object.keys(backup.data.shows).length,
             historyEntries:history.length,
             favorites:favorites.length,
+            favoriteMovies:favoriteMovies.length,
             backupVersion:backupVersion,
             schemaVersion:schemaVersion
         }

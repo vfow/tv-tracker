@@ -385,6 +385,7 @@ def read_tracker_data() -> tuple[dict[str, Any], int]:
             {
                 "username": "Username",
                 "favorite_shows": [],
+                "favorite_movies": [],
                 "avatar_type": "initial",
                 "avatar_preset": "silhouette-1",
                 "avatar_data": "",
@@ -1118,7 +1119,7 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
     profile.pop("date_only_episode_time", None)
 
     allowed_fields = {
-        "username", "favorite_shows", "avatar_type", "avatar_preset",
+        "username", "favorite_shows", "favorite_movies", "avatar_type", "avatar_preset",
         "avatar_data", "header_type", "header_preset", "header_image",
     }
     unknown = set(profile) - allowed_fields
@@ -1136,6 +1137,39 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
         if favorite_id not in normalized_favorites:
             normalized_favorites.append(favorite_id)
     profile["favorite_shows"] = normalized_favorites
+
+    favorite_movies = profile.get("favorite_movies", []) or []
+    if not isinstance(favorite_movies, list) or len(favorite_movies) > 8:
+        raise BackupValidationError("Profile favorite movies data is invalid")
+    normalized_movie_ids: set[str] = set()
+    normalized_movies: list[dict[str, Any]] = []
+    for raw_movie in favorite_movies:
+        if not isinstance(raw_movie, dict):
+            raise BackupValidationError("Profile favorite movie entry is invalid")
+        movie_id = normalized_identifier(
+            raw_movie.get("id") or raw_movie.get("tmdb_id"),
+            "Profile favorite movie identifier",
+            maximum=160,
+        )
+        if movie_id in normalized_movie_ids:
+            continue
+        normalized_movie_ids.add(movie_id)
+        movie = {"id": movie_id, "tmdb_id": movie_id}
+        for field, limit in {
+            "title": 240,
+            "poster_path": 240,
+            "backdrop_path": 240,
+            "release_date": 40,
+            "year": 8,
+        }.items():
+            value = raw_movie.get(field, "")
+            if value is None:
+                value = ""
+            if not isinstance(value, (str, int, float)):
+                raise BackupValidationError("Profile favorite movie entry is invalid")
+            movie[field] = str(value).strip()[:limit]
+        normalized_movies.append(movie)
+    profile["favorite_movies"] = normalized_movies
 
     limits = {
         "username": 160,
@@ -2016,6 +2050,19 @@ def create_app() -> Flask:
             or season_number < 0
             or episode_number <= 0
         ):
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/<path:app_path>", strict_slashes=False)
+    @login_required
+    def app_valid_spa_fallback(app_path: str):
+        requested_path = request.path.rstrip("/")
+        legacy_redirect = legacy_genre_redirect_path(requested_path)
+        if legacy_redirect:
+            return redirect(legacy_redirect)
+        if not valid_app_path(requested_path):
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)
