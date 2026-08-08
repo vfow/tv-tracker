@@ -580,18 +580,16 @@
     }
 
     .view-more-button{
-        @apply tw-mx-auto tw-mb-1 tw-mt-[18px] tw-block tw-min-w-[132px] tw-cursor-pointer tw-rounded-full tw-border tw-border-solid tw-border-white tw-bg-[#f4f4f0] tw-px-[26px] tw-pb-2 tw-pt-[7px] tw-font-league tw-text-[32px] tw-uppercase tw-leading-none tw-tracking-[.035em] tw-text-[#050505] tw-transition;
-        box-shadow:0 12px 28px rgba(0,0,0,.34), inset 0 -1px 0 rgba(0,0,0,.18);
+        @apply tw-mx-auto tw-mb-10 tw-mt-6 tw-block tw-cursor-pointer tw-border tw-border-solid tw-border-[#333] tw-bg-tt-control tw-px-7 tw-py-3 tw-font-league tw-text-[28px] tw-uppercase tw-tracking-[1px] tw-text-white tw-transition-colors;
     }
 
     .view-more-button:hover,
     .view-more-button:focus-visible{
-        @apply tw-translate-y-[-1px] tw-bg-white tw-text-black;
-        box-shadow:0 14px 32px rgba(0,0,0,.42),0 0 0 2px rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.2);
+        @apply tw-bg-white tw-text-black;
     }
 
     .view-more-button:disabled{
-        @apply tw-cursor-wait tw-opacity-60 tw-transform-none;
+        @apply tw-cursor-wait tw-opacity-60;
     }
 
     .discover-view-more-button{

@@ -1922,11 +1922,19 @@ function normalizeTMDBVideos(videos){
 }
 
 function normalizeTMDBKeywords(keywords){
-    const results = keywords && Array.isArray(keywords.results) ? keywords.results : [];
+    const results = keywords && Array.isArray(keywords.results)
+    ? keywords.results
+    : (keywords && Array.isArray(keywords.keywords) ? keywords.keywords : (Array.isArray(keywords) ? keywords : []));
 
     return results
-    .map(keyword=>keyword && keyword.name ? String(keyword.name).trim() : "")
+    .map(keyword=>{
+        if(typeof keyword === "string"){
+            return keyword.trim();
+        }
+        return keyword && keyword.name ? String(keyword.name).trim() : "";
+    })
     .filter(Boolean)
+    .filter((keyword,index,list)=>list.findIndex(item=>item.toLowerCase() === keyword.toLowerCase()) === index)
     .slice(0,12);
 }
 
@@ -2333,7 +2341,13 @@ function applyV2TMDBDetails(show,details){
     show._tmdb_alternative_titles = normalizeTMDBAlternativeTitles(details.alternative_titles);
     show._tmdb_external_ids = normalizeTMDBExternalIds(details);
     show._tmdb_videos = normalizeTMDBVideos(details.videos);
-    show._tmdb_keywords = normalizeTMDBKeywords(details.keywords);
+    const normalizedKeywords = normalizeTMDBKeywords(details.keywords);
+    if(normalizedKeywords.length || !Array.isArray(show._tmdb_keywords)){
+        show._tmdb_keywords = normalizedKeywords;
+    }
+    if(normalizedKeywords.length){
+        show._v2_keywords_loaded_at = new Date().toISOString();
+    }
     show._tmdb_watch_providers = details["watch/providers"] || show._tmdb_watch_providers || null;
     show._tmdb_similar = normalizeTMDBSimilarShows(details.similar,10);
     show._tmdb_cast = normalizeTMDBAggregateCast(details.aggregate_credits);
@@ -2410,6 +2424,34 @@ async function ensureShowV2APIDetails(show,{skipSave=false}={}){
     return true;
 }
 
+async function ensureShowV2Keywords(show,{skipSave=false}={}){
+    if(!show || !canUseTMDBShow(show)){
+        return false;
+    }
+
+    if(Array.isArray(show._tmdb_keywords) && show._tmdb_keywords.length){
+        return false;
+    }
+
+    if(show._v2_keywords_loaded_at){
+        return false;
+    }
+
+    if(typeof tmdbGetShowKeywords !== "function"){
+        return false;
+    }
+
+    const payload = await tmdbGetShowKeywords(show.tmdb_id);
+    show._tmdb_keywords = normalizeTMDBKeywords(payload);
+    show._v2_keywords_loaded_at = new Date().toISOString();
+
+    if(!skipSave){
+        await saveData({showIds:[String(show.tmdb_id)]});
+    }
+
+    return true;
+}
+
 async function refreshOpenShowV2Details(showId){
     const id = String(showId || "");
     const show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
@@ -2420,7 +2462,8 @@ async function refreshOpenShowV2Details(showId){
 
     try{
         const changed = await ensureShowV2APIDetails(show);
-        if(changed && selectedShowId === id && selectedEpisodeContext === null){
+        const keywordsChanged = await ensureShowV2Keywords(show);
+        if((changed || keywordsChanged) && selectedShowId === id && selectedEpisodeContext === null){
             renderShowDetailsPagePreservingScroll(show);
         }
     }catch(error){
@@ -5070,6 +5113,11 @@ async function openShowDetailsPage(showId,options={}){
         showDetailPreview = showObject;
         expandedSeasons[id] = expandedSeasons[id] || {};
         renderShowDetailsPage(showObject,{preview:true});
+        ensureShowV2Keywords(showObject,{skipSave:true}).then(changed=>{
+            if(changed && showDetailPreview && String(showDetailPreview.tmdb_id) === id && selectedEpisodeContext === null){
+                renderShowDetailsPagePreservingScroll(showDetailPreview);
+            }
+        }).catch(()=>{});
         if(shouldResetShowScroll){
             resetShowDetailScrollPosition();
         }

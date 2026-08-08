@@ -3064,17 +3064,38 @@ function renderNetworkEntityHTML(network){
 
 function getShowLanguageItems(show){
     const items = [];
-    const seen = new Set();
+    const seenCodes = new Set();
+    const seenLabels = new Set();
     const push = function(code,label){
         const cleanCode = typeof normalizeLanguageCode === "function" ? normalizeLanguageCode(code) : String(code || "").trim().toLowerCase();
         const cleanLabel = String(label || (typeof getLanguageName === "function" ? getLanguageName(cleanCode) : cleanCode)).trim();
-        const key = cleanCode || cleanLabel.toLowerCase();
-        if(!key || seen.has(key)){
+        const labelKey = cleanLabel.toLowerCase();
+
+        if(cleanCode && seenCodes.has(cleanCode)){
             return;
         }
-        seen.add(key);
+
+        if(labelKey && seenLabels.has(labelKey)){
+            return;
+        }
+
+        if(!cleanCode && !cleanLabel){
+            return;
+        }
+
+        if(cleanCode){
+            seenCodes.add(cleanCode);
+        }
+        if(labelKey){
+            seenLabels.add(labelKey);
+        }
         items.push({code:cleanCode,label:cleanLabel});
     };
+
+    if(show && show.original_language){
+        const code = String(show.original_language || "").trim().toLowerCase();
+        push(code,typeof getLanguageName === "function" ? getLanguageName(code) : code.toUpperCase());
+    }
 
     (Array.isArray(show && show.spoken_languages) ? show.spoken_languages : []).forEach(language=>{
         if(typeof language === "string"){
@@ -3083,11 +3104,6 @@ function getShowLanguageItems(show){
             push(language.iso_639_1 || language.iso_639_2 || "",language.english_name || language.name || "");
         }
     });
-
-    if(!items.length && show && show.original_language){
-        const code = String(show.original_language || "").trim().toLowerCase();
-        push(code,typeof getLanguageName === "function" ? getLanguageName(code) : code.toUpperCase());
-    }
 
     return items;
 }

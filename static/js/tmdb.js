@@ -393,6 +393,14 @@ async function tmdbGetShowDetails(showId,options={}){
     );
 }
 
+async function tmdbGetShowKeywords(showId,options={}){
+    return await tmdbFetchJSON(
+        "tv/" + encodeURIComponent(String(showId)) + "/keywords",
+        {},
+        options
+    );
+}
+
 async function tmdbGetSeason(showId,seasonNumber,options={}){
     return await tmdbFetchJSON(
         "tv/" + encodeURIComponent(String(showId)) + "/season/" + encodeURIComponent(String(seasonNumber)),
