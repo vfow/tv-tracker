@@ -340,13 +340,78 @@ function renderDiscoverHub(){
     attachDiscoverHubEvents();
 }
 
+function renderTrackerPosterSkeletonCards(count=12){
+    return Array.from({length:count}).map(()=>`
+        <div class="tt-skeleton-poster-card" aria-hidden="true">
+            <div class="tt-skeleton-poster"></div>
+            <div class="tt-skeleton-line tt-skeleton-line-title"></div>
+            <div class="tt-skeleton-line tt-skeleton-line-meta"></div>
+        </div>
+    `).join("");
+}
+
+function renderTrackerPersonSkeletonCards(count=12){
+    return Array.from({length:count}).map(()=>`
+        <div class="search-person-card search-person-skeleton-card" aria-hidden="true">
+            <div class="tt-skeleton-poster"></div>
+            <div class="tt-skeleton-line tt-skeleton-line-title"></div>
+        </div>
+    `).join("");
+}
+
+function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-back-button"){
+    const label = kind === "movie" ? "MOVIE" : "SHOW";
+    return `
+        <div class="show-detail-page-inner tt-detail-skeleton-page">
+            <button type="button" class="show-page-back-button" id="${escapeHTML(backButtonId)}" aria-label="Back">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <section class="tt-detail-skeleton" aria-label="Loading ${escapeHTML(label.toLowerCase())}">
+                <div class="tt-detail-skeleton-backdrop"></div>
+                <div class="tt-detail-skeleton-main">
+                    <div class="tt-detail-skeleton-poster"></div>
+                    <div class="tt-detail-skeleton-copy">
+                        <div class="tt-skeleton-kicker"></div>
+                        <div class="tt-skeleton-heading"></div>
+                        <div class="tt-skeleton-line tt-skeleton-line-wide"></div>
+                        <div class="tt-skeleton-line tt-skeleton-line-mid"></div>
+                        <div class="tt-skeleton-action-row">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    `;
+}
+
+function renderTrackerEpisodeSkeletonHTML(seasonNumber,episodeNumber){
+    return `
+        <div class="episode-detail-page-inner tt-episode-skeleton-page">
+            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back">
+                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+            </button>
+            <section class="tt-episode-skeleton" aria-label="Loading episode">
+                <div class="tt-episode-skeleton-still"></div>
+                <div class="tt-episode-skeleton-copy">
+                    <div class="tt-skeleton-kicker"></div>
+                    <div class="tt-skeleton-heading"></div>
+                    <div class="tt-skeleton-line tt-skeleton-line-wide"></div>
+                    <div class="tt-skeleton-line tt-skeleton-line-mid"></div>
+                    <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
+                </div>
+            </section>
+        </div>
+    `;
+}
+
 function renderDiscoverHubSkeleton(title){
     return `
         <section class="discover-section-group">
             <h2 class="discover-group-title">${escapeHTML(title)}</h2>
             <div class="discover-section">
                 <div class="discover-card-row discover-card-row-loading" aria-label="Loading ${escapeHTML(title)}">
-                    ${Array.from({length:8}).map(()=>`<div class="discover-card skeleton-card"></div>`).join("")}
+                    ${renderTrackerPosterSkeletonCards(8)}
                 </div>
             </div>
         </section>
@@ -599,8 +664,8 @@ function renderSearchResults(resultsList){
     `;
 
     const skeletonHTML = media === "person"
-    ? `<div class="search-person-grid search-person-grid-loading">${Array.from({length:12}).map(()=>`<div class="search-person-card search-person-skeleton-card skeleton-card"></div>`).join("")}</div>`
-    : `<div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}</div>`;
+    ? `<div class="search-person-grid search-person-grid-loading">${renderTrackerPersonSkeletonCards(12)}</div>`
+    : `<div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">${renderTrackerPosterSkeletonCards(12)}</div>`;
 
     const bodyHTML = !query
     ? `
@@ -852,7 +917,7 @@ function renderPersonDetailPage(state){
     : loading
     ? `
         <div class="genre-tight-grid genre-tight-grid-loading person-tight-grid">
-            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+            ${renderTrackerPosterSkeletonCards(12)}
         </div>
     `
     : `
@@ -945,7 +1010,7 @@ function renderGenreDetailPage(state){
     : loading
     ? `
         <div class="genre-tight-grid genre-tight-grid-loading">
-            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+            ${renderTrackerPosterSkeletonCards(12)}
         </div>
     `
     : `
@@ -1036,7 +1101,7 @@ function renderDiscoveryFilterDetailPage(state){
     : loading
     ? `
         <div class="genre-tight-grid genre-tight-grid-loading">
-            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+            ${renderTrackerPosterSkeletonCards(12)}
         </div>
     `
     : `
@@ -3151,7 +3216,9 @@ function renderMovieDetailPage(state){
     const pageState = state || {};
     const movie = pageState.movie || null;
     if(!movie){
-        content.innerHTML = `
+        content.innerHTML = pageState.loading && typeof renderTrackerDetailSkeletonHTML === "function"
+        ? renderTrackerDetailSkeletonHTML("movie","movie-page-back-button")
+        : `
             <div class="show-detail-page-inner">
                 <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
                     <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">

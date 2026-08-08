@@ -1618,7 +1618,7 @@ def render_page_error(status_code: int):
         status_code=status_code,
         error_title=error_title,
         error_text=error_text,
-        action_url="/app/list/watching" if signed_in else url_for("login"),
+        action_url="/app" if signed_in else url_for("login"),
         action_label="Back to app" if signed_in else "Back to sign in",
     ), status_code
 

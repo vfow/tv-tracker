@@ -172,6 +172,22 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('{{ error_title }}', error_template)
         self.assertIn('{{ error_text }}', error_template)
 
+    def test_phase55_navigation_loading_and_404_polish_exists(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        css = self.read('static/css/tailwind-input.css')
+        error_template = self.read('templates/error.html')
+        self.assertIn('navigateBackOrRouteFallback', app_js)
+        self.assertIn('getNavigationFallbackRoute', app_js)
+        self.assertIn('renderTrackerDetailSkeletonHTML', ui)
+        self.assertIn('renderTrackerEpisodeSkeletonHTML', ui)
+        self.assertIn('renderTrackerPosterSkeletonCards', ui)
+        self.assertIn('tt-detail-skeleton', css)
+        self.assertIn('tt-episode-skeleton', css)
+        self.assertIn('route-error-hero', css)
+        self.assertIn("assets/images/404.png", error_template)
+        self.assertTrue((ROOT / 'static/assets/images/404.png').exists())
+
     def test_auth_tabs_and_server_side_return_path_exist(self):
         app_py = self.read('app.py')
         login_template = self.read('templates/login.html')

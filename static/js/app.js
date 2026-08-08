@@ -4225,6 +4225,67 @@ function setAppHashRoute(route,replace=false){
     }
 }
 
+
+function getShowsFallbackRoute(){
+    if(activeShowsTab === "history"){
+        return "/app/history";
+    }
+    if(activeShowsTab === "upcoming"){
+        return "/app/upcoming";
+    }
+    const map = {
+        watching:"watching",
+        paused:"paused",
+        finished:"completed",
+        plan:"plan-to-watch",
+        dropped:"dropped"
+    };
+    const slug = map[String(activeFilter || "watching")] || "watching";
+    const query = String(typeof librarySearchQuery !== "undefined" ? librarySearchQuery || "" : "").trim();
+    return "/app/list/" + slug + (query ? "?q=" + encodeURIComponent(query) : "");
+}
+
+function getNavigationFallbackRoute(defaultRoute="/app"){
+    const context = typeof getCurrentPrimaryNavContext === "function" ? getCurrentPrimaryNavContext() : "";
+    if(context === "profile"){
+        return "/app/profile";
+    }
+    if(context === "settings"){
+        return "/app/settings";
+    }
+    if(context === "discover"){
+        return "/app/discover";
+    }
+    if(context === "shows"){
+        return getShowsFallbackRoute();
+    }
+    return defaultRoute || "/app";
+}
+
+function navigateToRouteFallback(route){
+    const fallback = String(route || getNavigationFallbackRoute("/app") || "/app");
+    setAppHashRoute(fallback,false);
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+        window.TVTrackerRouter.applyRoute();
+    }else if(fallback === "/app/profile"){
+        showPage("profile");
+    }else if(fallback === "/app/discover"){
+        showPage("discover");
+    }else if(fallback === "/app/settings"){
+        showPage("settings");
+    }else{
+        showPage("shows");
+    }
+}
+
+function navigateBackOrRouteFallback(fallbackRoute=""){
+    if(window.history.length > 1){
+        window.history.back();
+        return;
+    }
+    navigateToRouteFallback(fallbackRoute || getNavigationFallbackRoute("/app"));
+}
+
 function buildRouteSlug(value){
     return String(value || "")
     .trim()
@@ -4276,27 +4337,30 @@ function renderAppRouteNotFoundPage(){
     }
     if(content){
         content.innerHTML = `
-            <div class="show-detail-page-inner">
+            <div class="show-detail-page-inner route-error-page-inner">
                 <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
                     <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
                 </button>
-                <div class="empty-state show-detail-loading-state">
-                    <h2>We're not in Kansas anymore</h2>
-                    <p>This page is off the map.</p>
-                </div>
+                <section class="route-error-hero" aria-label="Page not found">
+                    <div class="route-error-copy">
+                        <p>404</p>
+                        <h2>We're not in Kansas anymore</h2>
+                        <span>This page is off the map.</span>
+                        <button type="button" class="view-more-button route-error-app-button" id="route-error-app-button">Back to app</button>
+                    </div>
+                </section>
             </div>
         `;
         const backButton = document.getElementById("show-page-back-button");
         if(backButton){
             backButton.addEventListener("click",function(){
-                if(window.history.length > 1){
-                    window.history.back();
-                }else{
-                    setAppHashRoute("/app/list/watching",false);
-                    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-                        window.TVTrackerRouter.applyRoute();
-                    }
-                }
+                navigateBackOrRouteFallback("/app");
+            });
+        }
+        const appButton = document.getElementById("route-error-app-button");
+        if(appButton){
+            appButton.addEventListener("click",function(){
+                navigateToRouteFallback("/app");
             });
         }
     }
@@ -5108,16 +5172,7 @@ function attachPersonDetailPageEvents(){
     const backButton = document.getElementById("person-page-back-button");
     if(backButton){
         backButton.addEventListener("click",function(){
-            if(window.history.length > 1){
-                window.history.back();
-            }else{
-                setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-                    window.TVTrackerRouter.applyRoute();
-                }else{
-                    showPage("discover");
-                }
-            }
+            navigateBackOrRouteFallback("/app/discover");
         });
     }
 
@@ -5483,16 +5538,7 @@ function attachGenreDetailPageEvents(){
     const backButton = document.getElementById("genre-page-back-button");
     if(backButton){
         backButton.addEventListener("click",function(){
-            if(window.history.length > 1){
-                window.history.back();
-            }else{
-                setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-                    window.TVTrackerRouter.applyRoute();
-                }else{
-                    showPage("discover");
-                }
-            }
+            navigateBackOrRouteFallback("/app/discover");
         });
     }
 
@@ -5975,16 +6021,7 @@ function attachDiscoveryFilterPageEvents(){
     const backButton = document.getElementById("discovery-filter-page-back-button");
     if(backButton){
         backButton.addEventListener("click",function(){
-            if(window.history.length > 1){
-                window.history.back();
-            }else{
-                setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-                    window.TVTrackerRouter.applyRoute();
-                }else{
-                    showPage("discover");
-                }
-            }
+            navigateBackOrRouteFallback("/app/discover");
         });
     }
 
@@ -6103,7 +6140,9 @@ function renderShowDetailLoading(showId){
         return;
     }
 
-    content.innerHTML = `
+    content.innerHTML = typeof renderTrackerDetailSkeletonHTML === "function"
+    ? renderTrackerDetailSkeletonHTML("show","show-page-back-button")
+    : `
         <div class="show-detail-page-inner">
             <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
@@ -6248,9 +6287,6 @@ function showMovieDetailPageShell(navigationContext=""){
 }
 
 function closeMoviePage(){
-    const fallback = "/app/discover";
-    const target = showDetailBackStack.length ? showDetailBackStack.pop() : fallback;
-
     selectedMovieId = null;
     moviePageState = {
         movieId:"",
@@ -6260,13 +6296,7 @@ function closeMoviePage(){
         movie:null
     };
 
-    setAppHashRoute(target || fallback,false);
-
-    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-        window.TVTrackerRouter.applyRoute();
-    }else{
-        showPage("discover");
-    }
+    navigateBackOrRouteFallback(getNavigationFallbackRoute("/app/discover"));
 }
 
 function renderMovieDetailLoading(){
@@ -6274,7 +6304,9 @@ function renderMovieDetailLoading(){
     if(!content){
         return;
     }
-    content.innerHTML = `
+    content.innerHTML = typeof renderTrackerDetailSkeletonHTML === "function"
+    ? renderTrackerDetailSkeletonHTML("movie","movie-page-back-button")
+    : `
         <div class="show-detail-page-inner">
             <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
@@ -6633,20 +6665,11 @@ function renderActiveShowDetailPage(){
 }
 
 function closeShowDetailsPage(){
-    const fallback = "/app/list/watching";
-    const target = showDetailBackStack.length ? showDetailBackStack.pop() : fallback;
-
     selectedShowId = null;
     selectedEpisodeContext = null;
     showDetailPreview = null;
 
-    setAppHashRoute(target || fallback,false);
-
-    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-        window.TVTrackerRouter.applyRoute();
-    }else{
-        showPage("shows");
-    }
+    navigateBackOrRouteFallback(getNavigationFallbackRoute("/app/list/watching"));
 }
 
 function closeShowModal(){
@@ -6697,9 +6720,11 @@ function renderEpisodeDetailLoading(showId,seasonNumber,episodeNumber){
         return;
     }
 
-    content.innerHTML = `
+    content.innerHTML = typeof renderTrackerEpisodeSkeletonHTML === "function"
+    ? renderTrackerEpisodeSkeletonHTML(seasonNumber,episodeNumber)
+    : `
         <div class="episode-detail-page-inner">
-            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
+            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back">
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
             <div class="empty-state episode-detail-loading-state">
@@ -6743,7 +6768,7 @@ function closeEpisodeDetailsPage(){
     const context = selectedEpisodeContext;
     const showId = context ? String(context.showId || selectedShowId || "") : "";
     const seasonNumber = context ? Number(context.season) : 0;
-    const targetRoute = showId ? getShowDetailRoute(showId) : "/app/list/watching";
+    const fallbackRoute = context && context.backToShow !== false && showId ? getShowDetailRoute(showId) : getNavigationFallbackRoute("/app/list/watching");
 
     if(showId){
         expandedSeasons[showId] = expandedSeasons[showId] || {};
@@ -6751,15 +6776,7 @@ function closeEpisodeDetailsPage(){
         showDetailScrollRestorePending = true;
     }
 
-    setAppHashRoute(targetRoute,true);
-
-    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-        window.TVTrackerRouter.applyRoute();
-    }else if(showId){
-        openShowDetailsPage(showId,{fromRoute:true});
-    }else{
-        showPage("shows");
-    }
+    navigateBackOrRouteFallback(fallbackRoute || "/app/list/watching");
 }
 
 function renderActiveEpisodeDetailPage(){
