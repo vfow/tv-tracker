@@ -1,6 +1,6 @@
 # TV Tracker
 
-Single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailwind-only frontend.
+Private, single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailwind-only frontend.
 
 ## Features
 
@@ -59,10 +59,6 @@ HEALTHZ_SECRET=<token>      # When set, /healthz requires X-Healthcheck-Token.
 ```
 
 Existing deployments may still use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` as fallbacks. Generate `APP_PASSWORD_HASH` with the helper under `tools/`. New admin passwords must contain at least 16 characters. Do not commit `.env`, database dumps, API keys, password hashes for real users, SSH keys, or deployment credentials.
-
-## Public Repository Safety
-
-This repository is public. Do not commit `.env`, real API keys, database URLs, password hashes, SSH keys, private deployment values, database dumps, exported backups, personal user data, or licensed font files unless their license explicitly allows public redistribution. Keep production values in host environment variables and GitHub Actions secrets/variables.
 
 ## Local Development
 

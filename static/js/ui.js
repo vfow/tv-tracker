@@ -2651,12 +2651,8 @@ function v2FirstTrailer(show){
     return videos.find(video=>String(video.type || "").toLowerCase() === "trailer") || videos[0] || null;
 }
 
-function renderV2NetworkLogoOnlyHTML(show,limit=2){
-    let networks = getShowNetworkItems(show).filter(network=>network && network.logo_path);
-
-    if(Number.isFinite(Number(limit))){
-        networks = networks.slice(0,Number(limit));
-    }
+function renderV2NetworkLogoOnlyHTML(show){
+    const networks = getShowNetworkItems(show).filter(network=>network && network.logo_path).slice(0,2);
 
     if(!networks.length){
         return "";
@@ -3623,73 +3619,34 @@ function renderShowCrewTabHTML(show){
     return html || `<div class="v2-api-empty">No crew details available yet.</div>`;
 }
 
-function renderShowNetworkDetailsHTML(show){
-    const networks = getShowNetworkItems(show);
-
-    if(!networks.length){
-        return "";
-    }
-
-    return `<div class="show-network-logo-list">${networks.map(network=>{
-        if(network.logo_path){
-            return `
-                <span class="show-network-logo-item" title="${escapeHTML(network.name || "Network")}">
-                    <img src="${escapeHTML(trackerImageURL(network.logo_path,"w154"))}" alt="${escapeHTML(network.name || "Network")}">
-                </span>
-            `;
-        }
-
-        return `<span class="show-network-name-fallback">${escapeHTML(network.name || "Network")}</span>`;
-    }).join("")}</div>`;
-}
-
-function renderAlternativeTitlesForDetailsHTML(show){
+function formatAlternativeTitlesForDetails(show){
     const titles = Array.isArray(show && show._tmdb_alternative_titles) ? show._tmdb_alternative_titles : [];
-    const groups = new Map();
-
-    titles
+    const rows = titles
     .filter(item=>item && item.title)
-    .forEach(item=>{
-        const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "Other";
-        const key = country || "Other";
-        if(!groups.has(key)){
-            groups.set(key,[]);
-        }
-
-        const cleanTitle = String(item.title || "").trim();
-        const groupTitles = groups.get(key);
-        if(cleanTitle && !groupTitles.some(title=>title.toLowerCase() === cleanTitle.toLowerCase())){
-            groupTitles.push(cleanTitle);
-        }
+    .slice(0,12)
+    .map(item=>{
+        const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "";
+        return country ? `${country}: ${item.title}` : item.title;
     });
 
-    if(!groups.size){
-        return "";
-    }
-
-    return `<div class="alternative-title-list">${Array.from(groups.entries()).map(([country,titlesForCountry])=>`
-        <div class="alternative-title-group">
-            <div class="alternative-title-country">${escapeHTML(country)}</div>
-            <div class="alternative-title-values">${titlesForCountry.map(title=>`<span>${escapeHTML(title)}</span>`).join("")}</div>
-        </div>
-    `).join("")}</div>`;
+    return rows.length ? rows.join(" / ") : "Unknown";
 }
 
 function renderShowDetailsTabHTML(show){
     const rows = [
-        {label:"Status",html:escapeHTML(show.tmdb_status || show.status || "Unknown")},
-        {label:"Networks",html:renderShowNetworkDetailsHTML(show) || "Unknown"},
-        {label:"Language",html:escapeHTML((show.spoken_languages || []).map(item=>item.english_name || item.name).filter(Boolean).join(" / ") || show.original_language || "Unknown")},
-        {label:"Country",html:escapeHTML((show.origin_country || []).map(getCountryLabel).join(" / ") || "Unknown")},
-        {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show) || "Unknown"}
+        ["Status",show.tmdb_status || show.status || "Unknown"],
+        ["Networks",v2JoinList(getShowNetworkItems(show).map(item=>item.name),6) || "Unknown"],
+        ["Language",(show.spoken_languages || []).map(item=>item.english_name || item.name).filter(Boolean).join(" / ") || show.original_language || "Unknown"],
+        ["Country",(show.origin_country || []).map(getCountryLabel).join(" / ") || "Unknown"],
+        ["Alternative Titles",formatAlternativeTitlesForDetails(show)]
     ];
 
     return `
         <div class="show-detail-fact-list">
-            ${rows.map(row=>`
+            ${rows.map(([label,value])=>`
                 <div class="show-detail-fact-row">
-                    <div class="episode-detail-label">${escapeHTML(row.label)}</div>
-                    <div class="episode-detail-value">${row.html}</div>
+                    <div class="episode-detail-label">${escapeHTML(label)}</div>
+                    <div class="episode-detail-value">${escapeHTML(String(value))}</div>
                 </div>
             `).join("")}
         </div>
@@ -3782,6 +3739,32 @@ function renderShowInfoSubTabContentHTML(show){
     return renderShowCastTabHTML(show);
 }
 
+function getShowProgressSummary(show){
+    const watchedCount = getWatchedEpisodeCount(show);
+    const totalCount = show && show.status === "finished" ? Math.max(watchedCount,getTotalEpisodeCount(show)) : getTotalEpisodeCount(show);
+    const progressPercent = show && show.status === "finished" ? 100 : totalCount ? Math.round((watchedCount / totalCount) * 100) : 0;
+    const progressText = show && show.status === "finished" ? `Completed • ${totalCount} / ${totalCount} episodes` : `${watchedCount} / ${totalCount} episodes`;
+
+    return {watchedCount,totalCount,progressPercent,progressText};
+}
+
+function renderShowProgressHTML(show){
+    const summary = getShowProgressSummary(show);
+
+    return `
+        <div class="show-progress-card">
+            <div class="show-progress-card-top">
+                <div>
+                    <div class="episode-detail-label">Overall Progress</div>
+                    <div class="progress-text">${escapeHTML(summary.progressText)}</div>
+                </div>
+                <div class="show-progress-percent">${summary.progressPercent}%</div>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${summary.progressPercent}%"></div></div>
+        </div>
+    `;
+}
+
 function renderShowInfoTabHTML(show){
     return `
         <div class="show-info-tab-stack">
@@ -3800,6 +3783,7 @@ function renderShowInfoTabHTML(show){
 function renderShowEpisodesTabHTML(show){
     return `
         <div class="show-episodes-tab-stack">
+            ${renderShowProgressHTML(show)}
             <div class="seasons-list">${renderSeasonsHTML(show)}</div>
         </div>
     `;
@@ -4192,18 +4176,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     ? "unwatched"
     : "future";
 
-    const episodeInlineFactsHTML = `
-        <div class="episode-detail-inline-facts">
-            <div class="episode-detail-inline-fact ${escapeHTML(statusClass)}">
-                <span class="episode-detail-label">Status</span>
-                <strong>${escapeHTML(statusText)}</strong>
-            </div>
-            <div class="episode-detail-inline-fact">
-                <span class="episode-detail-label">Watched</span>
-                <strong>${escapeHTML(watchedText)}</strong>
-            </div>
-        </div>
-    `;
+    const episodeDetailCardsHTML = "";
 
     const previousEpisodeTarget = getPreviousEpisodeTarget(show,seasonNumber,episodeNumber);
     const nextEpisodeTarget = getNextEpisodeTarget(show,seasonNumber,episodeNumber);
@@ -4212,31 +4185,27 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
         <div class="episode-detail-page-inner">
 
-        <div class="episode-page-hero-shell">
+        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
 
             <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
             </button>
 
-            <div class="modal-hero episode-detail-hero episode-page-hero" style='background-image:${backdrop}'>
+            <div class="modal-hero-content episode-detail-hero-content">
 
-                <div class="modal-hero-content episode-detail-hero-content">
+                <div class="modal-title episode-detail-title">
+                    ${escapeHTML(episodeTitle)}
+                </div>
 
-                    <div class="modal-title episode-detail-title">
-                        ${escapeHTML(episodeTitle)}
-                    </div>
-
-                    <div class="modal-meta episode-detail-meta-line">
-                        <span>${escapeHTML(show.title)}</span>
-                        <span class="episode-meta-separator">•</span>
-                        <span>${escapeHTML(episodeCode)}</span>
-                        <span class="episode-meta-separator">•</span>
-                        <span>${escapeHTML(airDateText)}</span>
-                        ${releaseTimeText ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(releaseTimeText)}</span>` : ""}
-                        ${runtimeText !== "Unknown" ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(runtimeText)}</span>` : ""}
-                        ${episodeRatingHTML ? `<span class="episode-meta-separator">•</span>${episodeRatingHTML}` : ""}
-                    </div>
-
+                <div class="modal-meta episode-detail-meta-line">
+                    <span>${escapeHTML(show.title)}</span>
+                    <span class="episode-meta-separator">•</span>
+                    <span>${escapeHTML(episodeCode)}</span>
+                    <span class="episode-meta-separator">•</span>
+                    <span>${escapeHTML(airDateText)}</span>
+                    ${releaseTimeText ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(releaseTimeText)}</span>` : ""}
+                    ${runtimeText !== "Unknown" ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(runtimeText)}</span>` : ""}
+                    ${episodeRatingHTML ? `<span class="episode-meta-separator">•</span>${episodeRatingHTML}` : ""}
                 </div>
 
             </div>
@@ -4281,13 +4250,30 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
 
 
-            <div class="episode-detail-main-clean modal-section">
+            <div class="episode-detail-main modal-section">
 
-                ${episodeInlineFactsHTML}
+                <div class="episode-detail-overview-card">
+                    <div class="episode-detail-section-label">Episode Info</div>
+                    <div class="episode-detail-overview">
+                        ${escapeHTML(episodeData.overview || "No episode overview available.")}
+                    </div>
+                </div>
 
-                <div class="episode-detail-section-label">Episode Info</div>
-                <div class="episode-detail-overview">
-                    ${escapeHTML(episodeData.overview || "No episode overview available.")}
+                <div class="episode-detail-grid">
+
+                    ${episodeDetailCardsHTML}
+
+                    <div class="episode-detail-info-card ${statusClass}">
+                        <div class="episode-detail-label">Status</div>
+                        <div class="episode-detail-value">${escapeHTML(statusText)}</div>
+                    </div>
+
+                    <div class="episode-detail-info-card">
+                        <div class="episode-detail-label">Watched</div>
+                        <div class="episode-detail-value">${escapeHTML(watchedText)}</div>
+                    </div>
+
+
                 </div>
 
             </div>
