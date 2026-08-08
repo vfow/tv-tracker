@@ -508,6 +508,50 @@
         });
     });
 
+
+
+    function isPlainAppRouteClick(event,anchor){
+        if(
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            !anchor ||
+            anchor.target ||
+            anchor.hasAttribute("download")
+        ){
+            return false;
+        }
+        const href = anchor.getAttribute("href") || "";
+        if(!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")){
+            return false;
+        }
+        try{
+            const url = new URL(href,window.location.origin);
+            return url.origin === window.location.origin && url.pathname.startsWith("/app");
+        }catch(error){
+            return false;
+        }
+    }
+
+    function handleAppRouteAnchorClick(event){
+        const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+        if(!isPlainAppRouteClick(event,anchor)){
+            return;
+        }
+        const url = new URL(anchor.getAttribute("href"),window.location.origin);
+        const nextRoute = url.pathname + url.search;
+        event.preventDefault();
+        setPathRoute(nextRoute,false);
+        applyRoute();
+    }
+
+    if(typeof document !== "undefined" && document && typeof document.addEventListener === "function"){
+        document.addEventListener("click",handleAppRouteAnchorClick);
+    }
+
     window.addEventListener("popstate",applyRoute);
 
     window.TVTrackerRouter = {

@@ -188,6 +188,24 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn("assets/images/404.png", error_template)
         self.assertTrue((ROOT / 'static/assets/images/404.png').exists())
 
+
+    def test_phase551_loading_back_and_404_correction_exists(self):
+        app_js = self.read('static/js/app.js')
+        router = self.read('static/js/app-router.js')
+        css = self.read('static/css/tailwind-input.css')
+        error_template = self.read('templates/error.html')
+        self.assertIn('navigateBackToStoredRouteOrFallback', app_js)
+        self.assertIn('pushDetailBackRoute', app_js)
+        self.assertIn('cancelActiveSearchRequest();', app_js)
+        self.assertIn('handleAppRouteAnchorClick', router)
+        self.assertIn('document.addEventListener("click",handleAppRouteAnchorClick)', router)
+        self.assertIn("background-image:url('/static/assets/images/404.png')", css)
+        self.assertNotIn('rgba(0,0,0,.72);\n        padding:34px', css)
+        self.assertIn('justify-content:flex-end', css)
+        self.assertIn("background-image:url('{{ url_for('static', filename='assets/images/404.png') }}')", error_template)
+        self.assertNotIn('tw-bg-black/70', error_template)
+        self.assertNotIn('tw-backdrop-blur-sm', error_template)
+
     def test_auth_tabs_and_server_side_return_path_exist(self):
         app_py = self.read('app.py')
         login_template = self.read('templates/login.html')

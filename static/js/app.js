@@ -3536,6 +3536,8 @@ function openSearchPage(query="",options={}){
 function openDiscoverHomePage(options={}){
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
+    cancelActiveSearchRequest();
+    searchRequestId += 1;
     selectedShowId = null;
     selectedEpisodeContext = null;
     selectedGenreSlug = null;
@@ -4284,6 +4286,38 @@ function navigateBackOrRouteFallback(fallbackRoute=""){
         return;
     }
     navigateToRouteFallback(fallbackRoute || getNavigationFallbackRoute("/app"));
+}
+
+function pushDetailBackRoute(routeToAvoid=""){
+    const current = getCurrentAppRoute();
+    const avoid = String(routeToAvoid || "");
+    if(!current || current === avoid){
+        return;
+    }
+    showDetailBackStack.push(current);
+    if(showDetailBackStack.length > 20){
+        showDetailBackStack = showDetailBackStack.slice(-20);
+    }
+}
+
+function popDetailBackRoute(){
+    const current = getCurrentAppRoute();
+    while(Array.isArray(showDetailBackStack) && showDetailBackStack.length){
+        const route = String(showDetailBackStack.pop() || "").trim();
+        if(route && route !== current && route.startsWith("/app")){
+            return route;
+        }
+    }
+    return "";
+}
+
+function navigateBackToStoredRouteOrFallback(fallbackRoute=""){
+    const storedRoute = popDetailBackRoute();
+    if(storedRoute){
+        navigateToRouteFallback(storedRoute);
+        return;
+    }
+    navigateBackOrRouteFallback(fallbackRoute || getNavigationFallbackRoute("/app"));
 }
 
 function buildRouteSlug(value){
@@ -6296,7 +6330,7 @@ function closeMoviePage(){
         movie:null
     };
 
-    navigateBackOrRouteFallback(getNavigationFallbackRoute("/app/discover"));
+    navigateBackToStoredRouteOrFallback(getNavigationFallbackRoute("/app/discover"));
 }
 
 function renderMovieDetailLoading(){
@@ -6429,11 +6463,7 @@ async function openMoviePage(movieId,options={}){
     discoverPreviewShow = null;
 
     if(!fromRoute){
-        const current = getCurrentAppRoute();
-        const currentMovie = getMovieDetailRoute(id,routeLabel);
-        if(current && current !== currentMovie){
-            showDetailBackStack.push(current);
-        }
+        pushDetailBackRoute(getMovieDetailRoute(id,routeLabel));
     }
 
     moviePageState = {
@@ -6497,15 +6527,7 @@ function showRouteSlugIsValid(show,routeSlug){
 }
 
 function pushShowDetailBackRoute(showId,showInfo=""){
-    const current = getCurrentAppRoute();
-    const currentShow = getShowDetailRoute(showId,showInfo);
-
-    if(current && current !== currentShow){
-        showDetailBackStack.push(current);
-        if(showDetailBackStack.length > 20){
-            showDetailBackStack = showDetailBackStack.slice(-20);
-        }
-    }
+    pushDetailBackRoute(getShowDetailRoute(showId,showInfo));
 }
 
 async function openShowDetailsPage(showId,options={}){
@@ -6669,7 +6691,7 @@ function closeShowDetailsPage(){
     selectedEpisodeContext = null;
     showDetailPreview = null;
 
-    navigateBackOrRouteFallback(getNavigationFallbackRoute("/app/list/watching"));
+    navigateBackToStoredRouteOrFallback(getNavigationFallbackRoute("/app/list/watching"));
 }
 
 function closeShowModal(){
@@ -6776,7 +6798,7 @@ function closeEpisodeDetailsPage(){
         showDetailScrollRestorePending = true;
     }
 
-    navigateBackOrRouteFallback(fallbackRoute || "/app/list/watching");
+    navigateBackToStoredRouteOrFallback(fallbackRoute || "/app/list/watching");
 }
 
 function renderActiveEpisodeDetailPage(){
@@ -6839,6 +6861,9 @@ async function openEpisodeModal(showId,season,episode,options={}){
     renderEpisodeDetailLoading(id,seasonNumber,episodeNumber);
 
     if(!fromRoute){
+        if(!replaceInPlace){
+            pushDetailBackRoute(episodeRoute);
+        }
         setAppHashRoute(
             episodeRoute,
             replaceInPlace || replaceRoute

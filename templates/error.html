@@ -9,12 +9,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-tailwind') }}">
 </head>
 {% if status_code == 404 %}
-<body class="tw-m-0 tw-grid tw-min-h-screen tw-min-h-[100dvh] tw-place-items-center tw-overflow-x-hidden tw-bg-black tw-p-[max(18px,env(safe-area-inset-top))_max(18px,env(safe-area-inset-right))_max(18px,env(safe-area-inset-bottom))_max(18px,env(safe-area-inset-left))] tw-text-center tw-font-sans tw-text-white tw-antialiased" style="background-image:linear-gradient(90deg,rgba(0,0,0,.76) 0%,rgba(0,0,0,.48) 47%,rgba(0,0,0,.18) 100%),url('{{ url_for('static', filename='assets/images/404.png') }}');background-size:cover;background-position:center;background-repeat:no-repeat;">
-<main class="tw-ml-0 tw-w-[min(560px,100%)] tw-justify-self-start tw-border tw-border-solid tw-border-white/10 tw-bg-black/70 tw-px-[34px] tw-py-[38px] tw-text-left tw-shadow-tt-elevated tw-backdrop-blur-sm max-[720px]:tw-justify-self-center max-[480px]:tw-px-6 max-[480px]:tw-py-[30px]" style="background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.14);">
-    <p class="tw-m-0 tw-mb-3 tw-font-league tw-text-[90px] tw-font-normal tw-leading-[.82] tw-tracking-[.02em] tw-text-white max-[480px]:tw-text-[68px]">{{ status_code }}</p>
-    <h1 class="tw-m-0 tw-mb-3 tw-font-league tw-text-[58px] tw-font-normal tw-leading-[.95] tw-tracking-[.03em] max-[480px]:tw-text-[46px]">{{ error_title }}</h1>
-    <p class="tw-m-0 tw-max-w-[360px] tw-text-base tw-leading-[1.6] tw-text-[#c9c9c9]">{{ error_text }}</p>
-    <a class="tw-mt-7 tw-inline-flex tw-min-h-[46px] tw-items-center tw-justify-center tw-rounded-[10px] tw-border tw-border-solid tw-border-white tw-bg-white tw-px-[18px] tw-py-3 tw-font-extrabold tw-text-black tw-no-underline tw-transition hover:tw-translate-y-[-1px] hover:tw-bg-[#d8d8d8] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" href="{{ action_url }}">{{ action_label }}</a>
+<body class="tw-m-0 tw-overflow-x-hidden tw-bg-black tw-font-sans tw-text-white tw-antialiased" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:flex-end;padding:72px clamp(28px,8vw,120px) 72px clamp(24px,5vw,72px);background-image:url('{{ url_for('static', filename='assets/images/404.png') }}');background-size:cover;background-position:center;background-repeat:no-repeat;">
+<main class="tw-text-left" style="width:min(520px,100%);text-shadow:0 4px 24px rgba(0,0,0,.9),0 1px 2px rgba(0,0,0,.88);">
+    <p class="tw-m-0 tw-mb-4 tw-font-league tw-font-normal tw-leading-[.82] tw-tracking-[.02em] tw-text-white" style="font-size:clamp(52px,7vw,94px);">{{ status_code }}</p>
+    <h1 class="tw-m-0 tw-mb-4 tw-font-league tw-font-normal tw-leading-[.92] tw-tracking-[.03em]" style="font-size:clamp(44px,5.2vw,76px);">{{ error_title }}</h1>
+    <p class="tw-m-0 tw-max-w-[360px] tw-text-base tw-font-bold tw-leading-[1.55] tw-text-[#f0f0f0]">{{ error_text }}</p>
+    <a style="box-shadow:0 12px 32px rgba(0,0,0,.38);" class="tw-mt-[30px] tw-inline-flex tw-min-h-[46px] tw-items-center tw-justify-center tw-rounded-[10px] tw-border tw-border-solid tw-border-white tw-bg-white tw-px-[18px] tw-py-3 tw-font-extrabold tw-text-black tw-no-underline  tw-transition hover:tw-translate-y-[-1px] hover:tw-bg-[#d8d8d8] focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" href="{{ action_url }}">{{ action_label }}</a>
 </main>
 </body>
 {% else %}
