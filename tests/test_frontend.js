@@ -19,6 +19,7 @@ const fs = require('fs');
 const app = fs.readFileSync('static/js/app.js','utf8');
 assert(!app.includes('api.' + 'tv' + 'maze.com'));
 assert(app.includes('function cleanLegacyMetadata'));
+assert(app.includes('person:{label'));
 assert(app.includes('function syncNextEpisodeFromTMDB'));
 
 
@@ -31,6 +32,7 @@ const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(router.includes('/app/list/'));
 assert(router.includes('/app/show/'));
+assert(router.includes('(person|actor|creator|director|writer|producer|editor|composer|cinematographer)'));
 assert(!router.includes('#/app'));
 assert(template.includes('show-detail-page'));
 assert(template.includes('episode-detail-page'));
@@ -41,6 +43,7 @@ assert(!login.includes('name="next"'));
 assert(tmdb.includes('The key is held by Flask'));
 assert(!ui.includes('TVTrackerStaticAdapter'));
 assert(ui.includes('function safeExternalURL'));
+assert(ui.includes('data-person-role="person"'));
 assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
 assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
 

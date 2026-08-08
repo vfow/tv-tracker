@@ -563,7 +563,7 @@ function renderSearchPersonCard(result){
         data-media-type="person"
         data-media-id="${escapeHTML(result && result.id)}"
         data-media-name="${escapeHTML(name)}"
-        data-person-role="actor">
+        data-person-role="person">
             <div class="search-person-photo">${photoHTML}</div>
             <div class="search-person-name">${escapeHTML(name)}</div>
         </button>
@@ -665,7 +665,7 @@ function renderSearchResults(resultsList){
             if(!mediaId || typeof openPersonPage !== "function"){
                 return;
             }
-            await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover"});
+            await openPersonPage(this.dataset.personRole || "person",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover"});
         });
     });
 

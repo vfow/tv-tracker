@@ -150,6 +150,23 @@ function createRouter(route){
 }
 
 {
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'neutral person route should open person page');
+  assert.deepStrictEqual(call.slice(1,3),['person','525']);
+  assert.strictEqual(call[3].fromRoute,true);
+  assert.strictEqual(call[3].routeSlug,'christopher-nolan');
+}
+
+{
+  const {calls,router}=createRouter('/app/person/525');
+  assert.strictEqual(router.currentRoute(),'/app/person/525');
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'ID-only person route should 404');
+  assert(!calls.some(item=>item[0]==='openPersonPage'));
+}
+
+{
   const {calls,router}=createRouter('/app/genre/tv/action-adventure');
   assert.strictEqual(router.currentRoute(),'/app/genre/tv/action-adventure');
   const call=calls.find(item=>item[0]==='openGenrePage');

@@ -164,6 +164,7 @@ const TV_STATUS_ROUTES = {
     "in-production":{label:"In Production",tmdbValue:"2"}
 };
 const PERSON_ROLE_CONFIGS = {
+    person:{label:"Person",titleTV:"TV Shows",titleMovie:"Movies"},
     actor:{label:"Actor",titleTV:"Shows starring",titleMovie:"Movies starring",source:"cast"},
     creator:{label:"Creator",titleTV:"Shows created by",titleMovie:"Movies created by",jobs:["creator","created by"]},
     director:{label:"Director",titleTV:"Shows directed by",titleMovie:"Movies directed by",jobs:["director"]},
@@ -4895,15 +4896,17 @@ function getPersonCreditsForRole(person,role,media){
     const cleanRole = normalizePersonRoleSlug(role);
     const cleanMedia = normalizePersonMediaType(media);
     const combined = person && person.combined_credits ? person.combined_credits : {};
-    const source = cleanRole === "actor" ? combined.cast : combined.crew;
+    const cast = Array.isArray(combined.cast) ? combined.cast : [];
+    const crew = Array.isArray(combined.crew) ? combined.crew : [];
+    const source = cleanRole === "person" ? cast.concat(crew) : cleanRole === "actor" ? cast : crew;
     const seen = new Set();
 
-    return (Array.isArray(source) ? source : [])
+    return source
     .filter(credit=>{
         if(!credit || String(credit.media_type || "") !== cleanMedia){
             return false;
         }
-        if(cleanRole === "actor"){
+        if(cleanRole === "person" || cleanRole === "actor"){
             return true;
         }
         return personCrewJobMatchesRole(credit,cleanRole);
@@ -5073,7 +5076,7 @@ async function openPersonPage(role,personId,options={}){
             role:cleanRole,
             personId:cleanId,
             routeSlug:routeSlug,
-            media:"tv",
+            media:media,
             loading:false,
             error:"",
             person:null,

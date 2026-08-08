@@ -323,7 +323,7 @@
                 return;
             }
 
-            const personMatch = route.match(/^\/app\/(actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            const personMatch = route.match(/^\/app\/(person|actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(personMatch){
                 const routePersonRole = personMatch[1];
                 const routePerson = parseRouteIdSlug(personMatch[2]);

@@ -105,6 +105,7 @@ APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
 )
 APP_LIST_PATH_RE = re.compile(r"^/app/list(?:/(watching|paused|completed|plan-to-watch|dropped))?$")
 APP_PERSON_ROLE_SLUGS = {
+    "person",
     "actor",
     "creator",
     "director",
@@ -115,7 +116,7 @@ APP_PERSON_ROLE_SLUGS = {
     "cinematographer",
 }
 APP_PERSON_PATH_RE = re.compile(
-    rf"^/app/(actor|creator|director|writer|producer|editor|composer|cinematographer)/({APP_ROUTE_ID_SLUG})$"
+    rf"^/app/(person|actor|creator|director|writer|producer|editor|composer|cinematographer)/({APP_ROUTE_ID_SLUG})$"
 )
 APP_SECTION_PATHS = {
     "/app/upcoming",

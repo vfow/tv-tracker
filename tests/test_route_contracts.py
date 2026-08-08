@@ -94,8 +94,11 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertTrue(valid_app_path("/app/genre/tv/action-adventure"))
         self.assertTrue(valid_app_path("/app/genre/movie/horror"))
         self.assertFalse(valid_app_path("/app/actor/123"))
+        self.assertFalse(valid_app_path("/app/person/525"))
+        self.assertTrue(valid_app_path("/app/person/525-christopher-nolan"))
         self.assertTrue(valid_app_path("/app/actor/123-leonardo-dicaprio"))
         self.assertTrue(valid_app_path("/app/cinematographer/456-roger-deakins"))
+        self.assertEqual(safe_next_url("/app/person/525-christopher-nolan"), "/app/person/525-christopher-nolan")
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/actor/123-leonardo-dicaprio")
 
     def test_discovery_paths_are_allowed(self):
@@ -135,6 +138,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/show/not-a-number",
             "/app/show/1399",
             "/app/actor/123",
+            "/app/person/525",
             "/app/network/213",
             "/app/language/ja",
             "/app/country/jp",
@@ -152,6 +156,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/genre/movie/action--adventure",
             "/app/show/1399-",
             "/app/actor/123-",
+            "/app/person/525-",
             "/app/network/213-",
             "/app/language/ja-",
             "/app/country/jp-",
@@ -164,7 +169,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/certification/music/pg",
             "/app/certification/movie/",
             "/app/actor/",
+            "/app/person/",
             "/app/actor/not-a-number",
+            "/app/person/not-a-number",
             "/app/actor/0",
             "/app/unknownrole/123",
             "/app/network/",
@@ -198,6 +205,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         )
         self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/tv/action-adventure")
         self.assertEqual(safe_next_url("/app/genre/movie/horror/"), "/app/genre/movie/horror")
+        self.assertEqual(safe_next_url("/app/person/525-christopher-nolan/"), "/app/person/525-christopher-nolan")
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/actor/123-leonardo-dicaprio")
         self.assertEqual(safe_next_url("/app/network/213-netflix/"), "/app/network/213-netflix")
         self.assertEqual(safe_next_url("/app/movie/603-the-matrix/"), "/app/movie/603-the-matrix")
