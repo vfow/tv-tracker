@@ -272,327 +272,177 @@ function renderDiscoverHub(){
 
     const state = typeof discoverHubState === "object" && discoverHubState
     ? discoverHubState
-    : {loaded:false,loading:false,error:"",sections:[]};
+    : {loaded:false,loading:false,error:"",sections:[],genres:[]};
 
     if(state.loading && (!state.sections || state.sections.length === 0)){
-
         results.innerHTML = `
-            <div class="discover-hub">
-                ${renderDiscoverHubSkeleton("Coming Soon")}
-                ${renderDiscoverHubSkeleton("Trending This Week")}
-                ${renderDiscoverHubSkeleton("Airing Now")}
-                ${renderDiscoverHubSkeleton("Popular")}
+            <div class="discover-page-shell">
+                <div class="discover-page-heading">
+                    <h1>Discover</h1>
+                    <p>Browse TV shows, movies, and genres.</p>
+                </div>
+                ${renderDiscoverHubSkeleton("TV Shows")}
+                ${renderDiscoverHubSkeleton("Movies")}
             </div>
         `;
-
         return;
-
     }
 
     if(state.error && (!state.sections || state.sections.length === 0)){
-
         results.innerHTML = `
-            <div class="empty-state">
-                <h2>Discover failed to load</h2>
-                <p>Try again later.</p>
+            <div class="discover-page-shell">
+                <div class="empty-state search-empty-state">
+                    <h2>Discover failed to load</h2>
+                    <p>Couldn’t load this page. Try again later.</p>
+                </div>
             </div>
         `;
-
         return;
-
     }
 
-    const sections = (state.sections || [])
+    const sections = (Array.isArray(state.sections) ? state.sections : [])
     .map(section=>{
-
-        const shows = (section.shows || []).filter(show=>{
-            return show && show.id;
-        });
-
-        return Object.assign({},section,{shows:shows});
-
+        const items = Array.isArray(section.items) ? section.items : (Array.isArray(section.shows) ? section.shows : []);
+        return Object.assign({},section,{items:items.filter(item=>item && item.id)});
     })
-    .filter(section=>section.shows && section.shows.length > 0);
+    .filter(section=>section.items.length > 0);
 
-    if(sections.length === 0){
-
-        results.innerHTML = `
-            <div class="empty-state">
-                <h2>Nothing new right now</h2>
-                <p>Try again later.</p>
-            </div>
-        `;
-
-        return;
-
-    }
+    const tvRows = sections.filter(section=>section.media === "tv");
+    const movieRows = sections.filter(section=>section.media === "movie");
 
     results.innerHTML = `
-        <div class="discover-hub">
-            ${sections.map(renderDiscoverHubSection).join("")}
+        <div class="discover-page-shell">
+            <div class="discover-page-heading">
+                <h1>Discover</h1>
+                <p>Browse TV shows, movies, and genres.</p>
+            </div>
+            ${renderDiscoverSectionGroup("TV Shows",tvRows)}
+            ${renderDiscoverSectionGroup("Movies",movieRows)}
+            ${renderDiscoverGenreSection(state.genres || [])}
         </div>
     `;
 
-    document.querySelectorAll(".discover-hub-card").forEach(card=>{
-
-        card.addEventListener("click",async function(){
-
-            await openDiscoverShowModal({
-                id:Number(this.dataset.showId),
-                name:this.dataset.showName || "",
-                poster_path:this.dataset.posterPath || "",
-                overview:this.dataset.overview || "",
-                first_air_date:this.dataset.firstAirDate || ""
-            });
-
-        });
-
-    });
-
-    setupInfiniteDiscoverCarousels();
-
-    document.querySelectorAll(".discover-row-arrow").forEach(button=>{
-
-        button.addEventListener("click",function(event){
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            const direction = this.dataset.direction === "left" ? -1 : 1;
-            const shell = this.closest(".discover-carousel-shell");
-            const row = shell ? shell.querySelector(".discover-card-row") : null;
-
-            if(!row){
-                return;
-            }
-
-            normalizeInfiniteDiscoverRow(row,false);
-
-            const scrollAmount = getDiscoverCarouselScrollAmount(row);
-
-            row.scrollBy({
-                left:direction * scrollAmount,
-                behavior:"smooth"
-            });
-
-            window.setTimeout(()=>{
-                normalizeInfiniteDiscoverRow(row,false);
-            },360);
-
-        });
-
-    });
-
-
-    document.querySelectorAll(".discover-view-more-button").forEach(button=>{
-        button.addEventListener("click",async function(){
-            if(this.disabled){
-                return;
-            }
-
-            this.disabled = true;
-            await loadMoreDiscoverSection(this.dataset.sectionKey);
-        });
-    });
-
+    attachDiscoverHubEvents();
 }
 
-
-
 function renderDiscoverHubSkeleton(title){
-
     return `
-        <div class="discover-section">
-            <div class="discover-section-heading">
-                <h3>${escapeHTML(title)}</h3>
-            </div>
-            <div class="discover-carousel-shell">
+        <section class="discover-section-group">
+            <h2 class="discover-group-title">${escapeHTML(title)}</h2>
+            <div class="discover-section">
+                <div class="discover-section-heading">
+                    <h3>Loading</h3>
+                </div>
                 <div class="discover-card-row">
                     ${Array.from({length:8}).map(()=>`<div class="discover-card skeleton-card"></div>`).join("")}
                 </div>
             </div>
-        </div>
+        </section>
     `;
-
 }
 
-
+function renderDiscoverSectionGroup(title,sections){
+    const cleanSections = Array.isArray(sections) ? sections : [];
+    if(!cleanSections.length){
+        return "";
+    }
+    return `
+        <section class="discover-section-group">
+            <h2 class="discover-group-title">${escapeHTML(title)}</h2>
+            ${cleanSections.map(renderDiscoverHubSection).join("")}
+        </section>
+    `;
+}
 
 function renderDiscoverHubSection(section){
-
-    const rowKey = escapeHTML(section.key || section.title || "shows");
-    const shows = section.shows || [];
-    const repeatedShows = shows.length > 1
-    ? [...shows,...shows,...shows]
-    : shows;
-
+    const items = Array.isArray(section.items) ? section.items : [];
+    const route = String(section.route || "").trim();
     return `
-        <div class="discover-section">
+        <section class="discover-section">
             <div class="discover-section-heading">
-                <div>
-                    <h3>${escapeHTML(section.title || "Shows")}</h3>
-                </div>
+                <h3>${escapeHTML(section.title || "Browse")}</h3>
+                ${route ? `<a class="view-more-button discover-view-more-link" href="${escapeHTML(route)}">VIEW MORE</a>` : ""}
             </div>
             <div class="discover-carousel-shell">
-                <div class="discover-card-row infinite-discover-row" data-discover-row="${rowKey}" data-original-count="${shows.length}">
-                    ${repeatedShows.map(renderDiscoverHubCard).join("")}
-                </div>
-                <div class="discover-carousel-overlay" aria-hidden="false">
-                    <button type="button" class="discover-row-arrow discover-row-arrow-left" data-direction="left" aria-label="Scroll left">‹</button>
-                    <button type="button" class="discover-row-arrow discover-row-arrow-right" data-direction="right" aria-label="Scroll right">›</button>
+                <div class="discover-card-row" data-discover-row="${escapeHTML(section.key || section.title || "row")}">
+                    ${items.map(renderDiscoverHubCard).join("")}
                 </div>
             </div>
-            ${section.hasMore ? `<button type="button" class="view-more-button discover-view-more-button" data-section-key="${rowKey}">${section.loadingMore ? "Loading…" : "View More"}</button>` : ""}
-        </div>
+        </section>
     `;
-
 }
 
+function renderDiscoverGenreSection(genres){
+    const items = (Array.isArray(genres) ? genres : [])
+    .map(genre=>{
+        const name = String(genre && genre.name || "").trim();
+        const route = name && typeof getGenreRouteFromName === "function" ? getGenreRouteFromName(name) : "";
+        return name && route ? {name,route} : null;
+    })
+    .filter(Boolean);
 
-function getDiscoverCarouselMetrics(row){
-
-    const cards = Array.from(row.querySelectorAll(".discover-hub-card"));
-    const originalCount = Number(row.dataset.originalCount || 0);
-
-    if(!row || !cards.length || !originalCount || originalCount < 2){
-        return null;
+    if(!items.length){
+        return "";
     }
 
-    const rowStyle = window.getComputedStyle(row);
-    const gap = parseFloat(rowStyle.columnGap || rowStyle.gap || "16") || 16;
-    const cardWidth = cards[0].getBoundingClientRect().width || 142;
-    const itemWidth = cardWidth + gap;
-    const setWidth = originalCount * itemWidth;
-
-    return {
-        cards,
-        originalCount,
-        gap,
-        cardWidth,
-        itemWidth,
-        setWidth
-    };
-
+    return `
+        <section class="discover-section-group discover-genre-section">
+            <h2 class="discover-group-title">Genres</h2>
+            <div class="discover-genre-grid">
+                ${items.map(item=>`<a class="discover-genre-card" href="${escapeHTML(item.route)}">${escapeHTML(item.name)}</a>`).join("")}
+            </div>
+        </section>
+    `;
 }
 
-
-
-function getDiscoverCarouselScrollAmount(row){
-
-    const metrics = getDiscoverCarouselMetrics(row);
-
-    if(!metrics){
-        return Math.max(280,Math.round(row.clientWidth * 0.7));
-    }
-
-    const visibleCards = Math.max(1,Math.floor(row.clientWidth / metrics.itemWidth));
-    const step = Math.max(1,visibleCards - 1);
-
-    return Math.round(step * metrics.itemWidth);
-
-}
-
-
-
-function normalizeInfiniteDiscoverRow(row,instant){
-
-    const metrics = getDiscoverCarouselMetrics(row);
-
-    if(!metrics){
-        return;
-    }
-
-    const min = metrics.setWidth * 0.35;
-    const max = metrics.setWidth * 1.65;
-    let target = null;
-
-    if(row.scrollLeft < min){
-        target = row.scrollLeft + metrics.setWidth;
-    }else if(row.scrollLeft > max){
-        target = row.scrollLeft - metrics.setWidth;
-    }
-
-    if(target === null){
-        return;
-    }
-
-    if(instant){
-        const previousBehavior = row.style.scrollBehavior;
-        row.style.scrollBehavior = "auto";
-        row.scrollLeft = target;
-        row.style.scrollBehavior = previousBehavior;
-        return;
-    }
-
-    window.requestAnimationFrame(()=>{
-        const previousBehavior = row.style.scrollBehavior;
-        row.style.scrollBehavior = "auto";
-        row.scrollLeft = target;
-        row.style.scrollBehavior = previousBehavior;
-    });
-
-}
-
-
-
-function setupInfiniteDiscoverCarousels(){
-
-    document.querySelectorAll(".infinite-discover-row").forEach(row=>{
-
-        const metrics = getDiscoverCarouselMetrics(row);
-
-        if(!metrics){
-            return;
-        }
-
-        const previousBehavior = row.style.scrollBehavior;
-        row.style.scrollBehavior = "auto";
-        row.scrollLeft = metrics.setWidth;
-        row.style.scrollBehavior = previousBehavior;
-
-        row.addEventListener("scroll",function(){
-            normalizeInfiniteDiscoverRow(row,false);
-        },{passive:true});
-
-    });
-
-}
-
-
-function renderDiscoverHubCard(show){
-
-    const posterHTML = show.poster_path
-    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="">`
-    : `<div class="discover-card-placeholder">TV</div>`;
-
-    const year = show.first_air_date
-    ? show.first_air_date.slice(0,4)
-    : "Unknown";
-
-    const rating = Number(show.vote_average || 0);
-    const ratingHTML = rating > 0
-    ? ` • <span>${rating.toFixed(1)}</span>`
-    : "";
+function renderDiscoverHubCard(item){
+    const mediaType = item && item.media_type === "movie" ? "movie" : "tv";
+    const title = item && (item.title || item.name) ? String(item.title || item.name) : "Untitled";
+    const date = item && (item.date || item.release_date || item.first_air_date) ? String(item.date || item.release_date || item.first_air_date) : "";
+    const year = date ? date.slice(0,4) : "Unknown";
+    const posterHTML = item && item.poster_path
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
+    : `<div class="discover-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
 
     return `
         <button
+        type="button"
         class="discover-hub-card"
-        data-show-id="${escapeHTML(show.id)}"
-        data-show-name="${escapeHTML(show.name || "")}" 
-        data-poster-path="${escapeHTML(show.poster_path || "")}" 
-        data-overview="${escapeHTML(show.overview || "")}" 
-        data-first-air-date="${escapeHTML(show.first_air_date || "")}">
+        data-media-type="${escapeHTML(mediaType)}"
+        data-media-id="${escapeHTML(item && item.id)}"
+        data-media-name="${escapeHTML(title)}"
+        data-poster-path="${escapeHTML(item && item.poster_path || "")}" 
+        data-overview="${escapeHTML(item && item.overview || "")}" 
+        data-first-air-date="${escapeHTML(item && item.first_air_date || "")}" 
+        data-release-date="${escapeHTML(item && item.release_date || "")}">
             <div class="discover-card-poster">
                 ${posterHTML}
             </div>
-            <div class="discover-card-title">${escapeHTML(show.name || "Untitled")}</div>
-            <div class="discover-card-meta">${escapeHTML(year)}${ratingHTML}</div>
+            <div class="discover-card-title">${escapeHTML(title)}</div>
+            <div class="discover-card-meta">${escapeHTML(year)}</div>
         </button>
     `;
-
 }
 
-
+function attachDiscoverHubEvents(){
+    document.querySelectorAll(".discover-hub-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            const mediaType = String(this.dataset.mediaType || "tv");
+            const mediaId = Number(this.dataset.mediaId || 0);
+            const mediaName = this.dataset.mediaName || "";
+            if(!mediaId){
+                return;
+            }
+            if(mediaType === "movie" && typeof openMoviePage === "function"){
+                await openMoviePage(mediaId,{movieName:mediaName});
+                return;
+            }
+            if(typeof openShowDetailsPage === "function"){
+                await openShowDetailsPage(mediaId,{showName:mediaName});
+            }
+        });
+    });
+}
 
 function getSearchResultPersonRole(result){
     const department = String(result && result.known_for_department || "").toLowerCase();
@@ -617,57 +467,72 @@ function getSearchResultPersonRole(result){
     return "actor";
 }
 
-function renderSearchResultCard(result){
-    const mediaType = result && result.media_type ? String(result.media_type) : "tv";
-    const title = result && (result.title || result.name) ? String(result.title || result.name) : "Untitled";
-    const date = result && (result.date || result.first_air_date || result.release_date) ? String(result.date || result.first_air_date || result.release_date) : "";
-    const year = date ? date.slice(0,4) : "Unknown";
-    const rating = Number(result && result.vote_average || 0);
-    const ratingHTML = mediaType === "person" ? "" : (rating > 0 ? ` • ${rating.toFixed(1)}` : "");
-    const posterPath = mediaType === "person" ? (result && result.profile_path || result && result.poster_path || "") : (result && result.poster_path || "");
-    const placeholder = mediaType === "person" ? "PERSON" : (mediaType === "movie" ? "MOVIE" : "TV");
-    const posterHTML = posterPath
-    ? `<img class="poster" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(posterPath,mediaType === "person" ? "h632" : "w500"))}" alt="${escapeHTML(title)}">`
-    : `<div class="poster-placeholder">${escapeHTML(placeholder)}</div>`;
-    const meta = mediaType === "person"
-    ? (result && result.known_for_department ? result.known_for_department : "Person")
-    : (mediaType === "movie" ? `Movie • ${year}` : `TV Show • ${year}`);
-
+function renderSearchTabButtonHTML(type,label,isActive){
     return `
         <button
         type="button"
-        class="show search-result-card"
-        data-media-type="${escapeHTML(mediaType)}"
-        data-media-id="${escapeHTML(result && result.id)}"
-        data-media-name="${escapeHTML(title)}"
-        data-poster-path="${escapeHTML(posterPath)}"
-        data-overview="${escapeHTML(result && result.overview || "")}" 
-        data-first-air-date="${escapeHTML(result && result.first_air_date || "")}" 
-        data-release-date="${escapeHTML(result && result.release_date || "")}" 
-        data-person-role="${escapeHTML(getSearchResultPersonRole(result))}">
-            ${posterHTML}
-            <div class="info">
-                <div class="title">${escapeHTML(title)}</div>
-                <div class="episode">${escapeHTML(meta)}${escapeHTML(ratingHTML)}</div>
-                ${result && result.overview ? `<div class="episode-title">${escapeHTML(result.overview)}</div>` : ""}
-            </div>
+        class="search-tab-button ${isActive ? "active" : ""}"
+        data-search-media="${escapeHTML(type)}"
+        role="tab"
+        aria-selected="${isActive ? "true" : "false"}">
+            ${escapeHTML(label)}
         </button>
     `;
 }
 
-function renderSearchResultSection(title,items){
-    if(!items.length){
-        return "";
-    }
+function renderSearchResultPosterCard(result){
+    const mediaType = result && result.media_type === "movie" ? "movie" : "tv";
+    const title = result && (result.title || result.name) ? String(result.title || result.name) : "Untitled";
+    const date = result && (result.date || result.first_air_date || result.release_date) ? String(result.date || result.first_air_date || result.release_date) : "";
+    const posterHTML = result && result.poster_path
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
+    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    const year = date ? date.slice(0,4) : "Unknown";
+    const rating = Number(result && result.vote_average || 0);
+    const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+
     return `
-        <section class="search-result-section">
-            <h3 class="modal-section-heading search-result-section-title">${escapeHTML(title)}</h3>
-            <div class="search-result-list">${items.map(renderSearchResultCard).join("")}</div>
-        </section>
+        <button
+        type="button"
+        class="genre-result-card search-result-poster-card"
+        data-media-type="${escapeHTML(mediaType)}"
+        data-media-id="${escapeHTML(result && result.id)}"
+        data-media-name="${escapeHTML(title)}"
+        data-poster-path="${escapeHTML(result && result.poster_path || "")}" 
+        data-overview="${escapeHTML(result && result.overview || "")}" 
+        data-first-air-date="${escapeHTML(result && result.first_air_date || "")}" 
+        data-release-date="${escapeHTML(result && result.release_date || "")}">
+            <div class="genre-result-poster">${posterHTML}</div>
+            <div class="genre-result-title">${escapeHTML(title)}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+        </button>
     `;
 }
 
-function renderSearchResults(shows){
+function renderSearchPersonCard(result){
+    const name = result && result.name ? String(result.name) : "Unknown Person";
+    const photoHTML = result && (result.profile_path || result.poster_path)
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.profile_path || result.poster_path,"h632"))}" alt="${escapeHTML(name + " photo")}">`
+    : `<div class="search-person-placeholder">PERSON</div>`;
+    const role = getSearchResultPersonRole(result);
+    const meta = result && result.known_for_department ? String(result.known_for_department) : "Person";
+
+    return `
+        <button
+        type="button"
+        class="search-person-card"
+        data-media-type="person"
+        data-media-id="${escapeHTML(result && result.id)}"
+        data-media-name="${escapeHTML(name)}"
+        data-person-role="${escapeHTML(role)}">
+            <div class="search-person-photo">${photoHTML}</div>
+            <div class="search-person-name">${escapeHTML(name)}</div>
+            <div class="search-person-meta">${escapeHTML(meta)}</div>
+        </button>
+    `;
+}
+
+function renderSearchResults(resultsList){
 
     const results = document.getElementById("search-results");
 
@@ -675,48 +540,72 @@ function renderSearchResults(shows){
         return;
     }
 
-    results.innerHTML = "";
+    const state = typeof discoverSearchState === "object" && discoverSearchState
+    ? discoverSearchState
+    : {query:"",media:"tv",page:1,totalPages:1,loading:false};
+    const query = String(state.query || "").trim();
+    const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || "tv") : "tv";
+    const allItems = Array.isArray(resultsList) ? resultsList : [];
+    const visibleItems = allItems.filter(item=>String(item && item.media_type || "tv") === media);
+    const labels = {tv:"TV Shows",movie:"Movies",person:"People"};
 
-    if(!shows || shows.length === 0){
-
-        const state = typeof discoverSearchState === "object" && discoverSearchState
-        ? discoverSearchState
-        : {query:""};
-        const query = String(state.query || "").trim();
-
-        results.innerHTML = `
-            <div class="empty-state">
-                <h2>No matches found</h2>
-                ${query ? `<p>Try another search.</p>` : ""}
-            </div>
-        `;
-
-        return;
-
-    }
-
-    const groups = {
-        tv:[],
-        movie:[],
-        person:[]
-    };
-
-    shows.forEach(item=>{
-        const mediaType = item && item.media_type ? String(item.media_type) : "tv";
-        if(groups[mediaType]){
-            groups[mediaType].push(item);
-        }
-    });
-
-    results.innerHTML = `
-        <div class="search-result-stack">
-            ${renderSearchResultSection("TV Shows",groups.tv)}
-            ${renderSearchResultSection("Movies",groups.movie)}
-            ${renderSearchResultSection("People",groups.person)}
+    const tabsHTML = `
+        <div class="search-tab-row" role="tablist" aria-label="Search result type">
+            ${renderSearchTabButtonHTML("tv","TV Shows",media === "tv")}
+            ${renderSearchTabButtonHTML("movie","Movies",media === "movie")}
+            ${renderSearchTabButtonHTML("person","People",media === "person")}
         </div>
     `;
 
-    document.querySelectorAll(".search-result-card[data-media-id]").forEach(card=>{
+    const bodyHTML = !query
+    ? `
+        <div class="empty-state search-empty-state">
+            <h2>Search the tracker universe</h2>
+            <p>Type a show, movie, or person above.</p>
+        </div>
+    `
+    : visibleItems.length
+    ? media === "person"
+        ? `<div class="search-person-grid">${visibleItems.map(renderSearchPersonCard).join("")}</div>`
+        : `<div class="genre-tight-grid search-tight-grid">${visibleItems.map(renderSearchResultPosterCard).join("")}</div>`
+    : state.loading
+    ? `
+        <div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">
+            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+        </div>
+    `
+    : `
+        <div class="empty-state search-empty-state">
+            <h2>No ${escapeHTML(labels[media] || "results")} found</h2>
+            <p>Try another tab or another search.</p>
+        </div>
+    `;
+
+    const canLoadMore = query && Number(state.page || 1) < Number(state.totalPages || 1);
+
+    results.innerHTML = `
+        <div class="search-page-shell">
+            <div class="search-page-heading">
+                <h1>Search</h1>
+                ${query ? `<p>Results for ${escapeHTML(query)}.</p>` : `<p>Search TV shows, movies, and people.</p>`}
+            </div>
+            ${tabsHTML}
+            <div class="search-results-body">
+                ${bodyHTML}
+            </div>
+            ${canLoadMore ? `<button type="button" class="view-more-button search-view-more-button" id="search-load-more-button" ${state.loading ? "disabled" : ""}>${state.loading ? "Loading…" : "VIEW MORE"}</button>` : ""}
+        </div>
+    `;
+
+    document.querySelectorAll(".search-tab-button[data-search-media]").forEach(button=>{
+        button.addEventListener("click",function(){
+            if(typeof setSearchMediaType === "function"){
+                setSearchMediaType(this.dataset.searchMedia || "tv");
+            }
+        });
+    });
+
+    document.querySelectorAll(".search-result-poster-card[data-media-id]").forEach(card=>{
         card.addEventListener("click",async function(){
             const mediaType = String(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
@@ -728,37 +617,27 @@ function renderSearchResults(shows){
                 await openMoviePage(mediaId,{movieName:mediaName});
                 return;
             }
-            if(mediaType === "person" && typeof openPersonPage === "function"){
-                await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:mediaName});
-                return;
+            if(typeof openShowDetailsPage === "function"){
+                await openShowDetailsPage(mediaId,{showName:mediaName});
             }
-            await openDiscoverShowModal({
-                id:mediaId,
-                name:mediaName,
-                poster_path:this.dataset.posterPath || "",
-                overview:this.dataset.overview || "",
-                first_air_date:this.dataset.firstAirDate || ""
-            });
         });
     });
 
-    const state = typeof discoverSearchState === "object" && discoverSearchState
-    ? discoverSearchState
-    : {page:1,totalPages:1,loading:false};
+    document.querySelectorAll(".search-person-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            const mediaId = Number(this.dataset.mediaId || 0);
+            if(!mediaId || typeof openPersonPage !== "function"){
+                return;
+            }
+            await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:this.dataset.mediaName || ""});
+        });
+    });
 
-    if(Number(state.page || 1) < Number(state.totalPages || 1)){
-        const moreButton = document.createElement("button");
-        moreButton.className = "view-more-button search-view-more-button";
-        moreButton.type = "button";
-        moreButton.textContent = state.loading ? "Loading…" : "View More";
-        moreButton.disabled = state.loading === true;
+    const moreButton = document.getElementById("search-load-more-button");
+    if(moreButton){
         moreButton.addEventListener("click",loadMoreSearchResults);
-        results.appendChild(moreButton);
     }
-
 }
-
-
 
 function getShowDetailFilters(){
     const filters = window.TVTrackerShowDetailFilters || {};
@@ -1081,7 +960,9 @@ function renderDiscoveryFilterDetailPage(state){
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
     const supportsMedia = typeof discoveryFilterSupportsMediaSwitch === "function" && discoveryFilterSupportsMediaSwitch(type);
-    const showYearFilter = type !== "year";
+    const isDiscoverCategory = type === "discover-category";
+    const showYearFilter = type !== "year" && !isDiscoverCategory;
+    const showSortFilter = !isDiscoverCategory;
     const sortDateLabel = media === "movie" ? "Release Date" : "First Air Date";
 
     const bodyHTML = error
@@ -1096,7 +977,7 @@ function renderDiscoveryFilterDetailPage(state){
         <div class="genre-tight-grid">
             ${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card discovery-filter-result-card"')).join("")}
         </div>
-        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="discovery-filter-load-more-button">View More</button>` : ""}
+        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="discovery-filter-load-more-button">VIEW MORE</button>` : ""}
         ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}
     `
     : loading
@@ -1112,6 +993,34 @@ function renderDiscoveryFilterDetailPage(state){
         </div>
     `;
 
+    const filterHTML = `
+        ${supportsMedia ? `
+            <label class="genre-filter-field" for="discovery-filter-media-filter">
+                <span>Media</span>
+                <select id="discovery-filter-media-filter">
+                    <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
+                    <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
+                </select>
+            </label>
+        ` : ""}
+        ${showYearFilter ? `
+            <label class="genre-filter-field" for="discovery-filter-year-filter">
+                <span>Year</span>
+                <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
+            </label>
+        ` : ""}
+        ${showSortFilter ? `
+            <label class="genre-filter-field" for="discovery-filter-sort-filter">
+                <span>Sort</span>
+                <select id="discovery-filter-sort-filter">
+                    <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
+                    <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
+                    <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
+                </select>
+            </label>
+        ` : ""}
+    `.trim();
+
     content.innerHTML = `
         <div class="genre-detail-page-inner discovery-filter-page-inner">
             <div class="genre-detail-header">
@@ -1123,31 +1032,7 @@ function renderDiscoveryFilterDetailPage(state){
                 </div>
             </div>
 
-            <div class="genre-filter-bar" aria-label="Page filters">
-                ${supportsMedia ? `
-                    <label class="genre-filter-field" for="discovery-filter-media-filter">
-                        <span>Media</span>
-                        <select id="discovery-filter-media-filter">
-                            <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
-                            <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
-                        </select>
-                    </label>
-                ` : ""}
-                ${showYearFilter ? `
-                    <label class="genre-filter-field" for="discovery-filter-year-filter">
-                        <span>Year</span>
-                        <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
-                    </label>
-                ` : ""}
-                <label class="genre-filter-field" for="discovery-filter-sort-filter">
-                    <span>Sort</span>
-                    <select id="discovery-filter-sort-filter">
-                        <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
-                        <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
-                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
-                    </select>
-                </label>
-            </div>
+            ${filterHTML ? `<div class="genre-filter-bar" aria-label="Page filters">${filterHTML}</div>` : ""}
 
             <div class="genre-result-content">
                 ${bodyHTML}

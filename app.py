@@ -59,6 +59,9 @@ APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/({APP_ROUTE_ID_SLUG})$")
 APP_YEAR_PATH_RE = re.compile(r"^/app/year/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
 APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
 APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
+    r"^/app/discover/(?:(?:tv)/(?:popular|top-rated|airing-today|on-the-air)|(?:movie)/(?:popular|top-rated|now-playing|upcoming))$"
+)
 APP_LIST_PATH_RE = re.compile(r"^/app/list(?:/(watching|paused|completed|plan-to-watch|dropped))?$")
 APP_PERSON_ROLE_SLUGS = {
     "actor",
@@ -1490,6 +1493,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate + (("?" + urlencode({"q": query})) if query else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
+    if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
+        return candidate
     if APP_SHOW_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_EPISODE_PATH_RE.fullmatch(candidate):
@@ -1540,6 +1545,7 @@ def valid_app_path(value: str | None) -> bool:
         or APP_YEAR_PATH_RE.fullmatch(candidate) is not None
         or APP_STATUS_PATH_RE.fullmatch(candidate) is not None
         or APP_CERTIFICATION_PATH_RE.fullmatch(candidate) is not None
+        or APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate) is not None
     )
 
 
@@ -1756,6 +1762,17 @@ def create_app() -> Flask:
     def app_section_page():
         requested_path = request.path.rstrip("/")
         if requested_path not in APP_SECTION_PATHS:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+
+    @app.get("/app/discover/<media_type>/<category_slug>", strict_slashes=False)
+    @login_required
+    def app_discover_category_page(media_type: str, category_slug: str):
+        requested_path = request.path.rstrip("/")
+        if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)

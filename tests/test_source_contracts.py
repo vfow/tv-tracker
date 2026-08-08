@@ -59,7 +59,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         css = self.read('static/css/tailwind-input.css')
         app_js = self.read('static/js/app.js')
         tmdb_js = self.read('static/js/tmdb.js')
-        self.assertIn('View More', ui)
+        self.assertIn('VIEW MORE', ui)
         self.assertIn('loadMoreSearchResults', app_js)
         self.assertIn('loadMoreDiscoverSection', app_js)
         self.assertIn('-webkit-line-clamp:2', css)
@@ -108,6 +108,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@app.get("/app/upcoming", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/history", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/discover", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/discover/<media_type>/<category_slug>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/search", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
@@ -153,6 +154,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderDiscoveryFilterDetailPage', ui)
         self.assertIn('renderMovieDetailPage', ui)
         self.assertIn('renderSearchResults', ui)
+        self.assertIn('renderDiscoverGenreSection', ui)
+        self.assertIn('renderSearchTabButtonHTML', ui)
         self.assertIn('renderShowThemesDetailsHTML', ui)
 
     def test_friendly_error_page_copy_exists(self):

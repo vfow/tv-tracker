@@ -27,6 +27,7 @@ def load_route_helpers():
         "APP_YEAR_PATH_RE",
         "APP_STATUS_PATH_RE",
         "APP_CERTIFICATION_PATH_RE",
+        "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
         "APP_LEGACY_WATCHLIST_PATHS",
         "APP_SECTION_PATHS",
@@ -97,6 +98,14 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/movie/603-the-matrix",
             "/app/company/49-hbo",
             "/app/provider/8-netflix",
+            "/app/discover/tv/popular",
+            "/app/discover/tv/top-rated",
+            "/app/discover/tv/airing-today",
+            "/app/discover/tv/on-the-air",
+            "/app/discover/movie/popular",
+            "/app/discover/movie/top-rated",
+            "/app/discover/movie/now-playing",
+            "/app/discover/movie/upcoming",
             "/app/year/2024",
             "/app/status/returning-series",
             "/app/status/ended",
@@ -124,6 +133,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/movie/603",
             "/app/company/49",
             "/app/provider/8",
+            "/app/discover/tv/trending",
+            "/app/discover/person/popular",
+            "/app/discover/movie/airing-today",
             "/app/genre/",
             "/app/genre/action--adventure",
             "/app/show/1399-",
@@ -178,6 +190,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/movie/603-the-matrix/"), "/app/movie/603-the-matrix")
         self.assertEqual(safe_next_url("/app/company/49-hbo/"), "/app/company/49-hbo")
         self.assertEqual(safe_next_url("/app/provider/8-netflix/"), "/app/provider/8-netflix")
+        self.assertEqual(safe_next_url("/app/discover/movie/upcoming/"), "/app/discover/movie/upcoming")
         self.assertEqual(safe_next_url("/app/year/2024/"), "/app/year/2024")
         self.assertEqual(safe_next_url("/app/status/returning-series/"), "/app/status/returning-series")
         self.assertEqual(safe_next_url("/app/certification/movie/pg-13/"), "/app/certification/movie/pg-13")

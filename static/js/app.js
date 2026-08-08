@@ -89,12 +89,13 @@ var currentSearchController = null;
 var searchRequestId = 0;
 var lastDiscoverSearchQuery = "";
 var lastDiscoverSearchResults = [];
-var discoverSearchState = {query:"",page:1,totalPages:1,loading:false};
+var discoverSearchState = {query:"",media:"tv",page:1,totalPages:1,loading:false};
 var discoverHubState = {
     loaded:false,
     loading:false,
     error:"",
-    sections:[]
+    sections:[],
+    genres:[]
 };
 var librarySearchQuery = "";
 var librarySearchRouteTimer = null;
@@ -112,13 +113,25 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v5";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
+const DISCOVER_ROW_LIMIT = 14;
+const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person"]);
+const DISCOVER_CATEGORY_ROUTES = {
+    "tv/popular":{media:"tv",category:"popular",path:"tv/popular",title:"Popular TV Shows",rowTitle:"Popular",section:"TV Shows"},
+    "tv/top-rated":{media:"tv",category:"top-rated",path:"tv/top_rated",title:"Top Rated TV Shows",rowTitle:"Top Rated",section:"TV Shows"},
+    "tv/airing-today":{media:"tv",category:"airing-today",path:"tv/airing_today",title:"Airing Today",rowTitle:"Airing Today",section:"TV Shows"},
+    "tv/on-the-air":{media:"tv",category:"on-the-air",path:"tv/on_the_air",title:"On The Air",rowTitle:"On The Air",section:"TV Shows"},
+    "movie/popular":{media:"movie",category:"popular",path:"movie/popular",title:"Popular Movies",rowTitle:"Popular",section:"Movies"},
+    "movie/top-rated":{media:"movie",category:"top-rated",path:"movie/top_rated",title:"Top Rated Movies",rowTitle:"Top Rated",section:"Movies"},
+    "movie/now-playing":{media:"movie",category:"now-playing",path:"movie/now_playing",title:"Now Playing",rowTitle:"Now Playing",section:"Movies"},
+    "movie/upcoming":{media:"movie",category:"upcoming",path:"movie/upcoming",title:"Upcoming Movies",rowTitle:"Upcoming",section:"Movies"}
+};
 const TMDB_TV_GENRE_CACHE_KEY = "tv-tracker-tmdb-tv-genres:v1";
 const TMDB_TV_GENRE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
 const DISCOVERY_GRID_PAGE_SIZE = 21;
 const GENRE_PAGE_SORTS = new Set(["popularity.desc","vote_average.desc","first_air_date.desc"]);
-const DISCOVERY_PAGE_TYPES = new Set(["network","language","country","theme","company","provider","year","status","certification"]);
+const DISCOVERY_PAGE_TYPES = new Set(["network","language","country","theme","company","provider","year","status","certification","discover-category"]);
 const PERSON_MEDIA_TYPES = new Set(["tv","movie"]);
 const BROWSE_MEDIA_TYPES = new Set(["tv","movie"]);
 const TV_STATUS_ROUTES = {
@@ -2405,6 +2418,14 @@ function showHasV2APIDetails(show){
         return false;
     }
 
+    if(
+        Array.isArray(show.created_by) &&
+        show.created_by.length > 0 &&
+        (!Array.isArray(show.created_by_people) || show.created_by_people.length === 0)
+    ){
+        return false;
+    }
+
     if(!show._v2_cast_loaded_at || !show._v2_bundle7_loaded_at || !show._v2_bundle7_2_loaded_at){
         return false;
     }
@@ -3136,37 +3157,51 @@ function cancelActiveSearchRequest(){
 
 
 
-function renderSearchIntro(){
+function normalizeSearchMediaType(media){
+    const clean = String(media || "tv").trim().toLowerCase();
+    return SEARCH_MEDIA_TYPES.has(clean) ? clean : "tv";
+}
 
-    const results = document.getElementById("search-results");
-
-    if(!results){
-        return;
+function setSearchMediaType(media){
+    discoverSearchState.media = normalizeSearchMediaType(media);
+    if(typeof renderSearchResults === "function"){
+        renderSearchResults(lastDiscoverSearchResults || []);
     }
+}
 
-    results.innerHTML = "";
-
+function renderSearchIntro(){
+    if(typeof renderSearchResults === "function"){
+        renderSearchResults([]);
+    }
 }
 
 function renderSearchLoading(query){
-
     const results = document.getElementById("search-results");
 
     if(!results){
         return;
     }
 
+    const cleanQuery = String(query || "").trim();
     results.innerHTML = `
-        <div class="empty-state">
-            <h2>Searching</h2>
-            <p>Looking for matches.</p>
+        <div class="search-page-shell">
+            <div class="search-page-heading">
+                <h1>Search</h1>
+                ${cleanQuery ? `<p>Searching for ${escapeHTML(cleanQuery)}.</p>` : `<p>Search TV shows, movies, and people.</p>`}
+            </div>
+            <div class="search-tab-row" role="tablist" aria-label="Search result type">
+                ${renderSearchTabButtonHTML("tv","TV Shows",true)}
+                ${renderSearchTabButtonHTML("movie","Movies",false)}
+                ${renderSearchTabButtonHTML("person","People",false)}
+            </div>
+            <div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">
+                ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+            </div>
         </div>
     `;
-
 }
 
 function renderSearchError(){
-
     const results = document.getElementById("search-results");
 
     if(!results){
@@ -3174,14 +3209,14 @@ function renderSearchError(){
     }
 
     results.innerHTML = `
-        <div class="empty-state">
-            <h2>Search failed</h2>
-            <p>Try again in a moment.</p>
+        <div class="search-page-shell">
+            <div class="empty-state search-empty-state">
+                <h2>Search failed</h2>
+                <p>Couldn’t load this page. Try again later.</p>
+            </div>
         </div>
     `;
-
 }
-
 
 function normalizeSearchResultItem(item){
     if(!item || !item.id){
@@ -3254,6 +3289,7 @@ function showSearchPageShell(){
     const pageElement = document.getElementById("discover-page");
     if(pageElement){
         pageElement.classList.add("active-page");
+        pageElement.scrollTop = 0;
     }
     if(typeof updateShellTitle === "function"){
         updateShellTitle();
@@ -3273,6 +3309,7 @@ function openSearchPage(query="",options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
     searchRouteState.query = cleanQuery;
+    discoverSearchState.media = "tv";
     showSearchPageShell();
     const input = document.getElementById("search");
     if(input){
@@ -3285,17 +3322,36 @@ function openSearchPage(query="",options={}){
     searchShows(cleanQuery,{skipRoute:true});
 }
 
-
-
-function shouldShowDiscoverHub(){
-
-    const searchInput = document.getElementById("search");
-    const query = searchInput ? searchInput.value.trim() : "";
-    return activePage === "discover" && query.length < 2;
-
+function openDiscoverHomePage(options={}){
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    selectedShowId = null;
+    selectedEpisodeContext = null;
+    selectedGenreSlug = null;
+    selectedPersonContext = null;
+    selectedDiscoveryContext = null;
+    selectedMovieId = null;
+    showDetailPreview = null;
+    discoverPreviewShow = null;
+    searchRouteState.query = "";
+    const input = document.getElementById("search");
+    if(input){
+        input.value = "";
+        input.setAttribute("placeholder","Search shows, movies, people");
+    }
+    showPage("discover");
+    if(!fromRoute){
+        setAppHashRoute("/app/discover",replaceRoute);
+    }
+    if(typeof renderDiscoverHub === "function"){
+        renderDiscoverHub();
+    }
+    loadDiscoverHub(false);
 }
 
-
+function shouldShowDiscoverHub(){
+    return activePage === "discover";
+}
 
 function getLocalDateKey(date){
 
@@ -3307,8 +3363,6 @@ function getLocalDateKey(date){
     return year + "-" + month + "-" + day;
 
 }
-
-
 
 function readDiscoverHubCache(){
 
@@ -3331,7 +3385,10 @@ function readDiscoverHubCache(){
             return null;
         }
 
-        return cached.sections;
+        return {
+            sections:cached.sections,
+            genres:Array.isArray(cached.genres) ? cached.genres : []
+        };
 
     }catch(error){
         return null;
@@ -3339,11 +3396,9 @@ function readDiscoverHubCache(){
 
 }
 
+function writeDiscoverHubCache(state){
 
-
-function writeDiscoverHubCache(sections){
-
-    if(!Array.isArray(sections)){
+    if(!state || !Array.isArray(state.sections)){
         return;
     }
 
@@ -3352,14 +3407,13 @@ function writeDiscoverHubCache(sections){
             DISCOVER_HUB_CACHE_KEY,
             JSON.stringify({
                 savedAt:Date.now(),
-                sections:sections
+                sections:state.sections,
+                genres:Array.isArray(state.genres) ? state.genres : []
             })
         );
     }catch(error){}
 
 }
-
-
 
 async function tmdbGetDiscoverPage(path,params={}){
 
@@ -3398,173 +3452,97 @@ async function tmdbGetDiscoverPage(path,params={}){
 
 }
 
-
-
 async function tmdbGetDiscoverList(path,params={}){
     const payload = await tmdbGetDiscoverPage(path,params);
     return payload.results || [];
 }
 
-
-
-
-function normalizeDiscoverHubShow(show){
-
-    if(!show || !show.id){
-        return null;
-    }
-
-    return {
-        id:show.id,
-        name:show.name || show.original_name || "Untitled",
-        poster_path:show.poster_path || "",
-        backdrop_path:show.backdrop_path || "",
-        overview:show.overview || "",
-        first_air_date:show.first_air_date || "",
-        vote_average:show.vote_average || 0,
-        popularity:show.popularity || 0
-    };
-
+function getDiscoverCategoryKey(media,category){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const cleanCategory = buildRouteSlug(category);
+    const key = cleanMedia + "/" + cleanCategory;
+    return DISCOVER_CATEGORY_ROUTES[key] ? key : "";
 }
 
+function getDiscoverCategoryConfig(mediaOrKey,category=""){
+    const key = category ? getDiscoverCategoryKey(mediaOrKey,category) : String(mediaOrKey || "").trim().toLowerCase();
+    return DISCOVER_CATEGORY_ROUTES[key] || null;
+}
 
+function getDiscoverCategoryDetailRoute(media,category){
+    const config = getDiscoverCategoryConfig(media,category);
+    return config ? `/app/discover/${encodeURIComponent(config.media)}/${encodeURIComponent(config.category)}` : "/app/discover";
+}
 
-function buildDiscoverHubSection(key,title,subtitle,shows,usedIds,options={}){
+function normalizeDiscoverMediaResultItem(raw,media){
+    if(!raw || !raw.id){
+        return null;
+    }
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const title = cleanMedia === "movie"
+    ? (raw.title || raw.original_title || "Untitled")
+    : (raw.name || raw.original_name || "Untitled");
+    const date = cleanMedia === "movie" ? (raw.release_date || "") : (raw.first_air_date || "");
+    return {
+        id:Number(raw.id || 0),
+        media_type:cleanMedia,
+        name:title,
+        title:title,
+        poster_path:raw.poster_path || "",
+        backdrop_path:raw.backdrop_path || "",
+        overview:raw.overview || "",
+        first_air_date:cleanMedia === "tv" ? date : "",
+        release_date:cleanMedia === "movie" ? date : "",
+        date:date,
+        vote_average:Number(raw.vote_average || 0),
+        popularity:Number(raw.popularity || 0)
+    };
+}
 
-    const output = [];
+function normalizeDiscoverHubShow(show){
+    return normalizeDiscoverMediaResultItem(show,"tv");
+}
 
-    (shows || []).forEach(raw=>{
-
-        const show = normalizeDiscoverHubShow(raw);
-
-        if(!show){
-            return;
+function buildDiscoverHubSection(key,config,payload){
+    const seen = new Set();
+    const items = (Array.isArray(payload && payload.results) ? payload.results : [])
+    .map(raw=>normalizeDiscoverMediaResultItem(raw,config.media))
+    .filter(item=>{
+        if(!item || !item.id || seen.has(String(item.id))){
+            return false;
         }
-
-        const id = String(show.id);
-
-        if(usedIds.has(id)){
-            return;
-        }
-
-        usedIds.add(id);
-        output.push(show);
-
-    });
+        seen.add(String(item.id));
+        return true;
+    })
+    .slice(0,DISCOVER_ROW_LIMIT);
 
     return {
         key:key,
-        title:title,
-        subtitle:subtitle,
-        shows:output.slice(0,20),
-        page:Number(options.page || 1),
-        totalPages:Number(options.totalPages || 1),
-        hasMore:Number(options.page || 1) < Number(options.totalPages || 1),
+        media:config.media,
+        category:config.category,
+        title:config.rowTitle,
+        section:config.section,
+        route:getDiscoverCategoryDetailRoute(config.media,config.category),
+        items:items,
+        shows:items,
+        page:Number(payload && payload.page || 1),
+        totalPages:Number(payload && payload.total_pages || 1),
+        hasMore:true,
         loadingMore:false
     };
-
 }
 
 function getDiscoverSectionRequestConfig(key){
-    const today = getLocalDateKey(new Date());
-
-    if(key === "coming-soon"){
-        return {
-            path:"discover/tv",
-            params:{
-                "first_air_date.gte":today,
-                "sort_by":"popularity.desc",
-                "include_adult":"false",
-                "include_null_first_air_dates":"false"
-            },
-            filter:show=>show && show.first_air_date && show.first_air_date >= today
-        };
-    }
-
-    if(key === "trending-week"){
-        return {path:"trending/tv/week",params:{},filter:null};
-    }
-
-    if(key === "airing-now"){
-        return {path:"tv/on_the_air",params:{},filter:null};
-    }
-
-    if(key === "popular"){
-        return {path:"tv/popular",params:{},filter:null};
-    }
-
-    return null;
+    return getDiscoverCategoryConfig(key);
 }
 
 async function loadMoreDiscoverSection(sectionKey){
-    const key = String(sectionKey || "");
-    const state = discoverHubState || {};
-    const sections = Array.isArray(state.sections) ? state.sections : [];
-    const section = sections.find(item=>String(item.key || "") === key);
-    const config = getDiscoverSectionRequestConfig(key);
-
-    if(!section || !config || section.loadingMore){
+    const config = getDiscoverCategoryConfig(sectionKey);
+    if(!config){
         return;
     }
-
-    const currentPage = Number(section.page || 1);
-    const totalPages = Number(section.totalPages || 1);
-
-    if(totalPages > 0 && currentPage >= totalPages){
-        section.hasMore = false;
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
-        }
-        return;
-    }
-
-    section.loadingMore = true;
-
-    if(typeof renderDiscoverHub === "function"){
-        renderDiscoverHub();
-    }
-
-    try{
-        const nextPage = currentPage + 1;
-        const payload = await tmdbGetDiscoverPage(config.path,Object.assign({},config.params,{page:nextPage}));
-        const existing = new Set((section.shows || []).map(show=>String(show.id)));
-        const newShows = [];
-
-        (payload.results || [])
-        .filter(show=>config.filter ? config.filter(show) : true)
-        .forEach(raw=>{
-            const show = normalizeDiscoverHubShow(raw);
-
-            if(!show || existing.has(String(show.id))){
-                return;
-            }
-
-            existing.add(String(show.id));
-            newShows.push(show);
-        });
-
-        section.shows = (section.shows || []).concat(newShows);
-        section.page = Number(payload.page || nextPage);
-        section.totalPages = Number(payload.total_pages || totalPages || section.page);
-        section.hasMore = section.page < section.totalPages;
-        section.loadingMore = false;
-        writeDiscoverHubCache(sections);
-
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
-        }
-    }catch(error){
-        section.loadingMore = false;
-        showToast(error && error.message ? error.message : "Could not load more shows");
-
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
-        }
-    }
+    await openDiscoverCategoryPage(config.media,config.category);
 }
-
-
-
 
 async function loadDiscoverHub(force=false){
 
@@ -3580,115 +3558,78 @@ async function loadDiscoverHub(force=false){
     }
 
     if(!force){
-
-        const cachedSections = readDiscoverHubCache();
-
-        if(cachedSections){
+        const cached = readDiscoverHubCache();
+        if(cached){
             discoverHubState = {
                 loaded:true,
                 loading:false,
                 error:"",
-                sections:cachedSections
+                sections:cached.sections,
+                genres:cached.genres
             };
-
             if(typeof renderDiscoverHub === "function"){
                 renderDiscoverHub();
             }
-
             return;
         }
-
     }
 
-    discoverHubState.loading = true;
-    discoverHubState.error = "";
+    discoverHubState = Object.assign({},discoverHubState,{loading:true,error:""});
 
     if(typeof renderDiscoverHub === "function"){
         renderDiscoverHub();
     }
 
     try{
+        const categoryEntries = Object.entries(DISCOVER_CATEGORY_ROUTES);
+        const sectionResults = await Promise.allSettled(
+            categoryEntries.map(([key,config])=>tmdbGetDiscoverPage(config.path,{page:1}))
+        );
 
-        const today = getLocalDateKey(new Date());
+        const sections = sectionResults.map((result,index)=>{
+            if(result.status !== "fulfilled"){
+                return null;
+            }
+            const [key,config] = categoryEntries[index];
+            const section = buildDiscoverHubSection(key,config,result.value);
+            return section.items.length ? section : null;
+        }).filter(Boolean);
 
-        const [comingSoon,trendingWeek,airingNow,popular] = await Promise.all([
-            tmdbGetDiscoverPage("discover/tv",{
-                "first_air_date.gte":today,
-                "sort_by":"popularity.desc",
-                "include_adult":"false",
-                "include_null_first_air_dates":"false"
-            }),
-            tmdbGetDiscoverPage("trending/tv/week"),
-            tmdbGetDiscoverPage("tv/on_the_air"),
-            tmdbGetDiscoverPage("tv/popular")
-        ]);
-
-        const usedIds = new Set();
-
-        const sections = [
-            buildDiscoverHubSection(
-                "coming-soon",
-                "Coming Soon",
-                "",
-                comingSoon.results.filter(show=>show && show.first_air_date && show.first_air_date >= today),
-                usedIds,
-                {page:comingSoon.page,totalPages:comingSoon.total_pages}
-            ),
-            buildDiscoverHubSection(
-                "trending-week",
-                "Trending This Week",
-                "",
-                trendingWeek.results,
-                usedIds,
-                {page:trendingWeek.page,totalPages:trendingWeek.total_pages}
-            ),
-            buildDiscoverHubSection(
-                "airing-now",
-                "Airing Now",
-                "",
-                airingNow.results,
-                usedIds,
-                {page:airingNow.page,totalPages:airingNow.total_pages}
-            ),
-            buildDiscoverHubSection(
-                "popular",
-                "Popular",
-                "",
-                popular.results,
-                usedIds,
-                {page:popular.page,totalPages:popular.total_pages}
-            )
-        ];
+        let genres = [];
+        try{
+            genres = await tmdbGetTVGenreList();
+        }catch(error){
+            genres = [];
+        }
 
         discoverHubState = {
             loaded:true,
             loading:false,
-            error:"",
-            sections:sections
+            error:sections.length ? "" : "Couldn’t load this page. Try again later.",
+            sections:sections,
+            genres:Array.isArray(genres) ? genres : []
         };
 
-        writeDiscoverHubCache(sections);
+        writeDiscoverHubCache(discoverHubState);
 
         if(shouldShowDiscoverHub() && typeof renderDiscoverHub === "function"){
             renderDiscoverHub();
         }
 
     }catch(error){
-
-        discoverHubState.loading = false;
-        discoverHubState.loaded = false;
-        discoverHubState.error = error && error.message ? error.message : "Could not load Discover.";
+        discoverHubState = {
+            loaded:false,
+            loading:false,
+            error:"Couldn’t load this page. Try again later.",
+            sections:[],
+            genres:[]
+        };
 
         if(shouldShowDiscoverHub() && typeof renderDiscoverHub === "function"){
             renderDiscoverHub();
         }
-
     }
-
 }
-
-
-
 
 function friendlyTMDBSearchError(error){
     const message = String(error && error.message ? error.message : "").trim();
@@ -3699,7 +3640,7 @@ function friendlyTMDBSearchError(error){
     }
 
     if(lower.includes("not found") || lower.includes("404")){
-        return "No matching TV show found.";
+        return "No matching page found.";
     }
 
     if(lower.includes("failed to fetch") || lower.includes("network")){
@@ -3730,16 +3671,13 @@ async function searchShows(query,options={}){
     }
 
     if(cleanQuery.length < 2){
-
         cancelActiveSearchRequest();
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
-        discoverSearchState = {query:"",page:1,totalPages:1,loading:false};
+        discoverSearchState = {query:"",media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,loading:false};
         renderSearchIntro();
-
         return;
-
     }
 
     cancelActiveSearchRequest();
@@ -3751,7 +3689,7 @@ async function searchShows(query,options={}){
     currentSearchController = controller;
     const requestId = ++searchRequestId;
 
-    discoverSearchState = {query:cleanQuery,page:1,totalPages:1,loading:true};
+    discoverSearchState = {query:cleanQuery,media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,loading:true};
     renderSearchLoading(cleanQuery);
 
     try{
@@ -3766,6 +3704,7 @@ async function searchShows(query,options={}){
         lastDiscoverSearchResults = payload.results || [];
         discoverSearchState = {
             query:cleanQuery,
+            media:normalizeSearchMediaType(discoverSearchState.media || "tv"),
             page:Number(payload.page || 1),
             totalPages:Number(payload.total_pages || 1),
             loading:false
@@ -3796,7 +3735,6 @@ async function searchShows(query,options={}){
     }
 
 }
-
 
 async function loadMoreSearchResults(){
     const state = discoverSearchState || {};
@@ -3836,6 +3774,7 @@ async function loadMoreSearchResults(){
         lastDiscoverSearchResults = (lastDiscoverSearchResults || []).concat(fresh);
         discoverSearchState = {
             query:query,
+            media:normalizeSearchMediaType(discoverSearchState.media || "tv"),
             page:Number(payload.page || nextPage),
             totalPages:Number(payload.total_pages || totalPages || nextPage),
             loading:false
@@ -3854,8 +3793,14 @@ async function loadMoreSearchResults(){
     }
 }
 
-
-
+async function openDiscoverCategoryPage(media,category,options={}){
+    const config = getDiscoverCategoryConfig(media,category);
+    if(!config){
+        showAppNotFound();
+        return;
+    }
+    await openDiscoveryFilterPage("discover-category",config.media + "/" + config.category,options);
+}
 
 async function addPendingShow(status){
 
@@ -4328,6 +4273,14 @@ function normalizeDiscoveryFilterValue(type,value){
     if(cleanType === "certification"){
         return normalizeCertificationValue(value);
     }
+    if(cleanType === "discover-category"){
+        const clean = String(value || "").trim().toLowerCase();
+        const match = clean.match(/^(tv|movie)\/(popular|top-rated|airing-today|on-the-air|now-playing|upcoming)$/);
+        if(!match){
+            return "";
+        }
+        return getDiscoverCategoryKey(match[1],match[2]);
+    }
     return "";
 }
 
@@ -4335,6 +4288,10 @@ function getDiscoveryEntityRouteLabel(type,value,label=""){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     const supplied = String(label || "").trim();
+    if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return config ? config.title : "Discover";
+    }
     if(cleanType === "language"){
         return getLanguageName(cleanValue);
     }
@@ -4366,6 +4323,10 @@ function getDiscoveryFilterDetailRoute(type,value,label=""){
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     if(!cleanType || !cleanValue){
         return "/app/list/watching";
+    }
+    if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return config ? getDiscoverCategoryDetailRoute(config.media,config.category) : "/app/discover";
     }
     if(cleanType === "year"){
         return getYearDetailRoute(cleanValue);
@@ -4422,6 +4383,10 @@ function getDiscoveryFilterFallbackName(type,value,media="tv"){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     const mediaWord = getBrowseTitleMediaWord(media);
+    if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return config ? config.title : "Discover";
+    }
     if(cleanType === "language"){
         return `${getLanguageName(cleanValue)} Shows`;
     }
@@ -5234,6 +5199,11 @@ function discoveryFilterForcedMedia(type,value){
         const parts = cleanValue.split("/");
         return normalizeBrowseMediaType(parts[0] || "tv");
     }
+    if(cleanType === "discover-category"){
+        const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return config ? config.media : "tv";
+    }
     return "tv";
 }
 
@@ -5302,6 +5272,10 @@ function buildDiscoveryFilterRequest(type,value,filters,page){
         params.include_video = "false";
     }
 
+    if(cleanType === "discover-category"){
+        return {page:page};
+    }
+
     if(cleanType === "network"){
         params.with_networks = cleanValue;
     }else if(cleanType === "language"){
@@ -5355,6 +5329,11 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
     const fallback = getDiscoveryFilterFallbackName(cleanType,cleanValue,cleanMedia);
     const supplied = String(existingName || "").trim();
     const mediaWord = getBrowseTitleMediaWord(cleanMedia);
+
+    if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return supplied || (config ? config.title : fallback);
+    }
 
     if(cleanType === "network"){
         if(supplied && !/^Shows from Network \d+$/i.test(supplied)){
@@ -5411,6 +5390,10 @@ function getDiscoveryRouteValidationLabel(type,value,pageName){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     const name = String(pageName || "").trim();
+    if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        return config ? config.title : name;
+    }
     if(cleanType === "language"){
         return getLanguageName(cleanValue);
     }
@@ -5472,7 +5455,8 @@ async function loadDiscoveryFilterPageResults(options={}){
             return;
         }
 
-        const discoverPath = media === "movie" ? "discover/movie" : "discover/tv";
+        const categoryConfig = cleanType === "discover-category" ? getDiscoverCategoryConfig(cleanValue) : null;
+        const discoverPath = categoryConfig ? categoryConfig.path : (media === "movie" ? "discover/movie" : "discover/tv");
 
         while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
             const params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
@@ -9182,6 +9166,16 @@ function updateTrackedLabels(){
     const searchInput = document.getElementById("search");
 
     if(!searchInput){
+        return;
+    }
+
+    if(activePage === "discover"){
+        searchInput.value = "";
+        searchInput.setAttribute("placeholder","Search shows, movies, people");
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+        loadDiscoverHub(false);
         return;
     }
 

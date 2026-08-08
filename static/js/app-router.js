@@ -258,6 +258,21 @@
                 return;
             }
 
+            const discoverCategoryMatch = route.match(/^\/app\/discover\/(?:(tv)\/(popular|top-rated|airing-today|on-the-air)|(movie)\/(popular|top-rated|now-playing|upcoming))$/);
+            if(discoverCategoryMatch){
+                const discoverMedia = discoverCategoryMatch[1] || discoverCategoryMatch[3];
+                const discoverCategory = discoverCategoryMatch[2] || discoverCategoryMatch[4];
+                clearDetailState();
+                if(typeof openDiscoverCategoryPage === "function"){
+                    openDiscoverCategoryPage(discoverMedia,discoverCategory,{fromRoute:true});
+                }else if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage("discover-category",discoverMedia + "/" + discoverCategory,{fromRoute:true});
+                }else{
+                    showPage("discover");
+                }
+                return;
+            }
+
             const episodeMatch = route.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)\/season\/(\d{1,5})\/episode\/([1-9][0-9]{0,5})$/);
             if(episodeMatch){
                 const routeShow = parseRouteIdSlug(episodeMatch[1]);
@@ -392,7 +407,11 @@
 
             if(route === "/app/discover"){
                 clearDetailState();
-                showPage("discover");
+                if(typeof openDiscoverHomePage === "function"){
+                    openDiscoverHomePage({fromRoute:true});
+                }else{
+                    showPage("discover");
+                }
                 return;
             }
             if(route === "/app/profile"){

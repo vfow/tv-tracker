@@ -50,6 +50,8 @@ function createRouter(route){
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
     openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
+    openDiscoverCategoryPage(media,category,options){ calls.push(['openDiscoverCategoryPage',media,category,options]); },
+    openDiscoverHomePage(options){ calls.push(['openDiscoverHomePage',options]); },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
     renderAppRouteNotFoundPage(){ calls.push(['renderAppRouteNotFoundPage']); },
     document:{querySelectorAll(){ return []; }},
@@ -103,6 +105,24 @@ function createRouter(route){
   assert(call,'pretty show route should open show page');
   assert.strictEqual(call[1],'1399');
   assert.strictEqual(call[2].routeSlug,'game-of-thrones');
+}
+
+
+{
+  const {calls,router}=createRouter('/app/discover/tv/popular');
+  assert.strictEqual(router.currentRoute(),'/app/discover/tv/popular');
+  const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
+  assert(call,'discover category route should open category page');
+  assert.deepStrictEqual(call.slice(1,3),['tv','popular']);
+  assert.strictEqual(call[3].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/discover/movie/upcoming');
+  assert.strictEqual(router.currentRoute(),'/app/discover/movie/upcoming');
+  const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
+  assert(call,'movie discover category route should open category page');
+  assert.deepStrictEqual(call.slice(1,3),['movie','upcoming']);
 }
 
 {
@@ -214,6 +234,8 @@ for (const route of [
   '/app/language/ja',
   '/app/country/jp',
   '/app/actor/123',
+  '/app/discover/tv/trending',
+  '/app/discover/person/popular',
 ]) {
   const {calls}=createRouter(route);
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404 until a pretty slug is used`);

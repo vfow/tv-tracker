@@ -4609,3 +4609,139 @@
         }
     }
 }
+
+@layer components{
+    @media (min-width:992px){
+        body.app-shell .sidebar{
+            display:flex !important;
+            visibility:visible !important;
+            opacity:1 !important;
+        }
+
+        body.app-shell .main{
+            margin-left:var(--tt-sidebar-width) !important;
+            width:calc(100vw - var(--tt-sidebar-width)) !important;
+            max-width:calc(100vw - var(--tt-sidebar-width)) !important;
+        }
+    }
+
+    .discover-page-shell,
+    .search-page-shell{
+        @apply tw-w-full tw-pb-12;
+    }
+
+    .discover-page-heading,
+    .search-page-heading{
+        @apply tw-mb-8 tw-max-w-[760px];
+    }
+
+    .discover-page-heading h1,
+    .search-page-heading h1{
+        @apply tw-m-0 tw-font-league tw-text-[clamp(52px,8vw,92px)] tw-font-normal tw-uppercase tw-leading-none tw-text-white;
+    }
+
+    .discover-page-heading p,
+    .search-page-heading p{
+        @apply tw-m-0 tw-mt-2 tw-text-sm tw-text-tt-subtle;
+    }
+
+    .discover-section-group{
+        @apply tw-mb-11;
+    }
+
+    .discover-group-title{
+        @apply tw-m-0 tw-mb-4 tw-font-league tw-text-[44px] tw-font-normal tw-uppercase tw-leading-none tw-text-white;
+    }
+
+    .discover-section-heading{
+        @apply tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-4;
+    }
+
+    .discover-section-heading h3{
+        @apply tw-m-0 tw-font-sans tw-text-base tw-font-bold tw-uppercase tw-tracking-[.08em] tw-text-tt-subtle;
+    }
+
+    .discover-view-more-link{
+        @apply tw-m-0 tw-inline-flex tw-shrink-0 tw-items-center tw-px-4 tw-py-2 tw-text-[22px] tw-no-underline;
+    }
+
+    .discover-card-row{
+        @apply tw-flex tw-w-full tw-min-w-0 tw-max-w-full tw-gap-4 tw-overflow-x-auto tw-overflow-y-hidden tw-pb-2 tw-scroll-smooth tw-snap-x tw-snap-proximity;
+        scrollbar-width:none;
+    }
+
+    .discover-card-row::-webkit-scrollbar{
+        width:0;
+        height:0;
+        display:none;
+    }
+
+    .discover-genre-grid{
+        @apply tw-grid tw-grid-cols-2 tw-gap-3 sm:tw-grid-cols-3 lg:tw-grid-cols-4 xl:tw-grid-cols-5;
+    }
+
+    .discover-genre-card{
+        @apply tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-px-4 tw-py-4 tw-font-bold tw-text-white tw-no-underline tw-transition-colors;
+    }
+
+    .discover-genre-card:hover,
+    .discover-genre-card:focus-visible{
+        @apply tw-border-[#444] tw-bg-tt-control;
+    }
+
+    .search-tab-row{
+        @apply tw-mb-6 tw-flex tw-flex-wrap tw-items-center tw-gap-2;
+    }
+
+    .search-tab-button{
+        @apply tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-px-4 tw-py-2 tw-font-bold tw-text-tt-subtle tw-transition-colors;
+    }
+
+    .search-tab-button:hover,
+    .search-tab-button:focus-visible,
+    .search-tab-button.active{
+        @apply tw-border-white tw-bg-white tw-text-black;
+    }
+
+    .search-tight-grid{
+        @apply tw-mt-0;
+    }
+
+    .search-person-grid{
+        @apply tw-grid tw-grid-cols-2 tw-gap-4 sm:tw-grid-cols-3 lg:tw-grid-cols-4 xl:tw-grid-cols-5 2xl:tw-grid-cols-6;
+    }
+
+    .search-person-card{
+        @apply tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition-colors;
+    }
+
+    .search-person-card:hover,
+    .search-person-card:focus-visible{
+        @apply tw-border-[#444] tw-bg-tt-control;
+    }
+
+    .search-person-photo{
+        @apply tw-w-full tw-bg-tt-control;
+        aspect-ratio:2 / 3;
+    }
+
+    .search-person-photo img{
+        @apply tw-block tw-h-full tw-w-full tw-object-cover;
+    }
+
+    .search-person-placeholder{
+        @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-font-league tw-text-[38px] tw-text-tt-dim;
+    }
+
+    .search-person-name{
+        @apply tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap tw-px-[10px] tw-pb-1 tw-pt-[10px] tw-text-sm tw-font-bold;
+    }
+
+    .search-person-meta{
+        @apply tw-px-[10px] tw-pb-[10px] tw-text-xs tw-text-tt-controlText;
+    }
+
+    .search-empty-state{
+        @apply tw-min-h-[360px];
+    }
+}
