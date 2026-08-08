@@ -2800,7 +2800,24 @@ function collectV2ProviderNames(providers){
     return names.slice(0,12);
 }
 
-function renderV2ProvidersGroup(label,providers){
+function getV2ProviderWatchLink(provider,providerRegion){
+    const directLink = safeExternalURL(
+        provider && (
+            provider.link ||
+            provider.url ||
+            provider.watch_url ||
+            provider.deep_link
+        )
+    );
+
+    if(directLink){
+        return directLink;
+    }
+
+    return safeExternalURL(providerRegion && providerRegion.link);
+}
+
+function renderV2ProvidersGroup(label,providers,providerRegion=null){
     if(!Array.isArray(providers) || providers.length === 0){
         return "";
     }
@@ -2809,11 +2826,24 @@ function renderV2ProvidersGroup(label,providers){
         const logo = provider.logo_path
         ? `<img class="v2-provider-logo" src="${escapeHTML(trackerImageURL(provider.logo_path,"w92"))}" alt="">`
         : "";
+        const providerName = provider && provider.provider_name ? provider.provider_name : "Provider";
+        const watchLink = getV2ProviderWatchLink(provider,providerRegion);
+        const innerHTML = `
+            ${logo}
+            <span>${escapeHTML(providerName)}</span>
+        `;
+
+        if(watchLink){
+            return `
+                <a class="v2-provider-pill v2-provider-pill-link" href="${escapeHTML(watchLink)}" target="_blank" rel="noopener noreferrer" title="Open ${escapeHTML(providerName)} availability">
+                    ${innerHTML}
+                </a>
+            `;
+        }
 
         return `
-            <span class="v2-provider-pill">
-                ${logo}
-                <span>${escapeHTML(provider.provider_name || "Provider")}</span>
+            <span class="v2-provider-pill v2-provider-pill-muted" title="No direct watch link available">
+                ${innerHTML}
             </span>
         `;
     }).join("");
@@ -2837,9 +2867,9 @@ function renderV2WatchProvidersHTML(show){
     }
 
     const groups = [
-        renderV2ProvidersGroup("Streaming",providers.flatrate),
-        renderV2ProvidersGroup("Rent",providers.rent),
-        renderV2ProvidersGroup("Buy",providers.buy)
+        renderV2ProvidersGroup("Streaming",providers.flatrate,providers),
+        renderV2ProvidersGroup("Rent",providers.rent,providers),
+        renderV2ProvidersGroup("Buy",providers.buy,providers)
     ].filter(Boolean).join("");
 
     if(!groups){
@@ -3738,9 +3768,9 @@ function renderShowReleasesTabHTML(show){
     }
 
     const groups = [
-        renderV2ProvidersGroup("Streaming",providers.flatrate),
-        renderV2ProvidersGroup("Rent",providers.rent),
-        renderV2ProvidersGroup("Buy",providers.buy)
+        renderV2ProvidersGroup("Streaming",providers.flatrate,providers),
+        renderV2ProvidersGroup("Rent",providers.rent,providers),
+        renderV2ProvidersGroup("Buy",providers.buy,providers)
     ].filter(Boolean).join("");
 
     return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
