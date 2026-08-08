@@ -274,6 +274,20 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('search-person-skeleton-card', source_css)
         self.assertIn('search-person-skeleton-card', built_css)
 
+    def test_phase52_route_restore_shells_use_explicit_context(self):
+        app_js = self.read('static/js/app.js')
+
+        self.assertIn('function getDiscoveryNavContext(options={},route="")', app_js)
+        self.assertIn('function showGenreDetailPageShell(navigationContext="")', app_js)
+        self.assertIn('function showDiscoveryFilterPageShell(navigationContext="")', app_js)
+        self.assertIn('showGenreDetailPageShell(navigationContext)', app_js)
+        self.assertIn('showDiscoveryFilterPageShell(navigationContext)', app_js)
+        self.assertIn('rememberRouteNavContext(genreRoute,navigationContext)', app_js)
+        self.assertIn('rememberRouteNavContext(initialDiscoveryRoute,navigationContext)', app_js)
+        self.assertIn('return "discover";', app_js)
+        self.assertNotIn('function showGenreDetailPageShell(){', app_js)
+        self.assertNotIn('function showDiscoveryFilterPageShell(){', app_js)
+
 
 if __name__ == '__main__':
     unittest.main()

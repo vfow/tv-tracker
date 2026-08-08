@@ -3277,6 +3277,23 @@ function getDetailNavContext(kind,options={},route=""){
     return inferNavContextFromActivePage(kind === "person" ? "discover" : "shows");
 }
 
+function getDiscoveryNavContext(options={},route=""){
+    const explicit = normalizeNavContext(options && options.navigationContext);
+    if(explicit){
+        return explicit;
+    }
+
+    if(options && options.fromRoute === true){
+        const remembered = getRememberedRouteNavContext(route || getCurrentAppRoute());
+        if(remembered){
+            return remembered;
+        }
+        return "discover";
+    }
+
+    return inferNavContextFromActivePage("discover");
+}
+
 function activatePrimaryNavContext(context){
     if(typeof setAppPrimaryNavActive === "function"){
         setAppPrimaryNavActive(normalizeNavContext(context) || "shows");
@@ -4228,7 +4245,7 @@ function renderAppRouteNotFoundPage(){
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
-    activatePrimaryNavContext(navigationContext || "shows");
+    activatePrimaryNavContext(inferNavContextFromActivePage("shows"));
     const page = document.getElementById("show-detail-page");
     const content = document.getElementById("show-detail-content");
     if(page){
@@ -5072,14 +5089,14 @@ function getGenreSortLabel(sort){
 }
 
 
-function showGenreDetailPageShell(){
+function showGenreDetailPageShell(navigationContext=""){
     activePage = "genre-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    activatePrimaryNavContext(navigationContext || "shows");
+    activatePrimaryNavContext(navigationContext || "discover");
 
     const pageElement = document.getElementById("genre-detail-page");
     if(pageElement){
@@ -5274,6 +5291,8 @@ async function openGenrePage(slug,options={}){
 
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
+    const genreRoute = getGenreDetailRoute(cleanSlug);
+    const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : genreRoute);
     const isSameGenre = activePage === "genre-detail" && String(selectedGenreSlug || "") === cleanSlug;
 
     selectedGenreSlug = cleanSlug;
@@ -5300,10 +5319,11 @@ async function openGenrePage(slug,options={}){
         };
     }
 
-    showGenreDetailPageShell();
+    showGenreDetailPageShell(navigationContext);
 
     if(!fromRoute){
-        setAppHashRoute(getGenreDetailRoute(cleanSlug),replaceRoute);
+        setAppHashRoute(genreRoute,replaceRoute);
+        rememberRouteNavContext(genreRoute,navigationContext);
     }
 
     if(!isSameGenre || !genrePageState.shows.length){
@@ -5370,14 +5390,14 @@ function attachGenreDetailPageEvents(){
     }
 }
 
-function showDiscoveryFilterPageShell(){
+function showDiscoveryFilterPageShell(navigationContext=""){
     activePage = "discovery-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    activatePrimaryNavContext(navigationContext || "shows");
+    activatePrimaryNavContext(navigationContext || "discover");
 
     const pageElement = document.getElementById("genre-detail-page");
     if(pageElement){
@@ -5724,6 +5744,8 @@ async function openDiscoveryFilterPage(type,value,options={}){
     const suppliedName = String(options && options.name || "").trim();
     const routeLabel = String(options && options.routeLabel || "").trim();
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
+    const initialDiscoveryRoute = getDiscoveryFilterDetailRoute(cleanType,cleanValue,routeLabel || suppliedName);
+    const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : initialDiscoveryRoute);
     const media = discoveryFilterSupportsMediaSwitch(cleanType)
     ? normalizeBrowseMediaType(options && options.media || (discoveryPageState && discoveryPageState.media) || "tv")
     : discoveryFilterForcedMedia(cleanType,cleanValue);
@@ -5766,10 +5788,11 @@ async function openDiscoveryFilterPage(type,value,options={}){
         }
     }
 
-    showDiscoveryFilterPageShell();
+    showDiscoveryFilterPageShell(navigationContext);
 
     if(!fromRoute){
-        setAppHashRoute(getDiscoveryFilterDetailRoute(cleanType,cleanValue,routeLabel || suppliedName),replaceRoute);
+        setAppHashRoute(initialDiscoveryRoute,replaceRoute);
+        rememberRouteNavContext(initialDiscoveryRoute,navigationContext);
     }
 
     if(!isSamePage || !discoveryPageState.shows.length){
