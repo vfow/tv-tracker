@@ -384,24 +384,42 @@ function renderDiscoverHubSection(section){
     `;
 }
 
-function renderDiscoverGenreSection(genres){
-    const items = (Array.isArray(genres) ? genres : [])
+function renderDiscoverGenreCards(genres,media){
+    return (Array.isArray(genres) ? genres : [])
     .map(genre=>{
         const name = String(genre && genre.name || "").trim();
-        const route = name && typeof getGenreRouteFromName === "function" ? getGenreRouteFromName(name) : "";
+        const route = name && typeof getGenreRouteFromName === "function" ? getGenreRouteFromName(name,media) : "";
         return name && route ? {name,route} : null;
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(item=>`<a class="discover-genre-card" href="${escapeHTML(item.route)}">${escapeHTML(item.name)}</a>`)
+    .join("");
+}
 
-    if(!items.length){
+function renderDiscoverGenreSection(genres){
+    const grouped = typeof normalizeDiscoverGenreState === "function" ? normalizeDiscoverGenreState(genres) : {tv:Array.isArray(genres) ? genres : [],movie:[]};
+    const activeMedia = typeof normalizeGenreMediaType === "function" ? normalizeGenreMediaType(typeof discoverGenreMedia !== "undefined" ? discoverGenreMedia : "tv") : "tv";
+    const tvCards = renderDiscoverGenreCards(grouped.tv,"tv");
+    const movieCards = renderDiscoverGenreCards(grouped.movie,"movie");
+
+    if(!tvCards && !movieCards){
         return "";
     }
 
     return `
         <section class="discover-section-group discover-genre-section">
-            <h2 class="discover-group-title">Genres</h2>
-            <div class="discover-genre-grid">
-                ${items.map(item=>`<a class="discover-genre-card" href="${escapeHTML(item.route)}">${escapeHTML(item.name)}</a>`).join("")}
+            <div class="discover-genre-heading-row">
+                <h2 class="discover-group-title">Genres</h2>
+                <div class="discover-genre-tab-row" role="tablist" aria-label="Genre media type">
+                    <button type="button" class="discover-genre-tab ${activeMedia === "tv" ? "active" : ""}" data-discover-genre-media="tv" role="tab" aria-selected="${activeMedia === "tv" ? "true" : "false"}">TV Shows</button>
+                    <button type="button" class="discover-genre-tab ${activeMedia === "movie" ? "active" : ""}" data-discover-genre-media="movie" role="tab" aria-selected="${activeMedia === "movie" ? "true" : "false"}">Movies</button>
+                </div>
+            </div>
+            <div class="discover-genre-panel" data-discover-genre-panel="tv" ${activeMedia === "tv" ? "" : "hidden"}>
+                <div class="discover-genre-grid">${tvCards || `<div class="v2-api-empty">No TV genres available.</div>`}</div>
+            </div>
+            <div class="discover-genre-panel" data-discover-genre-panel="movie" ${activeMedia === "movie" ? "" : "hidden"}>
+                <div class="discover-genre-grid">${movieCards || `<div class="v2-api-empty">No movie genres available.</div>`}</div>
             </div>
         </section>
     `;
@@ -437,6 +455,17 @@ function renderDiscoverHubCard(item){
 }
 
 function attachDiscoverHubEvents(){
+    document.querySelectorAll(".discover-genre-tab[data-discover-genre-media]").forEach(button=>{
+        button.addEventListener("click",function(){
+            if(typeof normalizeGenreMediaType === "function"){
+                discoverGenreMedia = normalizeGenreMediaType(this.dataset.discoverGenreMedia || "tv");
+            }else{
+                discoverGenreMedia = String(this.dataset.discoverGenreMedia || "tv") === "movie" ? "movie" : "tv";
+            }
+            renderDiscoverHub();
+        });
+    });
+
     document.querySelectorAll(".discover-hub-card[data-media-id]").forEach(card=>{
         card.addEventListener("click",async function(){
             const mediaType = String(this.dataset.mediaType || "tv");
@@ -876,7 +905,8 @@ function renderGenreDetailPage(state){
     }
 
     const pageState = state || {};
-    const name = pageState.name || (pageState.slug ? String(pageState.slug).split("-").map(part=>part.charAt(0).toUpperCase() + part.slice(1)).join(" ") : "Genre");
+    const media = typeof normalizeGenreMediaType === "function" ? normalizeGenreMediaType(pageState.media || "tv") : (pageState.media === "movie" ? "movie" : "tv");
+    const name = pageState.name || (pageState.slug && typeof getGenreDisplayNameFromSlug === "function" ? getGenreDisplayNameFromSlug(pageState.slug) : "Genre");
     const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
@@ -885,6 +915,17 @@ function renderGenreDetailPage(state){
     const page = Number(pageState.page || 1);
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
+    const mediaWord = media === "movie" ? "movies" : "shows";
+    const sortDateLabel = media === "movie" ? "Release Date" : "First Air Date";
+    const tvSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"tv") : "";
+    const movieSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"movie") : "";
+
+    const genreSwitchHTML = `
+        <div class="genre-media-switch" role="tablist" aria-label="Genre media type">
+            <button type="button" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-genre-media="tv" ${media !== "tv" && !tvSwitchRoute ? "disabled" : ""} role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</button>
+            <button type="button" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-genre-media="movie" ${media !== "movie" && !movieSwitchRoute ? "disabled" : ""} role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</button>
+        </div>
+    `;
 
     const bodyHTML = error
     ? `
@@ -898,8 +939,8 @@ function renderGenreDetailPage(state){
         <div class="genre-tight-grid">
             ${shows.map(renderGenrePosterGridCard).join("")}
         </div>
-        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="genre-load-more-button">View More</button>` : ""}
-        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more shows…</div>` : ""}
+        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="genre-load-more-button">VIEW MORE</button>` : ""}
+        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}
     `
     : loading
     ? `
@@ -909,7 +950,7 @@ function renderGenreDetailPage(state){
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No shows found</h2>
+            <h2>No ${mediaWord} found</h2>
             <p>Try a different year or sort option.</p>
         </div>
     `;
@@ -922,6 +963,7 @@ function renderGenreDetailPage(state){
                 </button>
                 <div>
                     <h1 class="genre-detail-title">${escapeHTML(name)}</h1>
+                    ${genreSwitchHTML}
                 </div>
             </div>
 
@@ -935,7 +977,7 @@ function renderGenreDetailPage(state){
                     <select id="genre-sort-filter">
                         <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
                         <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
-                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>First Air Date</option>
+                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
                     </select>
                 </label>
             </div>
@@ -2952,11 +2994,12 @@ function getShowNetworkInlineHTML(show){
 
 
 
-function getShowGenreRoute(genre){
+function getShowGenreRoute(genre,media="tv"){
     if(typeof getGenreRouteFromName === "function"){
-        return getGenreRouteFromName(genre);
+        return getGenreRouteFromName(genre,media);
     }
 
+    const cleanMedia = media === "movie" ? "movie" : "tv";
     const slug = String(genre || "")
     .trim()
     .toLowerCase()
@@ -2964,10 +3007,10 @@ function getShowGenreRoute(genre){
     .replace(/[^a-z0-9]+/g,"-")
     .replace(/^-+|-+$/g,"");
 
-    return slug ? "/app/genre/" + encodeURIComponent(slug) : "";
+    return slug ? "/app/genre/" + encodeURIComponent(cleanMedia) + "/" + encodeURIComponent(slug) : "";
 }
 
-function renderShowGenreLinksHTML(genres){
+function renderShowGenreLinksHTML(genres,media="tv"){
     const list = (Array.isArray(genres) ? genres : [])
     .map(genre=>String(genre || "").trim())
     .filter(Boolean);
@@ -2977,9 +3020,9 @@ function renderShowGenreLinksHTML(genres){
     }
 
     return `<span class="show-genre-link-list">${list.map((genre,index)=>{
-        const route = getShowGenreRoute(genre);
+        const route = getShowGenreRoute(genre,media);
         const link = route
-        ? `<a class="show-genre-link" href="${escapeHTML(route)}" data-genre-name="${escapeHTML(genre)}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
+        ? `<a class="show-genre-link" href="${escapeHTML(route)}" data-genre-name="${escapeHTML(genre)}" data-genre-media="${escapeHTML(media === "movie" ? "movie" : "tv")}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
         : `<span class="show-genre-link-disabled">${escapeHTML(genre)}</span>`;
         return `${index > 0 ? `<span class="show-genre-separator">•</span>` : ""}${link}`;
     }).join("")}</span>`;
@@ -3073,7 +3116,7 @@ function getMovieCertification(movie){
 
 function renderMovieGenresHTML(movie){
     const genres = Array.isArray(movie && movie.genres) ? movie.genres : [];
-    return renderShowGenreLinksHTML(genres) || "Unknown";
+    return renderShowGenreLinksHTML(genres,"movie") || "Unknown";
 }
 
 function renderMovieExternalLinksHTML(movie){
@@ -4560,9 +4603,9 @@ function renderShowGenresTabHTML(show){
     }
 
     return `<div class="show-detail-genre-chips">${genres.map(genre=>{
-        const route = getShowGenreRoute(genre);
+        const route = getShowGenreRoute(genre,"tv");
         return route
-        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
+        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-media="tv" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
         : `<span>${escapeHTML(genre)}</span>`;
     }).join("")}</div>`;
 }
@@ -4820,7 +4863,7 @@ function attachShowDetailsPageEvents(show,isTracked){
                 return;
             }
             event.preventDefault();
-            openGenrePage(this.dataset.genreName || this.textContent || "");
+            openGenrePage(this.dataset.genreName || this.textContent || "",{media:this.dataset.genreMedia || "tv"});
         });
     });
 

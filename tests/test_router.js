@@ -27,6 +27,7 @@ function createRouter(route){
     selectedEpisodeContext:null,
     selectedShowId:null,
     selectedGenreSlug:null,
+    selectedGenreMedia:'tv',
     selectedDiscoveryContext:null,
     selectedPersonContext:null,
     selectedMovieId:null,
@@ -44,6 +45,11 @@ function createRouter(route){
     getSearchRoute(query='',media='tv'){ return query ? '/app/search?q=' + encodeURIComponent(query) + '&type=' + encodeURIComponent(media || 'tv') : '/app/search'; },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
     getDiscoveryFilterDetailRoute(type,value){ return `/app/${type}/${value}`; },
+    getLegacyGenreRouteInfo(slug){
+      if(slug === 'horror') return {media:'movie',slug:'horror',route:'/app/genre/movie/horror'};
+      if(slug === 'action-adventure') return {media:'tv',slug:'action-adventure',route:'/app/genre/tv/action-adventure'};
+      return null;
+    },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openMoviePage(id,options){ calls.push(['openMoviePage',id,options]); },
@@ -144,12 +150,41 @@ function createRouter(route){
 }
 
 {
-  const {calls,router}=createRouter('/app/genre/action-adventure');
-  assert.strictEqual(router.currentRoute(),'/app/genre/action-adventure');
+  const {calls,router}=createRouter('/app/genre/tv/action-adventure');
+  assert.strictEqual(router.currentRoute(),'/app/genre/tv/action-adventure');
   const call=calls.find(item=>item[0]==='openGenrePage');
-  assert(call,'genre route should open genre page');
+  assert(call,'TV genre route should open genre page');
   assert.strictEqual(call[1],'action-adventure');
   assert.strictEqual(call[2].fromRoute,true);
+  assert.strictEqual(call[2].media,'tv');
+}
+
+{
+  const {calls,router}=createRouter('/app/genre/movie/horror');
+  assert.strictEqual(router.currentRoute(),'/app/genre/movie/horror');
+  const call=calls.find(item=>item[0]==='openGenrePage');
+  assert(call,'movie genre route should open genre page');
+  assert.strictEqual(call[1],'horror');
+  assert.strictEqual(call[2].fromRoute,true);
+  assert.strictEqual(call[2].media,'movie');
+}
+
+{
+  const {calls,router}=createRouter('/app/genre/action-adventure');
+  assert.strictEqual(router.currentRoute(),'/app/genre/tv/action-adventure');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/genre/tv/action-adventure'),'old TV genre route should redirect');
+  const call=calls.find(item=>item[0]==='openGenrePage');
+  assert(call,'legacy genre route should open genre page');
+  assert.strictEqual(call[2].media,'tv');
+}
+
+{
+  const {calls,router}=createRouter('/app/genre/horror');
+  assert.strictEqual(router.currentRoute(),'/app/genre/movie/horror');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/genre/movie/horror'),'old movie-only genre route should redirect');
+  const call=calls.find(item=>item[0]==='openGenrePage');
+  assert(call,'legacy movie genre route should open movie genre page');
+  assert.strictEqual(call[2].media,'movie');
 }
 
 for (const [route,type,value,slug] of [
@@ -237,9 +272,21 @@ for (const route of [
   '/app/actor/123',
   '/app/discover/tv/trending',
   '/app/discover/person/popular',
+  '/app/genre/person/drama',
 ]) {
   const {calls}=createRouter(route);
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404 until a pretty slug is used`);
+}
+
+
+{
+  const {context,calls,router}=createRouter('/app/list/watching');
+  calls.length=0;
+  context.activePage='genre-detail';
+  context.selectedGenreSlug='horror';
+  context.selectedGenreMedia='movie';
+  router.updateRouteFromState(false);
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/genre/movie/horror'));
 }
 
 {

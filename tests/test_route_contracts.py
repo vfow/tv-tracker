@@ -16,6 +16,10 @@ def load_route_helpers():
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
+        "APP_LEGACY_GENRE_PATH_RE",
+        "APP_TV_GENRE_SLUGS",
+        "APP_MOVIE_GENRE_SLUGS",
+        "APP_LEGACY_MOVIE_ONLY_GENRE_SLUGS",
         "APP_PERSON_PATH_RE",
         "APP_NETWORK_PATH_RE",
         "APP_LANGUAGE_PATH_RE",
@@ -44,6 +48,7 @@ def load_route_helpers():
             if names & wanted_names:
                 selected.append(node)
         elif isinstance(node, ast.FunctionDef) and node.name in {
+            "legacy_genre_redirect_path",
             "safe_next_url",
             "valid_app_path",
         }:
@@ -83,7 +88,11 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones"))
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones/season/0/episode/1"))
         self.assertTrue(valid_app_path("/app/show/1399/season/0/episode/1"))
-        self.assertTrue(valid_app_path("/app/genre/action-adventure"))
+        self.assertFalse(valid_app_path("/app/genre/action-adventure"))
+        self.assertEqual(safe_next_url("/app/genre/action-adventure"), "/app/genre/tv/action-adventure")
+        self.assertEqual(safe_next_url("/app/genre/horror"), "/app/genre/movie/horror")
+        self.assertTrue(valid_app_path("/app/genre/tv/action-adventure"))
+        self.assertTrue(valid_app_path("/app/genre/movie/horror"))
         self.assertFalse(valid_app_path("/app/actor/123"))
         self.assertTrue(valid_app_path("/app/actor/123-leonardo-dicaprio"))
         self.assertTrue(valid_app_path("/app/cinematographer/456-roger-deakins"))
@@ -138,6 +147,9 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/discover/movie/airing-today",
             "/app/genre/",
             "/app/genre/action--adventure",
+            "/app/genre/tv/",
+            "/app/genre/person/drama",
+            "/app/genre/movie/action--adventure",
             "/app/show/1399-",
             "/app/actor/123-",
             "/app/network/213-",
@@ -184,7 +196,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
             safe_next_url("/app/show/1399-game-of-thrones/season/1/episode/3/"),
             "/app/show/1399-game-of-thrones/season/1/episode/3",
         )
-        self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/action-adventure")
+        self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/tv/action-adventure")
+        self.assertEqual(safe_next_url("/app/genre/movie/horror/"), "/app/genre/movie/horror")
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/actor/123-leonardo-dicaprio")
         self.assertEqual(safe_next_url("/app/network/213-netflix/"), "/app/network/213-netflix")
         self.assertEqual(safe_next_url("/app/movie/603-the-matrix/"), "/app/movie/603-the-matrix")

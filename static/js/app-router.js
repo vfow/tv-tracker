@@ -105,7 +105,8 @@
             return "/app/list/watching";
         }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
-            return "/app/genre/" + encodeURIComponent(String(selectedGenreSlug));
+            const genreMedia = typeof selectedGenreMedia !== "undefined" && selectedGenreMedia === "movie" ? "movie" : "tv";
+            return "/app/genre/" + encodeURIComponent(genreMedia) + "/" + encodeURIComponent(String(selectedGenreSlug));
         }
         if(activePage === "show-detail" && selectedShowId){
             if(typeof getShowDetailRoute === "function"){
@@ -220,6 +221,9 @@
         }
         if(typeof selectedGenreSlug !== "undefined"){
             selectedGenreSlug = null;
+        }
+        if(typeof selectedGenreMedia !== "undefined"){
+            selectedGenreMedia = "tv";
         }
         if(typeof selectedPersonContext !== "undefined"){
             selectedPersonContext = null;
@@ -386,14 +390,35 @@
                 return;
             }
 
-            const genreMatch = route.match(/^\/app\/genre\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
-            if(genreMatch){
-                const routeGenreSlug = genreMatch[1];
-                if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && String(selectedGenreSlug || "") === routeGenreSlug){
+            const typedGenreMatch = route.match(/^\/app\/genre\/(tv|movie)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            if(typedGenreMatch){
+                const routeGenreMedia = typedGenreMatch[1];
+                const routeGenreSlug = typedGenreMatch[2];
+                if(
+                    activePage === "genre-detail" &&
+                    typeof selectedGenreSlug !== "undefined" &&
+                    typeof selectedGenreMedia !== "undefined" &&
+                    String(selectedGenreSlug || "") === routeGenreSlug &&
+                    String(selectedGenreMedia || "tv") === routeGenreMedia
+                ){
                     return;
                 }
                 if(typeof openGenrePage === "function"){
-                    openGenrePage(routeGenreSlug,{fromRoute:true});
+                    openGenrePage(routeGenreSlug,{fromRoute:true,media:routeGenreMedia});
+                }
+                return;
+            }
+
+            const legacyGenreMatch = route.match(/^\/app\/genre\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            if(legacyGenreMatch){
+                const legacyInfo = typeof getLegacyGenreRouteInfo === "function" ? getLegacyGenreRouteInfo(legacyGenreMatch[1]) : null;
+                if(!legacyInfo || !legacyInfo.route){
+                    showRouteNotFound();
+                    return;
+                }
+                setPathRoute(legacyInfo.route,true);
+                if(typeof openGenrePage === "function"){
+                    openGenrePage(legacyInfo.slug,{fromRoute:true,media:legacyInfo.media,replaceRoute:true});
                 }
                 return;
             }

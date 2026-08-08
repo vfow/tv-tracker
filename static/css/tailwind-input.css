@@ -4686,6 +4686,33 @@
         @apply tw-overflow-hidden;
     }
 
+    .discover-genre-heading-row{
+        @apply tw-mb-4 tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-3;
+    }
+
+    .discover-genre-tab-row,
+    .genre-media-switch{
+        @apply tw-flex tw-flex-wrap tw-items-center tw-gap-2;
+    }
+
+    .discover-genre-tab,
+    .genre-media-switch-button{
+        @apply tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-px-3 tw-py-2 tw-font-bold tw-text-tt-subtle tw-transition-colors;
+    }
+
+    .discover-genre-tab:hover,
+    .discover-genre-tab:focus-visible,
+    .discover-genre-tab.active,
+    .genre-media-switch-button:hover,
+    .genre-media-switch-button:focus-visible,
+    .genre-media-switch-button.active{
+        @apply tw-border-white tw-bg-white tw-text-black;
+    }
+
+    .genre-media-switch-button:disabled{
+        @apply tw-cursor-not-allowed tw-border-tt-line tw-bg-transparent tw-text-tt-dim tw-opacity-60;
+    }
+
     .discover-genre-grid{
         @apply tw-grid tw-grid-cols-2 tw-gap-3 sm:tw-grid-cols-3 lg:tw-grid-cols-4 xl:tw-grid-cols-5;
     }

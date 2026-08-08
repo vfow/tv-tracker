@@ -113,6 +113,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/show/<show_key>", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/genre/<genre_media>/<genre_slug>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/genre/<genre_slug>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/network/<network_key>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/language/<language_code>", strict_slashes=False)', app_py)
@@ -287,6 +288,33 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('return "discover";', app_js)
         self.assertNotIn('function showGenreDetailPageShell(){', app_js)
         self.assertNotIn('function showDiscoveryFilterPageShell(){', app_js)
+
+    def test_phase53_genre_media_upgrade_exists(self):
+        app_py = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        router = self.read('static/js/app-router.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('APP_LEGACY_GENRE_PATH_RE', app_py)
+        self.assertIn('legacy_genre_redirect_path', app_py)
+        self.assertIn('/app/genre/movie/{slug}', app_py)
+        self.assertIn('/app/genre/tv/{slug}', app_py)
+        self.assertIn('const GENRE_MEDIA_TYPES = new Set(["tv","movie"])', app_js)
+        self.assertIn('function getLegacyGenreRouteInfo', app_js)
+        self.assertIn('function getGenreMediaSwitchRoute', app_js)
+        self.assertIn('tmdbGetMovieGenreList', app_js)
+        self.assertIn('tmdbGetDiscoverPage("discover/" + media', app_js)
+        self.assertIn('primary_release_year', app_js)
+        self.assertIn('openGenrePage(routeGenreSlug,{fromRoute:true,media:routeGenreMedia})', router)
+        self.assertIn('getLegacyGenreRouteInfo', router)
+        self.assertIn('discover-genre-tab', ui)
+        self.assertIn('genre-media-switch-button', ui)
+        self.assertIn('getGenreRouteFromName(name,media)', ui)
+        self.assertIn('renderShowGenreLinksHTML(genres,"movie")', ui)
+        self.assertIn('discover-genre-tab', source_css)
+        self.assertIn('Phase 5.3 genre media routing', built_css)
 
 
 if __name__ == '__main__':
