@@ -815,8 +815,8 @@ async function init(){
     renderAll();
     appDataReady = true;
 
-    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-        setTimeout(()=>window.TVTrackerV2Router.applyRoute(),0);
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+        setTimeout(()=>window.TVTrackerRouter.applyRoute(),0);
     }
 
     startDataSync();
@@ -4001,8 +4001,8 @@ async function loadSeasonData(show,seasonNumber){
 
 
 function getCurrentAppRoute(){
-    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.currentRoute === "function"){
-        return window.TVTrackerV2Router.currentRoute();
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.currentRoute === "function"){
+        return window.TVTrackerRouter.currentRoute();
     }
 
     const path = String(window.location.pathname || "");
@@ -4097,8 +4097,8 @@ function renderAppRouteNotFoundPage(){
                     window.history.back();
                 }else{
                     setAppHashRoute("/app/list/watching",false);
-                    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-                        window.TVTrackerV2Router.applyRoute();
+                    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+                        window.TVTrackerRouter.applyRoute();
                     }
                 }
             });
@@ -4275,10 +4275,10 @@ function scheduleLibrarySearchRouteUpdate(){
         if(
             activePage === "shows" &&
             activeShowsTab === "watchlist" &&
-            window.TVTrackerV2Router &&
-            typeof window.TVTrackerV2Router.updateRouteFromState === "function"
+            window.TVTrackerRouter &&
+            typeof window.TVTrackerRouter.updateRouteFromState === "function"
         ){
-            window.TVTrackerV2Router.updateRouteFromState(false);
+            window.TVTrackerRouter.updateRouteFromState(false);
         }
     },220);
 }
@@ -4822,8 +4822,8 @@ function attachPersonDetailPageEvents(){
                 window.history.back();
             }else{
                 setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-                    window.TVTrackerV2Router.applyRoute();
+                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+                    window.TVTrackerRouter.applyRoute();
                 }else{
                     showPage("discover");
                 }
@@ -5143,8 +5143,8 @@ function attachGenreDetailPageEvents(){
                 window.history.back();
             }else{
                 setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-                    window.TVTrackerV2Router.applyRoute();
+                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+                    window.TVTrackerRouter.applyRoute();
                 }else{
                     showPage("discover");
                 }
@@ -5593,8 +5593,8 @@ function attachDiscoveryFilterPageEvents(){
                 window.history.back();
             }else{
                 setAppHashRoute("/app/discover",false);
-                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-                    window.TVTrackerV2Router.applyRoute();
+                if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+                    window.TVTrackerRouter.applyRoute();
                 }else{
                     showPage("discover");
                 }
@@ -5882,8 +5882,8 @@ function closeMoviePage(){
 
     setAppHashRoute(target || fallback,false);
 
-    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-        window.TVTrackerV2Router.applyRoute();
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+        window.TVTrackerRouter.applyRoute();
     }else{
         showPage("discover");
     }
@@ -6208,8 +6208,8 @@ function closeShowDetailsPage(){
 
     setAppHashRoute(target || fallback,false);
 
-    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-        window.TVTrackerV2Router.applyRoute();
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+        window.TVTrackerRouter.applyRoute();
     }else{
         showPage("shows");
     }
@@ -6322,8 +6322,8 @@ function closeEpisodeDetailsPage(){
 
     setAppHashRoute(targetRoute,true);
 
-    if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
-        window.TVTrackerV2Router.applyRoute();
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
+        window.TVTrackerRouter.applyRoute();
     }else if(showId){
         openShowDetailsPage(showId,{fromRoute:true});
     }else{

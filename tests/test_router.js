@@ -69,9 +69,9 @@ function createRouter(route){
   context.window.showPage=context.showPage;
   context.window.URLSearchParams=URLSearchParams;
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync('static/js/v2-router.js','utf8'),context);
+  vm.runInContext(fs.readFileSync('static/js/app-router.js','utf8'),context);
   while(queued.length){ queued.shift()(); }
-  return {context,calls,listeners,router:context.window.TVTrackerV2Router};
+  return {context,calls,listeners,router:context.window.TVTrackerRouter};
 }
 
 {

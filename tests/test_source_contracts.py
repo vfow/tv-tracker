@@ -21,7 +21,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)
         self.assertIn('2.0-tailwind', template)
-        self.assertIn('v2-router.js', template)
+        self.assertIn('app-router.js', template)
         self.assertNotIn('static-adapter.js', template)
 
     def test_backend_proxy_is_tmdb_only(self):
@@ -102,7 +102,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_real_protected_page_routes_exist(self):
         app_py = self.read('app.py')
-        router = self.read('static/js/v2-router.js')
+        router = self.read('static/js/app-router.js')
         template = self.read('templates/index.html')
         self.assertIn('@app.get("/app/list/<list_slug>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/upcoming", strict_slashes=False)', app_py)
@@ -180,7 +180,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('name="next"', login_template)
         self.assertNotIn('login?next=', db_js)
 
-    def test_v2_uses_server_tmdb_proxy_without_browser_key_ui(self):
+    def test_app_uses_server_tmdb_proxy_without_browser_key_ui(self):
         config = self.read('static/js/config.js')
         tmdb = self.read('static/js/tmdb.js')
         ui = self.read('static/js/ui.js')
@@ -219,7 +219,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
             self.assertIn(f'.{class_name}', source_css)
             self.assertIn(f'.{class_name}', built_css)
 
-    def test_v2_asset_paths_are_refresh_safe(self):
+    def test_app_asset_paths_are_refresh_safe(self):
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         self.assertNotIn('src="static/assets/', app_js)
