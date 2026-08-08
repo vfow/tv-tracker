@@ -539,13 +539,13 @@ function attachDiscoverHubEvents(){
             if(!mediaId){
                 return;
             }
-            lockSearchRouteBeforeResultOpen();
+            const backRoute = lockSearchRouteBeforeResultOpen();
             if(mediaType === "movie" && typeof openMoviePage === "function"){
-                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover"});
+                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover",backRoute:backRoute});
                 return;
             }
             if(typeof openShowDetailsPage === "function"){
-                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover"});
+                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover",backRoute:backRoute});
             }
         });
     });
@@ -639,12 +639,22 @@ function renderSearchPersonCard(result){
 
 function lockSearchRouteBeforeResultOpen(){
     if(activePage !== "search" || typeof getSearchRoute !== "function" || !window.TVTrackerRouter){
-        return;
+        return "";
     }
     const state = typeof discoverSearchState === "object" && discoverSearchState ? discoverSearchState : {};
     const query = String(state.query || (searchRouteState && searchRouteState.query) || "").trim();
     const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || (searchRouteState && searchRouteState.media) || "tv") : "tv";
-    window.TVTrackerRouter.setPathRoute(getSearchRoute(query,media),true);
+    const route = getSearchRoute(query,media);
+    if(searchRouteState){
+        searchRouteState.query = query;
+        searchRouteState.media = media;
+    }
+    if(discoverSearchState){
+        discoverSearchState.query = query;
+        discoverSearchState.media = media;
+    }
+    window.TVTrackerRouter.setPathRoute(route,true);
+    return route;
 }
 
 function renderSearchResults(resultsList){
@@ -726,13 +736,13 @@ function renderSearchResults(resultsList){
             if(!mediaId){
                 return;
             }
-            lockSearchRouteBeforeResultOpen();
+            const backRoute = lockSearchRouteBeforeResultOpen();
             if(mediaType === "movie" && typeof openMoviePage === "function"){
-                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover"});
+                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover",backRoute:backRoute});
                 return;
             }
             if(typeof openShowDetailsPage === "function"){
-                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover"});
+                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover",backRoute:backRoute});
             }
         });
     });
@@ -743,8 +753,8 @@ function renderSearchResults(resultsList){
             if(!mediaId || typeof openPersonPage !== "function"){
                 return;
             }
-            lockSearchRouteBeforeResultOpen();
-            await openPersonPage(this.dataset.personRole || "person",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover"});
+            const backRoute = lockSearchRouteBeforeResultOpen();
+            await openPersonPage(this.dataset.personRole || "person",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover",backRoute:backRoute});
         });
     });
 
@@ -880,7 +890,7 @@ function renderPersonResultCard(item){
     const year = item && item.date ? String(item.date).slice(0,4) : "Unknown";
     const rating = Number(item && item.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
-    const roleMeta = item && item.character ? item.character : (item && item.job ? item.job : "");
+    const roleMeta = item && item.person_role_label ? item.person_role_label : (item && item.character ? `Actor: ${item.character}` : (item && item.job ? item.job : ""));
 
     return `
         <button
@@ -3501,9 +3511,11 @@ function renderMovieDetailPage(state){
 
     const title = movie.title || "Untitled";
     const posterHTML = movie.poster_path
-    ? `<img class="show-page-poster-image" src="${escapeHTML(trackerImageURL(movie.poster_path,"w500"))}" alt="${escapeHTML(title)} poster">`
-    : `<div class="show-page-poster-placeholder">MOVIE</div>`;
-    const backdropStyle = movie.backdrop_path ? ` style="background-image:url('${escapeHTML(trackerImageURL(movie.backdrop_path,"original"))}')"` : "";
+    ? `<img src="${escapeHTML(trackerImageURL(movie.poster_path,"w500"))}" alt="${escapeHTML(title)} poster">`
+    : `<div class="poster-placeholder">MOVIE</div>`;
+    const backdrop = movie.backdrop_path
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), ${trackerBackgroundImage(movie.backdrop_path,"original")}`
+    : `linear-gradient(to top, #080808 0%, #141414 100%)`;
     const certification = getMovieCertification(movie);
     const rating = Number(movie.vote_average || 0);
     const metaItems = [];
@@ -3522,28 +3534,35 @@ function renderMovieDetailPage(state){
     const metaHTML = metaItems.filter(Boolean).map((item,index)=>`${index > 0 ? `<span class="modal-meta-separator">•</span>` : ""}${item}`).join("");
 
     content.innerHTML = `
-        <div class="show-detail-page-inner show-v2-detail-page-inner movie-detail-page-inner">
-            <section class="show-page-hero"${backdropStyle}>
-                <div class="show-page-hero-overlay"></div>
+        <div class="show-detail-page-inner movie-detail-page-inner">
+            <div class="show-page-hero-shell movie-page-hero-shell">
                 <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
                     <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
                 </button>
-                <div class="show-page-hero-content">
-                    <div class="show-page-poster-card">${posterHTML}</div>
-                    <div class="show-page-title-stack">
-                        <h1 class="show-page-title">${escapeHTML(title)}</h1>
+
+                <div class="modal-hero show-detail-hero show-page-hero movie-page-hero" style='background-image:${backdrop}'></div>
+
+                <div class="show-page-identity-row movie-page-identity-row">
+                    <div class="show-page-hero-poster movie-page-hero-poster">
+                        ${posterHTML}
+                    </div>
+                    <div class="show-page-hero-content movie-page-hero-content">
+                        <div class="modal-title show-page-title">${escapeHTML(title)}</div>
                         ${movie.tagline ? `<p class="show-detail-tagline">${escapeHTML(movie.tagline)}</p>` : ""}
-                        <div class="modal-meta show-page-meta">${metaHTML}</div>
-                        ${renderMovieActionButtonsHTML()}
+                        <div class="modal-meta modal-meta-under-status show-page-meta-line">${metaHTML}</div>
+                        <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML()}</div>
                         ${renderMovieExternalLinksHTML(movie)}
                     </div>
                 </div>
-            </section>
+            </div>
 
-            ${renderMovieTabsHTML()}
-
-            <div class="movie-detail-tab-content">
-                ${renderMovieActiveTabContentHTML(movie)}
+            <div class="modal-body show-page-body movie-page-body">
+                <div class="modal-section show-detail-tabs-section movie-detail-tabs-section">
+                    ${renderMovieTabsHTML()}
+                    <div class="movie-detail-tab-content show-detail-tab-panel">
+                        ${renderMovieActiveTabContentHTML(movie)}
+                    </div>
+                </div>
             </div>
         </div>
     `;
