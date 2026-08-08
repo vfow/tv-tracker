@@ -17,6 +17,7 @@ function createRouter(pathname){
     activeShowsTab:'watchlist',
     selectedEpisodeContext:null,
     selectedShowId:null,
+    selectedGenreSlug:null,
     appDataReady:true,
     showDetailBackStack:[],
     showDetailPreview:null,
@@ -27,6 +28,7 @@ function createRouter(pathname){
     closeShowModal(){ calls.push(['closeShowModal']); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
+    openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
     document:{querySelectorAll(){ return []; }},
     history:{
       pushState(state,title,url){ context.window.location.pathname=url; calls.push(['pushState',url]); },
@@ -63,6 +65,16 @@ function createRouter(pathname){
   assert(call,'episode route should open episode page');
   assert.deepStrictEqual(call.slice(1,4),['1399',1,3]);
   assert.strictEqual(call[4].fromRoute,true);
+}
+
+
+{
+  const {calls,router}=createRouter('/app/genre/action-adventure');
+  assert.strictEqual(router.currentRoute(),'/app/genre/action-adventure');
+  const call=calls.find(item=>item[0]==='openGenrePage');
+  assert(call,'genre route should open genre page');
+  assert.strictEqual(call[1],'action-adventure');
+  assert.strictEqual(call[2].fromRoute,true);
 }
 
 {

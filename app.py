@@ -46,6 +46,7 @@ APP_SHOW_PATH_RE = re.compile(r"^/app/show/([1-9][0-9]{0,11})$")
 APP_EPISODE_PATH_RE = re.compile(
     r"^/app/show/([1-9][0-9]{0,11})/season/([0-9]{1,5})/episode/([1-9][0-9]{0,5})$"
 )
+APP_GENRE_PATH_RE = re.compile(r"^/app/genre/[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_SECTION_PATHS = {
     "/app/watchlist",
     "/app/upcoming",
@@ -1444,6 +1445,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_EPISODE_PATH_RE.fullmatch(candidate):
         return candidate
+    if APP_GENRE_PATH_RE.fullmatch(candidate):
+        return candidate
     return "/app/watchlist"
 
 
@@ -1453,6 +1456,7 @@ def valid_app_path(value: str | None) -> bool:
         candidate in APP_SECTION_PATHS
         or APP_SHOW_PATH_RE.fullmatch(candidate) is not None
         or APP_EPISODE_PATH_RE.fullmatch(candidate) is not None
+        or APP_GENRE_PATH_RE.fullmatch(candidate) is not None
     )
 
 
@@ -1669,6 +1673,17 @@ def create_app() -> Flask:
     def app_section_page():
         requested_path = request.path.rstrip("/")
         if requested_path not in APP_SECTION_PATHS:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+
+    @app.get("/app/genre/<genre_slug>", strict_slashes=False)
+    @login_required
+    def app_genre_page(genre_slug: str):
+        requested_path = request.path.rstrip("/")
+        if APP_GENRE_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)

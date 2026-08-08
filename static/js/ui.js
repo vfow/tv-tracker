@@ -133,7 +133,8 @@ function updateShellTitle(){
         "show-detail":(typeof getShowForDetailPage === "function" && getShowForDetailPage(selectedShowId) ? getShowForDetailPage(selectedShowId).title : "Show"),
         "episode-detail":selectedEpisodeContext
         ? `S${selectedEpisodeContext.season}E${String(selectedEpisodeContext.episode).padStart(2,"0")}`
-        : "Episode"
+        : "Episode",
+        "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre"
     };
 
     const showTabTitles = {
@@ -689,6 +690,117 @@ function renderSearchResults(shows){
         results.appendChild(moreButton);
     }
 
+}
+
+
+
+function renderGenrePosterGridCard(show){
+    const posterHTML = show && show.poster_path
+    ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML((show.name || "Show") + " poster")}">`
+    : `<div class="genre-card-placeholder">TV</div>`;
+
+    const year = show && show.first_air_date ? String(show.first_air_date).slice(0,4) : "Unknown";
+    const rating = Number(show && show.vote_average || 0);
+    const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+
+    return `
+        <button
+        type="button"
+        class="genre-result-card"
+        data-show-id="${escapeHTML(show && show.id)}"
+        data-show-name="${escapeHTML(show && show.name || "")}" 
+        data-poster-path="${escapeHTML(show && show.poster_path || "")}" 
+        data-overview="${escapeHTML(show && show.overview || "")}" 
+        data-first-air-date="${escapeHTML(show && show.first_air_date || "")}">
+            <div class="genre-result-poster">${posterHTML}</div>
+            <div class="genre-result-title">${escapeHTML(show && show.name || "Untitled")}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+        </button>
+    `;
+}
+
+function renderGenreDetailPage(state){
+    const content = document.getElementById("genre-detail-content");
+    if(!content){
+        return;
+    }
+
+    const pageState = state || {};
+    const name = pageState.name || (pageState.slug ? String(pageState.slug).split("-").map(part=>part.charAt(0).toUpperCase() + part.slice(1)).join(" ") : "Genre");
+    const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+    const year = String(pageState.year || "").trim();
+    const sort = String(pageState.sort || "popularity.desc");
+    const page = Number(pageState.page || 1);
+    const totalPages = Number(pageState.totalPages || 1);
+    const canLoadMore = !loading && page < totalPages;
+
+    const bodyHTML = error
+    ? `
+        <div class="empty-state genre-detail-empty">
+            <h2>Genre could not load</h2>
+            <p>${escapeHTML(error)}</p>
+        </div>
+    `
+    : shows.length
+    ? `
+        <div class="genre-tight-grid">
+            ${shows.map(renderGenrePosterGridCard).join("")}
+        </div>
+        ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="genre-load-more-button">View More</button>` : ""}
+        ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more shows…</div>` : ""}
+    `
+    : loading
+    ? `
+        <div class="genre-tight-grid genre-tight-grid-loading">
+            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
+        </div>
+    `
+    : `
+        <div class="empty-state genre-detail-empty">
+            <h2>No shows found</h2>
+            <p>Try a different year or sort option.</p>
+        </div>
+    `;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner">
+            <div class="genre-detail-header">
+                <button type="button" class="show-page-back-button genre-page-back-button" id="genre-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div>
+                    <div class="genre-detail-kicker">TV Shows</div>
+                    <h1 class="genre-detail-title">${escapeHTML(name)}</h1>
+                    <p class="genre-detail-subtitle">Discover TV shows from TMDB.</p>
+                </div>
+            </div>
+
+            <div class="genre-filter-bar" aria-label="Genre filters">
+                <label class="genre-filter-field" for="genre-year-filter">
+                    <span>Year</span>
+                    <input id="genre-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
+                </label>
+                <label class="genre-filter-field" for="genre-sort-filter">
+                    <span>Sort</span>
+                    <select id="genre-sort-filter">
+                        <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
+                        <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
+                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>First Air Date</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="genre-result-summary">
+                ${loading && !shows.length ? "Loading shows…" : `${shows.length} ${shows.length === 1 ? "show" : "shows"}${pageState.name ? ` sorted by ${escapeHTML(typeof getGenreSortLabel === "function" ? getGenreSortLabel(sort) : "Popularity")}` : ""}`}
+            </div>
+
+            <div class="genre-result-content">
+                ${bodyHTML}
+            </div>
+        </div>
+    `;
 }
 
 
@@ -2585,6 +2697,40 @@ function getShowNetworkInlineHTML(show){
 }
 
 
+
+function getShowGenreRoute(genre){
+    if(typeof getGenreRouteFromName === "function"){
+        return getGenreRouteFromName(genre);
+    }
+
+    const slug = String(genre || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g," ")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
+
+    return slug ? "/app/genre/" + encodeURIComponent(slug) : "";
+}
+
+function renderShowGenreLinksHTML(genres){
+    const list = (Array.isArray(genres) ? genres : [])
+    .map(genre=>String(genre || "").trim())
+    .filter(Boolean);
+
+    if(!list.length){
+        return "";
+    }
+
+    return `<span class="show-genre-link-list">${list.map((genre,index)=>{
+        const route = getShowGenreRoute(genre);
+        const link = route
+        ? `<a class="show-genre-link" href="${escapeHTML(route)}" data-genre-name="${escapeHTML(genre)}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
+        : `<span class="show-genre-link-disabled">${escapeHTML(genre)}</span>`;
+        return `${index > 0 ? `<span class="show-genre-separator">•</span>` : ""}${link}`;
+    }).join("")}</span>`;
+}
+
 function getShowMetaHTML(show,year,genres,ratingHTML){
 
     const items = [];
@@ -2610,7 +2756,8 @@ function getShowMetaHTML(show,year,genres,ratingHTML){
     }
 
     if(genres){
-        items.push(`<span>${escapeHTML(genres)}</span>`);
+        const genreLinksHTML = renderShowGenreLinksHTML(show && show.genres ? show.genres : []);
+        items.push(genreLinksHTML || `<span>${escapeHTML(genres)}</span>`);
     }
 
     if(cleanRatingHTML){
@@ -2718,7 +2865,8 @@ function renderV2ShowInfoMetaLineHTML(show){
     }
 
     if(genres){
-        items.push(`<span>${escapeHTML(genres)}</span>`);
+        const genreLinksHTML = renderShowGenreLinksHTML(show && show.genres ? show.genres : []);
+        items.push(genreLinksHTML || `<span>${escapeHTML(genres)}</span>`);
     }
 
     if(rating > 0){
@@ -3739,7 +3887,12 @@ function renderShowGenresTabHTML(show){
         return `<div class="v2-api-empty">No genres available.</div>`;
     }
 
-    return `<div class="show-detail-genre-chips">${genres.map(genre=>`<span>${escapeHTML(genre)}</span>`).join("")}</div>`;
+    return `<div class="show-detail-genre-chips">${genres.map(genre=>{
+        const route = getShowGenreRoute(genre);
+        return route
+        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
+        : `<span>${escapeHTML(genre)}</span>`;
+    }).join("")}</div>`;
 }
 
 function getRatingsByCountry(show){
@@ -3986,6 +4139,16 @@ function attachShowDetailsPageEvents(show,isTracked){
         button.addEventListener("click",function(){
             activeShowInfoTabs[String(show.tmdb_id)] = this.dataset.showInfoTab || "Cast";
             renderShowDetailsPagePreservingScroll(show);
+        });
+    });
+
+    document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
+        link.addEventListener("click",function(event){
+            if(typeof openGenrePage !== "function"){
+                return;
+            }
+            event.preventDefault();
+            openGenrePage(this.dataset.genreName || this.textContent || "");
         });
     });
 

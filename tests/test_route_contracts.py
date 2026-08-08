@@ -13,6 +13,7 @@ def load_route_helpers():
     wanted_names = {
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
+        "APP_GENRE_PATH_RE",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -54,12 +55,17 @@ class ProtectedRouteContractTests(unittest.TestCase):
             self.assertTrue(valid_app_path(path))
             self.assertEqual(safe_next_url(path), path)
 
-    def test_show_and_episode_paths_are_allowed(self):
+    def test_show_episode_and_genre_paths_are_allowed(self):
         self.assertTrue(valid_app_path("/app/show/1399"))
         self.assertTrue(valid_app_path("/app/show/1399/season/0/episode/1"))
+        self.assertTrue(valid_app_path("/app/genre/action-adventure"))
         self.assertEqual(
             safe_next_url("/app/show/1399/season/1/episode/3"),
             "/app/show/1399/season/1/episode/3",
+        )
+        self.assertEqual(
+            safe_next_url("/app/genre/action-adventure"),
+            "/app/genre/action-adventure",
         )
 
     def test_sensitive_or_external_destinations_are_rejected(self):
@@ -69,6 +75,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/api/state",
             "/app/private/notes",
             "/app/show/not-a-number",
+            "/app/genre/",
+            "/app/genre/action--adventure",
             "/app/show/1399?status=watching",
         ):
             expected = (
@@ -89,6 +97,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             safe_next_url("/app/show/1399/season/1/episode/3/"),
             "/app/show/1399/season/1/episode/3",
         )
+        self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/action-adventure")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,9 @@
             "/season/" + encodeURIComponent(String(selectedEpisodeContext.season)) +
             "/episode/" + encodeURIComponent(String(selectedEpisodeContext.episode));
         }
+        if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
+            return "/app/genre/" + encodeURIComponent(String(selectedGenreSlug));
+        }
         if(activePage === "show-detail" && selectedShowId){
             return "/app/show/" + encodeURIComponent(String(selectedShowId));
         }
@@ -94,6 +97,9 @@
         discoverPreviewShow = null;
         selectedShowId = null;
         selectedEpisodeContext = null;
+        if(typeof selectedGenreSlug !== "undefined"){
+            selectedGenreSlug = null;
+        }
     }
 
     function applyRoute(){
@@ -135,6 +141,18 @@
                         fromRoute:true,
                         backToShow:true
                     });
+                }
+                return;
+            }
+
+            const genreMatch = route.match(/^\/app\/genre\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            if(genreMatch){
+                const routeGenreSlug = genreMatch[1];
+                if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && String(selectedGenreSlug || "") === routeGenreSlug){
+                    return;
+                }
+                if(typeof openGenrePage === "function"){
+                    openGenrePage(routeGenreSlug,{fromRoute:true});
                 }
                 return;
             }

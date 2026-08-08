@@ -111,14 +111,17 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/show/<int:tmdb_id>", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/genre/<genre_slug>", strict_slashes=False)', app_py)
         self.assertIn('"/app/show/<int:tmdb_id>/season/<int:season_number>/episode/<int:episode_number>"', app_py)
         self.assertNotIn('@app.get("/app/<path:app_path>")', app_py)
         self.assertIn('/app/watchlist', app_py)
         self.assertIn('/app/show/', router)
+        self.assertIn('/app/genre/', router)
         self.assertIn('/season/', router)
         self.assertIn('/episode/', router)
         self.assertNotIn('#/app', router)
         self.assertIn('show-detail-page', template)
+        self.assertIn('genre-detail-page', template)
         self.assertIn('episode-detail-page', template)
 
     def test_friendly_error_page_copy_exists(self):

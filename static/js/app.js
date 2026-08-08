@@ -28,6 +28,19 @@ var pendingShow = null;
 var discoverPreviewShow = null;
 var selectedShowId = null;
 var selectedEpisodeContext = null;
+var selectedGenreSlug = null;
+var genrePageState = {
+    slug:"",
+    name:"",
+    genreId:null,
+    year:"",
+    sort:"popularity.desc",
+    page:1,
+    totalPages:1,
+    loading:false,
+    error:"",
+    shows:[]
+};
 var showDetailPreview = null;
 var showDetailBackStack = [];
 var showDetailOpeningFromRoute = false;
@@ -67,6 +80,9 @@ var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v2";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
+const TMDB_TV_GENRE_CACHE_KEY = "tv-tracker-tmdb-tv-genres:v1";
+const TMDB_TV_GENRE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
+const GENRE_PAGE_SORTS = new Set(["popularity.desc","vote_average.desc","first_air_date.desc"]);
 
 
 
@@ -3762,6 +3778,321 @@ function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber){
     return getShowDetailRoute(showId) +
     "/season/" + encodeURIComponent(String(Number(seasonNumber))) +
     "/episode/" + encodeURIComponent(String(Number(episodeNumber)));
+}
+
+function normalizeGenreSlug(value){
+    return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g," ")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
+}
+
+function getGenreRouteFromName(name){
+    const slug = normalizeGenreSlug(name);
+    return slug ? "/app/genre/" + encodeURIComponent(slug) : "";
+}
+
+function getGenreDetailRoute(slug){
+    const cleanSlug = normalizeGenreSlug(slug);
+    return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanSlug) : "/app/watchlist";
+}
+
+function getGenreSortLabel(sort){
+    if(sort === "vote_average.desc"){
+        return "Rating";
+    }
+    if(sort === "first_air_date.desc"){
+        return "First Air Date";
+    }
+    return "Popularity";
+}
+
+
+function showGenreDetailPageShell(){
+    activePage = "genre-detail";
+
+    document.querySelectorAll(".page").forEach(section=>{
+        section.classList.remove("active-page");
+    });
+
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        button.classList.remove("active");
+        button.removeAttribute("aria-current");
+    });
+
+    const pageElement = document.getElementById("genre-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+        pageElement.scrollTop = 0;
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+function renderActiveGenrePage(){
+    if(typeof renderGenreDetailPage === "function"){
+        renderGenreDetailPage(genrePageState);
+        attachGenreDetailPageEvents();
+    }
+}
+
+function readTMDBTVGenreCache(){
+    try{
+        const raw = sessionStorage.getItem(TMDB_TV_GENRE_CACHE_KEY);
+        if(!raw){
+            return null;
+        }
+        const cached = JSON.parse(raw);
+        if(!cached || !Array.isArray(cached.genres)){
+            return null;
+        }
+        if(Date.now() - Number(cached.savedAt || 0) > TMDB_TV_GENRE_CACHE_TTL){
+            sessionStorage.removeItem(TMDB_TV_GENRE_CACHE_KEY);
+            return null;
+        }
+        return cached.genres;
+    }catch(error){
+        return null;
+    }
+}
+
+function writeTMDBTVGenreCache(genres){
+    if(!Array.isArray(genres)){
+        return;
+    }
+    try{
+        sessionStorage.setItem(
+            TMDB_TV_GENRE_CACHE_KEY,
+            JSON.stringify({savedAt:Date.now(),genres:genres})
+        );
+    }catch(error){}
+}
+
+async function tmdbGetTVGenreList(){
+    const cached = readTMDBTVGenreCache();
+    if(cached){
+        return cached;
+    }
+
+    const response = await fetch(TMDB_API_BASE + "/genre/tv/list");
+    if(!response.ok){
+        throw new Error("TMDB error: " + response.status);
+    }
+    const data = await response.json();
+    const genres = Array.isArray(data && data.genres) ? data.genres : [];
+    writeTMDBTVGenreCache(genres);
+    return genres;
+}
+
+async function resolveTVGenreFromSlug(slug){
+    const cleanSlug = normalizeGenreSlug(slug);
+    if(!cleanSlug){
+        return null;
+    }
+
+    const genres = await tmdbGetTVGenreList();
+    return genres.find(genre=>normalizeGenreSlug(genre && genre.name) === cleanSlug) || null;
+}
+
+function getGenrePageFiltersFromState(){
+    const year = String(genrePageState && genrePageState.year ? genrePageState.year : "").trim();
+    const sort = GENRE_PAGE_SORTS.has(String(genrePageState && genrePageState.sort || ""))
+    ? String(genrePageState.sort)
+    : "popularity.desc";
+
+    return {
+        year:/^\d{4}$/.test(year) ? year : "",
+        sort:sort
+    };
+}
+
+async function loadGenrePageResults(options={}){
+    const append = options && options.append === true;
+    const slug = normalizeGenreSlug(genrePageState && genrePageState.slug);
+
+    if(!slug){
+        genrePageState.error = "Genre not found.";
+        genrePageState.loading = false;
+        renderActiveGenrePage();
+        return;
+    }
+
+    const filters = getGenrePageFiltersFromState();
+    const nextPage = append ? Number(genrePageState.page || 1) + 1 : 1;
+
+    genrePageState.loading = true;
+    genrePageState.error = "";
+    if(!append){
+        genrePageState.shows = [];
+        genrePageState.page = 1;
+        genrePageState.totalPages = 1;
+    }
+    renderActiveGenrePage();
+
+    try{
+        const genre = await resolveTVGenreFromSlug(slug);
+        if(!genre || !genre.id){
+            genrePageState.loading = false;
+            genrePageState.error = "Genre not found.";
+            genrePageState.genreId = null;
+            genrePageState.name = slug.split("-").map(part=>part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+            renderActiveGenrePage();
+            return;
+        }
+
+        const params = {
+            with_genres:genre.id,
+            sort_by:filters.sort,
+            include_adult:"false",
+            include_null_first_air_dates:"false",
+            page:nextPage
+        };
+
+        if(filters.year){
+            params.first_air_date_year = filters.year;
+        }
+
+        if(filters.sort === "vote_average.desc"){
+            params["vote_count.gte"] = 20;
+        }
+
+        const payload = await tmdbGetDiscoverPage("discover/tv",params);
+        const existing = new Set((append ? genrePageState.shows : []).map(show=>String(show.id)));
+        const fresh = [];
+
+        (payload.results || []).forEach(raw=>{
+            const show = normalizeDiscoverHubShow(raw);
+            if(!show || existing.has(String(show.id))){
+                return;
+            }
+            existing.add(String(show.id));
+            fresh.push(show);
+        });
+
+        genrePageState = Object.assign({},genrePageState,{
+            slug:slug,
+            name:genre.name || genrePageState.name || "Genre",
+            genreId:genre.id,
+            year:filters.year,
+            sort:filters.sort,
+            page:Number(payload.page || nextPage),
+            totalPages:Number(payload.total_pages || nextPage || 1),
+            loading:false,
+            error:"",
+            shows:append ? (genrePageState.shows || []).concat(fresh) : fresh
+        });
+
+        renderActiveGenrePage();
+    }catch(error){
+        genrePageState.loading = false;
+        genrePageState.error = error && error.message ? error.message : "Could not load genre.";
+        renderActiveGenrePage();
+    }
+}
+
+async function openGenrePage(slug,options={}){
+    const cleanSlug = normalizeGenreSlug(slug);
+    if(!cleanSlug){
+        return;
+    }
+
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    const isSameGenre = activePage === "genre-detail" && String(selectedGenreSlug || "") === cleanSlug;
+
+    selectedGenreSlug = cleanSlug;
+    selectedShowId = null;
+    selectedEpisodeContext = null;
+    showDetailPreview = null;
+    discoverPreviewShow = null;
+
+    if(!isSameGenre){
+        genrePageState = {
+            slug:cleanSlug,
+            name:"",
+            genreId:null,
+            year:"",
+            sort:"popularity.desc",
+            page:1,
+            totalPages:1,
+            loading:false,
+            error:"",
+            shows:[]
+        };
+    }
+
+    showGenreDetailPageShell();
+
+    if(!fromRoute){
+        setAppHashRoute(getGenreDetailRoute(cleanSlug),replaceRoute);
+    }
+
+    if(!isSameGenre || !genrePageState.shows.length){
+        await loadGenrePageResults({append:false});
+    }else{
+        renderActiveGenrePage();
+    }
+}
+
+function attachGenreDetailPageEvents(){
+    const backButton = document.getElementById("genre-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",function(){
+            if(window.history.length > 1){
+                window.history.back();
+            }else{
+                setAppHashRoute("/app/discover",false);
+                if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
+                    window.TVTrackerV2Router.applyRoute();
+                }else{
+                    showPage("discover");
+                }
+            }
+        });
+    }
+
+    const yearInput = document.getElementById("genre-year-filter");
+    if(yearInput){
+        yearInput.addEventListener("change",function(){
+            const value = String(this.value || "").trim();
+            genrePageState.year = /^\d{4}$/.test(value) ? value : "";
+            this.value = genrePageState.year;
+            loadGenrePageResults({append:false});
+        });
+    }
+
+    const sortSelect = document.getElementById("genre-sort-filter");
+    if(sortSelect){
+        sortSelect.addEventListener("change",function(){
+            genrePageState.sort = GENRE_PAGE_SORTS.has(this.value) ? this.value : "popularity.desc";
+            loadGenrePageResults({append:false});
+        });
+    }
+
+    document.querySelectorAll(".genre-result-card[data-show-id]").forEach(card=>{
+        card.addEventListener("click",async function(){
+            await openDiscoverShowModal({
+                id:Number(this.dataset.showId),
+                name:this.dataset.showName || "",
+                poster_path:this.dataset.posterPath || "",
+                overview:this.dataset.overview || "",
+                first_air_date:this.dataset.firstAirDate || ""
+            });
+        });
+    });
+
+    const moreButton = document.getElementById("genre-load-more-button");
+    if(moreButton){
+        moreButton.addEventListener("click",function(){
+            if(!genrePageState.loading){
+                loadGenrePageResults({append:true});
+            }
+        });
+    }
 }
 
 function restoreShowDetailScrollPositionIfNeeded(){
