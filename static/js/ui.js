@@ -118,17 +118,11 @@ function playCheckSuccessAnimation(element){
 
 
 
-function updateShellTitle(){
-
-    const title = document.getElementById("mobile-page-title");
-
-    if(!title){
-        return;
-    }
+function getTrackerDocumentTitleLabel(){
 
     const pageTitles = {
         discover:"Discover",
-        search:"Search",
+        search:(typeof searchRouteState !== "undefined" && searchRouteState && searchRouteState.query ? `Search: ${searchRouteState.query}` : "Search"),
         profile:"Profile",
         settings:"Settings",
         "show-detail":(typeof getShowForDetailPage === "function" && getShowForDetailPage(selectedShowId) ? getShowForDetailPage(selectedShowId).title : "Show"),
@@ -143,15 +137,51 @@ function updateShellTitle(){
     };
 
     const showTabTitles = {
-        watchlist:"Watchlist",
+        watchlist:"Watching",
         upcoming:"Upcoming",
         history:"History"
     };
 
-    title.textContent = activePage === "shows"
+    return activePage === "shows"
     ? (showTabTitles[activeShowsTab] || "Shows")
     : (pageTitles[activePage] || "TV Tracker");
 
+}
+
+function updateShellTitle(){
+
+    const label = getTrackerDocumentTitleLabel();
+
+    if(typeof document !== "undefined"){
+        document.title = label && label !== "TV Tracker" ? `${label} — TV Tracker` : "TV Tracker";
+    }
+
+    const title = document.getElementById("mobile-page-title");
+
+    if(title){
+        title.textContent = label || "TV Tracker";
+    }
+
+}
+
+
+function normalizePrimaryNavPage(page){
+    const clean = String(page || "").trim().toLowerCase();
+    return ["shows","discover","profile","settings"].includes(clean) ? clean : "";
+}
+
+function setAppPrimaryNavActive(page){
+    const active = normalizePrimaryNavPage(page);
+    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+        const isActive = active && button.dataset.page === active;
+        button.classList.toggle("active",!!isActive);
+
+        if(isActive){
+            button.setAttribute("aria-current","page");
+        }else{
+            button.removeAttribute("aria-current");
+        }
+    });
 }
 
 function showPage(page){
@@ -166,16 +196,9 @@ function showPage(page){
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        const isActive = button.dataset.page === page;
-        button.classList.toggle("active",isActive);
-
-        if(isActive){
-            button.setAttribute("aria-current","page");
-        }else{
-            button.removeAttribute("aria-current");
-        }
-    });
+    if(typeof setAppPrimaryNavActive === "function"){
+        setAppPrimaryNavActive(page);
+    }
 
     const pageElement = document.getElementById(page + "-page");
 
@@ -277,10 +300,6 @@ function renderDiscoverHub(){
     if(state.loading && (!state.sections || state.sections.length === 0)){
         results.innerHTML = `
             <div class="discover-page-shell">
-                <div class="discover-page-heading">
-                    <h1>Discover</h1>
-                    <p>Browse TV shows, movies, and genres.</p>
-                </div>
                 ${renderDiscoverHubSkeleton("TV Shows")}
                 ${renderDiscoverHubSkeleton("Movies")}
             </div>
@@ -312,10 +331,6 @@ function renderDiscoverHub(){
 
     results.innerHTML = `
         <div class="discover-page-shell">
-            <div class="discover-page-heading">
-                <h1>Discover</h1>
-                <p>Browse TV shows, movies, and genres.</p>
-            </div>
             ${renderDiscoverSectionGroup("TV Shows",tvRows)}
             ${renderDiscoverSectionGroup("Movies",movieRows)}
             ${renderDiscoverGenreSection(state.genres || [])}
@@ -330,10 +345,7 @@ function renderDiscoverHubSkeleton(title){
         <section class="discover-section-group">
             <h2 class="discover-group-title">${escapeHTML(title)}</h2>
             <div class="discover-section">
-                <div class="discover-section-heading">
-                    <h3>Loading</h3>
-                </div>
-                <div class="discover-card-row">
+                <div class="discover-card-row discover-card-row-loading" aria-label="Loading ${escapeHTML(title)}">
                     ${Array.from({length:8}).map(()=>`<div class="discover-card skeleton-card"></div>`).join("")}
                 </div>
             </div>
@@ -434,11 +446,11 @@ function attachDiscoverHubEvents(){
                 return;
             }
             if(mediaType === "movie" && typeof openMoviePage === "function"){
-                await openMoviePage(mediaId,{movieName:mediaName});
+                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover"});
                 return;
             }
             if(typeof openShowDetailsPage === "function"){
-                await openShowDetailsPage(mediaId,{showName:mediaName});
+                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover"});
             }
         });
     });
@@ -514,8 +526,6 @@ function renderSearchPersonCard(result){
     const photoHTML = result && (result.profile_path || result.poster_path)
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.profile_path || result.poster_path,"h632"))}" alt="${escapeHTML(name + " photo")}">`
     : `<div class="search-person-placeholder">PERSON</div>`;
-    const role = getSearchResultPersonRole(result);
-    const meta = result && result.known_for_department ? String(result.known_for_department) : "Person";
 
     return `
         <button
@@ -524,10 +534,9 @@ function renderSearchPersonCard(result){
         data-media-type="person"
         data-media-id="${escapeHTML(result && result.id)}"
         data-media-name="${escapeHTML(name)}"
-        data-person-role="${escapeHTML(role)}">
+        data-person-role="actor">
             <div class="search-person-photo">${photoHTML}</div>
             <div class="search-person-name">${escapeHTML(name)}</div>
-            <div class="search-person-meta">${escapeHTML(meta)}</div>
         </button>
     `;
 }
@@ -546,7 +555,10 @@ function renderSearchResults(resultsList){
     const query = String(state.query || "").trim();
     const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || "tv") : "tv";
     const allItems = Array.isArray(resultsList) ? resultsList : [];
-    const visibleItems = allItems.filter(item=>String(item && item.media_type || "tv") === media);
+    const mediaItems = allItems.filter(item=>String(item && item.media_type || "tv") === media);
+    const batchSize = typeof SEARCH_RESULT_BATCH_SIZE !== "undefined" ? SEARCH_RESULT_BATCH_SIZE : 21;
+    const visibleLimit = Math.max(batchSize,Number(state.visibleLimit || batchSize));
+    const visibleItems = mediaItems.slice(0,visibleLimit);
     const labels = {tv:"TV Shows",movie:"Movies",person:"People"};
 
     const tabsHTML = `
@@ -557,23 +569,22 @@ function renderSearchResults(resultsList){
         </div>
     `;
 
+    const skeletonHTML = media === "person"
+    ? `<div class="search-person-grid search-person-grid-loading">${Array.from({length:12}).map(()=>`<div class="search-person-card search-person-skeleton-card skeleton-card"></div>`).join("")}</div>`
+    : `<div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}</div>`;
+
     const bodyHTML = !query
     ? `
         <div class="empty-state search-empty-state">
-            <h2>Search the tracker universe</h2>
-            <p>Type a show, movie, or person above.</p>
+            <p>Start typing to search.</p>
         </div>
     `
+    : state.loading && !visibleItems.length
+    ? skeletonHTML
     : visibleItems.length
     ? media === "person"
         ? `<div class="search-person-grid">${visibleItems.map(renderSearchPersonCard).join("")}</div>`
         : `<div class="genre-tight-grid search-tight-grid">${visibleItems.map(renderSearchResultPosterCard).join("")}</div>`
-    : state.loading
-    ? `
-        <div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">
-            ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
-        </div>
-    `
     : `
         <div class="empty-state search-empty-state">
             <h2>No ${escapeHTML(labels[media] || "results")} found</h2>
@@ -581,14 +592,10 @@ function renderSearchResults(resultsList){
         </div>
     `;
 
-    const canLoadMore = query && Number(state.page || 1) < Number(state.totalPages || 1);
+    const canLoadMore = query && (visibleItems.length < mediaItems.length || Number(state.page || 1) < Number(state.totalPages || 1));
 
     results.innerHTML = `
-        <div class="search-page-shell">
-            <div class="search-page-heading">
-                <h1>Search</h1>
-                ${query ? `<p>Results for ${escapeHTML(query)}.</p>` : `<p>Search TV shows, movies, and people.</p>`}
-            </div>
+        <div class="search-page-shell ${activePage === "discover" ? "discover-live-search-shell" : ""}">
             ${tabsHTML}
             <div class="search-results-body">
                 ${bodyHTML}
@@ -614,11 +621,11 @@ function renderSearchResults(resultsList){
                 return;
             }
             if(mediaType === "movie" && typeof openMoviePage === "function"){
-                await openMoviePage(mediaId,{movieName:mediaName});
+                await openMoviePage(mediaId,{movieName:mediaName,navigationContext:"discover"});
                 return;
             }
             if(typeof openShowDetailsPage === "function"){
-                await openShowDetailsPage(mediaId,{showName:mediaName});
+                await openShowDetailsPage(mediaId,{showName:mediaName,navigationContext:"discover"});
             }
         });
     });
@@ -629,13 +636,17 @@ function renderSearchResults(resultsList){
             if(!mediaId || typeof openPersonPage !== "function"){
                 return;
             }
-            await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:this.dataset.mediaName || ""});
+            await openPersonPage(this.dataset.personRole || "actor",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover"});
         });
     });
 
     const moreButton = document.getElementById("search-load-more-button");
     if(moreButton){
         moreButton.addEventListener("click",loadMoreSearchResults);
+    }
+
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
     }
 }
 

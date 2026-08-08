@@ -1475,12 +1475,14 @@ def safe_next_url(value: str | None) -> str:
         return "/app/list/watching"
     if candidate == "/app/search":
         query = ""
+        media_type = "tv"
         if separator:
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
-                if key == "q" and value.strip():
+                if key == "q" and value.strip() and not query:
                     query = value.strip()[:120]
-                    break
-        return "/app/search" + (("?" + urlencode({"q": query})) if query else "")
+                elif key == "type" and value.strip().lower() in {"tv", "movie", "person"}:
+                    media_type = value.strip().lower()
+        return "/app/search" + (("?" + urlencode({"q": query, "type": media_type})) if query else "")
     if candidate == "/app/list":
         return "/app/list/watching"
     if APP_LIST_PATH_RE.fullmatch(candidate):

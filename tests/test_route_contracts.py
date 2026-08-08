@@ -70,8 +70,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
         ):
             self.assertTrue(valid_app_path(path))
             self.assertEqual(safe_next_url(path), path)
-        self.assertEqual(safe_next_url("/app/search?q=batman"), "/app/search?q=batman")
-        self.assertEqual(safe_next_url("/app/search?x=1&q=the matrix"), "/app/search?q=the+matrix")
+        self.assertEqual(safe_next_url("/app/search?q=batman"), "/app/search?q=batman&type=tv")
+        self.assertEqual(safe_next_url("/app/search?x=1&q=the matrix&type=movie"), "/app/search?q=the+matrix&type=movie")
         self.assertTrue(valid_app_path("/app/list/watching"))
         self.assertTrue(valid_app_path("/app/list/completed"))
         self.assertEqual(safe_next_url("/app/list"), "/app/list/watching")

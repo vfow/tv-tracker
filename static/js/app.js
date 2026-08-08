@@ -32,7 +32,7 @@ var selectedGenreSlug = null;
 var selectedDiscoveryContext = null;
 var selectedPersonContext = null;
 var selectedMovieId = null;
-var searchRouteState = {query:""};
+var searchRouteState = {query:"",media:"tv"};
 var personPageState = {
     role:"",
     personId:"",
@@ -89,7 +89,7 @@ var currentSearchController = null;
 var searchRequestId = 0;
 var lastDiscoverSearchQuery = "";
 var lastDiscoverSearchResults = [];
-var discoverSearchState = {query:"",media:"tv",page:1,totalPages:1,loading:false};
+var discoverSearchState = {query:"",media:"tv",page:1,totalPages:1,visibleLimit:21,loading:false};
 var discoverHubState = {
     loaded:false,
     loading:false,
@@ -117,6 +117,9 @@ const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v5";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person"]);
+const SEARCH_RESULT_BATCH_SIZE = 21;
+const SEARCH_TYPING_DELAY_MS = 360;
+const APP_ROUTE_NAV_CONTEXT_KEY = "tv-tracker-route-nav-context:v1";
 const DISCOVER_CATEGORY_ROUTES = {
     "tv/popular":{media:"tv",category:"popular",path:"tv/popular",title:"Popular TV Shows",rowTitle:"Popular",section:"TV Shows"},
     "tv/top-rated":{media:"tv",category:"top-rated",path:"tv/top_rated",title:"Top Rated TV Shows",rowTitle:"Top Rated",section:"TV Shows"},
@@ -941,22 +944,33 @@ function setupEvents(){
 
 
 
-    document.getElementById("search").addEventListener("input",function(){
+    const globalSearchInput = document.getElementById("search");
 
-        clearTimeout(searchTimer);
+    if(globalSearchInput){
+        globalSearchInput.addEventListener("input",function(){
 
-        const query = this.value.trim();
+            clearTimeout(searchTimer);
 
-        if(query.length < 2){
-            searchShows(query);
-            return;
-        }
+            const query = this.value.trim();
 
-        searchTimer = setTimeout(()=>{
-            searchShows(query);
-        },220);
+            searchTimer = setTimeout(()=>{
+                searchShows(query,{skipRoute:activePage !== "search"});
+            },SEARCH_TYPING_DELAY_MS);
 
-    });
+        });
+
+        globalSearchInput.addEventListener("keydown",function(event){
+            if(event.key !== "Enter"){
+                return;
+            }
+            event.preventDefault();
+            const query = this.value.trim();
+            openSearchPage(query,{
+                media:normalizeSearchMediaType(discoverSearchState.media || searchRouteState.media || "tv"),
+                replaceRoute:false
+            });
+        });
+    }
 
 
 
@@ -3162,43 +3176,157 @@ function normalizeSearchMediaType(media){
     return SEARCH_MEDIA_TYPES.has(clean) ? clean : "tv";
 }
 
+
+function normalizeNavContext(value){
+    const clean = String(value || "").trim().toLowerCase();
+    return ["shows","discover","profile","settings"].includes(clean) ? clean : "";
+}
+
+function getRouteNavContextMap(){
+    try{
+        const raw = sessionStorage.getItem(APP_ROUTE_NAV_CONTEXT_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }catch(error){
+        return {};
+    }
+}
+
+function setRouteNavContextMap(map){
+    try{
+        sessionStorage.setItem(APP_ROUTE_NAV_CONTEXT_KEY,JSON.stringify(map || {}));
+    }catch(error){}
+}
+
+function normalizeContextRouteKey(route){
+    const clean = String(route || "").trim();
+    if(!clean){
+        return "";
+    }
+    try{
+        const parsed = new URL(clean,window.location.origin || "http://localhost");
+        return parsed.pathname + parsed.search;
+    }catch(error){
+        return clean;
+    }
+}
+
+function rememberRouteNavContext(route,context){
+    const routeKey = normalizeContextRouteKey(route);
+    const cleanContext = normalizeNavContext(context);
+    if(!routeKey || !cleanContext){
+        return;
+    }
+    const map = getRouteNavContextMap();
+    map[routeKey] = cleanContext;
+    const keys = Object.keys(map);
+    if(keys.length > 80){
+        keys.slice(0,keys.length - 80).forEach(key=>delete map[key]);
+    }
+    setRouteNavContextMap(map);
+}
+
+function getRememberedRouteNavContext(route){
+    const routeKey = normalizeContextRouteKey(route);
+    if(!routeKey){
+        return "";
+    }
+    const map = getRouteNavContextMap();
+    return normalizeNavContext(map[routeKey]);
+}
+
+function getCurrentPrimaryNavContext(){
+    const active = document.querySelector(".app-primary-nav button[data-page].active");
+    return normalizeNavContext(active && active.dataset ? active.dataset.page : "");
+}
+
+function inferNavContextFromActivePage(defaultContext="shows"){
+    const currentContext = getCurrentPrimaryNavContext();
+    if(["show-detail","movie-detail","episode-detail","person-detail"].includes(activePage) && currentContext){
+        return currentContext;
+    }
+    if(activePage === "profile"){
+        return "profile";
+    }
+    if(activePage === "settings"){
+        return "settings";
+    }
+    if(["discover","search","genre-detail","discovery-detail","person-detail"].includes(activePage)){
+        return "discover";
+    }
+    if(activePage === "shows" || activePage === "show-detail" || activePage === "movie-detail" || activePage === "episode-detail"){
+        return "shows";
+    }
+    return normalizeNavContext(defaultContext) || "shows";
+}
+
+function getDetailNavContext(kind,options={},route=""){
+    const explicit = normalizeNavContext(options && options.navigationContext);
+    if(explicit){
+        return explicit;
+    }
+
+    if(options && options.fromRoute === true){
+        const remembered = getRememberedRouteNavContext(route || getCurrentAppRoute());
+        if(remembered){
+            return remembered;
+        }
+        return kind === "person" ? "discover" : "shows";
+    }
+
+    return inferNavContextFromActivePage(kind === "person" ? "discover" : "shows");
+}
+
+function activatePrimaryNavContext(context){
+    if(typeof setAppPrimaryNavActive === "function"){
+        setAppPrimaryNavActive(normalizeNavContext(context) || "shows");
+    }
+}
+
 function setSearchMediaType(media){
-    discoverSearchState.media = normalizeSearchMediaType(media);
-    if(typeof renderSearchResults === "function"){
-        renderSearchResults(lastDiscoverSearchResults || []);
+    const nextMedia = normalizeSearchMediaType(media);
+    discoverSearchState.media = nextMedia;
+    searchRouteState.media = nextMedia;
+
+    const input = document.getElementById("search");
+    const query = String(discoverSearchState.query || (input ? input.value : "") || "").trim();
+
+    if(activePage === "search"){
+        setAppHashRoute(getSearchRoute(query,nextMedia),true);
+    }
+
+    if(query.length >= 2){
+        searchShows(query,{skipRoute:activePage !== "search"});
+    }else if(activePage === "discover"){
+        if(typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+        loadDiscoverHub(false);
+    }else{
+        renderSearchIntro();
     }
 }
 
 function renderSearchIntro(){
+    lastDiscoverSearchQuery = "";
+    lastDiscoverSearchResults = [];
+    discoverSearchState = Object.assign({},discoverSearchState,{
+        query:"",
+        media:normalizeSearchMediaType(discoverSearchState.media || searchRouteState.media || "tv"),
+        page:1,
+        totalPages:1,
+        visibleLimit:SEARCH_RESULT_BATCH_SIZE,
+        loading:false
+    });
     if(typeof renderSearchResults === "function"){
         renderSearchResults([]);
     }
 }
 
 function renderSearchLoading(query){
-    const results = document.getElementById("search-results");
-
-    if(!results){
-        return;
+    if(typeof renderSearchResults === "function"){
+        renderSearchResults(lastDiscoverSearchResults || []);
     }
-
-    const cleanQuery = String(query || "").trim();
-    results.innerHTML = `
-        <div class="search-page-shell">
-            <div class="search-page-heading">
-                <h1>Search</h1>
-                ${cleanQuery ? `<p>Searching for ${escapeHTML(cleanQuery)}.</p>` : `<p>Search TV shows, movies, and people.</p>`}
-            </div>
-            <div class="search-tab-row" role="tablist" aria-label="Search result type">
-                ${renderSearchTabButtonHTML("tv","TV Shows",true)}
-                ${renderSearchTabButtonHTML("movie","Movies",false)}
-                ${renderSearchTabButtonHTML("person","People",false)}
-            </div>
-            <div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">
-                ${Array.from({length:12}).map(()=>`<div class="genre-skeleton-card"></div>`).join("")}
-            </div>
-        </div>
-    `;
 }
 
 function renderSearchError(){
@@ -3218,14 +3346,11 @@ function renderSearchError(){
     `;
 }
 
-function normalizeSearchResultItem(item){
+function normalizeSearchResultItem(item,forcedMediaType=""){
     if(!item || !item.id){
         return null;
     }
-    const mediaType = String(item.media_type || "tv").toLowerCase();
-    if(!["tv","movie","person"].includes(mediaType)){
-        return null;
-    }
+    const mediaType = normalizeSearchMediaType(forcedMediaType || item.media_type || "tv");
     const title = mediaType === "tv"
     ? (item.name || item.original_name || "Untitled")
     : mediaType === "movie"
@@ -3250,19 +3375,31 @@ function normalizeSearchResultItem(item){
     };
 }
 
-async function tmdbSearchMultiPage(query,page=1,options={}){
+function getSearchEndpointForMedia(media){
+    const cleanMedia = normalizeSearchMediaType(media);
+    if(cleanMedia === "movie"){
+        return "search/movie";
+    }
+    if(cleanMedia === "person"){
+        return "search/person";
+    }
+    return "search/tv";
+}
+
+async function tmdbSearchMediaPage(query,media,page=1,options={}){
     const cleanQuery = String(query || "").trim();
+    const cleanMedia = normalizeSearchMediaType(media);
     const pageNumber = Math.max(1,Number(page || 1));
     if(!cleanQuery){
         return {results:[],page:1,total_pages:1,total_results:0};
     }
-    const data = await tmdbFetchJSON("search/multi",{
+    const data = await tmdbFetchJSON(getSearchEndpointForMedia(cleanMedia),{
         query:cleanQuery,
         include_adult:"false",
         page:pageNumber
     },options);
     const results = (Array.isArray(data && data.results) ? data.results : [])
-    .map(normalizeSearchResultItem)
+    .map(item=>normalizeSearchResultItem(item,cleanMedia))
     .filter(Boolean);
     return {
         results:results,
@@ -3272,20 +3409,46 @@ async function tmdbSearchMultiPage(query,page=1,options={}){
     };
 }
 
+async function tmdbSearchMediaBatch(query,media,startPage=1,batchSize=SEARCH_RESULT_BATCH_SIZE,options={}){
+    const cleanMedia = normalizeSearchMediaType(media);
+    const seen = new Set();
+    const results = [];
+    let page = Math.max(1,Number(startPage || 1));
+    let totalPages = page;
+    let totalResults = 0;
+
+    while(results.length < batchSize){
+        const payload = await tmdbSearchMediaPage(query,cleanMedia,page,options);
+        totalPages = Number(payload.total_pages || page || 1);
+        totalResults = Number(payload.total_results || totalResults || 0);
+        (payload.results || []).forEach(item=>{
+            const key = item ? `${item.media_type}:${item.id}` : "";
+            if(!item || !item.id || seen.has(key)){
+                return;
+            }
+            seen.add(key);
+            results.push(item);
+        });
+        if(page >= totalPages){
+            break;
+        }
+        page += 1;
+    }
+
+    return {
+        results:results,
+        page:page,
+        total_pages:totalPages,
+        total_results:totalResults
+    };
+}
+
 function showSearchPageShell(){
     activePage = "search";
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        const isDiscover = button.dataset.page === "discover";
-        button.classList.toggle("active",isDiscover);
-        if(isDiscover){
-            button.setAttribute("aria-current","page");
-        }else{
-            button.removeAttribute("aria-current");
-        }
-    });
+    activatePrimaryNavContext("discover");
     const pageElement = document.getElementById("discover-page");
     if(pageElement){
         pageElement.classList.add("active-page");
@@ -3300,6 +3463,7 @@ function openSearchPage(query="",options={}){
     const cleanQuery = String(query || "").trim();
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
+    const media = normalizeSearchMediaType(options && options.media || searchRouteState.media || discoverSearchState.media || "tv");
     selectedShowId = null;
     selectedEpisodeContext = null;
     selectedGenreSlug = null;
@@ -3309,7 +3473,15 @@ function openSearchPage(query="",options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
     searchRouteState.query = cleanQuery;
-    discoverSearchState.media = "tv";
+    searchRouteState.media = media;
+    discoverSearchState = {
+        query:cleanQuery,
+        media:media,
+        page:1,
+        totalPages:1,
+        visibleLimit:SEARCH_RESULT_BATCH_SIZE,
+        loading:false
+    };
     showSearchPageShell();
     const input = document.getElementById("search");
     if(input){
@@ -3317,7 +3489,7 @@ function openSearchPage(query="",options={}){
         input.setAttribute("placeholder","Search shows, movies, people");
     }
     if(!fromRoute){
-        setAppHashRoute(getSearchRoute(cleanQuery),replaceRoute);
+        setAppHashRoute(getSearchRoute(cleanQuery,media),replaceRoute);
     }
     searchShows(cleanQuery,{skipRoute:true});
 }
@@ -3334,6 +3506,10 @@ function openDiscoverHomePage(options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
     searchRouteState.query = "";
+    searchRouteState.media = "tv";
+    discoverSearchState = {query:"",media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:false};
+    lastDiscoverSearchQuery = "";
+    lastDiscoverSearchResults = [];
     const input = document.getElementById("search");
     if(input){
         input.value = "";
@@ -3350,7 +3526,9 @@ function openDiscoverHomePage(options={}){
 }
 
 function shouldShowDiscoverHub(){
-    return activePage === "discover";
+    const input = document.getElementById("search");
+    const query = String(discoverSearchState && discoverSearchState.query || (input ? input.value : "") || "").trim();
+    return activePage === "discover" && query.length < 2;
 }
 
 function getLocalDateKey(date){
@@ -3659,15 +3837,16 @@ async function searchShows(query,options={}){
     }
 
     const cleanQuery = String(query || "").trim();
-    const cacheKey = getSearchCacheKey(cleanQuery);
+    const cleanMedia = normalizeSearchMediaType(discoverSearchState.media || searchRouteState.media || "tv");
+    const cacheKey = getSearchCacheKey(cleanQuery) + ":" + cleanMedia;
     const skipRoute = options && options.skipRoute === true;
+    const replaceRoute = options && options.replaceRoute !== false;
 
-    if(!skipRoute && (activePage === "search" || activePage === "discover")){
-        searchRouteState.query = cleanQuery;
-        setAppHashRoute(getSearchRoute(cleanQuery),true);
-        if(activePage !== "search"){
-            showSearchPageShell();
-        }
+    searchRouteState.query = cleanQuery;
+    searchRouteState.media = cleanMedia;
+
+    if(!skipRoute && activePage === "search"){
+        setAppHashRoute(getSearchRoute(cleanQuery,cleanMedia),replaceRoute);
     }
 
     if(cleanQuery.length < 2){
@@ -3675,8 +3854,18 @@ async function searchShows(query,options={}){
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
-        discoverSearchState = {query:"",media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,loading:false};
-        renderSearchIntro();
+        discoverSearchState = {query:"",media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:false};
+        if(activePage === "discover"){
+            if(typeof renderDiscoverHub === "function"){
+                renderDiscoverHub();
+            }
+            loadDiscoverHub(false);
+        }else{
+            renderSearchIntro();
+        }
+        if(typeof updateShellTitle === "function"){
+            updateShellTitle();
+        }
         return;
     }
 
@@ -3689,12 +3878,14 @@ async function searchShows(query,options={}){
     currentSearchController = controller;
     const requestId = ++searchRequestId;
 
-    discoverSearchState = {query:cleanQuery,media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,loading:true};
+    lastDiscoverSearchQuery = "";
+    lastDiscoverSearchResults = [];
+    discoverSearchState = {query:cleanQuery,media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:true};
     renderSearchLoading(cleanQuery);
 
     try{
 
-        const payload = await tmdbSearchMultiPage(cleanQuery,1,{signal:controller ? controller.signal : undefined});
+        const payload = await tmdbSearchMediaBatch(cleanQuery,cleanMedia,1,SEARCH_RESULT_BATCH_SIZE,{signal:controller ? controller.signal : undefined});
 
         if(requestId !== searchRequestId){
             return;
@@ -3704,9 +3895,10 @@ async function searchShows(query,options={}){
         lastDiscoverSearchResults = payload.results || [];
         discoverSearchState = {
             query:cleanQuery,
-            media:normalizeSearchMediaType(discoverSearchState.media || "tv"),
+            media:cleanMedia,
             page:Number(payload.page || 1),
             totalPages:Number(payload.total_pages || 1),
+            visibleLimit:SEARCH_RESULT_BATCH_SIZE,
             loading:false
         };
 
@@ -3739,19 +3931,31 @@ async function searchShows(query,options={}){
 async function loadMoreSearchResults(){
     const state = discoverSearchState || {};
     const query = String(state.query || "").trim();
+    const media = normalizeSearchMediaType(state.media || searchRouteState.media || "tv");
 
     if(!query || state.loading){
         return;
     }
 
-    const nextPage = Number(state.page || 1) + 1;
+    const currentLimit = Math.max(SEARCH_RESULT_BATCH_SIZE,Number(state.visibleLimit || SEARCH_RESULT_BATCH_SIZE));
+    const targetLimit = currentLimit + SEARCH_RESULT_BATCH_SIZE;
     const totalPages = Number(state.totalPages || 1);
+    let nextPage = Number(state.page || 1) + 1;
 
-    if(totalPages > 0 && nextPage > totalPages){
+    if((lastDiscoverSearchResults || []).length >= targetLimit || nextPage > totalPages){
+        discoverSearchState = Object.assign({},state,{
+            media:media,
+            visibleLimit:targetLimit,
+            loading:false
+        });
+        if(typeof renderSearchResults === "function"){
+            renderSearchResults(lastDiscoverSearchResults || []);
+        }
         return;
     }
 
     state.loading = true;
+    state.media = media;
     discoverSearchState = state;
 
     if(typeof renderSearchResults === "function"){
@@ -3759,24 +3963,35 @@ async function loadMoreSearchResults(){
     }
 
     try{
-        const payload = await tmdbSearchMultiPage(query,nextPage);
+        let latestPage = Number(state.page || 1);
+        let latestTotalPages = totalPages;
         const existing = new Set((lastDiscoverSearchResults || []).map(item=>`${item.media_type}:${item.id}`));
-        const fresh = (payload.results || []).filter(item=>{
-            const key = item ? `${item.media_type}:${item.id}` : "";
-            if(!item || !item.id || existing.has(key)){
-                return false;
-            }
+        const fresh = [];
 
-            existing.add(key);
-            return true;
-        });
+        while((lastDiscoverSearchResults.length + fresh.length) < targetLimit && nextPage <= latestTotalPages){
+            const payload = await tmdbSearchMediaPage(query,media,nextPage);
+            latestPage = Number(payload.page || nextPage);
+            latestTotalPages = Number(payload.total_pages || latestTotalPages || nextPage);
+
+            (payload.results || []).forEach(item=>{
+                const key = item ? `${item.media_type}:${item.id}` : "";
+                if(!item || !item.id || existing.has(key)){
+                    return;
+                }
+                existing.add(key);
+                fresh.push(item);
+            });
+
+            nextPage += 1;
+        }
 
         lastDiscoverSearchResults = (lastDiscoverSearchResults || []).concat(fresh);
         discoverSearchState = {
             query:query,
-            media:normalizeSearchMediaType(discoverSearchState.media || "tv"),
-            page:Number(payload.page || nextPage),
-            totalPages:Number(payload.total_pages || totalPages || nextPage),
+            media:media,
+            page:latestPage,
+            totalPages:latestTotalPages,
+            visibleLimit:targetLimit,
             loading:false
         };
 
@@ -4013,10 +4228,7 @@ function renderAppRouteNotFoundPage(){
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
     const page = document.getElementById("show-detail-page");
     const content = document.getElementById("show-detail-content");
     if(page){
@@ -4196,9 +4408,10 @@ function getCertificationDetailRoute(media,certification){
     return slug ? `/app/certification/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(slug)}` : "/app/list/watching";
 }
 
-function getSearchRoute(query=""){
+function getSearchRoute(query="",media="tv"){
     const clean = String(query || "").trim();
-    return clean ? `/app/search?q=${encodeURIComponent(clean)}` : "/app/search";
+    const cleanMedia = normalizeSearchMediaType(media || searchRouteState.media || discoverSearchState.media || "tv");
+    return clean ? `/app/search?q=${encodeURIComponent(clean)}&type=${encodeURIComponent(cleanMedia)}` : "/app/search";
 }
 
 function getLibraryListRoute(filter=activeFilter,query=librarySearchQuery){
@@ -4638,17 +4851,14 @@ async function tmdbGetPersonDetailsWithCredits(personId){
     );
 }
 
-function showPersonDetailPageShell(){
+function showPersonDetailPageShell(navigationContext=""){
     activePage = "person-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("person-detail-page");
     if(pageElement){
@@ -4665,6 +4875,9 @@ function renderActivePersonPage(){
     if(typeof renderPersonDetailPage === "function"){
         renderPersonDetailPage(personPageState);
         attachPersonDetailPageEvents();
+    }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
     }
 }
 
@@ -4733,6 +4946,8 @@ async function openPersonPage(role,personId,options={}){
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const routeLabel = String(options && (options.personName || options.routeLabel) || "").trim();
     const media = normalizePersonMediaType(options && options.media || (personPageState && personPageState.media) || "tv");
+    const initialPersonRoute = getPersonDetailRoute(cleanRole,cleanId,routeLabel);
+    const navigationContext = getDetailNavContext("person",options,fromRoute ? getCurrentAppRoute() : initialPersonRoute);
     const isSamePerson = activePage === "person-detail" &&
     selectedPersonContext &&
     String(selectedPersonContext.role || "") === cleanRole &&
@@ -4765,10 +4980,11 @@ async function openPersonPage(role,personId,options={}){
         personPageState.media = media;
     }
 
-    showPersonDetailPageShell();
+    showPersonDetailPageShell(navigationContext);
 
     if(!fromRoute){
-        setAppHashRoute(getPersonDetailRoute(cleanRole,cleanId,routeLabel),replaceRoute);
+        setAppHashRoute(initialPersonRoute,replaceRoute);
+        rememberRouteNavContext(initialPersonRoute,navigationContext);
     }
 
     if(!isSamePerson || !personPageState.person){
@@ -4863,10 +5079,7 @@ function showGenreDetailPageShell(){
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("genre-detail-page");
     if(pageElement){
@@ -5164,10 +5377,7 @@ function showDiscoveryFilterPageShell(){
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("genre-detail-page");
     if(pageElement){
@@ -5675,17 +5885,14 @@ function getShowForDetailPage(showId){
     return null;
 }
 
-function showShowDetailPageShell(){
+function showShowDetailPageShell(navigationContext=""){
     activePage = "show-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("show-detail-page");
     if(pageElement){
@@ -5828,17 +6035,14 @@ async function tmdbGetMovieDetails(movieId){
     );
 }
 
-function showMovieDetailPageShell(){
+function showMovieDetailPageShell(navigationContext=""){
     activePage = "movie-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("show-detail-page");
     if(pageElement){
@@ -5944,6 +6148,9 @@ function renderActiveMoviePage(){
         renderMovieDetailPage(moviePageState);
         attachMovieDetailPageEvents();
     }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
 }
 
 function attachMovieDetailPageEvents(){
@@ -5963,6 +6170,8 @@ async function openMoviePage(movieId,options={}){
     const replaceRoute = options && options.replaceRoute === true;
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const routeLabel = String(options && (options.movieName || options.routeLabel) || "").trim();
+    const initialMovieRoute = getMovieDetailRoute(id,routeLabel);
+    const navigationContext = getDetailNavContext("movie",options,fromRoute ? getCurrentAppRoute() : initialMovieRoute);
 
     selectedMovieId = id;
     selectedShowId = null;
@@ -5989,11 +6198,12 @@ async function openMoviePage(movieId,options={}){
         movie:null
     };
 
-    showMovieDetailPageShell();
+    showMovieDetailPageShell(navigationContext);
     renderMovieDetailLoading();
 
     if(!fromRoute){
-        setAppHashRoute(getMovieDetailRoute(id,routeLabel),replaceRoute);
+        setAppHashRoute(initialMovieRoute,replaceRoute);
+        rememberRouteNavContext(initialMovieRoute,navigationContext);
     }
 
     try{
@@ -6018,9 +6228,14 @@ async function openMoviePage(movieId,options={}){
             movie:movie
         };
         if(!fromRoute){
-            setAppHashRoute(getMovieDetailRoute(id,movie.title),true);
+            const canonicalMovieRoute = getMovieDetailRoute(id,movie.title);
+            setAppHashRoute(canonicalMovieRoute,true);
+            rememberRouteNavContext(canonicalMovieRoute,navigationContext);
         }
         renderActiveMoviePage();
+        if(typeof updateShellTitle === "function"){
+            updateShellTitle();
+        }
     }catch(error){
         moviePageState.loading = false;
         moviePageState.error = "Couldn’t load this page. Try again later.";
@@ -6057,6 +6272,8 @@ async function openShowDetailsPage(showId,options={}){
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
+    const initialShowRoute = getShowDetailRoute(id,options && options.showName || "");
+    const navigationContext = getDetailNavContext("show",options,fromRoute ? getCurrentAppRoute() : initialShowRoute);
     const returningEpisodeContext = selectedEpisodeContext && String(selectedEpisodeContext.showId) === id
     ? selectedEpisodeContext
     : null;
@@ -6081,7 +6298,7 @@ async function openShowDetailsPage(showId,options={}){
         pushShowDetailBackRoute(id,options && options.showName || "");
     }
 
-    showShowDetailPageShell();
+    showShowDetailPageShell(navigationContext);
 
     if(shouldResetShowScroll){
         resetShowDetailScrollPosition();
@@ -6094,7 +6311,8 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     if(!fromRoute){
-        setAppHashRoute(getShowDetailRoute(id,options && options.showName || ""),replaceRoute);
+        setAppHashRoute(initialShowRoute,replaceRoute);
+        rememberRouteNavContext(initialShowRoute,navigationContext);
     }
 
     const trackedShow = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
@@ -6107,9 +6325,14 @@ async function openShowDetailsPage(showId,options={}){
         showDetailPreview = null;
         expandedSeasons[id] = expandedSeasons[id] || {};
         if(!fromRoute){
-            setAppHashRoute(getShowDetailRoute(id,trackedShow),true);
+            const canonicalShowRoute = getShowDetailRoute(id,trackedShow);
+            setAppHashRoute(canonicalShowRoute,true);
+            rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
         renderShowDetailsPage(trackedShow,{preview:false});
+        if(typeof updateShellTitle === "function"){
+            updateShellTitle();
+        }
         if(shouldResetShowScroll){
             resetShowDetailScrollPosition();
         }
@@ -6125,9 +6348,14 @@ async function openShowDetailsPage(showId,options={}){
         }
         expandedSeasons[id] = expandedSeasons[id] || {};
         if(!fromRoute){
-            setAppHashRoute(getShowDetailRoute(id,showDetailPreview),true);
+            const canonicalShowRoute = getShowDetailRoute(id,showDetailPreview);
+            setAppHashRoute(canonicalShowRoute,true);
+            rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
         renderShowDetailsPage(showDetailPreview,{preview:true});
+        if(typeof updateShellTitle === "function"){
+            updateShellTitle();
+        }
         if(shouldResetShowScroll){
             resetShowDetailScrollPosition();
         }
@@ -6150,9 +6378,14 @@ async function openShowDetailsPage(showId,options={}){
         showDetailPreview = showObject;
         expandedSeasons[id] = expandedSeasons[id] || {};
         if(!fromRoute){
-            setAppHashRoute(getShowDetailRoute(id,showObject),true);
+            const canonicalShowRoute = getShowDetailRoute(id,showObject);
+            setAppHashRoute(canonicalShowRoute,true);
+            rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
         renderShowDetailsPage(showObject,{preview:true});
+        if(typeof updateShellTitle === "function"){
+            updateShellTitle();
+        }
         ensureShowV2Keywords(showObject,{skipSave:true}).then(changed=>{
             if(changed && showDetailPreview && String(showDetailPreview.tmdb_id) === id && selectedEpisodeContext === null){
                 renderShowDetailsPagePreservingScroll(showDetailPreview);
@@ -6179,6 +6412,9 @@ function renderActiveShowDetailPage(){
         renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show.tmdb_id)])});
     }else if(selectedShowId){
         renderShowDetailLoading(selectedShowId);
+    }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
     }
 }
 
@@ -6221,17 +6457,14 @@ function closeShowModal(){
     }
 }
 
-function showEpisodeDetailPageShell(){
+function showEpisodeDetailPageShell(navigationContext=""){
     activePage = "episode-detail";
 
     document.querySelectorAll(".page").forEach(section=>{
         section.classList.remove("active-page");
     });
 
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
-        button.classList.remove("active");
-        button.removeAttribute("aria-current");
-    });
+    activatePrimaryNavContext(navigationContext || "shows");
 
     const pageElement = document.getElementById("episode-detail-page");
     if(pageElement){
@@ -6352,6 +6585,8 @@ async function openEpisodeModal(showId,season,episode,options={}){
     const replaceRoute = typeof options === "object" && options.replaceRoute === true;
     const requestedPreview = typeof options === "object" && options.discoverPreview === true;
     const backToShow = typeof options === "object" ? options.backToShow !== false : true;
+    const episodeRoute = getEpisodeDetailRoute(id,seasonNumber,episodeNumber);
+    const navigationContext = getDetailNavContext("show",options,fromRoute ? getCurrentAppRoute() : episodeRoute);
 
     if(activePage === "show-detail"){
         const showPage = document.getElementById("show-detail-page");
@@ -6369,14 +6604,15 @@ async function openEpisodeModal(showId,season,episode,options={}){
         discoverPreview:requestedPreview
     };
 
-    showEpisodeDetailPageShell();
+    showEpisodeDetailPageShell(navigationContext);
     renderEpisodeDetailLoading(id,seasonNumber,episodeNumber);
 
     if(!fromRoute){
         setAppHashRoute(
-            getEpisodeDetailRoute(id,seasonNumber,episodeNumber),
+            episodeRoute,
             replaceInPlace || replaceRoute
         );
+        rememberRouteNavContext(episodeRoute,navigationContext);
     }
 
     let show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
@@ -9170,12 +9406,16 @@ function updateTrackedLabels(){
     }
 
     if(activePage === "discover"){
-        searchInput.value = "";
         searchInput.setAttribute("placeholder","Search shows, movies, people");
-        if(typeof renderDiscoverHub === "function"){
-            renderDiscoverHub();
+        const discoverQuery = searchInput.value.trim();
+        if(discoverQuery.length >= 2){
+            searchShows(discoverQuery,{skipRoute:true});
+        }else{
+            if(typeof renderDiscoverHub === "function"){
+                renderDiscoverHub();
+            }
+            loadDiscoverHub(false);
         }
-        loadDiscoverHub(false);
         return;
     }
 

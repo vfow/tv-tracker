@@ -46,6 +46,16 @@
         }
     }
 
+
+    function currentSearchMediaType(){
+        try{
+            const value = new URLSearchParams(String(window.location.search || "")).get("type") || "tv";
+            return ["tv","movie","person"].includes(value) ? value : "tv";
+        }catch(error){
+            return "tv";
+        }
+    }
+
     function showRouteNotFound(){
         if(typeof renderAppRouteNotFoundPage === "function"){
             renderAppRouteNotFoundPage();
@@ -105,7 +115,8 @@
         }
         if(activePage === "search"){
             const query = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.query : "";
-            return typeof getSearchRoute === "function" ? getSearchRoute(query) : "/app/search";
+            const media = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.media : "tv";
+            return typeof getSearchRoute === "function" ? getSearchRoute(query,media) : "/app/search";
         }
         if(activePage === "discover"){
             return "/app/discover";
@@ -251,7 +262,7 @@
             if(route === "/app/search"){
                 clearDetailState();
                 if(typeof openSearchPage === "function"){
-                    openSearchPage(currentSearchQuery(),{fromRoute:true});
+                    openSearchPage(currentSearchQuery(),{fromRoute:true,media:currentSearchMediaType()});
                 }else{
                     showPage("discover");
                 }

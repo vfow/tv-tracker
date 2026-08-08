@@ -30,7 +30,7 @@ function createRouter(route){
     selectedDiscoveryContext:null,
     selectedPersonContext:null,
     selectedMovieId:null,
-    searchRouteState:{query:''},
+    searchRouteState:{query:'',media:'tv'},
     moviePageState:{movie:null},
     discoveryPageState:{name:''},
     appDataReady:true,
@@ -41,7 +41,7 @@ function createRouter(route){
     renderShowsPage(){ calls.push(['renderShowsPage']); },
     updateShellTitle(){ calls.push(['updateShellTitle']); },
     closeShowModal(){ calls.push(['closeShowModal']); },
-    getSearchRoute(query=''){ return query ? '/app/search?q=' + encodeURIComponent(query) : '/app/search'; },
+    getSearchRoute(query='',media='tv'){ return query ? '/app/search?q=' + encodeURIComponent(query) + '&type=' + encodeURIComponent(media || 'tv') : '/app/search'; },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
     getDiscoveryFilterDetailRoute(type,value){ return `/app/${type}/${value}`; },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
@@ -77,12 +77,13 @@ function createRouter(route){
 }
 
 {
-  const {calls,router}=createRouter('/app/search?q=batman');
-  assert.strictEqual(router.currentRoute(),'/app/search?q=batman');
+  const {calls,router}=createRouter('/app/search?q=batman&type=movie');
+  assert.strictEqual(router.currentRoute(),'/app/search?q=batman&type=movie');
   const call=calls.find(item=>item[0]==='openSearchPage');
   assert(call,'search route should open search page');
   assert.strictEqual(call[1],'batman');
   assert.strictEqual(call[2].fromRoute,true);
+  assert.strictEqual(call[2].media,'movie');
 }
 
 {
@@ -245,9 +246,9 @@ for (const route of [
   const {context,calls,router}=createRouter('/app/list/watching');
   calls.length=0;
   context.activePage='search';
-  context.searchRouteState={query:'batman'};
+  context.searchRouteState={query:'batman',media:'tv'};
   router.updateRouteFromState(false);
-  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/search?q=batman'));
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/search?q=batman&type=tv'));
 }
 
 {

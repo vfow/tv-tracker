@@ -251,6 +251,29 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('/healthz', readme)
         self.assertIn('test_sync_reliability.js', run_all)
 
+    def test_phase51_search_routing_polish_exists(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        router = self.read('static/js/app-router.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('const SEARCH_RESULT_BATCH_SIZE = 21', app_js)
+        self.assertIn('function tmdbSearchMediaPage', app_js)
+        self.assertIn('search/tv', app_js)
+        self.assertIn('search/movie', app_js)
+        self.assertIn('search/person', app_js)
+        self.assertIn('replaceState({tvTrackerRoute:true}', app_js)
+        self.assertIn('getSearchRoute(query="",media="tv")', app_js)
+        self.assertIn('&type=${encodeURIComponent(cleanMedia)}', app_js)
+        self.assertIn('currentSearchMediaType', router)
+        self.assertIn('Start typing to search.', ui)
+        self.assertNotIn('Browse TV shows, movies, and genres.', ui)
+        self.assertNotIn('Results for ${escapeHTML(query)}', ui)
+        self.assertNotIn('known_for_department ? String(result.known_for_department)', ui)
+        self.assertIn('search-person-skeleton-card', source_css)
+        self.assertIn('search-person-skeleton-card', built_css)
+
 
 if __name__ == '__main__':
     unittest.main()
