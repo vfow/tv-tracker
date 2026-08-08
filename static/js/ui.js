@@ -3030,9 +3030,8 @@ function renderV2ShowAPISectionsHTML(show){
     return "";
 }
 
-function attachV2ShowModalEvents(show,container){
-    const root = container || document;
-    root.querySelectorAll("[data-v2-similar-open]").forEach(button=>{
+function attachV2ShowModalEvents(show){
+    document.querySelectorAll("[data-v2-similar-open]").forEach(button=>{
         button.addEventListener("click",async function(event){
             event.stopPropagation();
             const id = this.getAttribute("data-v2-similar-open");
@@ -3183,7 +3182,7 @@ function renderDiscoverShowModal(show){
 
     `;
 
-    content.querySelectorAll(".discover-add-status-button").forEach(button=>{
+    document.querySelectorAll(".discover-add-status-button").forEach(button=>{
 
         button.addEventListener("click",function(){
             addDiscoverPreviewShow(this.dataset.status);
@@ -3191,7 +3190,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    content.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
+    document.querySelectorAll(".discover-season-toggle").forEach(toggle=>{
 
         const activate = function(event){
             if(event){
@@ -3210,7 +3209,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    content.querySelectorAll(".discover-season-all-button").forEach(button=>{
+    document.querySelectorAll(".discover-season-all-button").forEach(button=>{
 
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
@@ -3246,7 +3245,7 @@ function renderDiscoverShowModal(show){
 
 
 
-    content.querySelectorAll(".discover-preview-check-button").forEach(button=>{
+    document.querySelectorAll(".discover-preview-check-button").forEach(button=>{
 
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
@@ -3281,7 +3280,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    content.querySelectorAll(".discover-episode-row").forEach(row=>{
+    document.querySelectorAll(".discover-episode-row").forEach(row=>{
 
         row.addEventListener("click",async function(event){
 
@@ -3299,7 +3298,7 @@ function renderDiscoverShowModal(show){
 
     });
 
-    attachV2ShowModalEvents(show,content);
+    attachV2ShowModalEvents(show);
 
 }
 
@@ -3504,8 +3503,8 @@ function renderShowModalPreservingScroll(show){
 
 function getShowDetailActiveTab(show){
     const id = String(show && show.tmdb_id ? show.tmdb_id : selectedShowId || "");
-    const tab = activeShowDetailsTabs && activeShowDetailsTabs[id] ? activeShowDetailsTabs[id] : "Cast";
-    return ["Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Cast";
+    const tab = activeShowDetailsTabs && activeShowDetailsTabs[id] ? activeShowDetailsTabs[id] : "Info";
+    return ["Info","Episodes"].includes(tab) ? tab : "Info";
 }
 
 function getCountryFlag(code){
@@ -3568,8 +3567,8 @@ function renderShowDetailTabsHTML(show){
     const activeTab = getShowDetailActiveTab(show);
     return `
         <div class="show-detail-tabs" role="tablist" aria-label="Show details sections">
-            ${["Cast","Crew","Details","Genres","Releases"].map(tab=>`
-                <button type="button" class="show-detail-tab ${activeTab === tab ? "active" : ""}" data-show-detail-tab="${tab}">${tab}</button>
+            ${["Info","Episodes"].map(tab=>`
+                <button type="button" class="show-detail-tab ${activeTab === tab ? "active" : ""}" data-show-detail-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
             `).join("")}
         </div>
     `;
@@ -3682,24 +3681,64 @@ function renderShowReleasesTabHTML(show){
     return renderV2WatchProvidersHTML(show) || `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
 }
 
+function getShowProgressSummary(show){
+    const watchedCount = getWatchedEpisodeCount(show);
+    const totalCount = show && show.status === "finished" ? Math.max(watchedCount,getTotalEpisodeCount(show)) : getTotalEpisodeCount(show);
+    const progressPercent = show && show.status === "finished" ? 100 : totalCount ? Math.round((watchedCount / totalCount) * 100) : 0;
+    const progressText = show && show.status === "finished" ? `Completed • ${totalCount} / ${totalCount} episodes` : `${watchedCount} / ${totalCount} episodes`;
+
+    return {watchedCount,totalCount,progressPercent,progressText};
+}
+
+function renderShowProgressHTML(show){
+    const summary = getShowProgressSummary(show);
+
+    return `
+        <div class="show-progress-card">
+            <div class="show-progress-card-top">
+                <div>
+                    <div class="episode-detail-label">Overall Progress</div>
+                    <div class="progress-text">${escapeHTML(summary.progressText)}</div>
+                </div>
+                <div class="show-progress-percent">${summary.progressPercent}%</div>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${summary.progressPercent}%"></div></div>
+        </div>
+    `;
+}
+
+function renderShowInfoTabHTML(show){
+    return `
+        <div class="show-info-tab-grid">
+            <div class="show-info-card show-info-overview-card">
+                <h3 class="modal-section-heading">Synopsis</h3>
+                <div class="modal-overview">${escapeHTML(show.overview || "No overview available.")}</div>
+            </div>
+            <div class="show-info-card show-info-details-card">
+                <h3 class="modal-section-heading">Details</h3>
+                ${renderShowDetailsTabHTML(show)}
+            </div>
+        </div>
+    `;
+}
+
+function renderShowEpisodesTabHTML(show){
+    return `
+        <div class="show-episodes-tab-stack">
+            ${renderShowProgressHTML(show)}
+            <div class="seasons-list">${renderSeasonsHTML(show)}</div>
+        </div>
+    `;
+}
+
 function renderShowDetailTabContentHTML(show){
     const activeTab = getShowDetailActiveTab(show);
 
-    if(activeTab === "Crew"){
-        return renderShowCrewTabHTML(show);
-    }
-    if(activeTab === "Details"){
-        return renderShowDetailsTabHTML(show);
-    }
-    if(activeTab === "Genres"){
-        return renderShowGenresTabHTML(show);
-    }
-    if(activeTab === "Releases"){
-        return renderShowReleasesTabHTML(show);
+    if(activeTab === "Episodes"){
+        return renderShowEpisodesTabHTML(show);
     }
 
-    const cast = Array.isArray(show && show._tmdb_cast) ? show._tmdb_cast : [];
-    return renderV2ActorListSectionHTML("Cast",cast,"v2-cast-section",{limit:null}) || `<div class="v2-api-empty">No cast details available yet.</div>`;
+    return renderShowInfoTabHTML(show);
 }
 
 function renderV2RelatedShowsHTML(show){
@@ -3741,52 +3780,36 @@ function renderShowDetailsPage(show,options={}){
     const ratingHTML = ratingAvailable
     ? `<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">${Number(show.tmdb_rating).toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
-    const watchedCount = getWatchedEpisodeCount(show);
-    const totalCount = show.status === "finished" ? Math.max(watchedCount,getTotalEpisodeCount(show)) : getTotalEpisodeCount(show);
-    const progressPercent = show.status === "finished" ? 100 : totalCount ? Math.round((watchedCount / totalCount) * 100) : 0;
-    const progressText = show.status === "finished" ? `Completed • ${totalCount} / ${totalCount} episodes` : `${watchedCount} / ${totalCount} episodes`;
     const backdrop = show.backdrop_path
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.45) 58%, rgba(8,8,8,0.18) 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    ? `linear-gradient(to top, rgba(8,8,8,0.88) 0%, rgba(8,8,8,0.38) 52%, rgba(8,8,8,0.08) 100%), ${trackerBackgroundImage(show.backdrop_path,"original")}`
+    : `linear-gradient(to top, #080808 0%, #141414 100%)`;
 
     selectedShowId = String(show.tmdb_id);
     activeShowDetailsTabs[String(show.tmdb_id)] = getShowDetailActiveTab(show);
 
     content.innerHTML = `
         <div class="show-detail-page-inner">
-            <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
+            <div class="show-page-hero-shell">
+                <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
 
-            <div class="modal-hero show-detail-hero show-page-hero" style='background-image:${backdrop}'>
-                <div class="show-page-hero-poster">
-                    ${show.poster_path ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(show.title || "Show")} poster">` : `<div class="poster-placeholder">TV</div>`}
-                </div>
-                <div class="modal-hero-content show-page-hero-content">
-                    <div class="modal-title">${escapeHTML(show.title || "Untitled")}</div>
+                <div class="modal-hero show-detail-hero show-page-hero" style='background-image:${backdrop}'></div>
+
+                <div class="show-page-identity-row">
+                    <div class="show-page-hero-poster">
+                        ${show.poster_path ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(show.title || "Show")} poster">` : `<div class="poster-placeholder">TV</div>`}
+                    </div>
+                    <div class="show-page-hero-content">
+                        <div class="modal-title show-page-title">${escapeHTML(show.title || "Untitled")}</div>
+                        <div class="modal-meta modal-meta-under-status show-page-meta-line">${getShowMetaHTML(show,year,genres,ratingHTML)}</div>
+                        ${renderV2ShowInfoLinksLineHTML(show)}
+                        <div class="show-page-actions-wrap">${renderShowDetailActionControlsHTML(show,isTracked)}</div>
+                    </div>
                 </div>
             </div>
 
             <div class="modal-body show-page-body">
-                <div class="modal-section show-page-info-section">
-                    <div class="modal-meta modal-meta-under-status">${getShowMetaHTML(show,year,genres,ratingHTML)}</div>
-                    ${renderV2ShowInfoLinksLineHTML(show)}
-                    <div class="show-page-actions-wrap">${renderShowDetailActionControlsHTML(show,isTracked)}</div>
-                    <h3 class="modal-section-heading">Synopsis</h3>
-                    <div class="modal-overview">${escapeHTML(show.overview || "No overview available.")}</div>
-                </div>
-
-                <div class="modal-section">
-                    <h3 class="modal-section-heading">Overall Progress</h3>
-                    <div class="progress-text">${progressText}</div>
-                    <div class="progress-bar"><div class="progress-fill" style="width:${progressPercent}%"></div></div>
-                </div>
-
-                <div class="modal-section">
-                    <h3 class="modal-section-heading">Seasons</h3>
-                    <div class="seasons-list">${renderSeasonsHTML(show)}</div>
-                </div>
-
                 <div class="modal-section show-detail-tabs-section">
                     ${renderShowDetailTabsHTML(show)}
                     <div class="show-detail-tab-panel">${renderShowDetailTabContentHTML(show)}</div>
@@ -3799,7 +3822,7 @@ function renderShowDetailsPage(show,options={}){
     `;
 
     attachShowDetailsPageEvents(show,isTracked);
-    attachV2ShowModalEvents(show,document.getElementById("show-detail-content"));
+    attachV2ShowModalEvents(show);
 }
 
 function renderShowModal(show){
@@ -3814,17 +3837,12 @@ function stopNestedSeasonAction(event){
 
 
 function attachShowDetailsPageEvents(show,isTracked){
-    const root = document.getElementById("show-detail-content");
-    if(!root){
-        return;
-    }
-
     const backButton = document.getElementById("show-page-back-button");
     if(backButton){
         backButton.addEventListener("click",closeShowDetailsPage);
     }
 
-    root.querySelectorAll(".show-page-add-status-button").forEach(button=>{
+    document.querySelectorAll(".show-page-add-status-button").forEach(button=>{
         button.addEventListener("click",async function(){
             if(this.disabled){
                 return;
@@ -3840,20 +3858,20 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    root.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
+    document.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
         button.addEventListener("click",function(){
             updateShowStatus(show.tmdb_id,this.dataset.status);
         });
     });
 
-    root.querySelectorAll(".show-detail-tab").forEach(button=>{
+    document.querySelectorAll(".show-detail-tab").forEach(button=>{
         button.addEventListener("click",function(){
-            activeShowDetailsTabs[String(show.tmdb_id)] = this.dataset.showDetailTab || "Cast";
+            activeShowDetailsTabs[String(show.tmdb_id)] = this.dataset.showDetailTab || "Info";
             renderShowDetailsPagePreservingScroll(show);
         });
     });
 
-    root.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
+    document.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
         const activate = function(event){
             if(event){
                 event.preventDefault();
@@ -3870,7 +3888,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    root.querySelectorAll(".season-all-button").forEach(button=>{
+    document.querySelectorAll(".season-all-button").forEach(button=>{
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
                 event.stopPropagation();
@@ -3898,7 +3916,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    root.querySelectorAll(".episode-check-button").forEach(button=>{
+    document.querySelectorAll(".episode-check-button").forEach(button=>{
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
             button.addEventListener(eventName,function(event){
                 event.stopPropagation();
@@ -3927,7 +3945,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    root.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
+    document.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
         const warmEpisodeDetails = function(){
             if(typeof prefetchEpisodeV2Details === "function"){
                 prefetchEpisodeV2Details(show.tmdb_id,Number(row.dataset.season),Number(row.dataset.episode));
@@ -4442,7 +4460,7 @@ function renderSeasonsHTML(show){
 
                 ${
                 isOpen
-                ? `<div class="season-episodes collapse-content">${renderV2SeasonOverviewHTML(show,season)}${renderSeasonEpisodesHTML(show,season)}</div>`
+                ? `<div class="season-episodes collapse-content">${renderSeasonEpisodesHTML(show,season)}</div>`
                 : ""
                 }
 

@@ -3907,6 +3907,8 @@ async function openShowDetailsPage(showId,options={}){
         expandedSeasons[id] = expandedSeasons[id] || {};
         expandedSeasons[id][String(returningEpisodeContext.season)] = true;
         showDetailScrollRestorePending = true;
+    }else{
+        activeShowDetailsTabs[id] = "Info";
     }
 
     selectedEpisodeContext = null;
@@ -4348,7 +4350,7 @@ async function toggleSeason(showId,seasonNumber){
         await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
         renderShowDetailsPagePreservingScroll(show);
         if(DATA.shows && DATA.shows[id]){
-            saveData({showIds:[id], silent:true});
+            saveData({showIds:[id]});
         }
     }
 }
