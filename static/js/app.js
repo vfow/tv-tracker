@@ -97,6 +97,7 @@ var discoverHubState = {
     sections:[]
 };
 var librarySearchQuery = "";
+var librarySearchRouteTimer = null;
 var v2EpisodeDetailPendingLoads = new Map();
 var V2_EPISODE_DETAIL_CACHE_PREFIX = "tv-tracker-v2-episode-details:";
 var V2_EPISODE_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
@@ -4006,12 +4007,12 @@ function getCurrentAppRoute(){
 
     const path = String(window.location.pathname || "");
     const search = String(window.location.search || "");
-    const cleanPath = path.startsWith("/app") ? path : "/app/watchlist";
+    const cleanPath = path.startsWith("/app") ? path : "/app/list/watching";
     return cleanPath === "/app/search" && search ? cleanPath + search : cleanPath;
 }
 
 function setAppHashRoute(route,replace=false){
-    const cleanRoute = String(route || "/app/watchlist");
+    const cleanRoute = String(route || "/app/list/watching");
     const currentRoute = String(window.location.pathname || "") + String(window.location.search || "");
 
     if(currentRoute === cleanRoute && !window.location.hash){
@@ -4095,7 +4096,7 @@ function renderAppRouteNotFoundPage(){
                 if(window.history.length > 1){
                     window.history.back();
                 }else{
-                    setAppHashRoute("/app/watchlist",false);
+                    setAppHashRoute("/app/list/watching",false);
                     if(window.TVTrackerV2Router && typeof window.TVTrackerV2Router.applyRoute === "function"){
                         window.TVTrackerV2Router.applyRoute();
                     }
@@ -4148,7 +4149,7 @@ function getKnownShowRouteLabel(showId,showInfo=""){
 
 function getShowDetailRoute(showId,showInfo=""){
     const key = buildRouteKey(showId,getKnownShowRouteLabel(showId,showInfo));
-    return key ? "/app/show/" + encodeURIComponent(key) : "/app/watchlist";
+    return key && key.includes("-") ? "/app/show/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
 function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber){
@@ -4173,7 +4174,7 @@ function getGenreRouteFromName(name){
 
 function getGenreDetailRoute(slug){
     const cleanSlug = normalizeGenreSlug(slug);
-    return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanSlug) : "/app/watchlist";
+    return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanSlug) : "/app/list/watching";
 }
 
 
@@ -4184,17 +4185,17 @@ function normalizeRouteId(value){
 
 function getMovieDetailRoute(movieId,label=""){
     const key = buildRouteKey(movieId,label);
-    return key ? "/app/movie/" + encodeURIComponent(key) : "/app/watchlist";
+    return key && key.includes("-") ? "/app/movie/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
 function getCompanyDetailRoute(companyId,label=""){
     const key = buildRouteKey(companyId,label);
-    return key ? "/app/company/" + encodeURIComponent(key) : "/app/watchlist";
+    return key && key.includes("-") ? "/app/company/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
 function getProviderDetailRoute(providerId,label=""){
     const key = buildRouteKey(providerId,label);
-    return key ? "/app/provider/" + encodeURIComponent(key) : "/app/watchlist";
+    return key && key.includes("-") ? "/app/provider/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
 function normalizeBrowseMediaType(media){
@@ -4209,7 +4210,7 @@ function normalizeYearValue(value){
 
 function getYearDetailRoute(year){
     const clean = normalizeYearValue(year);
-    return clean ? "/app/year/" + encodeURIComponent(clean) : "/app/watchlist";
+    return clean ? "/app/year/" + encodeURIComponent(clean) : "/app/list/watching";
 }
 
 function normalizeStatusSlug(value){
@@ -4219,7 +4220,7 @@ function normalizeStatusSlug(value){
 
 function getStatusDetailRoute(status){
     const clean = normalizeStatusSlug(status);
-    return clean ? "/app/status/" + encodeURIComponent(clean) : "/app/watchlist";
+    return clean ? "/app/status/" + encodeURIComponent(clean) : "/app/list/watching";
 }
 
 function getStatusRouteLabel(status){
@@ -4247,12 +4248,39 @@ function normalizeCertificationValue(value){
 function getCertificationDetailRoute(media,certification){
     const cleanMedia = normalizeBrowseMediaType(media);
     const slug = normalizeCertificationSlug(certification);
-    return slug ? `/app/certification/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(slug)}` : "/app/watchlist";
+    return slug ? `/app/certification/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(slug)}` : "/app/list/watching";
 }
 
 function getSearchRoute(query=""){
     const clean = String(query || "").trim();
     return clean ? `/app/search?q=${encodeURIComponent(clean)}` : "/app/search";
+}
+
+function getLibraryListRoute(filter=activeFilter,query=librarySearchQuery){
+    const routeMap = {
+        watching:"watching",
+        paused:"paused",
+        finished:"completed",
+        plan:"plan-to-watch",
+        dropped:"dropped"
+    };
+    const routeSlug = routeMap[String(filter || "watching")] || "watching";
+    const cleanQuery = String(query || "").trim();
+    return "/app/list/" + routeSlug + (cleanQuery ? "?q=" + encodeURIComponent(cleanQuery) : "");
+}
+
+function scheduleLibrarySearchRouteUpdate(){
+    clearTimeout(librarySearchRouteTimer);
+    librarySearchRouteTimer = setTimeout(()=>{
+        if(
+            activePage === "shows" &&
+            activeShowsTab === "watchlist" &&
+            window.TVTrackerV2Router &&
+            typeof window.TVTrackerV2Router.updateRouteFromState === "function"
+        ){
+            window.TVTrackerV2Router.updateRouteFromState(false);
+        }
+    },220);
 }
 
 function getAppWatchRegion(){
@@ -4337,7 +4365,7 @@ function getDiscoveryFilterDetailRoute(type,value,label=""){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     if(!cleanType || !cleanValue){
-        return "/app/watchlist";
+        return "/app/list/watching";
     }
     if(cleanType === "year"){
         return getYearDetailRoute(cleanValue);
@@ -4352,10 +4380,13 @@ function getDiscoveryFilterDetailRoute(type,value,label=""){
     const routeLabel = getDiscoveryEntityRouteLabel(cleanType,cleanValue,label);
     if(cleanType === "network" || cleanType === "theme" || cleanType === "company" || cleanType === "provider"){
         const key = buildRouteKey(cleanValue,routeLabel);
-        return key ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}` : "/app/watchlist";
+        return key && key.includes("-") ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}` : "/app/list/watching";
     }
     const slug = buildRouteSlug(routeLabel);
-    const key = slug ? `${cleanValue}-${slug}` : cleanValue;
+    if(!slug){
+        return "/app/list/watching";
+    }
+    const key = `${cleanValue}-${slug}`;
     return `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}`;
 }
 
@@ -4515,7 +4546,7 @@ function getPersonDetailRoute(role,personId,label=""){
     const cleanRole = normalizePersonRoleSlug(role);
     const cleanId = normalizePersonId(personId);
     const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
-    return cleanRole && key ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(key)}` : "/app/watchlist";
+    return cleanRole && key && key.includes("-") ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(key)}` : "/app/list/watching";
 }
 
 function getPersonPageTitle(role,media){
@@ -6168,7 +6199,7 @@ function renderActiveShowDetailPage(){
 }
 
 function closeShowDetailsPage(){
-    const fallback = "/app/watchlist";
+    const fallback = "/app/list/watching";
     const target = showDetailBackStack.length ? showDetailBackStack.pop() : fallback;
 
     selectedShowId = null;
@@ -6281,7 +6312,7 @@ function closeEpisodeDetailsPage(){
     const context = selectedEpisodeContext;
     const showId = context ? String(context.showId || selectedShowId || "") : "";
     const seasonNumber = context ? Number(context.season) : 0;
-    const targetRoute = showId ? getShowDetailRoute(showId) : "/app/watchlist";
+    const targetRoute = showId ? getShowDetailRoute(showId) : "/app/list/watching";
 
     if(showId){
         expandedSeasons[showId] = expandedSeasons[showId] || {};

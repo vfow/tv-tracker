@@ -1786,6 +1786,9 @@ function createLibrarySearchBox(){
 
         librarySearchQuery = this.value;
         renderWatchlist();
+        if(typeof scheduleLibrarySearchRouteUpdate === "function"){
+            scheduleLibrarySearchRouteUpdate();
+        }
 
     });
 
@@ -3394,7 +3397,7 @@ function renderShowEntityLinkHTML(label,type,value,options={}){
     const name = String(options && options.name || cleanLabel).trim();
     const className = options && options.className ? String(options.className) : "show-detail-entity-link";
 
-    if(route && route !== "/app/watchlist"){
+    if(route && route !== "/app/list/watching"){
         return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-name="${escapeHTML(name)}" data-discovery-label="${escapeHTML(routeLabel)}">${escapeHTML(cleanLabel)}</a>`;
     }
 

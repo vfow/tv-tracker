@@ -2,8 +2,21 @@
     "use strict";
 
     const SHOW_TABS = new Set(["watchlist","upcoming","history"]);
+    const LIST_ROUTE_TO_FILTER = {
+        "watching":"watching",
+        "paused":"paused",
+        "completed":"finished",
+        "plan-to-watch":"plan",
+        "dropped":"dropped"
+    };
+    const FILTER_TO_LIST_ROUTE = {
+        watching:"watching",
+        paused:"paused",
+        finished:"completed",
+        plan:"plan-to-watch",
+        dropped:"dropped"
+    };
     const SECTION_ROUTES = new Set([
-        "/app/watchlist",
         "/app/upcoming",
         "/app/history",
         "/app/discover",
@@ -38,7 +51,7 @@
             renderAppRouteNotFoundPage();
             return;
         }
-        setPathRoute("/app/watchlist",true);
+        setPathRoute("/app/list/watching",true);
     }
 
     function routePrefix(){
@@ -47,9 +60,12 @@
 
     function currentRoute(){
         const path = String(window.location.pathname || "");
-        const cleanPath = path.startsWith("/app") ? path : "/app/watchlist";
+        const cleanPath = path.startsWith("/app") ? path : "/app/list/watching";
         const search = String(window.location.search || "");
-        return cleanPath === "/app/search" && search ? cleanPath + search : cleanPath;
+        if(search && (cleanPath === "/app/search" || cleanPath.startsWith("/app/list/"))){
+            return cleanPath + search;
+        }
+        return cleanPath;
     }
 
     function routeForState(){
@@ -63,20 +79,20 @@
                 const movieName = typeof moviePageState !== "undefined" && moviePageState && moviePageState.movie ? moviePageState.movie.title : "";
                 return getMovieDetailRoute(selectedMovieId,movieName);
             }
-            return "/app/movie/" + encodeURIComponent(String(selectedMovieId));
+            return "/app/list/watching";
         }
         if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.role && selectedPersonContext.personId){
             if(typeof getPersonDetailRoute === "function"){
                 return getPersonDetailRoute(selectedPersonContext.role,selectedPersonContext.personId);
             }
-            return "/app/" + encodeURIComponent(String(selectedPersonContext.role)) + "/" + encodeURIComponent(String(selectedPersonContext.personId));
+            return "/app/list/watching";
         }
         if(activePage === "discovery-detail" && typeof selectedDiscoveryContext !== "undefined" && selectedDiscoveryContext && selectedDiscoveryContext.type && selectedDiscoveryContext.value){
             if(typeof getDiscoveryFilterDetailRoute === "function"){
                 const routeName = typeof discoveryPageState !== "undefined" && discoveryPageState ? discoveryPageState.name : "";
                 return getDiscoveryFilterDetailRoute(selectedDiscoveryContext.type,selectedDiscoveryContext.value,routeName);
             }
-            return "/app/" + encodeURIComponent(String(selectedDiscoveryContext.type)) + "/" + encodeURIComponent(String(selectedDiscoveryContext.value));
+            return "/app/list/watching";
         }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
             return "/app/genre/" + encodeURIComponent(String(selectedGenreSlug));
@@ -85,7 +101,7 @@
             if(typeof getShowDetailRoute === "function"){
                 return getShowDetailRoute(selectedShowId);
             }
-            return "/app/show/" + encodeURIComponent(String(selectedShowId));
+            return "/app/list/watching";
         }
         if(activePage === "search"){
             const query = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.query : "";
@@ -107,13 +123,13 @@
             if(activeShowsTab === "history"){
                 return "/app/history";
             }
-            return "/app/watchlist";
+            return getListRoute(activeFilter,typeof librarySearchQuery !== "undefined" ? librarySearchQuery : "");
         }
-        return "/app/watchlist";
+        return "/app/list/watching";
     }
 
     function setPathRoute(route,replace=false){
-        const nextRoute = String(route || "/app/watchlist");
+        const nextRoute = String(route || "/app/list/watching");
         const current = String(window.location.pathname || "") + String(window.location.search || "");
         if(current === nextRoute && !window.location.hash){
             return;
@@ -130,6 +146,38 @@
             return;
         }
         setPathRoute(routeForState(),replace);
+    }
+
+
+    function getListRoute(filter,query=""){
+        const routeSlug = FILTER_TO_LIST_ROUTE[String(filter || "watching")] || "watching";
+        const cleanQuery = String(query || "").trim();
+        return "/app/list/" + routeSlug + (cleanQuery ? "?q=" + encodeURIComponent(cleanQuery) : "");
+    }
+
+    function setActiveFilterButtons(){
+        document.querySelectorAll(".filters button[data-filter]").forEach(button=>{
+            button.classList.toggle("active",button.dataset.filter === activeFilter);
+        });
+    }
+
+    function activateListRoute(listSlug,options={}){
+        const cleanSlug = String(listSlug || "watching").trim().toLowerCase();
+        const nextFilter = LIST_ROUTE_TO_FILTER[cleanSlug] || "watching";
+        clearDetailState();
+        activeShowsTab = "watchlist";
+        activeFilter = nextFilter;
+        if(typeof librarySearchQuery !== "undefined"){
+            librarySearchQuery = currentSearchQuery();
+        }
+        document.querySelectorAll(".top-tabs button").forEach(button=>{
+            button.classList.toggle("active",button.dataset.tab === "watchlist");
+        });
+        setActiveFilterButtons();
+        showPage("shows");
+        if(options && options.replaceRoute){
+            setPathRoute(getListRoute(activeFilter,typeof librarySearchQuery !== "undefined" ? librarySearchQuery : ""),true);
+        }
     }
 
     function activateShowsTab(tab){
@@ -175,7 +223,7 @@
             return;
         }
 
-        const route = String(window.location.pathname || "").startsWith("/app") ? String(window.location.pathname || "") : "/app/watchlist";
+        const route = String(window.location.pathname || "").startsWith("/app") ? String(window.location.pathname || "") : "/app/list/watching";
         const fullRoute = currentRoute();
 
         if(
@@ -189,6 +237,17 @@
         applyingRoute = true;
 
         try{
+            if(route === "/app" || route === "/app/" || route === "/app/watchlist" || route === "/app/list"){
+                activateListRoute("watching",{replaceRoute:true});
+                return;
+            }
+
+            const listMatch = route.match(/^\/app\/list\/(watching|paused|completed|plan-to-watch|dropped)$/);
+            if(listMatch){
+                activateListRoute(listMatch[1]);
+                return;
+            }
+
             if(route === "/app/search"){
                 clearDetailState();
                 if(typeof openSearchPage === "function"){
@@ -225,7 +284,7 @@
                 return;
             }
 
-            const movieMatch = route.match(/^\/app\/movie\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            const movieMatch = route.match(/^\/app\/movie\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(movieMatch){
                 const routeMovie = parseRouteIdSlug(movieMatch[1]);
                 if(typeof openMoviePage === "function"){
@@ -234,7 +293,7 @@
                 return;
             }
 
-            const personMatch = route.match(/^\/app\/(actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            const personMatch = route.match(/^\/app\/(actor|creator|director|writer|producer|editor|composer|cinematographer)\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(personMatch){
                 const routePersonRole = personMatch[1];
                 const routePerson = parseRouteIdSlug(personMatch[2]);
@@ -255,7 +314,7 @@
                 return;
             }
 
-            const discoveryIdMatch = route.match(/^\/app\/(network|theme|company|provider)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            const discoveryIdMatch = route.match(/^\/app\/(network|theme|company|provider)\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(discoveryIdMatch){
                 const parsed = parseRouteIdSlug(discoveryIdMatch[2]);
                 if(typeof openDiscoveryFilterPage === "function"){
@@ -264,7 +323,7 @@
                 return;
             }
 
-            const discoveryCodeMatch = route.match(/^\/app\/(language)\/([a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$|^\/app\/(country)\/([a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            const discoveryCodeMatch = route.match(/^\/app\/(language)\/([a-z]{2,3}-[a-z0-9]+(?:-[a-z0-9]+)*)$|^\/app\/(country)\/([a-z]{2}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(discoveryCodeMatch){
                 const routeDiscoveryType = discoveryCodeMatch[1] || discoveryCodeMatch[3];
                 const rawDiscoveryValue = discoveryCodeMatch[2] || discoveryCodeMatch[4];
@@ -313,7 +372,7 @@
                 return;
             }
 
-            const showMatch = route.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+            const showMatch = route.match(/^\/app\/show\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
             if(showMatch){
                 const routeShow = parseRouteIdSlug(showMatch[1]);
                 const routeShowId = routeShow.id;
@@ -361,7 +420,7 @@
 
             clearDetailState();
             showPage("shows");
-            activateShowsTab("watchlist");
+            activateListRoute("watching",{replaceRoute:route === "/app/watchlist"});
         }finally{
             applyingRoute = false;
         }
@@ -383,6 +442,12 @@
     });
 
     document.querySelectorAll(".top-tabs button[data-tab]").forEach(button=>{
+        button.addEventListener("click",()=>{
+            window.setTimeout(()=>updateRouteFromState(false),0);
+        });
+    });
+
+    document.querySelectorAll(".filters button[data-filter]").forEach(button=>{
         button.addEventListener("click",()=>{
             window.setTimeout(()=>updateRouteFromState(false),0);
         });

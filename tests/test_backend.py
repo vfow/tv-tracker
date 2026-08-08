@@ -419,11 +419,11 @@ class V2RouteSecurityTests(unittest.TestCase):
 
     def test_protected_show_route_stores_server_side_return_path(self):
         with patch.object(tracker, "read_admin_account", return_value=self.account):
-            response = self.client.get("/app/show/1399")
+            response = self.client.get("/app/show/1399-game-of-thrones")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], "/login")
         with self.client.session_transaction() as session:
-            self.assertEqual(session.get("post_login_path"), "/app/show/1399")
+            self.assertEqual(session.get("post_login_path"), "/app/show/1399-game-of-thrones")
 
     def test_authenticated_episode_route_renders_app_shell(self):
         authenticated_session(self.client)
@@ -443,7 +443,7 @@ class V2RouteSecurityTests(unittest.TestCase):
     def test_security_headers_use_local_frontend_sources(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
-            response = self.client.get("/app/watchlist")
+            response = self.client.get("/app/list/watching")
         csp = response.headers.get("Content-Security-Policy", "")
         self.assertIn("script-src 'self'", csp)
         self.assertIn("style-src 'self' 'unsafe-inline'", csp)
@@ -452,9 +452,9 @@ class V2RouteSecurityTests(unittest.TestCase):
     def test_trailing_app_route_redirects_to_canonical_path(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
-            response = self.client.get("/app/show/1399/")
+            response = self.client.get("/app/show/1399-game-of-thrones/")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["Location"], "/app/show/1399")
+        self.assertEqual(response.headers["Location"], "/app/show/1399-game-of-thrones")
 
     def test_invalid_app_route_is_not_accepted(self):
         authenticated_session(self.client)
@@ -465,7 +465,7 @@ class V2RouteSecurityTests(unittest.TestCase):
     def test_invalid_numeric_app_route_is_not_accepted(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
-            response = self.client.get("/app/show/0")
+            response = self.client.get("/app/show/1399")
         self.assertEqual(response.status_code, 404)
 
     def test_page_not_found_uses_friendly_error_page(self):
@@ -506,9 +506,9 @@ class V2RouteSecurityTests(unittest.TestCase):
         self.assertEqual(response.get_json()["code"], "server_error")
 
     def test_safe_next_url_rejects_external_and_sensitive_paths(self):
-        self.assertEqual(tracker.safe_next_url("https://example.com"), "/app/watchlist")
-        self.assertEqual(tracker.safe_next_url("//example.com"), "/app/watchlist")
-        self.assertEqual(tracker.safe_next_url("/api/state"), "/app/watchlist")
+        self.assertEqual(tracker.safe_next_url("https://example.com"), "/app/list/watching")
+        self.assertEqual(tracker.safe_next_url("//example.com"), "/app/list/watching")
+        self.assertEqual(tracker.safe_next_url("/api/state"), "/app/list/watching")
         self.assertEqual(
             tracker.safe_next_url("/app/show/1399/season/1/episode/3?token=secret"),
             "/app/show/1399/season/1/episode/3",

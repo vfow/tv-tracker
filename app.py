@@ -42,15 +42,16 @@ SCHEMA_VERSION = 4
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
-APP_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
+APP_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*"
+APP_EPISODE_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
 APP_SHOW_PATH_RE = re.compile(rf"^/app/show/({APP_ROUTE_ID_SLUG})$")
 APP_EPISODE_PATH_RE = re.compile(
-    rf"^/app/show/({APP_ROUTE_ID_SLUG})/season/([0-9]{{1,5}})/episode/([1-9][0-9]{{0,5}})$"
+    rf"^/app/show/({APP_EPISODE_ROUTE_ID_SLUG})/season/([0-9]{{1,5}})/episode/([1-9][0-9]{{0,5}})$"
 )
 APP_GENRE_PATH_RE = re.compile(r"^/app/genre/[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
-APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
-APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
 APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/({APP_ROUTE_ID_SLUG})$")
@@ -58,6 +59,7 @@ APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/({APP_ROUTE_ID_SLUG})$")
 APP_YEAR_PATH_RE = re.compile(r"^/app/year/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
 APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
 APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_LIST_PATH_RE = re.compile(r"^/app/list(?:/(watching|paused|completed|plan-to-watch|dropped))?$")
 APP_PERSON_ROLE_SLUGS = {
     "actor",
     "creator",
@@ -72,7 +74,6 @@ APP_PERSON_PATH_RE = re.compile(
     rf"^/app/(actor|creator|director|writer|producer|editor|composer|cinematographer)/({APP_ROUTE_ID_SLUG})$"
 )
 APP_SECTION_PATHS = {
-    "/app/watchlist",
     "/app/upcoming",
     "/app/history",
     "/app/discover",
@@ -80,6 +81,7 @@ APP_SECTION_PATHS = {
     "/app/profile",
     "/app/settings",
 }
+APP_LEGACY_WATCHLIST_PATHS = {"/app/watchlist", "/app/watchlist/"}
 ERROR_PAGE_MESSAGES = {
     404: ("We're not in Kansas anymore", "This page is off the map."),
     500: ("Houston, we have a problem", "Something went wrong. Try again in a moment."),
@@ -1465,7 +1467,9 @@ def safe_next_url(value: str | None) -> str:
         candidate = candidate.rstrip("/")
 
     if candidate in {"/app", "/app/"}:
-        return "/app/watchlist"
+        return "/app/list/watching"
+    if raw_path in APP_LEGACY_WATCHLIST_PATHS:
+        return "/app/list/watching"
     if candidate == "/app/search":
         query = ""
         if separator:
@@ -1474,6 +1478,16 @@ def safe_next_url(value: str | None) -> str:
                     query = value.strip()[:120]
                     break
         return "/app/search" + (("?" + urlencode({"q": query})) if query else "")
+    if candidate == "/app/list":
+        return "/app/list/watching"
+    if APP_LIST_PATH_RE.fullmatch(candidate):
+        query = ""
+        if separator:
+            for key, value in parse_qsl(raw_query, keep_blank_values=False):
+                if key == "q" and value.strip():
+                    query = value.strip()[:120]
+                    break
+        return candidate + (("?" + urlencode({"q": query})) if query else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
     if APP_SHOW_PATH_RE.fullmatch(candidate):
@@ -1504,13 +1518,14 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
         return candidate
-    return "/app/watchlist"
+    return "/app/list/watching"
 
 
 def valid_app_path(value: str | None) -> bool:
     candidate = str(value or "").strip()
     return (
         candidate in APP_SECTION_PATHS
+        or APP_LIST_PATH_RE.fullmatch(candidate) is not None
         or APP_SHOW_PATH_RE.fullmatch(candidate) is not None
         or APP_EPISODE_PATH_RE.fullmatch(candidate) is not None
         or APP_GENRE_PATH_RE.fullmatch(candidate) is not None
@@ -1537,7 +1552,7 @@ def render_page_error(status_code: int):
         status_code=status_code,
         error_title=error_title,
         error_text=error_text,
-        action_url="/app/watchlist" if signed_in else url_for("login"),
+        action_url="/app/list/watching" if signed_in else url_for("login"),
         action_label="Back to app" if signed_in else "Back to sign in",
     ), status_code
 
@@ -1655,7 +1670,7 @@ def create_app() -> Flask:
     @app.get("/signup")
     def signup():
         if authenticated():
-            return redirect("/app/watchlist")
+            return redirect("/app/list/watching")
         session["auth_tab"] = "signup"
         return redirect(url_for("login"))
 
@@ -1715,14 +1730,14 @@ def create_app() -> Flask:
     @app.get("/")
     def root():
         if authenticated():
-            return redirect("/app/watchlist")
+            return redirect("/app/list/watching")
         return redirect(url_for("login"))
 
     @app.get("/app")
     @app.get("/app/")
     @login_required
     def app_root():
-        return redirect("/app/watchlist")
+        return redirect("/app/list/watching")
 
     def render_app_shell(initial_app_path: str):
         return render_template(
@@ -1731,7 +1746,6 @@ def create_app() -> Flask:
             initial_app_path=initial_app_path,
         )
 
-    @app.get("/app/watchlist", strict_slashes=False)
     @app.get("/app/upcoming", strict_slashes=False)
     @app.get("/app/history", strict_slashes=False)
     @app.get("/app/discover", strict_slashes=False)
@@ -1742,6 +1756,24 @@ def create_app() -> Flask:
     def app_section_page():
         requested_path = request.path.rstrip("/")
         if requested_path not in APP_SECTION_PATHS:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/watchlist", strict_slashes=False)
+    @login_required
+    def app_watchlist_alias():
+        return redirect("/app/list/watching")
+
+    @app.get("/app/list", strict_slashes=False)
+    @app.get("/app/list/<list_slug>", strict_slashes=False)
+    @login_required
+    def app_list_page(list_slug: str | None = None):
+        requested_path = request.path.rstrip("/")
+        if requested_path == "/app/list":
+            return redirect("/app/list/watching")
+        if APP_LIST_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)

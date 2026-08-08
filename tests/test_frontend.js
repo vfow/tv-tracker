@@ -29,7 +29,7 @@ const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
-assert(router.includes('/app/watchlist'));
+assert(router.includes('/app/list/'));
 assert(router.includes('/app/show/'));
 assert(!router.includes('#/app'));
 assert(template.includes('show-detail-page'));

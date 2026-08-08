@@ -3,7 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 function splitRoute(route){
-  const [pathname, query=''] = String(route || '/app/watchlist').split('?');
+  const [pathname, query=''] = String(route || '/app/list/watching').split('?');
   return {pathname, search:query ? '?' + query : ''};
 }
 
@@ -22,6 +22,8 @@ function createRouter(route){
     encodeURIComponent,
     activePage:'shows',
     activeShowsTab:'watchlist',
+    activeFilter:'watching',
+    librarySearchQuery:'',
     selectedEpisodeContext:null,
     selectedShowId:null,
     selectedGenreSlug:null,
@@ -82,12 +84,16 @@ function createRouter(route){
 }
 
 {
+  const {calls,router}=createRouter('/app/list/watching?q=dark');
+  assert.strictEqual(router.currentRoute(),'/app/list/watching?q=dark');
+  assert(calls.some(item=>item[0]==='showPage' && item[1]==='shows'),'list route should open shows page');
+}
+
+{
   const {calls,router}=createRouter('/app/show/1399');
   assert.strictEqual(router.currentRoute(),'/app/show/1399');
-  const call=calls.find(item=>item[0]==='openShowDetailsPage');
-  assert(call,'show route should open show page');
-  assert.strictEqual(call[1],'1399');
-  assert.strictEqual(call[2].fromRoute,true);
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'old ID-only show route should not open show page');
+  assert(!calls.some(item=>item[0]==='openShowDetailsPage'));
 }
 
 {
@@ -198,13 +204,39 @@ for (const [route,type,value,slug] of [
   assert.strictEqual(call[3].routeSlug,'leonardo-dicaprio');
 }
 
+
+for (const route of [
+  '/app/movie/603',
+  '/app/network/213',
+  '/app/company/49',
+  '/app/provider/8',
+  '/app/theme/1234',
+  '/app/language/ja',
+  '/app/country/jp',
+  '/app/actor/123',
+]) {
+  const {calls}=createRouter(route);
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404 until a pretty slug is used`);
+}
+
 {
-  const {context,calls,router}=createRouter('/app/watchlist');
+  const {context,calls,router}=createRouter('/app/list/watching');
   calls.length=0;
   context.activePage='search';
   context.searchRouteState={query:'batman'};
   router.updateRouteFromState(false);
   assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/search?q=batman'));
+}
+
+{
+  const {context,calls,router}=createRouter('/app/list/watching');
+  calls.length=0;
+  context.activePage='shows';
+  context.activeShowsTab='watchlist';
+  context.activeFilter='plan';
+  context.librarySearchQuery='dark';
+  router.updateRouteFromState(false);
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/list/plan-to-watch?q=dark'));
 }
 
 {

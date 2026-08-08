@@ -12,6 +12,7 @@ def load_route_helpers():
     tree = ast.parse(source)
     wanted_names = {
         "APP_ROUTE_ID_SLUG",
+        "APP_EPISODE_ROUTE_ID_SLUG",
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
@@ -26,6 +27,8 @@ def load_route_helpers():
         "APP_YEAR_PATH_RE",
         "APP_STATUS_PATH_RE",
         "APP_CERTIFICATION_PATH_RE",
+        "APP_LIST_PATH_RE",
+        "APP_LEGACY_WATCHLIST_PATHS",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -57,7 +60,6 @@ safe_next_url, valid_app_path = load_route_helpers()
 class ProtectedRouteContractTests(unittest.TestCase):
     def test_sections_are_allowed(self):
         for path in (
-            "/app/watchlist",
             "/app/upcoming",
             "/app/history",
             "/app/discover",
@@ -69,33 +71,31 @@ class ProtectedRouteContractTests(unittest.TestCase):
             self.assertEqual(safe_next_url(path), path)
         self.assertEqual(safe_next_url("/app/search?q=batman"), "/app/search?q=batman")
         self.assertEqual(safe_next_url("/app/search?x=1&q=the matrix"), "/app/search?q=the+matrix")
+        self.assertTrue(valid_app_path("/app/list/watching"))
+        self.assertTrue(valid_app_path("/app/list/completed"))
+        self.assertEqual(safe_next_url("/app/list"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/list/watching?q=dark"), "/app/list/watching?q=dark")
+        self.assertEqual(safe_next_url("/app/list/plan-to-watch?x=1&q=the matrix"), "/app/list/plan-to-watch?q=the+matrix")
 
     def test_show_episode_genre_and_people_paths_are_allowed(self):
-        self.assertTrue(valid_app_path("/app/show/1399"))
+        self.assertFalse(valid_app_path("/app/show/1399"))
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones"))
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones/season/0/episode/1"))
         self.assertTrue(valid_app_path("/app/show/1399/season/0/episode/1"))
         self.assertTrue(valid_app_path("/app/genre/action-adventure"))
-        self.assertTrue(valid_app_path("/app/actor/123"))
+        self.assertFalse(valid_app_path("/app/actor/123"))
         self.assertTrue(valid_app_path("/app/actor/123-leonardo-dicaprio"))
         self.assertTrue(valid_app_path("/app/cinematographer/456-roger-deakins"))
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/actor/123-leonardo-dicaprio")
 
     def test_discovery_paths_are_allowed(self):
         for path in (
-            "/app/network/213",
             "/app/network/213-netflix",
-            "/app/language/ja",
             "/app/language/ja-japanese",
-            "/app/country/jp",
             "/app/country/jp-japan",
-            "/app/theme/1234",
             "/app/theme/1234-war",
-            "/app/movie/603",
             "/app/movie/603-the-matrix",
-            "/app/company/49",
             "/app/company/49-hbo",
-            "/app/provider/8",
             "/app/provider/8-netflix",
             "/app/year/2024",
             "/app/status/returning-series",
@@ -115,6 +115,15 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/api/state",
             "/app/private/notes",
             "/app/show/not-a-number",
+            "/app/show/1399",
+            "/app/actor/123",
+            "/app/network/213",
+            "/app/language/ja",
+            "/app/country/jp",
+            "/app/theme/1234",
+            "/app/movie/603",
+            "/app/company/49",
+            "/app/provider/8",
             "/app/genre/",
             "/app/genre/action--adventure",
             "/app/show/1399-",
@@ -146,21 +155,18 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/theme/not-a-number",
             "/app/show/1399?status=watching",
         ):
-            expected = (
-                "/app/show/1399"
-                if value == "/app/show/1399?status=watching"
-                else "/app/watchlist"
-            )
-            self.assertEqual(safe_next_url(value), expected)
+            self.assertEqual(safe_next_url(value), "/app/list/watching")
 
     def test_app_root_normalizes_to_watchlist(self):
-        self.assertEqual(safe_next_url("/app"), "/app/watchlist")
-        self.assertEqual(safe_next_url("/app/"), "/app/watchlist")
+        self.assertEqual(safe_next_url("/app"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/"), "/app/list/watching")
 
     def test_trailing_app_destinations_normalize(self):
-        self.assertEqual(safe_next_url("/app/watchlist/"), "/app/watchlist")
+        self.assertEqual(safe_next_url("/app/watchlist/"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/list/"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/list/dropped/"), "/app/list/dropped")
         self.assertEqual(safe_next_url("/app/search/"), "/app/search")
-        self.assertEqual(safe_next_url("/app/show/1399/"), "/app/show/1399")
+        self.assertEqual(safe_next_url("/app/show/1399/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/show/1399-game-of-thrones/"), "/app/show/1399-game-of-thrones")
         self.assertEqual(
             safe_next_url("/app/show/1399-game-of-thrones/season/1/episode/3/"),
