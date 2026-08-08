@@ -845,7 +845,6 @@ function renderPersonDetailPage(state){
     const credits = Array.isArray(pageState.credits) ? pageState.credits : [];
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
-    const title = typeof getPersonPageTitle === "function" ? getPersonPageTitle(role,media) : (media === "movie" ? "Movies" : "Shows");
     const name = person && person.name ? person.name : "Person";
 
     const bodyHTML = error
@@ -884,7 +883,6 @@ function renderPersonDetailPage(state){
                                 <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
                             </button>
                             <div>
-                                <div class="genre-detail-kicker">${escapeHTML(title)}</div>
                                 <h1 class="genre-detail-title person-detail-title">${escapeHTML(name)}</h1>
                             </div>
                         </div>
