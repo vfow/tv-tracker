@@ -6495,13 +6495,69 @@ function attachMovieDetailPageEvents(){
         });
     });
 
+    const closeMovieReleaseSortMenus = function(exceptMenu){
+        document.querySelectorAll("[data-movie-release-sort-menu]").forEach(menu=>{
+            if(menu === exceptMenu){
+                return;
+            }
+            menu.hidden = true;
+            const wrap = menu.closest(".movie-release-sort-menu-wrap");
+            if(wrap){
+                wrap.classList.remove("open");
+                const toggle = wrap.querySelector("[data-movie-release-sort-toggle]");
+                if(toggle){
+                    toggle.setAttribute("aria-expanded","false");
+                }
+            }
+        });
+    };
+
     document.querySelectorAll("[data-movie-release-sort-toggle]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const current = String(this.dataset.currentSort || activeMovieReleaseSort || "date").toLowerCase();
-            activeMovieReleaseSort = current === "country" ? "date" : "country";
+        button.addEventListener("click",function(event){
+            event.preventDefault();
+            event.stopPropagation();
+            const wrap = this.closest(".movie-release-sort-menu-wrap");
+            const menu = wrap ? wrap.querySelector("[data-movie-release-sort-menu]") : null;
+            if(!menu){
+                return;
+            }
+            const willOpen = menu.hidden;
+            closeMovieReleaseSortMenus(willOpen ? menu : null);
+            menu.hidden = !willOpen;
+            wrap.classList.toggle("open",willOpen);
+            this.setAttribute("aria-expanded",willOpen ? "true" : "false");
+        });
+    });
+
+    document.querySelectorAll("[data-movie-release-sort-option]").forEach(button=>{
+        button.addEventListener("click",function(event){
+            event.preventDefault();
+            event.stopPropagation();
+            const nextSort = String(this.dataset.movieReleaseSortOption || "date").toLowerCase();
+            if(nextSort !== "country" && nextSort !== "date"){
+                return;
+            }
+            activeMovieReleaseSort = nextSort;
             renderActiveMoviePage();
         });
     });
+
+    if(typeof window !== "undefined" && !window.tvTrackerMovieReleaseSortOutsideBound){
+        window.tvTrackerMovieReleaseSortOutsideBound = true;
+        document.addEventListener("click",function(){
+            document.querySelectorAll("[data-movie-release-sort-menu]").forEach(menu=>{
+                menu.hidden = true;
+                const wrap = menu.closest(".movie-release-sort-menu-wrap");
+                if(wrap){
+                    wrap.classList.remove("open");
+                    const toggle = wrap.querySelector("[data-movie-release-sort-toggle]");
+                    if(toggle){
+                        toggle.setAttribute("aria-expanded","false");
+                    }
+                }
+            });
+        });
+    }
 
     document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){

@@ -4483,16 +4483,17 @@
     .show-detail-theme-list{
         display:flex;
         flex-wrap:wrap;
-        gap:.4rem .5rem;
+        gap:.5rem .55rem;
     }
 
     .show-detail-theme-chip{
         border-radius:9999px;
-        border:1px solid rgba(255,255,255,.12);
-        background:rgba(255,255,255,.04);
-        padding:.15rem .55rem;
-        font-size:.75rem;
-        font-weight:700;
+        border:1px solid rgba(255,255,255,.14);
+        background:rgba(255,255,255,.05);
+        padding:.22rem .66rem;
+        font-size:.82rem;
+        font-weight:800;
+        line-height:1.15;
         color:#d6d6d6;
     }
 
@@ -5205,7 +5206,7 @@
 }
 
 .show-genres-tab-section + .show-genres-tab-section{
-    margin-top:2px;
+    margin-top:22px;
 }
 
 .show-genres-tab-heading{
@@ -5243,6 +5244,12 @@
     color:rgba(255,255,255,.42);
 }
 
+.movie-release-sort-menu-wrap{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+}
+
 .movie-release-sort-button{
     display:inline-flex;
     align-items:center;
@@ -5258,9 +5265,16 @@
 }
 
 .movie-release-sort-button:hover,
-.movie-release-sort-button:focus-visible{
+.movie-release-sort-button:focus-visible,
+.movie-release-sort-menu-wrap.open .movie-release-sort-button{
     color:#ffffff;
     outline:0;
+}
+
+.movie-release-sort-current{
+    display:inline-block;
+    min-width:58px;
+    text-align:left;
 }
 
 .movie-release-sort-chevron{
@@ -5269,14 +5283,56 @@
     font-size:.8em;
 }
 
+.movie-release-sort-menu{
+    position:absolute;
+    top:calc(100% + 7px);
+    right:0;
+    z-index:30;
+    display:grid;
+    min-width:96px;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:10px;
+    background:#111820;
+    box-shadow:0 16px 32px rgba(0,0,0,.42);
+    text-transform:none;
+    letter-spacing:0;
+}
+
+.movie-release-sort-menu[hidden]{
+    display:none;
+}
+
+.movie-release-sort-menu-option{
+    border:0;
+    background:transparent;
+    padding:8px 11px;
+    color:#d9e4ee;
+    font-size:.78rem;
+    font-weight:750;
+    text-align:left;
+    cursor:pointer;
+}
+
+.movie-release-sort-menu-option:hover,
+.movie-release-sort-menu-option:focus-visible,
+.movie-release-sort-menu-option.active{
+    background:rgba(255,255,255,.09);
+    color:#ffffff;
+    outline:0;
+}
+
 .movie-release-country-row,
 .movie-release-date-row{
     display:grid;
     grid-template-columns:minmax(150px,220px) minmax(0,1fr);
     gap:18px;
     align-items:start;
+    border:0;
     border-bottom:1px solid rgba(255,255,255,.12);
+    border-radius:0;
     padding:11px 0;
+    background:transparent;
 }
 
 .movie-release-country-label,

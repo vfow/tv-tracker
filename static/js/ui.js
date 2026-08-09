@@ -3424,14 +3424,27 @@ function getMovieReleaseSortMode(){
 function renderMovieReleaseSortControlHTML(sortMode){
     const mode = sortMode === "country" ? "country" : "date";
     const label = mode === "country" ? "Country" : "Date";
-    const nextLabel = mode === "country" ? "date" : "country";
+    const options = ["date","country"].map(option=>{
+        const optionLabel = option === "country" ? "Country" : "Date";
+        const active = option === mode;
+        return `
+            <button class="movie-release-sort-menu-option${active ? " active" : ""}" type="button" data-movie-release-sort-option="${escapeHTML(option)}" role="menuitemradio" aria-checked="${active ? "true" : "false"}">
+                ${escapeHTML(optionLabel)}
+            </button>
+        `;
+    }).join("");
     return `
         <div class="movie-release-sort-note movie-release-sort-bar">
             <span class="movie-release-sort-static">Sort by</span>
-            <button class="movie-release-sort-button" type="button" data-movie-release-sort-toggle data-current-sort="${escapeHTML(mode)}" aria-label="Sort releases by ${escapeHTML(nextLabel)}">
-                <span>${escapeHTML(label)}</span>
-                <span class="movie-release-sort-chevron" aria-hidden="true">⌄</span>
-            </button>
+            <span class="movie-release-sort-menu-wrap">
+                <button class="movie-release-sort-button" type="button" data-movie-release-sort-toggle data-current-sort="${escapeHTML(mode)}" aria-haspopup="true" aria-expanded="false" aria-label="Choose movie release sort">
+                    <span class="movie-release-sort-current">${escapeHTML(label)}</span>
+                    <span class="movie-release-sort-chevron" aria-hidden="true">⌄</span>
+                </button>
+                <span class="movie-release-sort-menu" data-movie-release-sort-menu role="menu" hidden>
+                    ${options}
+                </span>
+            </span>
         </div>
     `;
 }

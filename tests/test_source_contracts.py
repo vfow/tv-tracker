@@ -511,5 +511,30 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-sort-button', built_css)
 
 
+    def test_phase606_release_dropdown_and_visual_polish_exists(self):
+        ui = self.read('static/js/ui.js')
+        app = self.read('static/js/app.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
+        releases_block = ui[releases_start:ui.index('function renderMovieReleaseEntryHTML(release)', releases_start)]
+
+        self.assertIn('data-movie-release-sort-menu', releases_block)
+        self.assertIn('data-movie-release-sort-option', releases_block)
+        self.assertIn('movie-release-sort-current', releases_block)
+        self.assertIn('movie-release-sort-menu-wrap', source_css)
+        self.assertIn('movie-release-sort-menu-wrap', built_css)
+        self.assertIn('movie-release-sort-menu-option', source_css)
+        self.assertIn('movie-release-sort-menu-option', built_css)
+        self.assertIn('closeMovieReleaseSortMenus', app)
+        self.assertIn('tvTrackerMovieReleaseSortOutsideBound', app)
+        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', source_css)
+        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', built_css)
+        self.assertIn('font-size:.82rem;', source_css)
+        self.assertIn('font-size:.82rem;', built_css)
+        self.assertIn('margin-top:22px;', source_css)
+        self.assertIn('margin-top:22px;', built_css)
+
+
 if __name__ == '__main__':
     unittest.main()
