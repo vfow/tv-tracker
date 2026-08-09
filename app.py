@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import threading
 import time
 import math
@@ -1720,6 +1721,14 @@ def render_page_error(status_code: int):
     message_code = 404 if status_code == 404 else 500
     error_title, error_text = ERROR_PAGE_MESSAGES[message_code]
     signed_in = session.get("authenticated") is True
+    route_error_gradient_class = ""
+    if status_code == 404:
+        gradient_count = 8
+        previous_index = session.get("route_error_gradient_index")
+        choices = [index for index in range(gradient_count) if index != previous_index]
+        gradient_index = secrets.choice(choices or list(range(gradient_count)))
+        session["route_error_gradient_index"] = gradient_index
+        route_error_gradient_class = f"route-error-gradient-{gradient_index + 1}"
     return render_template(
         "error.html",
         status_code=status_code,
@@ -1727,6 +1736,7 @@ def render_page_error(status_code: int):
         error_text=error_text,
         action_url="/app" if signed_in else url_for("login"),
         action_label="Back to app" if signed_in else "Back to sign in",
+        route_error_gradient_class=route_error_gradient_class,
     ), status_code
 
 

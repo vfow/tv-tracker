@@ -207,8 +207,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('tt-detail-skeleton', css)
         self.assertIn('tt-episode-skeleton', css)
         self.assertIn('route-error-hero', css)
-        self.assertIn("assets/images/404.png", error_template)
-        self.assertTrue((ROOT / 'static/assets/images/404.png').exists())
+        self.assertIn('route-error-gradient-1', css)
+        self.assertIn('{{ route_error_gradient_class }}', error_template)
+        self.assertNotIn("assets/images/404.png", error_template)
 
 
     def test_phase551_loading_back_and_404_correction_exists(self):
@@ -221,10 +222,17 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('cancelActiveSearchRequest();', app_js)
         self.assertIn('handleAppRouteAnchorClick', router)
         self.assertIn('document.addEventListener("click",handleAppRouteAnchorClick)', router)
-        self.assertIn("background-image:url('/static/assets/images/404.png')", css)
+        self.assertIn('route-error-gradient-1', css)
+        self.assertIn('route-error-gradient-8', css)
+        tailwind_config = self.read('tailwind.config.js')
+        self.assertIn("'route-error-gradient-1'", tailwind_config)
+        self.assertIn("'route-error-gradient-8'", tailwind_config)
+        self.assertIn('getRouteErrorGradientClass', app_js)
+        self.assertNotIn("background-image:url('/static/assets/images/404.png')", css)
         self.assertNotIn('rgba(0,0,0,.72);\n        padding:34px', css)
         self.assertIn('justify-content:flex-end', css)
-        self.assertIn("background-image:url('{{ url_for('static', filename='assets/images/404.png') }}')", error_template)
+        self.assertIn('{{ route_error_gradient_class }}', error_template)
+        self.assertNotIn("assets/images/404.png", error_template)
         self.assertNotIn('tw-bg-black/70', error_template)
         self.assertNotIn('tw-backdrop-blur-sm', error_template)
 

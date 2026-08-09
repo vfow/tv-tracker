@@ -4373,6 +4373,27 @@ function parseRouteKey(value){
     return {id:match[1],slug:match[2] || "",hasSlug:!!match[2],valid:true};
 }
 
+const ROUTE_ERROR_GRADIENT_COUNT = 8;
+
+function getRouteErrorGradientClass(){
+    let previousIndex = -1;
+    try{
+        const storedValue = sessionStorage.getItem("tv-tracker-404-gradient-index");
+        const stored = storedValue === null ? -1 : Number(storedValue);
+        if(Number.isInteger(stored)){
+            previousIndex = stored;
+        }
+    }catch(_error){}
+    let index = Math.floor(Math.random() * ROUTE_ERROR_GRADIENT_COUNT);
+    if(ROUTE_ERROR_GRADIENT_COUNT > 1 && index === previousIndex){
+        index = (index + 1 + Math.floor(Math.random() * (ROUTE_ERROR_GRADIENT_COUNT - 1))) % ROUTE_ERROR_GRADIENT_COUNT;
+    }
+    try{
+        sessionStorage.setItem("tv-tracker-404-gradient-index",String(index));
+    }catch(_error){}
+    return `route-error-gradient-${index + 1}`;
+}
+
 function renderAppRouteNotFoundPage(){
     activePage = "route-error";
     document.querySelectorAll(".page").forEach(section=>{
@@ -4401,6 +4422,10 @@ function renderAppRouteNotFoundPage(){
                 </section>
             </div>
         `;
+        const errorHero = content.querySelector(".route-error-hero");
+        if(errorHero){
+            errorHero.classList.add(getRouteErrorGradientClass());
+        }
         const backButton = document.getElementById("show-page-back-button");
         if(backButton){
             backButton.addEventListener("click",function(){

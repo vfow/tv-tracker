@@ -10,7 +10,15 @@ module.exports = {
     'profile-header-purple',
     'profile-header-green',
     'profile-header-amber',
-    'profile-header-monochrome'
+    'profile-header-monochrome',
+    'route-error-gradient-1',
+    'route-error-gradient-2',
+    'route-error-gradient-3',
+    'route-error-gradient-4',
+    'route-error-gradient-5',
+    'route-error-gradient-6',
+    'route-error-gradient-7',
+    'route-error-gradient-8'
   ],
   prefix: 'tw-',
   corePlugins: {

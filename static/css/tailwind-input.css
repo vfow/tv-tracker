@@ -145,13 +145,6 @@
 
     .page{
         @apply tw-hidden tw-h-[100dvh] tw-overflow-y-auto tw-overflow-x-hidden;
-        scrollbar-width:none;
-    }
-
-    .page::-webkit-scrollbar{
-        width:0;
-        height:0;
-        display:none;
     }
 
     .page.active-page{
@@ -5074,11 +5067,17 @@
         align-items:center;
         justify-content:flex-end;
         padding:64px clamp(34px,6vw,92px) 64px clamp(24px,5vw,72px);
-        background-image:url('/static/assets/images/404.png');
-        background-size:cover;
-        background-position:center;
-        background-repeat:no-repeat;
+        background:#000;
     }
+
+    .route-error-gradient-1{background-image:radial-gradient(circle at 16% 20%,rgba(124,22,36,.58) 0%,rgba(60,8,18,.24) 30%,transparent 58%),linear-gradient(135deg,#160509 0%,#050505 55%,#000 100%);}
+    .route-error-gradient-2{background-image:radial-gradient(circle at 18% 22%,rgba(25,67,145,.62) 0%,rgba(10,28,72,.28) 32%,transparent 60%),linear-gradient(135deg,#050b18 0%,#040506 58%,#000 100%);}
+    .route-error-gradient-3{background-image:radial-gradient(circle at 16% 18%,rgba(92,39,151,.62) 0%,rgba(45,18,82,.26) 32%,transparent 60%),linear-gradient(135deg,#100718 0%,#050505 58%,#000 100%);}
+    .route-error-gradient-4{background-image:radial-gradient(circle at 18% 20%,rgba(21,105,75,.58) 0%,rgba(8,50,35,.24) 32%,transparent 60%),linear-gradient(135deg,#04120d 0%,#050505 58%,#000 100%);}
+    .route-error-gradient-5{background-image:radial-gradient(circle at 17% 20%,rgba(155,91,20,.56) 0%,rgba(72,39,7,.24) 32%,transparent 60%),linear-gradient(135deg,#170d04 0%,#050505 58%,#000 100%);}
+    .route-error-gradient-6{background-image:radial-gradient(circle at 18% 20%,rgba(14,111,118,.58) 0%,rgba(5,52,56,.24) 32%,transparent 60%),linear-gradient(135deg,#031214 0%,#050505 58%,#000 100%);}
+    .route-error-gradient-7{background-image:radial-gradient(circle at 16% 20%,rgba(119,20,74,.58) 0%,rgba(57,8,35,.24) 32%,transparent 60%),linear-gradient(135deg,#15040d 0%,#050505 58%,#000 100%);}
+    .route-error-gradient-8{background-image:radial-gradient(circle at 18% 20%,rgba(82,91,28,.56) 0%,rgba(39,43,10,.24) 32%,transparent 60%),linear-gradient(135deg,#0e1005 0%,#050505 58%,#000 100%);}
 
     .route-error-copy{
         width:min(640px,48vw);

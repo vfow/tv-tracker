@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-tailwind') }}">
 </head>
 {% if status_code == 404 %}
-<body class="tw-m-0 tw-overflow-x-hidden tw-bg-black tw-font-sans tw-text-white tw-antialiased" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:flex-end;padding:64px clamp(34px,6vw,92px) 64px clamp(24px,5vw,72px);background-image:url('{{ url_for('static', filename='assets/images/404.png') }}');background-size:cover;background-position:center;background-repeat:no-repeat;">
+<body class="tw-m-0 tw-overflow-x-hidden tw-bg-black tw-font-sans tw-text-white tw-antialiased {{ route_error_gradient_class }}" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:flex-end;padding:64px clamp(34px,6vw,92px) 64px clamp(24px,5vw,72px);">
 <main class="tw-text-left" style="width:min(640px,48vw);min-width:min(480px,100%);text-shadow:0 4px 24px rgba(0,0,0,.9),0 1px 2px rgba(0,0,0,.88);">
     <p class="tw-m-0 tw-mb-5 tw-font-league tw-font-normal tw-leading-[.82] tw-tracking-[.02em] tw-text-white" style="font-size:clamp(58px,6vw,96px);">{{ status_code }}</p>
     <h1 class="tw-m-0 tw-mb-5 tw-font-league tw-font-normal tw-leading-[.9] tw-tracking-[.025em]" style="font-size:clamp(46px,4.65vw,76px);max-width:640px;">{{ error_title }}</h1>
