@@ -478,9 +478,9 @@ class V2RouteSecurityTests(unittest.TestCase):
     def test_page_not_found_uses_friendly_error_page(self):
         response = self.client.get("/not-a-real-page")
         self.assertEqual(response.status_code, 404)
-        self.assertIn(b"We&#39;re not in Kansas anymore", response.data)
-        self.assertIn(b"This page is off the map.", response.data)
-        self.assertIn(b"Back to sign in", response.data)
+        self.assertIn(b"Are you lost?", response.data)
+        self.assertIn(b"BACK TO APP", response.data)
+        self.assertNotIn(b"This page is off the map.", response.data)
 
     def test_api_not_found_returns_json(self):
         response = self.client.get("/api/not-a-real-endpoint")

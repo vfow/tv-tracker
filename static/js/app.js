@@ -4409,15 +4409,11 @@ function renderAppRouteNotFoundPage(){
     if(content){
         content.innerHTML = `
             <div class="show-detail-page-inner route-error-page-inner">
-                <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
-                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-                </button>
                 <section class="route-error-hero" aria-label="Page not found">
                     <div class="route-error-copy">
                         <p>404</p>
-                        <h2>We're not in Kansas anymore</h2>
-                        <span>This page is off the map.</span>
-                        <button type="button" class="view-more-button route-error-app-button" id="route-error-app-button">Back to app</button>
+                        <h1>Are you lost?</h1>
+                        <a class="view-more-button route-error-app-button" id="route-error-app-button" href="/app">BACK TO APP</a>
                     </div>
                 </section>
             </div>
@@ -4425,18 +4421,6 @@ function renderAppRouteNotFoundPage(){
         const errorHero = content.querySelector(".route-error-hero");
         if(errorHero){
             errorHero.classList.add(getRouteErrorGradientClass());
-        }
-        const backButton = document.getElementById("show-page-back-button");
-        if(backButton){
-            backButton.addEventListener("click",function(){
-                navigateBackOrRouteFallback("/app");
-            });
-        }
-        const appButton = document.getElementById("route-error-app-button");
-        if(appButton){
-            appButton.addEventListener("click",function(){
-                navigateToRouteFallback("/app");
-            });
         }
     }
     if(typeof updateShellTitle === "function"){
@@ -6355,27 +6339,7 @@ function renderShowDetailError(message){
 }
 
 function renderShowDetailNotFound(){
-    const content = document.getElementById("show-detail-content");
-    if(!content){
-        return;
-    }
-
-    content.innerHTML = `
-        <div class="show-detail-page-inner">
-            <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-            <div class="empty-state show-detail-loading-state">
-                <h2>We're not in Kansas anymore</h2>
-                <p>This page is off the map.</p>
-            </div>
-        </div>
-    `;
-
-    const backButton = document.getElementById("show-page-back-button");
-    if(backButton){
-        backButton.addEventListener("click",closeShowDetailsPage);
-    }
+    renderAppRouteNotFoundPage();
 }
 
 function normalizeMovieDetails(movie){
@@ -6487,25 +6451,7 @@ function renderMovieDetailLoading(){
 }
 
 function renderMovieDetailNotFound(){
-    const content = document.getElementById("show-detail-content");
-    if(!content){
-        return;
-    }
-    content.innerHTML = `
-        <div class="show-detail-page-inner">
-            <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-            <div class="empty-state show-detail-loading-state">
-                <h2>We're not in Kansas anymore</h2>
-                <p>This page is off the map.</p>
-            </div>
-        </div>
-    `;
-    const backButton = document.getElementById("movie-page-back-button");
-    if(backButton){
-        backButton.addEventListener("click",closeMoviePage);
-    }
+    renderAppRouteNotFoundPage();
 }
 
 function renderMovieDetailError(){

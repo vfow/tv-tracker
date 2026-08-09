@@ -525,7 +525,7 @@
 
     .search-container,
     #discover-page .search-container{
-        @apply tw-w-full tw-max-w-full tw-overflow-x-hidden tw-p-[30px];
+        @apply tw-w-full tw-max-w-full tw-overflow-x-hidden tw-py-[30px] tw-pl-[30px] tw-pr-0;
     }
 
     .search-bar,
@@ -5090,8 +5090,7 @@
     }
 
     .route-error-copy p,
-    .route-error-copy h2,
-    .route-error-copy span{
+    .route-error-copy h1{
         margin:0;
     }
 
@@ -5103,7 +5102,7 @@
         color:#fff;
     }
 
-    .route-error-copy h2{
+    .route-error-copy h1{
         margin-top:14px;
         font-family:League Gothic,Arial,sans-serif;
         font-size:clamp(46px,4.65vw,76px);
@@ -5113,18 +5112,10 @@
         color:#fff;
     }
 
-    .route-error-copy span{
-        display:block;
-        margin-top:14px;
-        max-width:430px;
-        color:#f0f0f0;
-        font-weight:700;
-        line-height:1.55;
-    }
-
     .route-error-app-button{
-        margin-top:26px;
-        box-shadow:0 12px 32px rgba(0,0,0,.38);
+        width:max-content;
+        margin:26px 0 0;
+        text-decoration:none;
     }
 
     @media (max-width:767.98px){

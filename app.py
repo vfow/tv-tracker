@@ -114,7 +114,7 @@ APP_SECTION_PATHS = {
     "/app/settings",
 }
 ERROR_PAGE_MESSAGES = {
-    404: ("We're not in Kansas anymore", "This page is off the map."),
+    404: ("Are you lost?", ""),
     500: ("Houston, we have a problem", "Something went wrong. Try again in a moment."),
 }
 PASSWORD_HASHER = PasswordHasher()
@@ -1729,13 +1729,15 @@ def render_page_error(status_code: int):
         gradient_index = secrets.choice(choices or list(range(gradient_count)))
         session["route_error_gradient_index"] = gradient_index
         route_error_gradient_class = f"route-error-gradient-{gradient_index + 1}"
+    action_url = "/app" if status_code == 404 or signed_in else url_for("login")
+    action_label = "Back to app" if status_code == 404 or signed_in else "Back to sign in"
     return render_template(
         "error.html",
         status_code=status_code,
         error_title=error_title,
         error_text=error_text,
-        action_url="/app" if signed_in else url_for("login"),
-        action_label="Back to app" if signed_in else "Back to sign in",
+        action_url=action_url,
+        action_label=action_label,
         route_error_gradient_class=route_error_gradient_class,
     ), status_code
 

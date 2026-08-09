@@ -187,12 +187,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_friendly_error_page_copy_exists(self):
         app_py = self.read('app.py')
         error_template = self.read('templates/error.html')
-        self.assertIn("We're not in Kansas anymore", app_py)
-        self.assertIn('This page is off the map.', app_py)
+        self.assertIn("Are you lost?", app_py)
+        self.assertNotIn("We're not in Kansas anymore", app_py)
         self.assertIn('Houston, we have a problem', app_py)
         self.assertIn('Something went wrong. Try again in a moment.', app_py)
         self.assertIn('{{ error_title }}', error_template)
         self.assertIn('{{ error_text }}', error_template)
+        self.assertIn('BACK TO APP', error_template)
 
     def test_phase55_navigation_loading_and_404_polish_exists(self):
         app_js = self.read('static/js/app.js')
@@ -235,6 +236,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn("assets/images/404.png", error_template)
         self.assertNotIn('tw-bg-black/70', error_template)
         self.assertNotIn('tw-backdrop-blur-sm', error_template)
+        self.assertIn('Are you lost?', app_js)
+        self.assertNotIn("We're not in Kansas anymore", app_js)
+        self.assertIn('tw-py-[30px] tw-pl-[30px] tw-pr-0', css)
+        self.assertIn('class="view-more-button route-error-app-button"', error_template)
 
     def test_auth_tabs_and_server_side_return_path_exist(self):
         app_py = self.read('app.py')
@@ -421,7 +426,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('person_role_label', app_js)
         self.assertIn('Actor: ', app_js)
         self.assertIn('width:min(640px,48vw)', css)
-        self.assertIn('width:min(640px,48vw)', error_template)
+        self.assertIn('class="route-error-copy"', error_template)
 
     def test_phase602_movie_info_cleanup_exists(self):
         ui = self.read('static/js/ui.js')
