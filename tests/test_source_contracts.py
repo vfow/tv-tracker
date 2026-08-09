@@ -155,7 +155,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderPersonDetailPage', ui)
         self.assertIn('renderDiscoveryFilterDetailPage', ui)
         self.assertIn('renderMovieDetailPage', ui)
-        self.assertIn('Directed by', ui)
+        self.assertIn('renderMovieCrewTabHTML', ui)
+        self.assertIn('{label:"Director",jobs:["Director"],role:"director"}', ui)
         self.assertIn('renderSearchResults', ui)
         self.assertIn('renderDiscoverGenreSection', ui)
         self.assertIn('renderSearchTabButtonHTML', ui)
@@ -371,7 +372,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieTabsHTML', ui)
         self.assertIn('Info","Cast","Crew","Details","Releases', ui)
         self.assertIn('movie-page-disabled-status-button', ui)
-        self.assertIn('Directed by', ui)
+        self.assertIn('renderMovieCrewTabHTML', ui)
+        self.assertIn('{label:"Director",jobs:["Director"],role:"director"}', ui)
         self.assertIn('renderMovieReleasesHTML', ui)
         self.assertIn('lockSearchRouteBeforeResultOpen', ui)
         self.assertIn('favorites-popup-title', template)
@@ -392,6 +394,31 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('Actor: ', app_js)
         self.assertIn('width:min(640px,48vw)', css)
         self.assertIn('width:min(640px,48vw)', error_template)
+
+    def test_phase602_movie_info_cleanup_exists(self):
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        info_start = ui.index('function renderMovieInfoTabHTML(movie)')
+        info_end = ui.index('function renderMovieActiveTabContentHTML(movie)')
+        info_block = ui[info_start:info_end]
+        details_start = ui.index('function renderMovieDetailsTabHTML(movie)')
+        details_end = ui.index('function renderMovieInfoTabHTML(movie)')
+        details_block = ui[details_start:details_end]
+
+        self.assertIn('function renderMovieCompanyLogosHTML', ui)
+        self.assertIn('movie-info-tagline', info_block)
+        self.assertIn('movie.overview || "Unknown"', info_block)
+        self.assertNotIn('renderMovieGenresHTML(movie)', info_block)
+        self.assertNotIn('renderMovieProvidersHTML(movie)', info_block)
+        self.assertNotIn('Directed by', info_block)
+        self.assertNotIn('Written by', info_block)
+        self.assertNotIn('Budget', details_block)
+        self.assertNotIn('Revenue', details_block)
+        self.assertIn('if(productionCompaniesHTML)', details_block)
+        self.assertIn('renderMovieCompanyLogosHTML(movie && movie.production_companies)', details_block)
+        self.assertIn('movie-company-logo', source_css)
+        self.assertIn('movie-company-logo', built_css)
 
 
 if __name__ == '__main__':

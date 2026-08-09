@@ -3196,6 +3196,28 @@ function renderCompanyLinksHTML(companies){
     return items.length ? `<span class="show-detail-inline-link-list">${items.join(`<span class="show-detail-inline-separator">/</span>`)}</span>` : "Unknown";
 }
 
+function renderMovieCompanyLogosHTML(companies){
+    const items = (Array.isArray(companies) ? companies : [])
+    .map(company=>{
+        const id = Number(company && company.id || 0);
+        const name = String(company && company.name || "").trim();
+        const logoPath = String(company && company.logo_path || "").trim();
+        const route = id && typeof getCompanyDetailRoute === "function" ? getCompanyDetailRoute(id,name) : "";
+        if(!name){
+            return "";
+        }
+        if(logoPath){
+            const logo = `<img class="movie-company-logo" src="${escapeHTML(trackerImageURL(logoPath,"w154"))}" alt="${escapeHTML(name)}">`;
+            return route
+            ? `<a href="${escapeHTML(route)}" class="movie-company-logo-link" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${logo}</a>`
+            : `<span class="movie-company-logo-link" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${logo}</span>`;
+        }
+        return renderPlainInlineRouteLinkHTML(name,route,"show-detail-company-link movie-company-name-fallback");
+    })
+    .filter(Boolean);
+    return items.length ? `<span class="movie-company-logo-list">${items.join("")}</span>` : "";
+}
+
 function getMovieCertification(movie){
     const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
     const us = results.find(item=>String(item.iso_3166_1 || "").toUpperCase() === "US");
@@ -3424,46 +3446,38 @@ function renderMovieCrewTabHTML(movie){
 
 function renderMovieDetailsTabHTML(movie){
     const certification = getMovieCertification(movie);
+    const productionCompaniesHTML = renderMovieCompanyLogosHTML(movie && movie.production_companies);
+    const rows = [
+        {label:"Original Title",html:escapeHTML(movie.original_title || "Unknown")},
+        {label:"Status",html:escapeHTML(movie.status || "Unknown")},
+        {label:"Release Date",html:escapeHTML(movie.release_date || "Unknown")},
+        {label:"Runtime",html:movie.runtime ? `${escapeHTML(movie.runtime)} min` : "Unknown"},
+        {label:"Language",html:renderMovieLanguageDetailsHTML(movie)},
+        {label:"Country",html:renderMovieCountryDetailsHTML(movie)},
+        {label:"Certification",html:certification ? renderCertificationLinkHTML("movie",certification) : "Unknown"}
+    ];
+    if(productionCompaniesHTML){
+        rows.push({label:"Production Companies",html:productionCompaniesHTML});
+    }
     return `
         <div class="show-detail-fact-list">
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Original Title</div><div class="episode-detail-value">${escapeHTML(movie.original_title || "Unknown")}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Status</div><div class="episode-detail-value">${escapeHTML(movie.status || "Unknown")}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Release Date</div><div class="episode-detail-value">${escapeHTML(movie.release_date || "Unknown")}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Runtime</div><div class="episode-detail-value">${movie.runtime ? `${escapeHTML(movie.runtime)} min` : "Unknown"}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Budget</div><div class="episode-detail-value">${formatMovieMoney(movie.budget)}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Revenue</div><div class="episode-detail-value">${formatMovieMoney(movie.revenue)}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Language</div><div class="episode-detail-value">${renderMovieLanguageDetailsHTML(movie)}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Country</div><div class="episode-detail-value">${renderMovieCountryDetailsHTML(movie)}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Certification</div><div class="episode-detail-value">${certification ? renderCertificationLinkHTML("movie",certification) : "Unknown"}</div></div>
-            <div class="show-detail-fact-row"><div class="episode-detail-label">Production Companies</div><div class="episode-detail-value">${renderCompanyLinksHTML(movie.production_companies)}</div></div>
+            ${rows.map(row=>`
+                <div class="show-detail-fact-row">
+                    <div class="episode-detail-label">${escapeHTML(row.label)}</div>
+                    <div class="episode-detail-value">${row.html}</div>
+                </div>
+            `).join("")}
         </div>
     `;
 }
 
 function renderMovieInfoTabHTML(movie){
-    const directors = renderMovieCrewLinksHTML(movie,["Director"],"director");
-    const writers = renderMovieCrewLinksHTML(movie,["Writer","Screenplay","Story"],"writer");
+    const tagline = String(movie && movie.tagline || "").trim();
     return `
         <section class="show-detail-section v2-show-info-section">
             <h2 class="modal-section-heading">Synopsis</h2>
+            ${tagline ? `<p class="show-detail-tagline movie-info-tagline">${escapeHTML(tagline)}</p>` : ""}
             <p class="overview">${escapeHTML(movie.overview || "Unknown")}</p>
-        </section>
-        <section class="show-detail-section v2-show-info-section">
-            <div class="show-detail-fact-list">
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Genres</div><div class="episode-detail-value">${renderMovieGenresHTML(movie)}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Directed by</div><div class="episode-detail-value">${directors}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Written by</div><div class="episode-detail-value">${writers}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Production Companies</div><div class="episode-detail-value">${renderCompanyLinksHTML(movie.production_companies)}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Language</div><div class="episode-detail-value">${renderMovieLanguageDetailsHTML(movie)}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Country</div><div class="episode-detail-value">${renderMovieCountryDetailsHTML(movie)}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Release Date</div><div class="episode-detail-value">${escapeHTML(movie.release_date || "Unknown")}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Runtime</div><div class="episode-detail-value">${movie.runtime ? `${escapeHTML(movie.runtime)} min` : "Unknown"}</div></div>
-                <div class="show-detail-fact-row"><div class="episode-detail-label">Status</div><div class="episode-detail-value">${escapeHTML(movie.status || "Unknown")}</div></div>
-            </div>
-        </section>
-        <section class="show-detail-section v2-show-info-section">
-            <h2 class="modal-section-heading">Where to Watch</h2>
-            ${renderMovieProvidersHTML(movie)}
         </section>
     `;
 }

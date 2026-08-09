@@ -378,4 +378,4 @@
     margin-top:4px;
     color:rgba(255,255,255,.62);
     font-size:.9rem;
-}
+}.movie-company-logo-list{display:flex;flex-wrap:wrap;align-items:center;-moz-column-gap:1rem;column-gap:1rem;row-gap:.75rem}.movie-company-logo-link{display:inline-flex;min-height:30px;align-items:center;text-decoration-line:none}.movie-company-logo{display:block;max-height:30px;max-width:112px;-o-object-fit:contain;object-fit:contain}.movie-company-name-fallback{display:inline-flex;align-items:center}

@@ -2851,6 +2851,23 @@
         @apply tw-mt-[10px] tw-text-xs tw-text-tt-subtle;
     }
 
+
+    .movie-company-logo-list{
+        @apply tw-flex tw-flex-wrap tw-items-center tw-gap-x-4 tw-gap-y-3;
+    }
+
+    .movie-company-logo-link{
+        @apply tw-inline-flex tw-min-h-[30px] tw-items-center tw-no-underline;
+    }
+
+    .movie-company-logo{
+        @apply tw-block tw-max-h-[30px] tw-max-w-[112px] tw-object-contain;
+    }
+
+    .movie-company-name-fallback{
+        @apply tw-inline-flex tw-items-center;
+    }
+
     .v2-keyword-pill{
         @apply tw-border-[#2c2c2c] tw-bg-[#0c0c0c] tw-px-[10px] tw-py-1.5 tw-text-xs tw-font-normal tw-text-[#d8d8d8];
     }
