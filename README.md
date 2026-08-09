@@ -106,24 +106,50 @@ On Windows PowerShell, use `npm.cmd run css:build` or `npm.cmd run css:watch` if
 
 ## Routes And Authentication
 
-All application pages require a valid authenticated session:
+All application pages require a valid authenticated session. The client uses one shared route parser for startup, normal SPA navigation, browser history, and direct links.
+
+Canonical route families include:
 
 ```text
-/app/watchlist
+/app/list/watching
+/app/list/paused
+/app/list/completed
+/app/list/plan-to-watch
+/app/list/dropped
 /app/upcoming
 /app/history
 /app/discover
+/app/discover/tv/<category>
+/app/discover/movie/<category>
+/app/search?q=<query>&type=tv|movie|person
+/app/show/<tmdb_id>-<slug>
+/app/show/<tmdb_id>-<slug>/season/<season_number>/episode/<episode_number>
+/app/movie/<tmdb_id>-<slug>
+/app/person/<tmdb_id>-<slug>
+/app/genre/tv/<genre_slug>
+/app/genre/movie/<genre_slug>
+/app/theme/<tmdb_keyword_id>-<slug>
+/app/theme/movie/<tmdb_keyword_id>-<slug>
+/app/network/<tmdb_id>-<slug>
+/app/company/<tmdb_id>-<slug>
+/app/provider/<tmdb_id>-<slug>
+/app/language/<code>-<slug>
+/app/country/<code>-<slug>
+/app/year/<year>
+/app/status/<status>
+/app/certification/tv/<certification>
+/app/certification/movie/<certification>
 /app/profile
 /app/settings
-/app/show/<tmdb_id>
-/app/show/<tmdb_id>/season/<season_number>/episode/<episode_number>
 ```
 
-`/app` redirects to `/app/watchlist`. `/login` opens the public authentication page. `/signup` redirects to the same page with the Sign Up tab selected, where registration currently displays `Registration coming soon`.
+`/app` redirects to `/app/list/watching`. Obsolete aliases such as `/app/watchlist`, bare `/app/list`, role-specific person routes, and untyped genre routes are not part of the routing system. ID-based detail routes may be accepted without a slug long enough to load the referenced TMDB entity; the client then replaces the address with the canonical readable URL without adding a browser-history entry.
 
-Protected paths requested before login are validated and stored in the server session. After login, the user returns to the validated path; otherwise the destination is `/app/watchlist`.
+`/login` opens the public authentication page. `/signup` redirects to the same page with the Sign Up tab selected, where registration currently displays `Registration coming soon`.
 
-Show and episode URLs contain only public TMDB identifiers and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
+Protected paths requested before login are validated and stored in the server session. After login, the user returns to the validated application path; otherwise the destination is `/app/list/watching`.
+
+Route URLs contain only public TMDB identifiers, route slugs, filter values, and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
 
 ## Data Safety
 

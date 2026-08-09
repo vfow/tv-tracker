@@ -3856,6 +3856,12 @@ async function loadDiscoverHub(force=false){
     }
 }
 
+function isTMDBNotFoundError(error){
+    const status = Number(error && error.status || 0);
+    const message = String(error && error.message ? error.message : "").trim().toLowerCase();
+    return status === 404 || message.includes("not found") || message.includes("no matching");
+}
+
 function friendlyTMDBSearchError(error){
     const message = String(error && error.message ? error.message : "").trim();
     const lower = message.toLowerCase();
@@ -4367,14 +4373,6 @@ function parseRouteKey(value){
     return {id:match[1],slug:match[2] || "",hasSlug:!!match[2],valid:true};
 }
 
-function routeSlugMatchesLabel(routeSlug,label){
-    const cleanRouteSlug = buildRouteSlug(routeSlug);
-    if(!cleanRouteSlug){
-        return true;
-    }
-    return cleanRouteSlug === buildRouteSlug(label);
-}
-
 function renderAppRouteNotFoundPage(){
     activePage = "route-error";
     document.querySelectorAll(".page").forEach(section=>{
@@ -4514,20 +4512,6 @@ function getSmartGenreEquivalentSlug(slug,currentMedia,targetMedia){
     }
     const mapped = fromMedia === "tv" ? TV_TO_MOVIE_GENRE_SLUGS[cleanSlug] : MOVIE_TO_TV_GENRE_SLUGS[cleanSlug];
     return mapped && getGenreSlugSet(toMedia).has(mapped) ? mapped : "";
-}
-
-function getLegacyGenreRouteInfo(slug){
-    const cleanSlug = normalizeGenreSlug(slug);
-    if(!cleanSlug){
-        return null;
-    }
-    if(TV_GENRE_SLUGS.has(cleanSlug)){
-        return {media:"tv",slug:cleanSlug,route:getGenreDetailRoute(cleanSlug,"tv")};
-    }
-    if(MOVIE_GENRE_SLUGS.has(cleanSlug)){
-        return {media:"movie",slug:cleanSlug,route:getGenreDetailRoute(cleanSlug,"movie")};
-    }
-    return null;
 }
 
 function getGenreRouteFromName(name,media="tv"){
@@ -4947,10 +4931,9 @@ function getKnownPersonRouteLabel(personId,label=""){
 }
 
 function getPersonDetailRoute(role,personId,label=""){
-    const cleanRole = normalizePersonRoleSlug(role);
     const cleanId = normalizePersonId(personId);
     const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
-    return cleanRole && key && key.includes("-") ? `/app/${encodeURIComponent(cleanRole)}/${encodeURIComponent(key)}` : "/app/list/watching";
+    return key && key.includes("-") ? `/app/person/${encodeURIComponent(key)}` : "/app/list/watching";
 }
 
 function getPersonPageTitle(role,media){
@@ -5182,13 +5165,10 @@ async function loadPersonPageResults(){
             throw new Error("Person not found.");
         }
 
-        if(personPageState.routeSlug && !routeSlugMatchesLabel(personPageState.routeSlug,person.name)){
-            personPageState.loading = false;
-            personPageState.error = "Page not found.";
-            personPageState.person = null;
-            personPageState.credits = [];
-            renderActivePersonPage();
-            return;
+        const canonicalPersonRoute = getPersonDetailRoute("person",cleanId,person.name);
+        if(canonicalPersonRoute && canonicalPersonRoute !== "/app/list/watching"){
+            setAppHashRoute(canonicalPersonRoute,true);
+            rememberRouteNavContext(canonicalPersonRoute,"discover");
         }
 
         personPageState = Object.assign({},personPageState,{
@@ -5203,6 +5183,10 @@ async function loadPersonPageResults(){
 
         renderActivePersonPage();
     }catch(error){
+        if(isTMDBNotFoundError(error)){
+            renderAppRouteNotFoundPage();
+            return;
+        }
         personPageState.loading = false;
         personPageState.error = "Couldn’t load this page. Try again later.";
         renderActivePersonPage();
@@ -5210,10 +5194,10 @@ async function loadPersonPageResults(){
 }
 
 async function openPersonPage(role,personId,options={}){
-    const cleanRole = normalizePersonRoleSlug(role);
+    const cleanRole = "person";
     const cleanId = normalizePersonId(personId);
 
-    if(!cleanRole || !cleanId){
+    if(!cleanId){
         return;
     }
 
@@ -5512,11 +5496,7 @@ async function loadGenrePageResults(options={}){
     try{
         const genre = await resolveGenreFromSlug(slug,media);
         if(!genre || !genre.id){
-            genrePageState.loading = false;
-            genrePageState.error = "Genre not found.";
-            genrePageState.genreId = null;
-            genrePageState.name = getGenreDisplayNameFromSlug(slug);
-            renderActiveGenrePage();
+            renderAppRouteNotFoundPage();
             return;
         }
 
@@ -5912,7 +5892,12 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
             if(network && network.name){
                 return `Shows from ${network.name}`;
             }
-        }catch(error){}
+            throw new Error("Network not found.");
+        }catch(error){
+            if(isTMDBNotFoundError(error)){
+                throw error;
+            }
+        }
     }
 
     if(cleanType === "theme"){
@@ -5924,7 +5909,12 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
             if(keyword && keyword.name){
                 return `${mediaWord} about ${keyword.name}`;
             }
-        }catch(error){}
+            throw new Error("Theme not found.");
+        }catch(error){
+            if(isTMDBNotFoundError(error)){
+                throw error;
+            }
+        }
     }
 
     if(cleanType === "company"){
@@ -5936,7 +5926,12 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
             if(company && company.name){
                 return `${mediaWord} from ${company.name}`;
             }
-        }catch(error){}
+            throw new Error("Company not found.");
+        }catch(error){
+            if(isTMDBNotFoundError(error)){
+                throw error;
+            }
+        }
     }
 
     if(cleanType === "provider"){
@@ -5948,7 +5943,12 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
             if(provider && provider.name){
                 return `${mediaWord} from ${provider.name}`;
             }
-        }catch(error){}
+            throw new Error("Provider not found.");
+        }catch(error){
+            if(isTMDBNotFoundError(error)){
+                throw error;
+            }
+        }
     }
 
     return supplied || fallback;
@@ -6018,12 +6018,13 @@ async function loadDiscoveryFilterPageResults(options={}){
         const resolvedName = await resolveDiscoveryFilterPageName(cleanType,cleanValue,discoveryPageState.name,media);
         const validationLabel = getDiscoveryRouteValidationLabel(cleanType,cleanValue,resolvedName);
 
-        if(discoveryPageState.routeSlug && !routeSlugMatchesLabel(discoveryPageState.routeSlug,validationLabel)){
-            discoveryPageState.loading = false;
-            discoveryPageState.error = "Page not found.";
-            discoveryPageState.shows = [];
-            renderActiveDiscoveryFilterPage();
-            return;
+        if(cleanType !== "discover-category"){
+            const canonicalDiscoveryRoute = getDiscoveryFilterDetailRoute(cleanType,cleanValue,validationLabel,media);
+            if(canonicalDiscoveryRoute && canonicalDiscoveryRoute !== "/app/list/watching"){
+                setAppHashRoute(canonicalDiscoveryRoute,true);
+                rememberRouteNavContext(canonicalDiscoveryRoute,"discover");
+                discoveryPageState.routeSlug = buildRouteSlug(validationLabel);
+            }
         }
 
         const categoryConfig = cleanType === "discover-category" ? getDiscoverCategoryConfig(cleanValue) : null;
@@ -6067,6 +6068,10 @@ async function loadDiscoveryFilterPageResults(options={}){
 
         renderActiveDiscoveryFilterPage();
     }catch(error){
+        if(isTMDBNotFoundError(error)){
+            renderAppRouteNotFoundPage();
+            return;
+        }
         discoveryPageState.loading = false;
         discoveryPageState.error = "Couldn’t load this page. Try again later.";
         renderActiveDiscoveryFilterPage();
@@ -6685,19 +6690,15 @@ async function openMoviePage(movieId,options={}){
             renderMovieDetailNotFound();
             return;
         }
-        if(routeSlug && !routeSlugMatchesLabel(routeSlug,movie.title)){
-            renderMovieDetailNotFound();
-            return;
-        }
+        const canonicalMovieRoute = getMovieDetailRoute(id,movie.title);
         moviePageState = {
             movieId:id,
-            routeSlug:routeSlug,
+            routeSlug:buildRouteSlug(movie.title),
             loading:false,
             error:"",
             movie:movie
         };
-        if(!fromRoute){
-            const canonicalMovieRoute = getMovieDetailRoute(id,movie.title);
+        if(canonicalMovieRoute && canonicalMovieRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalMovieRoute,true);
             rememberRouteNavContext(canonicalMovieRoute,navigationContext);
         }
@@ -6706,17 +6707,14 @@ async function openMoviePage(movieId,options={}){
             updateShellTitle();
         }
     }catch(error){
+        if(isTMDBNotFoundError(error)){
+            renderAppRouteNotFoundPage();
+            return;
+        }
         moviePageState.loading = false;
         moviePageState.error = "Couldn’t load this page. Try again later.";
         renderMovieDetailError();
     }
-}
-
-function showRouteSlugIsValid(show,routeSlug){
-    if(!routeSlug){
-        return true;
-    }
-    return routeSlugMatchesLabel(routeSlug,show && (show.title || show.name || show.original_name));
 }
 
 function pushShowDetailBackRoute(showId,showInfo=""){
@@ -6783,14 +6781,10 @@ async function openShowDetailsPage(showId,options={}){
     const trackedShow = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
 
     if(trackedShow){
-        if(!showRouteSlugIsValid(trackedShow,routeSlug)){
-            renderShowDetailNotFound();
-            return;
-        }
         showDetailPreview = null;
         expandedSeasons[id] = expandedSeasons[id] || {};
-        if(!fromRoute){
-            const canonicalShowRoute = getShowDetailRoute(id,trackedShow);
+        const canonicalShowRoute = getShowDetailRoute(id,trackedShow);
+        if(canonicalShowRoute && canonicalShowRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalShowRoute,true);
             rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
@@ -6807,13 +6801,9 @@ async function openShowDetailsPage(showId,options={}){
     }
 
     if(showDetailPreview && String(showDetailPreview.tmdb_id) === id){
-        if(!showRouteSlugIsValid(showDetailPreview,routeSlug)){
-            renderShowDetailNotFound();
-            return;
-        }
         expandedSeasons[id] = expandedSeasons[id] || {};
-        if(!fromRoute){
-            const canonicalShowRoute = getShowDetailRoute(id,showDetailPreview);
+        const canonicalShowRoute = getShowDetailRoute(id,showDetailPreview);
+        if(canonicalShowRoute && canonicalShowRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalShowRoute,true);
             rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
@@ -6836,14 +6826,10 @@ async function openShowDetailsPage(showId,options={}){
         const showObject = createShowObject(details,"");
         showObject.status = "";
         showObject._preview_only = true;
-        if(!showRouteSlugIsValid(showObject,routeSlug)){
-            renderShowDetailNotFound();
-            return;
-        }
         showDetailPreview = showObject;
         expandedSeasons[id] = expandedSeasons[id] || {};
-        if(!fromRoute){
-            const canonicalShowRoute = getShowDetailRoute(id,showObject);
+        const canonicalShowRoute = getShowDetailRoute(id,showObject);
+        if(canonicalShowRoute && canonicalShowRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalShowRoute,true);
             rememberRouteNavContext(canonicalShowRoute,navigationContext);
         }
@@ -6861,6 +6847,10 @@ async function openShowDetailsPage(showId,options={}){
         }
         restoreShowDetailScrollPositionIfNeeded();
     }catch(error){
+        if(isTMDBNotFoundError(error)){
+            renderAppRouteNotFoundPage();
+            return;
+        }
         renderShowDetailError(friendlyTMDBSearchError(error));
         showToast(friendlyTMDBSearchError(error));
     }
@@ -7092,8 +7082,12 @@ async function openEpisodeModal(showId,season,episode,options={}){
             show = previewShow;
         }catch(error){
             if(selectedEpisodeContext && String(selectedEpisodeContext.showId) === id){
-                renderEpisodeDetailError(friendlyTMDBSearchError(error));
-                showToast(friendlyTMDBSearchError(error));
+                if(isTMDBNotFoundError(error)){
+                    renderAppRouteNotFoundPage();
+                }else{
+                    renderEpisodeDetailError(friendlyTMDBSearchError(error));
+                    showToast(friendlyTMDBSearchError(error));
+                }
             }
             return;
         }
@@ -7105,6 +7099,12 @@ async function openEpisodeModal(showId,season,episode,options={}){
 
     const isDiscoverPreview = !(DATA.shows && DATA.shows[id]);
     selectedEpisodeContext.discoverPreview = isDiscoverPreview;
+
+    const canonicalEpisodeRoute = getEpisodeDetailRoute(id,seasonNumber,episodeNumber,show);
+    if(canonicalEpisodeRoute && !canonicalEpisodeRoute.startsWith("/app/list/")){
+        setAppHashRoute(canonicalEpisodeRoute,true);
+        rememberRouteNavContext(canonicalEpisodeRoute,navigationContext);
+    }
 
     const forceRefresh = episodeNeedsDetailRefresh(show,seasonNumber,episodeNumber);
     const neededLoad = !seasonDataAlreadyLoaded(show,seasonNumber,forceRefresh);

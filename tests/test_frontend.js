@@ -31,8 +31,11 @@ const ui = fs.readFileSync('static/js/ui.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(router.includes('/app/list/'));
-assert(router.includes('/app/show/'));
-assert(router.includes('(person|actor|creator|director|writer|producer|editor|composer|cinematographer)'));
+assert(router.includes('app\\/show'));
+assert(router.includes('function parseAppRoute(pathname,search="")'));
+assert(router.includes('function prepareInitialRoute()'));
+assert(router.includes('app\\/person'));
+assert(!router.includes('person|actor|creator|director|writer|producer|editor|composer|cinematographer'));
 assert(!router.includes('#/app'));
 assert(template.includes('show-detail-page'));
 assert(template.includes('episode-detail-page'));

@@ -138,7 +138,9 @@ async function tmdbFetchJSON(path,params={},options={}){
             message = "TMDB is rate-limiting requests. Try again soon.";
         }
 
-        throw new Error(message);
+        const requestError = new Error(message);
+        requestError.status = response.status;
+        throw requestError;
     }
 
     return await response.json();

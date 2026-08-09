@@ -42,14 +42,13 @@ SCHEMA_VERSION = 4
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
-APP_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*"
-APP_EPISODE_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
+APP_ROUTE_ID_SLUG = r"[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
+APP_EPISODE_ROUTE_ID_SLUG = APP_ROUTE_ID_SLUG
 APP_SHOW_PATH_RE = re.compile(rf"^/app/show/({APP_ROUTE_ID_SLUG})$")
 APP_EPISODE_PATH_RE = re.compile(
     rf"^/app/show/({APP_EPISODE_ROUTE_ID_SLUG})/season/([0-9]{{1,5}})/episode/([1-9][0-9]{{0,5}})$"
 )
 APP_GENRE_PATH_RE = re.compile(r"^/app/genre/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
-APP_LEGACY_GENRE_PATH_RE = re.compile(r"^/app/genre/([a-z0-9]+(?:-[a-z0-9]+)*)$")
 APP_TV_GENRE_SLUGS = {
     "action-adventure",
     "animation",
@@ -89,10 +88,9 @@ APP_MOVIE_GENRE_SLUGS = {
     "war",
     "western",
 }
-APP_LEGACY_MOVIE_ONLY_GENRE_SLUGS = APP_MOVIE_GENRE_SLUGS - APP_TV_GENRE_SLUGS
 APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
-APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
-APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
 APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_THEME_PATH_RE = re.compile(rf"^/app/theme/movie/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
@@ -104,21 +102,8 @@ APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]
 APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
     r"^/app/discover/(?:(?:tv)/(?:popular|top-rated|airing-today|on-the-air)|(?:movie)/(?:popular|top-rated|now-playing|upcoming))$"
 )
-APP_LIST_PATH_RE = re.compile(r"^/app/list(?:/(watching|paused|completed|plan-to-watch|dropped))?$")
-APP_PERSON_ROLE_SLUGS = {
-    "person",
-    "actor",
-    "creator",
-    "director",
-    "writer",
-    "producer",
-    "editor",
-    "composer",
-    "cinematographer",
-}
-APP_PERSON_PATH_RE = re.compile(
-    rf"^/app/(person|actor|creator|director|writer|producer|editor|composer|cinematographer)/({APP_ROUTE_ID_SLUG})$"
-)
+APP_LIST_PATH_RE = re.compile(r"^/app/list/(watching|paused|completed|plan-to-watch|dropped)$")
+APP_PERSON_PATH_RE = re.compile(rf"^/app/person/({APP_ROUTE_ID_SLUG})$")
 APP_SECTION_PATHS = {
     "/app/upcoming",
     "/app/history",
@@ -127,7 +112,6 @@ APP_SECTION_PATHS = {
     "/app/profile",
     "/app/settings",
 }
-APP_LEGACY_WATCHLIST_PATHS = {"/app/watchlist", "/app/watchlist/"}
 ERROR_PAGE_MESSAGES = {
     404: ("We're not in Kansas anymore", "This page is off the map."),
     500: ("Houston, we have a problem", "Something went wrong. Try again in a moment."),
@@ -1643,19 +1627,6 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
     return revision
 
 
-def legacy_genre_redirect_path(candidate: str) -> str | None:
-    """Return a clean media-specific genre URL for an old ambiguous genre route."""
-    match = APP_LEGACY_GENRE_PATH_RE.fullmatch(candidate)
-    if match is None:
-        return None
-    slug = match.group(1)
-    if slug in APP_LEGACY_MOVIE_ONLY_GENRE_SLUGS:
-        return f"/app/genre/movie/{slug}"
-    if slug in APP_TV_GENRE_SLUGS:
-        return f"/app/genre/tv/{slug}"
-    return None
-
-
 def safe_next_url(value: str | None) -> str:
     """Return a validated internal application route for post-login use."""
     raw_value = str(value or "").strip().split("#", 1)[0]
@@ -1665,8 +1636,6 @@ def safe_next_url(value: str | None) -> str:
         candidate = candidate.rstrip("/")
 
     if candidate in {"/app", "/app/"}:
-        return "/app/list/watching"
-    if raw_path in APP_LEGACY_WATCHLIST_PATHS:
         return "/app/list/watching"
     if candidate == "/app/search":
         query = ""
@@ -1678,8 +1647,6 @@ def safe_next_url(value: str | None) -> str:
                 elif key == "type" and value.strip().lower() in {"tv", "movie", "person"}:
                     media_type = value.strip().lower()
         return "/app/search" + (("?" + urlencode({"q": query, "type": media_type})) if query else "")
-    if candidate == "/app/list":
-        return "/app/list/watching"
     if APP_LIST_PATH_RE.fullmatch(candidate):
         query = ""
         if separator:
@@ -1692,9 +1659,6 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
         return candidate
-    legacy_genre_redirect = legacy_genre_redirect_path(candidate)
-    if legacy_genre_redirect:
-        return legacy_genre_redirect
     if APP_SHOW_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_EPISODE_PATH_RE.fullmatch(candidate):
@@ -1981,18 +1945,10 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/watchlist", strict_slashes=False)
-    @login_required
-    def app_watchlist_alias():
-        return redirect("/app/list/watching")
-
-    @app.get("/app/list", strict_slashes=False)
     @app.get("/app/list/<list_slug>", strict_slashes=False)
     @login_required
-    def app_list_page(list_slug: str | None = None):
+    def app_list_page(list_slug: str):
         requested_path = request.path.rstrip("/")
-        if requested_path == "/app/list":
-            return redirect("/app/list/watching")
         if APP_LIST_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
@@ -2009,15 +1965,6 @@ def create_app() -> Flask:
         if request.path != requested_path:
             return redirect(requested_path)
         return render_app_shell(requested_path)
-
-    @app.get("/app/genre/<genre_slug>", strict_slashes=False)
-    @login_required
-    def app_legacy_genre_page(genre_slug: str):
-        requested_path = request.path.rstrip("/")
-        legacy_redirect = legacy_genre_redirect_path(requested_path)
-        if legacy_redirect is None:
-            abort(404)
-        return redirect(legacy_redirect)
 
     @app.get("/app/network/<network_key>", strict_slashes=False)
     @login_required
@@ -2130,14 +2077,11 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/<person_role>/<person_key>", strict_slashes=False)
+    @app.get("/app/person/<person_key>", strict_slashes=False)
     @login_required
-    def app_person_page(person_role: str, person_key: str):
+    def app_person_page(person_key: str):
         requested_path = request.path.rstrip("/")
-        if (
-            person_role not in APP_PERSON_ROLE_SLUGS
-            or APP_PERSON_PATH_RE.fullmatch(requested_path) is None
-        ):
+        if APP_PERSON_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect(requested_path)
@@ -2178,9 +2122,6 @@ def create_app() -> Flask:
     @login_required
     def app_valid_spa_fallback(app_path: str):
         requested_path = request.path.rstrip("/")
-        legacy_redirect = legacy_genre_redirect_path(requested_path)
-        if legacy_redirect:
-            return redirect(legacy_redirect)
         if not valid_app_path(requested_path):
             abort(404)
         if request.path != requested_path:

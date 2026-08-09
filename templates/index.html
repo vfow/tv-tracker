@@ -17,7 +17,7 @@
 
 <aside class="sidebar" id="app-sidebar">
     <nav class="sidebar-nav app-primary-nav" aria-label="Primary navigation">
-        <a class="active" data-page="shows" aria-current="page" href="/app/list/watching">
+        <a data-page="shows" href="/app/list/watching">
             SHOWS
         </a>
 
@@ -36,7 +36,7 @@
 </aside>
 
 <nav class="mobile-bottom-nav app-primary-nav" aria-label="Primary navigation">
-    <a class="active" data-page="shows" aria-current="page" href="/app/list/watching">SHOWS</a>
+    <a data-page="shows" href="/app/list/watching">SHOWS</a>
     <a data-page="discover" href="/app/discover">DiSCOVER</a>
     <a data-page="profile" href="/app/profile">PROFILE</a>
     <a data-page="settings" href="/app/settings">SETTINGS</a>
@@ -48,11 +48,11 @@
 
 <!-- SHOWS PAGE -->
 
-<div id="shows-page" class="page active-page">
+<div id="shows-page" class="page">
 
     <nav class="top-tabs">
 
-      <a class="active" data-tab="watchlist" href="/app/list/watching">
+      <a data-tab="watchlist" href="/app/list/watching">
         WATCHLIST
       </a>
 
@@ -71,7 +71,7 @@
     <div class="filters">
 
         <div class="status-filter-track">
-            <a class="active" data-filter="watching" href="/app/list/watching">
+            <a data-filter="watching" href="/app/list/watching">
                 Watching
             </a>
 
@@ -97,7 +97,6 @@
 
 
     <main class="content" id="show-list">
-        {% if initial_app_path.startswith('/app/list/') %}
         <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="Loading shows">
             {% for _ in range(5) %}
             <article class="watchlist-skeleton-row" aria-hidden="true">
@@ -107,14 +106,11 @@
                     <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--{{ loop.index }}"></div>
                     <div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--{{ loop.index }}"></div>
                 </div>
-                {% if initial_app_path != '/app/list/completed' %}
                 <div class="watchlist-skeleton-block watchlist-skeleton-action"></div>
-                {% endif %}
             </article>
             {% endfor %}
             <span class="watchlist-skeleton-sr">Loading shows…</span>
         </div>
-        {% endif %}
     </main>
 
 </div>

@@ -7,7 +7,7 @@ function splitRoute(route){
   return {pathname, search:query ? '?' + query : ''};
 }
 
-function createRouter(route){
+function createRouter(route, options={}){
   const initial = splitRoute(route);
   const queued = [];
   const calls = [];
@@ -32,9 +32,13 @@ function createRouter(route){
     selectedPersonContext:null,
     selectedMovieId:null,
     searchRouteState:{query:'',media:'tv'},
-    moviePageState:{movie:null},
-    discoveryPageState:{name:''},
-    appDataReady:true,
+    moviePageState:{movieId:'',routeSlug:'',loading:false,error:'',movie:null},
+    personPageState:{role:'',personId:'',media:'tv',loading:false,error:'',person:null,credits:[]},
+    genrePageState:{media:'tv',slug:'',name:'',genreId:null,year:'',sort:'popularity.desc',page:1,totalPages:1,loading:false,error:'',shows:[]},
+    discoveryPageState:{type:'',value:'',name:'',media:'tv',routeSlug:'',year:'',sort:'popularity.desc',page:1,totalPages:1,loading:false,error:'',shows:[]},
+    discoverSearchState:{query:'',media:'tv',loading:false},
+    discoverHubState:{loaded:false,loading:false,error:'',sections:[],genres:{tv:[],movie:[]}},
+    appDataReady:options.appDataReady !== false,
     showDetailBackStack:[],
     showDetailPreview:null,
     discoverPreviewShow:null,
@@ -44,12 +48,9 @@ function createRouter(route){
     closeShowModal(){ calls.push(['closeShowModal']); },
     getSearchRoute(query='',media='tv'){ return query ? '/app/search?q=' + encodeURIComponent(query) + '&type=' + encodeURIComponent(media || 'tv') : '/app/search'; },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
+    getKnownShowRouteLabel(){ return ''; },
+    getEpisodeDetailRoute(id,season,episode,name=''){ return name ? `/app/show/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}/season/${season}/episode/${episode}` : `/app/show/${id}/season/${season}/episode/${episode}`; },
     getDiscoveryFilterDetailRoute(type,value){ return `/app/${type}/${value}`; },
-    getLegacyGenreRouteInfo(slug){
-      if(slug === 'horror') return {media:'movie',slug:'horror',route:'/app/genre/movie/horror'};
-      if(slug === 'action-adventure') return {media:'tv',slug:'action-adventure',route:'/app/genre/tv/action-adventure'};
-      return null;
-    },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openMoviePage(id,options){ calls.push(['openMoviePage',id,options]); },
@@ -59,8 +60,28 @@ function createRouter(route){
     openDiscoverCategoryPage(media,category,options){ calls.push(['openDiscoverCategoryPage',media,category,options]); },
     openDiscoverHomePage(options){ calls.push(['openDiscoverHomePage',options]); },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
+    showShowDetailPageShell(ctx){ context.activePage='show-detail'; calls.push(['showShowDetailPageShell',ctx]); },
+    renderShowDetailLoading(id){ calls.push(['renderShowDetailLoading',id]); },
+    showMovieDetailPageShell(ctx){ context.activePage='movie-detail'; calls.push(['showMovieDetailPageShell',ctx]); },
+    renderMovieDetailLoading(){ calls.push(['renderMovieDetailLoading']); },
+    showEpisodeDetailPageShell(ctx){ context.activePage='episode-detail'; calls.push(['showEpisodeDetailPageShell',ctx]); },
+    renderEpisodeDetailLoading(id,season,episode){ calls.push(['renderEpisodeDetailLoading',id,season,episode]); },
+    showPersonDetailPageShell(ctx){ context.activePage='person-detail'; calls.push(['showPersonDetailPageShell',ctx]); },
+    renderActivePersonPage(){ calls.push(['renderActivePersonPage']); },
+    showGenreDetailPageShell(ctx){ context.activePage='genre-detail'; calls.push(['showGenreDetailPageShell',ctx]); },
+    renderActiveGenrePage(){ calls.push(['renderActiveGenrePage']); },
+    showDiscoveryFilterPageShell(ctx){ context.activePage='discovery-detail'; calls.push(['showDiscoveryFilterPageShell',ctx]); },
+    renderActiveDiscoveryFilterPage(){ calls.push(['renderActiveDiscoveryFilterPage']); },
+    showSearchPageShell(){ context.activePage='search'; calls.push(['showSearchPageShell']); },
+    renderSearchLoading(query){ calls.push(['renderSearchLoading',query]); },
+    renderDiscoverHub(){ calls.push(['renderDiscoverHub']); },
     renderAppRouteNotFoundPage(){ calls.push(['renderAppRouteNotFoundPage']); },
-    document:{querySelectorAll(){ return []; }},
+    document:{
+      querySelectorAll(){ return []; },
+      querySelector(){ return null; },
+      getElementById(){ return null; },
+      addEventListener(){}
+    },
     history:{
       pushState(state,title,url){ const parts=splitRoute(url); context.window.location.pathname=parts.pathname; context.window.location.search=parts.search; calls.push(['pushState',url]); },
       replaceState(state,title,url){ const parts=splitRoute(url); context.window.location.pathname=parts.pathname; context.window.location.search=parts.search; calls.push(['replaceState',url]); }
@@ -101,8 +122,10 @@ function createRouter(route){
 {
   const {calls,router}=createRouter('/app/show/1399');
   assert.strictEqual(router.currentRoute(),'/app/show/1399');
-  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'old ID-only show route should not open show page');
-  assert(!calls.some(item=>item[0]==='openShowDetailsPage'));
+  const call=calls.find(item=>item[0]==='openShowDetailsPage');
+  assert(call,'ID-only show route should load so the fetched title can canonicalize the slug');
+  assert.strictEqual(call[1],'1399');
+  assert.strictEqual(call[2].routeSlug,'');
 }
 
 {
@@ -162,8 +185,10 @@ function createRouter(route){
 {
   const {calls,router}=createRouter('/app/person/525');
   assert.strictEqual(router.currentRoute(),'/app/person/525');
-  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'ID-only person route should 404');
-  assert(!calls.some(item=>item[0]==='openPersonPage'));
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'ID-only person route should load so the fetched name can canonicalize the slug');
+  assert.deepStrictEqual(call.slice(1,3),['person','525']);
+  assert.strictEqual(call[3].routeSlug,'');
 }
 
 {
@@ -186,22 +211,11 @@ function createRouter(route){
   assert.strictEqual(call[2].media,'movie');
 }
 
-{
-  const {calls,router}=createRouter('/app/genre/action-adventure');
-  assert.strictEqual(router.currentRoute(),'/app/genre/tv/action-adventure');
-  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/genre/tv/action-adventure'),'old TV genre route should redirect');
-  const call=calls.find(item=>item[0]==='openGenrePage');
-  assert(call,'legacy genre route should open genre page');
-  assert.strictEqual(call[2].media,'tv');
-}
-
-{
-  const {calls,router}=createRouter('/app/genre/horror');
-  assert.strictEqual(router.currentRoute(),'/app/genre/movie/horror');
-  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/genre/movie/horror'),'old movie-only genre route should redirect');
-  const call=calls.find(item=>item[0]==='openGenrePage');
-  assert(call,'legacy movie genre route should open movie genre page');
-  assert.strictEqual(call[2].media,'movie');
+for (const route of ['/app/genre/action-adventure','/app/genre/horror']) {
+  const {calls,router}=createRouter(route);
+  assert.strictEqual(router.currentRoute(),route);
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404 after legacy genre aliases are removed`);
+  assert(!calls.some(item=>item[0]==='openGenrePage'));
 }
 
 for (const [route,type,value,slug] of [
@@ -281,28 +295,33 @@ for (const [route,type,value,slug] of [
 {
   const {calls,router}=createRouter('/app/actor/123-leonardo-dicaprio');
   assert.strictEqual(router.currentRoute(),'/app/actor/123-leonardo-dicaprio');
-  const call=calls.find(item=>item[0]==='openPersonPage');
-  assert(call,'pretty person route should open person page');
-  assert.deepStrictEqual(call.slice(1,3),['actor','123']);
-  assert.strictEqual(call[3].routeSlug,'leonardo-dicaprio');
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'role-specific person aliases should be removed');
+  assert(!calls.some(item=>item[0]==='openPersonPage'));
 }
 
 
+for (const [route,callName] of [
+  ['/app/movie/603','openMoviePage'],
+  ['/app/network/213','openDiscoveryFilterPage'],
+  ['/app/company/49','openDiscoveryFilterPage'],
+  ['/app/provider/8','openDiscoveryFilterPage'],
+  ['/app/theme/1234','openDiscoveryFilterPage'],
+  ['/app/theme/movie/1234','openDiscoveryFilterPage'],
+  ['/app/language/ja','openDiscoveryFilterPage'],
+  ['/app/country/jp','openDiscoveryFilterPage'],
+]) {
+  const {calls}=createRouter(route);
+  assert(calls.some(item=>item[0]===callName), `${route} should load so its resolved label can canonicalize the URL`);
+}
+
 for (const route of [
-  '/app/movie/603',
-  '/app/network/213',
-  '/app/company/49',
-  '/app/provider/8',
-  '/app/theme/1234',
-  '/app/language/ja',
-  '/app/country/jp',
   '/app/actor/123',
   '/app/discover/tv/trending',
   '/app/discover/person/popular',
   '/app/genre/person/drama',
 ]) {
   const {calls}=createRouter(route);
-  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404 until a pretty slug is used`);
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404`);
 }
 
 
@@ -343,6 +362,100 @@ for (const route of [
   context.window.location.search='';
   router.applyRoute();
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'));
+}
+
+
+{
+  const {calls,router}=createRouter('/app/search/?type=invalid&q=batman');
+  assert.strictEqual(router.currentRoute(),'/app/search?q=batman&type=tv');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/search?q=batman&type=tv'),'search route should normalize slash/query parameters');
+}
+
+{
+  const {calls,router}=createRouter('/app/list/completed/?x=1&q=dark');
+  assert.strictEqual(router.currentRoute(),'/app/list/completed?q=dark');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/list/completed?q=dark'),'list route should normalize trailing slash and query');
+}
+
+{
+  const {calls,context}=createRouter('/app/show/1399-game-of-thrones',{appDataReady:false});
+  assert.strictEqual(context.activePage,'show-detail');
+  assert(calls.some(item=>item[0]==='showShowDetailPageShell'),'startup should select the show-detail shell before app data is ready');
+  assert(calls.some(item=>item[0]==='renderShowDetailLoading' && item[1]==='1399'),'startup should show the existing show skeleton');
+  assert(!calls.some(item=>item[0]==='showPage' && item[1]==='shows'),'startup must not render WATCHLIST first');
+}
+
+{
+  const {calls,context}=createRouter('/app/movie/603-the-matrix',{appDataReady:false});
+  assert.strictEqual(context.activePage,'movie-detail');
+  assert(calls.some(item=>item[0]==='showMovieDetailPageShell'),'startup should select the movie-detail shell');
+  assert(calls.some(item=>item[0]==='renderMovieDetailLoading'),'startup should show the existing movie skeleton');
+}
+
+{
+  const {calls,context}=createRouter('/app/person/525-christopher-nolan',{appDataReady:false});
+  assert.strictEqual(context.activePage,'person-detail');
+  assert.strictEqual(context.personPageState.role,'person');
+  assert(calls.some(item=>item[0]==='renderActivePersonPage'),'startup should render the existing person loading layout');
+}
+
+{
+  const {calls,context}=createRouter('/app/history',{appDataReady:false});
+  assert.strictEqual(context.activeShowsTab,'history');
+  assert.strictEqual(context.activePage,'shows');
+  assert(!calls.some(item=>item[0]==='renderShowsPage'),'history startup should select the tab without rendering empty app data');
+}
+
+{
+  const {calls,router}=createRouter('/app');
+  assert.strictEqual(router.currentRoute(),'/app/list/watching');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/list/watching'),'app root should normalize without adding history');
+}
+
+{
+  const {calls,context}=createRouter('/app/show/1399',{appDataReady:false});
+  assert.strictEqual(context.activePage,'show-detail');
+  assert(calls.some(item=>item[0]==='renderShowDetailLoading' && item[1]==='1399'),'ID-only show startup should use the show skeleton');
+}
+
+{
+  const {calls,context}=createRouter('/app/profile',{appDataReady:false});
+  assert.strictEqual(context.activePage,'profile');
+  assert(!calls.some(item=>item[0]==='showPage'),'profile startup should select its shell without rendering unloaded state');
+}
+
+{
+  const {calls,context}=createRouter('/app/settings',{appDataReady:false});
+  assert.strictEqual(context.activePage,'settings');
+  assert(!calls.some(item=>item[0]==='showPage'),'settings startup should select its shell without rendering unloaded state');
+}
+
+{
+  const {calls,context}=createRouter('/app/upcoming',{appDataReady:false});
+  assert.strictEqual(context.activeShowsTab,'upcoming');
+  assert.strictEqual(context.activePage,'shows');
+  assert(!calls.some(item=>item[0]==='renderShowsPage'),'upcoming startup should select the tab without rendering unloaded state');
+}
+
+{
+  const {calls,context}=createRouter('/app/network/213',{appDataReady:false});
+  assert.strictEqual(context.activePage,'discovery-detail');
+  assert(calls.some(item=>item[0]==='renderActiveDiscoveryFilterPage'),'ID-only discovery startup should reuse the existing grid loading state');
+}
+
+{
+  const {calls,context,listeners}=createRouter('/app/list/watching');
+  calls.length=0;
+  context.window.location.pathname='/app/profile';
+  context.window.location.search='';
+  listeners.popstate();
+  assert(calls.some(item=>item[0]==='showPage' && item[1]==='profile'),'browser back/forward should route through the shared parser');
+}
+
+{
+  const {calls,router}=createRouter('/app/private/notes',{appDataReady:false});
+  assert.strictEqual(router.parseRoute('/app/private/notes','').valid,false);
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'unknown startup route should show 404 immediately');
 }
 
 console.log('Real-path router runtime checks passed');

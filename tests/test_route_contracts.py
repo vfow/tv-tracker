@@ -16,10 +16,8 @@ def load_route_helpers():
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
-        "APP_LEGACY_GENRE_PATH_RE",
         "APP_TV_GENRE_SLUGS",
         "APP_MOVIE_GENRE_SLUGS",
-        "APP_LEGACY_MOVIE_ONLY_GENRE_SLUGS",
         "APP_PERSON_PATH_RE",
         "APP_NETWORK_PATH_RE",
         "APP_LANGUAGE_PATH_RE",
@@ -34,7 +32,6 @@ def load_route_helpers():
         "APP_CERTIFICATION_PATH_RE",
         "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
-        "APP_LEGACY_WATCHLIST_PATHS",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -49,7 +46,6 @@ def load_route_helpers():
             if names & wanted_names:
                 selected.append(node)
         elif isinstance(node, ast.FunctionDef) and node.name in {
-            "legacy_genre_redirect_path",
             "safe_next_url",
             "valid_app_path",
         }:
@@ -85,22 +81,38 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/list/plan-to-watch?x=1&q=the matrix"), "/app/list/plan-to-watch?q=the+matrix")
 
     def test_show_episode_genre_and_people_paths_are_allowed(self):
-        self.assertFalse(valid_app_path("/app/show/1399"))
+        self.assertTrue(valid_app_path("/app/show/1399"))
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones"))
         self.assertTrue(valid_app_path("/app/show/1399-game-of-thrones/season/0/episode/1"))
         self.assertTrue(valid_app_path("/app/show/1399/season/0/episode/1"))
         self.assertFalse(valid_app_path("/app/genre/action-adventure"))
-        self.assertEqual(safe_next_url("/app/genre/action-adventure"), "/app/genre/tv/action-adventure")
-        self.assertEqual(safe_next_url("/app/genre/horror"), "/app/genre/movie/horror")
+        self.assertEqual(safe_next_url("/app/genre/action-adventure"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/genre/horror"), "/app/list/watching")
         self.assertTrue(valid_app_path("/app/genre/tv/action-adventure"))
         self.assertTrue(valid_app_path("/app/genre/movie/horror"))
         self.assertFalse(valid_app_path("/app/actor/123"))
-        self.assertFalse(valid_app_path("/app/person/525"))
+        self.assertTrue(valid_app_path("/app/person/525"))
         self.assertTrue(valid_app_path("/app/person/525-christopher-nolan"))
-        self.assertTrue(valid_app_path("/app/actor/123-leonardo-dicaprio"))
-        self.assertTrue(valid_app_path("/app/cinematographer/456-roger-deakins"))
+        self.assertFalse(valid_app_path("/app/actor/123-leonardo-dicaprio"))
+        self.assertFalse(valid_app_path("/app/cinematographer/456-roger-deakins"))
         self.assertEqual(safe_next_url("/app/person/525-christopher-nolan"), "/app/person/525-christopher-nolan")
-        self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/actor/123-leonardo-dicaprio")
+        self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
+
+    def test_id_only_routes_are_allowed_for_client_canonicalization(self):
+        for path in (
+            "/app/show/1399",
+            "/app/person/525",
+            "/app/network/213",
+            "/app/language/ja",
+            "/app/country/jp",
+            "/app/theme/1234",
+            "/app/theme/movie/1234",
+            "/app/movie/603",
+            "/app/company/49",
+            "/app/provider/8",
+        ):
+            self.assertTrue(valid_app_path(path), path)
+            self.assertEqual(safe_next_url(path), path)
 
     def test_discovery_paths_are_allowed(self):
         for path in (
@@ -138,17 +150,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/api/state",
             "/app/private/notes",
             "/app/show/not-a-number",
-            "/app/show/1399",
             "/app/actor/123",
-            "/app/person/525",
-            "/app/network/213",
-            "/app/language/ja",
-            "/app/country/jp",
-            "/app/theme/1234",
-            "/app/theme/movie/1234",
-            "/app/movie/603",
-            "/app/company/49",
-            "/app/provider/8",
             "/app/discover/tv/trending",
             "/app/discover/person/popular",
             "/app/discover/movie/airing-today",
@@ -188,9 +190,11 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/theme/",
             "/app/theme/0",
             "/app/theme/not-a-number",
-            "/app/show/1399?status=watching",
         ):
             self.assertEqual(safe_next_url(value), "/app/list/watching")
+
+    def test_irrelevant_query_is_removed_from_detail_route(self):
+        self.assertEqual(safe_next_url("/app/show/1399?status=watching"), "/app/show/1399")
 
     def test_app_root_normalizes_to_watchlist(self):
         self.assertEqual(safe_next_url("/app"), "/app/list/watching")
@@ -201,16 +205,16 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/list/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/list/dropped/"), "/app/list/dropped")
         self.assertEqual(safe_next_url("/app/search/"), "/app/search")
-        self.assertEqual(safe_next_url("/app/show/1399/"), "/app/list/watching")
+        self.assertEqual(safe_next_url("/app/show/1399/"), "/app/show/1399")
         self.assertEqual(safe_next_url("/app/show/1399-game-of-thrones/"), "/app/show/1399-game-of-thrones")
         self.assertEqual(
             safe_next_url("/app/show/1399-game-of-thrones/season/1/episode/3/"),
             "/app/show/1399-game-of-thrones/season/1/episode/3",
         )
-        self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/genre/tv/action-adventure")
+        self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/genre/movie/horror/"), "/app/genre/movie/horror")
         self.assertEqual(safe_next_url("/app/person/525-christopher-nolan/"), "/app/person/525-christopher-nolan")
-        self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/actor/123-leonardo-dicaprio")
+        self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/network/213-netflix/"), "/app/network/213-netflix")
         self.assertEqual(safe_next_url("/app/movie/603-the-matrix/"), "/app/movie/603-the-matrix")
         self.assertEqual(safe_next_url("/app/company/49-hbo/"), "/app/company/49-hbo")

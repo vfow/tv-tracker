@@ -462,10 +462,17 @@ class V2RouteSecurityTests(unittest.TestCase):
             response = self.client.get("/app/show/1399/private-notes")
         self.assertEqual(response.status_code, 404)
 
-    def test_invalid_numeric_app_route_is_not_accepted(self):
+    def test_id_only_detail_route_renders_shell_for_client_canonicalization(self):
         authenticated_session(self.client)
         with patch.object(tracker, "read_admin_account", return_value=self.account):
             response = self.client.get("/app/show/1399")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'meta name="app-route" content="/app/show/1399"', response.data)
+
+    def test_removed_role_person_alias_is_not_accepted(self):
+        authenticated_session(self.client)
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/actor/525-christopher-nolan")
         self.assertEqual(response.status_code, 404)
 
     def test_page_not_found_uses_friendly_error_page(self):
