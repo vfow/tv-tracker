@@ -156,7 +156,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderDiscoveryFilterDetailPage', ui)
         self.assertIn('renderMovieDetailPage', ui)
         self.assertIn('renderMovieCrewTabHTML', ui)
-        self.assertIn('{label:"Director",jobs:["Director"],role:"director"}', ui)
+        self.assertIn('function renderMovieDirectedByHTML(movie)', ui)
         self.assertIn('renderSearchResults', ui)
         self.assertIn('renderDiscoverGenreSection', ui)
         self.assertIn('renderSearchTabButtonHTML', ui)
@@ -373,7 +373,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('Info","Cast","Crew","Details","Releases', ui)
         self.assertIn('movie-page-disabled-status-button', ui)
         self.assertIn('renderMovieCrewTabHTML', ui)
-        self.assertIn('{label:"Director",jobs:["Director"],role:"director"}', ui)
+        self.assertIn('function renderMovieDirectedByHTML(movie)', ui)
         self.assertIn('renderMovieReleasesHTML', ui)
         self.assertIn('lockSearchRouteBeforeResultOpen', ui)
         self.assertIn('favorites-popup-title', template)
@@ -419,6 +419,38 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieCompanyLogosHTML(movie && movie.production_companies)', details_block)
         self.assertIn('movie-company-logo', source_css)
         self.assertIn('movie-company-logo', built_css)
+
+    def test_phase603_details_consistency_and_releases_exist(self):
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        detail_start = ui.index('function renderMovieDetailPage(state)')
+        detail_block = ui[detail_start:ui.index('function getShowMetaHTML', detail_start)]
+        crew_start = ui.index('function renderMovieCrewTabHTML(movie)')
+        crew_block = ui[crew_start:ui.index('function renderMovieDetailsTabHTML(movie)', crew_start)]
+        release_start = ui.index('function renderMovieReleasesHTML(movie)')
+        release_block = ui[release_start:ui.index('function renderMovieCastTabHTML(movie)', release_start)]
+
+        self.assertIn('renderMovieDirectedByHTML(movie)', detail_block)
+        self.assertIn('renderMovieGenresHTML(movie)', detail_block)
+        self.assertNotIn('movie.tagline ? `<p class="show-detail-tagline">', detail_block)
+        self.assertIn('font-style:italic;', source_css)
+        self.assertIn('font-style:italic;', built_css)
+        self.assertIn('collectMovieCrewDepartments(movie)', crew_block)
+        self.assertIn('renderV2CrewMemberRows(group.people,"crew")', crew_block)
+        self.assertIn('movie-crew-department-list', source_css)
+        self.assertIn('movie-crew-department-list', built_css)
+        self.assertIn('renderCompanyLogoTilesHTML(companies)', ui)
+        self.assertIn('return renderCompanyLogoTilesHTML(companies) || "Unknown";', ui)
+        self.assertIn('background:#f3f3f3;', source_css)
+        self.assertIn('background:#f3f3f3;', built_css)
+        self.assertIn('movie-release-groups', release_block)
+        self.assertIn('movie-release-country-chip', release_block)
+        self.assertIn('movie-release-certification-badge', ui)
+        self.assertIn('typeDiff', release_block)
+        self.assertIn('localeCompare(String(b.countryName', release_block)
+        self.assertIn('movie-release-date-row', source_css)
+        self.assertIn('movie-release-date-row', built_css)
 
 
 if __name__ == '__main__':

@@ -3185,18 +3185,7 @@ function renderCreatedByHTML(show){
     return `<span>Created by ${creators.map(escapeHTML).join(" • ")}</span>`;
 }
 
-function renderCompanyLinksHTML(companies){
-    const source = Array.isArray(companies) ? companies : [];
-    const items = source.map(company=>{
-        const id = Number(company && company.id || 0);
-        const name = String(company && company.name || "").trim();
-        const route = id && typeof getCompanyDetailRoute === "function" ? getCompanyDetailRoute(id,name) : "";
-        return name ? renderPlainInlineRouteLinkHTML(name,route,"show-detail-company-link") : "";
-    }).filter(Boolean);
-    return items.length ? `<span class="show-detail-inline-link-list">${items.join(`<span class="show-detail-inline-separator">/</span>`)}</span>` : "Unknown";
-}
-
-function renderMovieCompanyLogosHTML(companies){
+function renderCompanyLogoTilesHTML(companies){
     const items = (Array.isArray(companies) ? companies : [])
     .map(company=>{
         const id = Number(company && company.id || 0);
@@ -3206,16 +3195,26 @@ function renderMovieCompanyLogosHTML(companies){
         if(!name){
             return "";
         }
-        if(logoPath){
-            const logo = `<img class="movie-company-logo" src="${escapeHTML(trackerImageURL(logoPath,"w154"))}" alt="${escapeHTML(name)}">`;
-            return route
-            ? `<a href="${escapeHTML(route)}" class="movie-company-logo-link" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${logo}</a>`
-            : `<span class="movie-company-logo-link" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${logo}</span>`;
-        }
-        return renderPlainInlineRouteLinkHTML(name,route,"show-detail-company-link movie-company-name-fallback");
+
+        const innerHTML = logoPath
+        ? `<img class="movie-company-logo" src="${escapeHTML(trackerImageURL(logoPath,"w154"))}" alt="${escapeHTML(name)}">`
+        : `<span class="movie-company-name-fallback">${escapeHTML(name)}</span>`;
+        const className = `movie-company-logo-link${logoPath ? "" : " movie-company-logo-link-name"}`;
+
+        return route
+        ? `<a href="${escapeHTML(route)}" class="${className}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${innerHTML}</a>`
+        : `<span class="${className}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${innerHTML}</span>`;
     })
     .filter(Boolean);
     return items.length ? `<span class="movie-company-logo-list">${items.join("")}</span>` : "";
+}
+
+function renderCompanyLinksHTML(companies){
+    return renderCompanyLogoTilesHTML(companies) || "Unknown";
+}
+
+function renderMovieCompanyLogosHTML(companies){
+    return renderCompanyLogoTilesHTML(companies);
 }
 
 function getMovieCertification(movie){
@@ -3296,7 +3295,7 @@ function getMovieCrewByJobs(movie,jobs){
 }
 
 function renderMovieCrewLinksHTML(movie,jobs,role){
-    const people = getMovieCrewByJobs(movie,jobs).slice(0,8);
+    const people = getMovieCrewByJobs(movie,jobs);
     if(!people.length){
         return "Unknown";
     }
@@ -3306,6 +3305,20 @@ function renderMovieCrewLinksHTML(movie,jobs,role){
         const route = id && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(role,id,name) : "";
         return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${renderPlainInlineRouteLinkHTML(name,route,"show-detail-person-link")}`;
     }).join("")}</span>`;
+}
+
+function renderMovieDirectedByHTML(movie){
+    const directors = getMovieCrewByJobs(movie,"Director");
+    if(!directors.length){
+        return "";
+    }
+    const links = directors.map((person,index)=>{
+        const id = Number(person && person.id || 0);
+        const name = String(person && person.name || "Unknown").trim();
+        const route = id && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("director",id,name) : "";
+        return `${index > 0 ? `<span class="show-detail-comma-separator">, </span>` : ""}${renderPlainInlineRouteLinkHTML(name,route,"show-detail-person-link")}`;
+    }).join("");
+    return links ? `<span>Directed by ${links}</span>` : "";
 }
 
 function renderMovieCountryDetailsHTML(movie){
@@ -3386,39 +3399,110 @@ function renderMovieProvidersHTML(movie){
     return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">Unknown</div>`;
 }
 
-function renderMovieReleasesHTML(movie){
-    const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
-    if(!results.length){
-        return `<div class="v2-api-empty">Unknown</div>`;
-    }
+function getMovieReleaseTypeLabel(type){
     const releaseTypes = {
         1:"Premiere",
-        2:"Theatrical limited",
+        2:"Theatrical Limited",
         3:"Theatrical",
         4:"Digital",
         5:"Physical",
         6:"TV"
     };
+    return releaseTypes[Number(type || 0)] || "Release";
+}
+
+function getMovieReleaseTypeOrder(type){
+    const order = {1:1,2:2,3:3,4:4,5:5,6:6};
+    return order[Number(type || 0)] || 99;
+}
+
+function renderMovieReleaseCountryChipHTML(release){
+    const countryName = release.countryName || "Other";
+    const certification = String(release.certification || "").trim();
+    const note = String(release.note || "").trim();
+    return `
+        <span class="movie-release-country-chip">
+            <span class="movie-release-country-main">
+                <span class="movie-release-country-name">${escapeHTML(countryName)}</span>
+                ${certification ? `<span class="movie-release-certification-badge">${escapeHTML(certification)}</span>` : ""}
+            </span>
+            ${note ? `<span class="movie-release-note">${escapeHTML(note)}</span>` : ""}
+        </span>
+    `;
+}
+
+function renderMovieReleasesHTML(movie){
+    const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
+    if(!results.length){
+        return `<div class="v2-api-empty">Unknown</div>`;
+    }
+
     const rows = [];
     results.forEach(country=>{
-        const code = String(country && country.iso_3166_1 || "").trim();
-        const label = code ? getCountryLabel(code) : "Other";
+        const code = String(country && country.iso_3166_1 || "").trim().toUpperCase();
+        const countryName = code ? getCountryName(code) : "Other";
         (Array.isArray(country && country.release_dates) ? country.release_dates : []).forEach(release=>{
-            const date = String(release.release_date || "").slice(0,10) || "Unknown";
-            const certification = String(release.certification || "").trim() || "Unknown";
-            const type = releaseTypes[Number(release.type || 0)] || "Release";
-            rows.push({label,date,certification,type});
+            rows.push({
+                countryCode:code,
+                countryName:countryName || code || "Other",
+                date:String(release && release.release_date || "").slice(0,10) || "Unknown",
+                certification:String(release && release.certification || "").trim(),
+                note:String(release && release.note || "").trim(),
+                type:Number(release && release.type || 0),
+                typeLabel:getMovieReleaseTypeLabel(release && release.type)
+            });
         });
     });
+
     if(!rows.length){
         return `<div class="v2-api-empty">Unknown</div>`;
     }
-    return `<div class="show-release-list movie-release-list">${rows.map(row=>`
-        <div class="show-release-row">
-            <div class="show-release-country">${escapeHTML(row.label)}</div>
-            <div class="show-release-meta">${escapeHTML(row.type)} • ${escapeHTML(row.certification)} • ${escapeHTML(row.date)}</div>
+
+    rows.sort((a,b)=>{
+        const typeDiff = getMovieReleaseTypeOrder(a.type) - getMovieReleaseTypeOrder(b.type);
+        if(typeDiff){
+            return typeDiff;
+        }
+        const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
+        const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
+        if(dateA !== dateB){
+            return dateA.localeCompare(dateB);
+        }
+        return String(a.countryName || "").localeCompare(String(b.countryName || ""));
+    });
+
+    const groupedByType = new Map();
+    rows.forEach(row=>{
+        const typeKey = `${getMovieReleaseTypeOrder(row.type)}:${row.typeLabel}`;
+        if(!groupedByType.has(typeKey)){
+            groupedByType.set(typeKey,{label:row.typeLabel,dates:new Map()});
+        }
+        const group = groupedByType.get(typeKey);
+        if(!group.dates.has(row.date)){
+            group.dates.set(row.date,[]);
+        }
+        group.dates.get(row.date).push(row);
+    });
+
+    return `
+        <div class="movie-release-groups">
+            ${Array.from(groupedByType.values()).map(group=>`
+                <section class="movie-release-type-group">
+                    <h3 class="modal-section-heading movie-release-type-heading">${escapeHTML(group.label)}</h3>
+                    <div class="movie-release-date-list">
+                        ${Array.from(group.dates.entries()).map(([date,dateRows])=>`
+                            <div class="movie-release-date-row">
+                                <div class="movie-release-date">${escapeHTML(date)}</div>
+                                <div class="movie-release-country-chip-list">
+                                    ${dateRows.sort((a,b)=>String(a.countryName || "").localeCompare(String(b.countryName || ""))).map(renderMovieReleaseCountryChipHTML).join("")}
+                                </div>
+                            </div>
+                        `).join("")}
+                    </div>
+                </section>
+            `).join("")}
         </div>
-    `).join("")}</div>`;
+    `;
 }
 
 function renderMovieCastTabHTML(movie){
@@ -3427,19 +3511,72 @@ function renderMovieCastTabHTML(movie){
     return rows ? `<div class="v2-actor-list show-info-actor-list">${rows}</div>` : `<div class="v2-api-empty">Unknown</div>`;
 }
 
-function renderMovieCrewTabHTML(movie){
-    const groups = [
-        {label:"Director",jobs:["Director"],role:"director"},
-        {label:"Writer",jobs:["Writer","Screenplay","Story"],role:"writer"},
-        {label:"Producer",jobs:["Producer","Executive Producer"],role:"producer"},
-        {label:"Composer",jobs:["Original Music Composer","Music"],role:"composer"},
-        {label:"Editor",jobs:["Editor"],role:"editor"},
-        {label:"Cinematographer",jobs:["Director of Photography","Cinematography"],role:"cinematographer"}
+function normalizeMovieCrewDepartment(department){
+    const label = String(department || "").trim();
+    return label || "Other Crew";
+}
+
+function getMovieCrewDepartmentOrder(department){
+    const key = normalizeMovieCrewDepartment(department).toLowerCase();
+    const order = [
+        "directing",
+        "writing",
+        "production",
+        "camera",
+        "sound",
+        "editing",
+        "art",
+        "visual effects",
+        "costume & make-up",
+        "crew"
     ];
-    return `<div class="show-detail-fact-list movie-crew-fact-list">${groups.map(group=>`
-        <div class="show-detail-fact-row">
-            <div class="episode-detail-label">${escapeHTML(group.label)}</div>
-            <div class="episode-detail-value">${renderMovieCrewLinksHTML(movie,group.jobs,group.role)}</div>
+    const index = order.indexOf(key);
+    return index >= 0 ? index : order.length;
+}
+
+function collectMovieCrewDepartments(movie){
+    const departments = new Map();
+    (Array.isArray(movie && movie.crew) ? movie.crew : []).forEach(person=>{
+        const department = normalizeMovieCrewDepartment(person && person.department);
+        if(!departments.has(department)){
+            departments.set(department,new Map());
+        }
+        const people = departments.get(department);
+        const id = Number(person && person.id || 0);
+        const name = String(person && person.name || "Unknown").trim();
+        const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+        const job = String(person && person.job || "Crew").trim() || "Crew";
+        if(!people.has(key)){
+            people.set(key,{...person,job:job,jobs:[job]});
+            return;
+        }
+        const existing = people.get(key);
+        if(!existing.jobs.includes(job)){
+            existing.jobs.push(job);
+            existing.job = existing.jobs.join(" / ");
+        }
+    });
+
+    return Array.from(departments.entries())
+    .map(([department,people])=>({
+        department,
+        people:Array.from(people.values()).sort((a,b)=>String(a.name || "").localeCompare(String(b.name || "")))
+    }))
+    .sort((a,b)=>{
+        const orderDiff = getMovieCrewDepartmentOrder(a.department) - getMovieCrewDepartmentOrder(b.department);
+        return orderDiff || a.department.localeCompare(b.department);
+    });
+}
+
+function renderMovieCrewTabHTML(movie){
+    const groups = collectMovieCrewDepartments(movie);
+    if(!groups.length){
+        return `<div class="v2-api-empty">Unknown</div>`;
+    }
+    return `<div class="movie-crew-department-list">${groups.map(group=>`
+        <div class="show-detail-crew-group movie-crew-department-group">
+            <h3 class="modal-section-heading movie-crew-department-heading">${escapeHTML(group.department)}</h3>
+            <div class="v2-actor-list movie-crew-list">${renderV2CrewMemberRows(group.people,"crew")}</div>
         </div>
     `).join("")}</div>`;
 }
@@ -3540,6 +3677,14 @@ function renderMovieDetailPage(state){
     }
     metaItems.push(certification ? renderCertificationLinkHTML("movie",certification) : "Unknown");
     metaItems.push(movie.runtime ? `<span>${escapeHTML(movie.runtime)} min</span>` : `<span>Unknown</span>`);
+    const directedByHTML = renderMovieDirectedByHTML(movie);
+    if(directedByHTML){
+        metaItems.push(directedByHTML);
+    }
+    const genresHTML = renderMovieGenresHTML(movie);
+    if(genresHTML && genresHTML !== "Unknown"){
+        metaItems.push(genresHTML);
+    }
     if(rating > 0){
         metaItems.push(`<span class="tmdb-rating-group"><span class="tmdb-rating-inline">${rating.toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`);
     }else{
@@ -3562,7 +3707,6 @@ function renderMovieDetailPage(state){
                     </div>
                     <div class="show-page-hero-content movie-page-hero-content">
                         <div class="modal-title show-page-title">${escapeHTML(title)}</div>
-                        ${movie.tagline ? `<p class="show-detail-tagline">${escapeHTML(movie.tagline)}</p>` : ""}
                         <div class="modal-meta modal-meta-under-status show-page-meta-line">${metaHTML}</div>
                         <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML()}</div>
                         ${renderMovieExternalLinksHTML(movie)}
@@ -4826,7 +4970,7 @@ function renderV2CrewMemberRows(people,fallbackRole=""){
         const routeRole = getCrewRouteRole(person,fallbackRole);
         const photo = person.profile_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"w185"))}" alt="">`
-        : `<div class="v2-actor-placeholder">CREW</div>`;
+        : `<div class="v2-actor-placeholder">NO PHOTO</div>`;
 
         return `
             <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}" data-person-name="${escapeHTML(person.name || "Unknown")}"` : ""}>
