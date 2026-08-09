@@ -620,7 +620,7 @@ function renderSearchPersonCard(result){
     const name = result && result.name ? String(result.name) : "Unknown Person";
     const photoHTML = result && (result.profile_path || result.poster_path)
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.profile_path || result.poster_path,"h632"))}" alt="${escapeHTML(name + " photo")}">`
-    : `<div class="search-person-placeholder">PERSON</div>`;
+    : renderPersonSilhouettePlaceholderHTML("search-person-placeholder");
 
     return `
         <button
@@ -866,7 +866,7 @@ function renderGenrePosterGridCard(show){
 function renderPersonProfileHTML(person,role){
     const photo = person && person.profile_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"h632"))}" alt="${escapeHTML((person.name || "Person") + " photo")}">`
-    : `<div class="person-profile-placeholder">NO PHOTO</div>`;
+    : renderPersonSilhouettePlaceholderHTML("person-profile-placeholder");
     const biography = person && person.biography ? String(person.biography).trim() : "";
     const hasLongBio = biography.length > 260;
 
@@ -3416,18 +3416,34 @@ function getMovieReleaseTypeOrder(type){
     return order[Number(type || 0)] || 99;
 }
 
-function renderMovieReleaseCountryChipHTML(release){
-    const countryName = release.countryName || "Other";
+function renderMovieReleaseEntryHTML(release){
     const certification = String(release.certification || "").trim();
     const note = String(release.note || "").trim();
     return `
-        <span class="movie-release-country-chip">
-            <span class="movie-release-country-main">
-                <span class="movie-release-country-name">${escapeHTML(countryName)}</span>
+        <div class="movie-release-entry">
+            <div class="movie-release-entry-main">
+                <span class="movie-release-date">${escapeHTML(formatMovieReleaseDate(release.date))}</span>
+                <span class="modal-meta-separator">•</span>
+                <span class="movie-release-type-label">${escapeHTML(release.typeLabel || "Release")}</span>
                 ${certification ? `<span class="movie-release-certification-badge">${escapeHTML(certification)}</span>` : ""}
-            </span>
-            ${note ? `<span class="movie-release-note">${escapeHTML(note)}</span>` : ""}
-        </span>
+            </div>
+            ${note ? `<div class="movie-release-note">${escapeHTML(note)}</div>` : ""}
+        </div>
+    `;
+}
+
+function renderMovieReleaseCountryRowHTML(country){
+    const flag = getCountryFlag(country.countryCode);
+    return `
+        <div class="movie-release-country-row">
+            <div class="movie-release-country-label">
+                ${flag ? `<span class="movie-release-flag" aria-hidden="true">${escapeHTML(flag)}</span>` : ""}
+                <span class="movie-release-country-name">${escapeHTML(country.countryName || "Other")}</span>
+            </div>
+            <div class="movie-release-entry-list">
+                ${country.releases.map(renderMovieReleaseEntryHTML).join("")}
+            </div>
+        </div>
     `;
 }
 
@@ -3437,70 +3453,63 @@ function renderMovieReleasesHTML(movie){
         return `<div class="v2-api-empty">Unknown</div>`;
     }
 
-    const rows = [];
+    const countries = new Map();
     results.forEach(country=>{
         const code = String(country && country.iso_3166_1 || "").trim().toUpperCase();
         const countryName = code ? getCountryName(code) : "Other";
-        (Array.isArray(country && country.release_dates) ? country.release_dates : []).forEach(release=>{
-            rows.push({
+        const releases = (Array.isArray(country && country.release_dates) ? country.release_dates : [])
+        .map(release=>({
+            countryCode:code,
+            countryName:countryName || code || "Other",
+            date:String(release && release.release_date || "").slice(0,10) || "Unknown",
+            certification:String(release && release.certification || "").trim(),
+            note:String(release && release.note || "").trim(),
+            type:Number(release && release.type || 0),
+            typeLabel:getMovieReleaseTypeLabel(release && release.type)
+        }))
+        .filter(release=>release.date !== "Unknown" || release.typeLabel !== "Release" || release.certification || release.note);
+
+        if(!releases.length){
+            return;
+        }
+
+        const key = code || countryName || "Other";
+        if(!countries.has(key)){
+            countries.set(key,{
                 countryCode:code,
                 countryName:countryName || code || "Other",
-                date:String(release && release.release_date || "").slice(0,10) || "Unknown",
-                certification:String(release && release.certification || "").trim(),
-                note:String(release && release.note || "").trim(),
-                type:Number(release && release.type || 0),
-                typeLabel:getMovieReleaseTypeLabel(release && release.type)
+                releases:[]
             });
-        });
+        }
+        countries.get(key).releases.push(...releases);
     });
 
-    if(!rows.length){
+    const countryRows = Array.from(countries.values())
+    .map(country=>({
+        ...country,
+        releases:country.releases.sort((a,b)=>{
+            const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
+            const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
+            if(dateA !== dateB){
+                return dateA.localeCompare(dateB);
+            }
+            const typeDiff = getMovieReleaseTypeOrder(a.type) - getMovieReleaseTypeOrder(b.type);
+            if(typeDiff){
+                return typeDiff;
+            }
+            return String(a.certification || "").localeCompare(String(b.certification || ""));
+        })
+    }))
+    .sort((a,b)=>String(a.countryName || "").localeCompare(String(b.countryName || "")));
+
+    if(!countryRows.length){
         return `<div class="v2-api-empty">Unknown</div>`;
     }
 
-    rows.sort((a,b)=>{
-        const typeDiff = getMovieReleaseTypeOrder(a.type) - getMovieReleaseTypeOrder(b.type);
-        if(typeDiff){
-            return typeDiff;
-        }
-        const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
-        const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
-        if(dateA !== dateB){
-            return dateA.localeCompare(dateB);
-        }
-        return String(a.countryName || "").localeCompare(String(b.countryName || ""));
-    });
-
-    const groupedByType = new Map();
-    rows.forEach(row=>{
-        const typeKey = `${getMovieReleaseTypeOrder(row.type)}:${row.typeLabel}`;
-        if(!groupedByType.has(typeKey)){
-            groupedByType.set(typeKey,{label:row.typeLabel,dates:new Map()});
-        }
-        const group = groupedByType.get(typeKey);
-        if(!group.dates.has(row.date)){
-            group.dates.set(row.date,[]);
-        }
-        group.dates.get(row.date).push(row);
-    });
-
     return `
-        <div class="movie-release-groups">
-            ${Array.from(groupedByType.values()).map(group=>`
-                <section class="movie-release-type-group">
-                    <h3 class="modal-section-heading movie-release-type-heading">${escapeHTML(group.label)}</h3>
-                    <div class="movie-release-date-list">
-                        ${Array.from(group.dates.entries()).map(([date,dateRows])=>`
-                            <div class="movie-release-date-row">
-                                <div class="movie-release-date">${escapeHTML(date)}</div>
-                                <div class="movie-release-country-chip-list">
-                                    ${dateRows.sort((a,b)=>String(a.countryName || "").localeCompare(String(b.countryName || ""))).map(renderMovieReleaseCountryChipHTML).join("")}
-                                </div>
-                            </div>
-                        `).join("")}
-                    </div>
-                </section>
-            `).join("")}
+        <div class="movie-release-country-list">
+            <div class="movie-release-sort-note">Sort by country</div>
+            ${countryRows.map(renderMovieReleaseCountryRowHTML).join("")}
         </div>
     `;
 }
@@ -3708,8 +3717,8 @@ function renderMovieDetailPage(state){
                     <div class="show-page-hero-content movie-page-hero-content">
                         <div class="modal-title show-page-title">${escapeHTML(title)}</div>
                         <div class="modal-meta modal-meta-under-status show-page-meta-line">${metaHTML}</div>
-                        <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML()}</div>
                         ${renderMovieExternalLinksHTML(movie)}
+                        <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML()}</div>
                     </div>
                 </div>
             </div>
@@ -4244,7 +4253,7 @@ function renderV2ActorImageHTML(actor){
         return `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(actor.profile_path,"w185"))}" alt="">`;
     }
 
-    return `<div class="v2-actor-placeholder">NO PHOTO</div>`;
+    return renderPersonSilhouettePlaceholderHTML("v2-actor-placeholder");
 }
 
 function getCastLayoutSetting(){
@@ -4892,6 +4901,34 @@ function renderShowModalPreservingScroll(show){
     renderShowDetailsPagePreservingScroll(show);
 }
 
+function renderPersonSilhouettePlaceholderHTML(className="person-silhouette-placeholder"){
+    const cleanClass = String(className || "person-silhouette-placeholder").trim() || "person-silhouette-placeholder";
+    return `
+        <div class="${escapeHTML(cleanClass)} person-silhouette-placeholder" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false" role="img">
+                <path class="person-silhouette-head" d="M32 30c7.18 0 13-5.82 13-13S39.18 4 32 4 19 9.82 19 17s5.82 13 13 13Z"></path>
+                <path class="person-silhouette-body" d="M10 60c1.8-13.05 10.4-22 22-22s20.2 8.95 22 22H10Z"></path>
+            </svg>
+        </div>
+    `;
+}
+
+function formatMovieReleaseDate(dateString){
+    const clean = String(dateString || "").trim();
+    if(!clean || clean === "Unknown"){
+        return "Unknown";
+    }
+    const date = new Date(clean);
+    if(Number.isNaN(date.getTime())){
+        return clean;
+    }
+    return date.toLocaleDateString("en-GB",{
+        day:"2-digit",
+        month:"short",
+        year:"numeric"
+    });
+}
+
 function getShowDetailActiveTab(show){
     const id = String(show && show.tmdb_id ? show.tmdb_id : selectedShowId || "");
     const tab = activeShowDetailsTabs && activeShowDetailsTabs[id] ? activeShowDetailsTabs[id] : "Info";
@@ -4970,7 +5007,7 @@ function renderV2CrewMemberRows(people,fallbackRole=""){
         const routeRole = getCrewRouteRole(person,fallbackRole);
         const photo = person.profile_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"w185"))}" alt="">`
-        : `<div class="v2-actor-placeholder">NO PHOTO</div>`;
+        : renderPersonSilhouettePlaceholderHTML("v2-actor-placeholder");
 
         return `
             <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}" data-person-name="${escapeHTML(person.name || "Unknown")}"` : ""}>
@@ -5073,7 +5110,6 @@ function renderShowDetailsTabHTML(show){
         {label:"Country",html:renderShowCountryDetailsHTML(show)},
         {label:"Certification",html:contentRating ? renderCertificationLinkHTML("tv",contentRating) : "Unknown"},
         {label:"Production Companies",html:renderCompanyLinksHTML(productionCompanies)},
-        {label:"Themes",html:renderShowThemesDetailsHTML(show)},
         {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show)}
     ];
 
@@ -5091,16 +5127,30 @@ function renderShowDetailsTabHTML(show){
 
 function renderShowGenresTabHTML(show){
     const genres = Array.isArray(show && show.genres) ? show.genres : [];
-    if(!genres.length){
-        return `<div class="v2-api-empty">No genres available.</div>`;
-    }
-
-    return `<div class="show-detail-genre-chips">${genres.map(genre=>{
+    const themesHTML = renderShowThemesDetailsHTML(show);
+    const genreHTML = genres.length
+    ? `<div class="show-detail-genre-chips">${genres.map(genre=>{
         const route = getShowGenreRoute(genre,"tv");
         return route
         ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-media="tv" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
         : `<span>${escapeHTML(genre)}</span>`;
-    }).join("")}</div>`;
+    }).join("")}</div>`
+    : `<div class="v2-api-empty">No genres available.</div>`;
+
+    return `
+        <div class="show-genres-tab-stack">
+            <section class="show-genres-tab-section">
+                <h3 class="modal-section-heading show-genres-tab-heading">Genres</h3>
+                ${genreHTML}
+            </section>
+            ${themesHTML !== "Unknown" ? `
+                <section class="show-genres-tab-section">
+                    <h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>
+                    ${themesHTML}
+                </section>
+            ` : ""}
+        </div>
+    `;
 }
 
 function getRatingsByCountry(show){

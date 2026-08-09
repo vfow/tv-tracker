@@ -444,13 +444,43 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('return renderCompanyLogoTilesHTML(companies) || "Unknown";', ui)
         self.assertIn('background:#f3f3f3;', source_css)
         self.assertIn('background:#f3f3f3;', built_css)
-        self.assertIn('movie-release-groups', release_block)
-        self.assertIn('movie-release-country-chip', release_block)
+        self.assertIn('movie-release-country-list', release_block)
+        self.assertIn('renderMovieReleaseCountryRowHTML', release_block)
         self.assertIn('movie-release-certification-badge', ui)
-        self.assertIn('typeDiff', release_block)
         self.assertIn('localeCompare(String(b.countryName', release_block)
-        self.assertIn('movie-release-date-row', source_css)
-        self.assertIn('movie-release-date-row', built_css)
+        self.assertIn('movie-release-country-row', source_css)
+        self.assertIn('movie-release-country-row', built_css)
+
+    def test_phase604_detail_polish_releases_and_placeholders_exist(self):
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        details_start = ui.index('function renderMovieDetailPage(state)')
+        details_block = ui[details_start:ui.index('function getShowMetaHTML', details_start)]
+        genres_start = ui.index('function renderShowGenresTabHTML(show)')
+        genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
+        releases_start = ui.index('function renderMovieReleasesHTML(movie)')
+        releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
+        show_details_start = ui.index('function renderShowDetailsTabHTML(show)')
+        show_details_block = ui[show_details_start:ui.index('function renderShowGenresTabHTML(show)', show_details_start)]
+
+        self.assertIn('${renderMovieExternalLinksHTML(movie)}\n                        <div class="show-page-actions-wrap movie-page-actions-wrap">', details_block)
+        self.assertIn('renderPersonSilhouettePlaceholderHTML', ui)
+        self.assertNotIn('NO PHOTO', ui)
+        self.assertIn('show-genres-tab-stack', genres_block)
+        self.assertIn('<h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>', genres_block)
+        self.assertNotIn('{label:"Themes",html:renderShowThemesDetailsHTML(show)}', show_details_block)
+        self.assertIn('movie-release-country-list', releases_block)
+        self.assertIn('renderMovieReleaseCountryRowHTML', releases_block)
+        self.assertIn('movie-release-sort-note', releases_block)
+        self.assertNotIn('groupedByType', releases_block)
+        self.assertIn('person-silhouette-placeholder', source_css)
+        self.assertIn('person-silhouette-placeholder', built_css)
+        self.assertIn('show-genres-tab-stack', source_css)
+        self.assertIn('show-genres-tab-stack', built_css)
+        self.assertIn('movie-release-country-list', source_css)
+        self.assertIn('movie-release-country-list', built_css)
+
 
 
 if __name__ == '__main__':

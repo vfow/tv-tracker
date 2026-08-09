@@ -5096,26 +5096,6 @@
 .movie-crew-fact-list .episode-detail-value{
     line-height:1.7;
 }
-.movie-release-list{
-    display:grid;
-    gap:10px;
-}
-.movie-release-list .show-release-row{
-    border:1px solid rgba(255,255,255,.08);
-    border-radius:14px;
-    padding:12px 14px;
-    background:rgba(255,255,255,.035);
-}
-.movie-release-list .show-release-country{
-    font-weight:700;
-    letter-spacing:.02em;
-}
-.movie-release-list .show-release-meta{
-    margin-top:4px;
-    color:rgba(255,255,255,.62);
-    font-size:.9rem;
-}
-
 /* Phase 6.0.3 details consistency and movie releases */
 .movie-info-tagline{
     margin:0 0 14px;
@@ -5183,102 +5163,165 @@
     margin-bottom:12px;
 }
 
-.movie-release-groups{
+}
+/* Phase 6.0.4 detail polish and clean releases */
+.person-silhouette-placeholder{
+    display:flex;
+    height:100%;
+    width:100%;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(145deg,#171717,#080808);
+    color:rgba(255,255,255,.42);
+}
+
+.person-silhouette-placeholder svg{
+    display:block;
+    width:46%;
+    max-width:54px;
+    height:auto;
+    fill:currentColor;
+    opacity:.9;
+}
+
+.person-profile-placeholder.person-silhouette-placeholder svg,
+.search-person-placeholder.person-silhouette-placeholder svg{
+    width:42%;
+    max-width:82px;
+}
+
+.v2-actor-placeholder.person-silhouette-placeholder svg{
+    width:48%;
+    max-width:34px;
+}
+
+.show-genres-tab-stack{
     display:grid;
     gap:26px;
 }
 
-.movie-release-type-group{
+.show-genres-tab-section{
+    min-width:0;
+}
+
+.show-genres-tab-heading{
+    margin-bottom:12px;
+}
+
+.movie-page-actions-wrap{
+    margin-top:.75rem;
+}
+
+.movie-release-country-list{
     display:grid;
-    gap:12px;
+    gap:0;
 }
 
-.movie-release-type-heading{
-    margin:0;
-}
-
-.movie-release-date-list{
-    display:grid;
-    gap:12px;
-}
-
-.movie-release-date-row{
-    display:grid;
-    grid-template-columns:minmax(112px,150px) minmax(0,1fr);
-    gap:14px;
-    align-items:flex-start;
-    border:1px solid rgba(255,255,255,.09);
-    border-radius:16px;
-    padding:14px;
-    background:rgba(255,255,255,.035);
-}
-
-.movie-release-date{
-    color:#fff;
-    font-size:.95rem;
-    font-weight:800;
-    letter-spacing:.02em;
-}
-
-.movie-release-country-chip-list{
+.movie-release-sort-note{
     display:flex;
-    flex-wrap:wrap;
-    gap:8px;
+    justify-content:flex-end;
+    border-bottom:1px solid rgba(255,255,255,.14);
+    padding:0 0 8px;
+    color:rgba(255,255,255,.42);
+    font-size:.72rem;
+    text-transform:uppercase;
+    letter-spacing:.12em;
 }
 
-.movie-release-country-chip{
-    display:inline-flex;
-    min-height:34px;
-    flex-direction:column;
-    justify-content:center;
-    gap:3px;
-    border:1px solid rgba(255,255,255,.13);
-    border-radius:999px;
-    padding:7px 11px;
-    background:rgba(255,255,255,.06);
-    color:#f4f4f4;
+.movie-release-country-row{
+    display:grid;
+    grid-template-columns:minmax(150px,220px) minmax(0,1fr);
+    gap:18px;
+    align-items:start;
+    border-bottom:1px solid rgba(255,255,255,.12);
+    padding:11px 0;
 }
 
-.movie-release-country-main{
-    display:inline-flex;
+.movie-release-country-label{
+    display:flex;
+    min-width:0;
     align-items:center;
+    gap:8px;
+    color:#e8eef5;
+    font-size:.88rem;
+    font-weight:800;
+    line-height:1.35;
+}
+
+.movie-release-flag{
+    display:inline-flex;
+    width:20px;
+    min-width:20px;
+    justify-content:center;
+    font-size:1rem;
+    line-height:1;
+}
+
+.movie-release-entry-list{
+    display:grid;
     gap:7px;
 }
 
-.movie-release-country-name{
-    font-size:.85rem;
-    font-weight:800;
-    line-height:1.1;
+.movie-release-entry{
+    min-width:0;
+}
+
+.movie-release-entry-main{
+    display:flex;
+    min-width:0;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:6px;
+    color:rgba(255,255,255,.74);
+    font-size:.82rem;
+    line-height:1.45;
+}
+
+.movie-release-date{
+    color:#b9c5d3;
+    font-size:.82rem;
+    font-weight:500;
+    letter-spacing:0;
+}
+
+.movie-release-type-label{
+    color:rgba(255,255,255,.76);
+    font-weight:650;
 }
 
 .movie-release-certification-badge{
     display:inline-flex;
-    min-width:24px;
-    min-height:20px;
+    min-width:22px;
+    min-height:18px;
     align-items:center;
     justify-content:center;
-    border:1px solid rgba(255,255,255,.42);
-    border-radius:6px;
-    padding:1px 6px;
-    background:rgba(255,255,255,.14);
-    color:#fff;
-    font-size:.72rem;
+    border:1px solid rgba(185,197,211,.56);
+    border-radius:3px;
+    padding:1px 5px;
+    background:rgba(255,255,255,.08);
+    color:#dce6f2;
+    font-size:.68rem;
     font-weight:900;
     line-height:1;
     letter-spacing:.02em;
 }
 
 .movie-release-note{
-    max-width:260px;
-    color:rgba(255,255,255,.62);
-    font-size:.74rem;
-    font-weight:650;
-    line-height:1.25;
+    margin-top:2px;
+    max-width:520px;
+    color:rgba(185,197,211,.62);
+    font-size:.76rem;
+    font-weight:500;
+    line-height:1.28;
 }
 
 @media (max-width:767.98px){
-    .movie-release-date-row{
+    .movie-release-country-row{
         grid-template-columns:1fr;
+        gap:7px;
+    }
+
+    .movie-release-sort-note{
+        justify-content:flex-start;
     }
 }
-
