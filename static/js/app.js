@@ -86,6 +86,7 @@ var showDetailScrollRestorePending = false;
 var appDataReady = false;
 var activeShowDetailsTabs = {};
 var activeMovieDetailsTab = "Info";
+var activeMovieReleaseSort = "date";
 var activeShowInfoTabs = {};
 var expandedSeasons = {};
 var expandedUpcomingBatches = {};
@@ -6494,6 +6495,14 @@ function attachMovieDetailPageEvents(){
         });
     });
 
+    document.querySelectorAll("[data-movie-release-sort-toggle]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const current = String(this.dataset.currentSort || activeMovieReleaseSort || "date").toLowerCase();
+            activeMovieReleaseSort = current === "country" ? "date" : "country";
+            renderActiveMoviePage();
+        });
+    });
+
     document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openGenrePage !== "function"){
@@ -6548,6 +6557,7 @@ async function openMoviePage(movieId,options={}){
     }
 
     activeMovieDetailsTab = "Info";
+    activeMovieReleaseSort = "date";
 
     moviePageState = {
         movieId:id,

@@ -447,7 +447,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-country-list', release_block)
         self.assertIn('renderMovieReleaseCountryRowHTML', release_block)
         self.assertIn('movie-release-certification-badge', ui)
-        self.assertIn('localeCompare(String(b.countryName', release_block)
+        self.assertIn('localeCompare(String(b.countryName', ui)
         self.assertIn('movie-release-country-row', source_css)
         self.assertIn('movie-release-country-row', built_css)
 
@@ -459,7 +459,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         details_block = ui[details_start:ui.index('function getShowMetaHTML', details_start)]
         genres_start = ui.index('function renderShowGenresTabHTML(show)')
         genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
-        releases_start = ui.index('function renderMovieReleasesHTML(movie)')
+        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
         releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
         show_details_start = ui.index('function renderShowDetailsTabHTML(show)')
         show_details_block = ui[show_details_start:ui.index('function renderShowGenresTabHTML(show)', show_details_start)]
@@ -481,6 +481,34 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-country-list', source_css)
         self.assertIn('movie-release-country-list', built_css)
 
+
+
+    def test_phase605_small_detail_cleanup_exists(self):
+        ui = self.read('static/js/ui.js')
+        app = self.read('static/js/app.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        themes_start = ui.index('function renderShowThemesDetailsHTML(show)')
+        themes_block = ui[themes_start:ui.index('function renderShowNetworkDetailsHTML(show)', themes_start)]
+        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
+        releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
+
+        self.assertIn('show-detail-theme-list-expanded', themes_block)
+        self.assertNotIn('data-show-themes-more', themes_block)
+        self.assertNotIn('...more', themes_block)
+        self.assertIn('var activeMovieReleaseSort = "date";', app)
+        self.assertIn('activeMovieReleaseSort = "date";', app)
+        self.assertIn('data-movie-release-sort-toggle', ui)
+        self.assertIn('data-movie-release-sort-toggle', app)
+        self.assertIn('renderMovieReleaseSortControlHTML(sortMode)', releases_block)
+        self.assertIn('groupMovieReleasesByDate(releases)', releases_block)
+        self.assertIn('groupMovieReleasesByCountry(releases)', ui)
+        self.assertIn('movie-release-date-row', releases_block)
+        self.assertIn('movie-release-date-entry-list', releases_block)
+        self.assertIn('movie-release-date-row', source_css)
+        self.assertIn('movie-release-date-row', built_css)
+        self.assertIn('movie-release-sort-button', source_css)
+        self.assertIn('movie-release-sort-button', built_css)
 
 
 if __name__ == '__main__':

@@ -3416,6 +3416,26 @@ function getMovieReleaseTypeOrder(type){
     return order[Number(type || 0)] || 99;
 }
 
+function getMovieReleaseSortMode(){
+    const sort = String(typeof activeMovieReleaseSort !== "undefined" ? activeMovieReleaseSort : "date").trim().toLowerCase();
+    return sort === "country" ? "country" : "date";
+}
+
+function renderMovieReleaseSortControlHTML(sortMode){
+    const mode = sortMode === "country" ? "country" : "date";
+    const label = mode === "country" ? "Country" : "Date";
+    const nextLabel = mode === "country" ? "date" : "country";
+    return `
+        <div class="movie-release-sort-note movie-release-sort-bar">
+            <span class="movie-release-sort-static">Sort by</span>
+            <button class="movie-release-sort-button" type="button" data-movie-release-sort-toggle data-current-sort="${escapeHTML(mode)}" aria-label="Sort releases by ${escapeHTML(nextLabel)}">
+                <span>${escapeHTML(label)}</span>
+                <span class="movie-release-sort-chevron" aria-hidden="true">⌄</span>
+            </button>
+        </div>
+    `;
+}
+
 function renderMovieReleaseEntryHTML(release){
     const certification = String(release.certification || "").trim();
     const note = String(release.note || "").trim();
@@ -3447,17 +3467,45 @@ function renderMovieReleaseCountryRowHTML(country){
     `;
 }
 
-function renderMovieReleasesHTML(movie){
-    const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
-    if(!results.length){
-        return `<div class="v2-api-empty">Unknown</div>`;
-    }
+function renderMovieReleaseDateEntryHTML(release){
+    const flag = getCountryFlag(release.countryCode);
+    const certification = String(release.certification || "").trim();
+    const note = String(release.note || "").trim();
+    return `
+        <div class="movie-release-date-entry">
+            <div class="movie-release-date-entry-main">
+                <span class="movie-release-date-country-label">
+                    ${flag ? `<span class="movie-release-flag" aria-hidden="true">${escapeHTML(flag)}</span>` : ""}
+                    <span class="movie-release-country-name">${escapeHTML(release.countryName || "Other")}</span>
+                </span>
+                <span class="modal-meta-separator">•</span>
+                <span class="movie-release-type-label">${escapeHTML(release.typeLabel || "Release")}</span>
+                ${certification ? `<span class="movie-release-certification-badge">${escapeHTML(certification)}</span>` : ""}
+            </div>
+            ${note ? `<div class="movie-release-note">${escapeHTML(note)}</div>` : ""}
+        </div>
+    `;
+}
 
-    const countries = new Map();
+function renderMovieReleaseDateRowHTML(group){
+    return `
+        <div class="movie-release-date-row">
+            <div class="movie-release-date-label">${escapeHTML(formatMovieReleaseDate(group.date))}</div>
+            <div class="movie-release-date-entry-list">
+                ${group.releases.map(renderMovieReleaseDateEntryHTML).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function collectMovieReleaseRows(movie){
+    const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results) ? movie.release_dates.results : [];
+    const releases = [];
+
     results.forEach(country=>{
         const code = String(country && country.iso_3166_1 || "").trim().toUpperCase();
         const countryName = code ? getCountryName(code) : "Other";
-        const releases = (Array.isArray(country && country.release_dates) ? country.release_dates : [])
+        (Array.isArray(country && country.release_dates) ? country.release_dates : [])
         .map(release=>({
             countryCode:code,
             countryName:countryName || code || "Other",
@@ -3467,31 +3515,69 @@ function renderMovieReleasesHTML(movie){
             type:Number(release && release.type || 0),
             typeLabel:getMovieReleaseTypeLabel(release && release.type)
         }))
-        .filter(release=>release.date !== "Unknown" || release.typeLabel !== "Release" || release.certification || release.note);
+        .filter(release=>release.date !== "Unknown" || release.typeLabel !== "Release" || release.certification || release.note)
+        .forEach(release=>releases.push(release));
+    });
 
-        if(!releases.length){
-            return;
-        }
+    return releases;
+}
 
-        const key = code || countryName || "Other";
+function sortMovieReleaseRows(a,b){
+    const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
+    const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
+    if(dateA !== dateB){
+        return dateA.localeCompare(dateB);
+    }
+    const countryDiff = String(a.countryName || "").localeCompare(String(b.countryName || ""));
+    if(countryDiff){
+        return countryDiff;
+    }
+    const typeDiff = getMovieReleaseTypeOrder(a.type) - getMovieReleaseTypeOrder(b.type);
+    if(typeDiff){
+        return typeDiff;
+    }
+    return String(a.certification || "").localeCompare(String(b.certification || ""));
+}
+
+function groupMovieReleasesByCountry(releases){
+    const countries = new Map();
+    releases.forEach(release=>{
+        const key = release.countryCode || release.countryName || "Other";
         if(!countries.has(key)){
             countries.set(key,{
-                countryCode:code,
-                countryName:countryName || code || "Other",
+                countryCode:release.countryCode,
+                countryName:release.countryName || release.countryCode || "Other",
                 releases:[]
             });
         }
-        countries.get(key).releases.push(...releases);
+        countries.get(key).releases.push(release);
     });
 
-    const countryRows = Array.from(countries.values())
+    return Array.from(countries.values())
     .map(country=>({
         ...country,
-        releases:country.releases.sort((a,b)=>{
-            const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
-            const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
-            if(dateA !== dateB){
-                return dateA.localeCompare(dateB);
+        releases:country.releases.sort(sortMovieReleaseRows)
+    }))
+    .sort((a,b)=>String(a.countryName || "").localeCompare(String(b.countryName || "")));
+}
+
+function groupMovieReleasesByDate(releases){
+    const dates = new Map();
+    releases.forEach(release=>{
+        const key = release.date || "Unknown";
+        if(!dates.has(key)){
+            dates.set(key,{date:key,releases:[]});
+        }
+        dates.get(key).releases.push(release);
+    });
+
+    return Array.from(dates.values())
+    .map(group=>({
+        ...group,
+        releases:group.releases.sort((a,b)=>{
+            const countryDiff = String(a.countryName || "").localeCompare(String(b.countryName || ""));
+            if(countryDiff){
+                return countryDiff;
             }
             const typeDiff = getMovieReleaseTypeOrder(a.type) - getMovieReleaseTypeOrder(b.type);
             if(typeDiff){
@@ -3500,16 +3586,35 @@ function renderMovieReleasesHTML(movie){
             return String(a.certification || "").localeCompare(String(b.certification || ""));
         })
     }))
-    .sort((a,b)=>String(a.countryName || "").localeCompare(String(b.countryName || "")));
+    .sort((a,b)=>{
+        const dateA = a.date === "Unknown" ? "9999-99-99" : a.date;
+        const dateB = b.date === "Unknown" ? "9999-99-99" : b.date;
+        return dateA.localeCompare(dateB);
+    });
+}
 
-    if(!countryRows.length){
+function renderMovieReleasesHTML(movie){
+    const releases = collectMovieReleaseRows(movie);
+    if(!releases.length){
         return `<div class="v2-api-empty">Unknown</div>`;
     }
 
+    const sortMode = getMovieReleaseSortMode();
+    if(sortMode === "country"){
+        const countryRows = groupMovieReleasesByCountry(releases);
+        return `
+            <div class="movie-release-country-list">
+                ${renderMovieReleaseSortControlHTML(sortMode)}
+                ${countryRows.map(renderMovieReleaseCountryRowHTML).join("")}
+            </div>
+        `;
+    }
+
+    const dateRows = groupMovieReleasesByDate(releases);
     return `
-        <div class="movie-release-country-list">
-            <div class="movie-release-sort-note">Sort by country</div>
-            ${countryRows.map(renderMovieReleaseCountryRowHTML).join("")}
+        <div class="movie-release-date-list">
+            ${renderMovieReleaseSortControlHTML(sortMode)}
+            ${dateRows.map(renderMovieReleaseDateRowHTML).join("")}
         </div>
     `;
 }
@@ -3949,20 +4054,15 @@ function renderShowCountryDetailsHTML(show){
 }
 
 function renderShowThemesDetailsHTML(show){
-    const themes = normalizeThemeItems(show).slice(0,20);
+    const themes = normalizeThemeItems(show);
     if(!themes.length){
         return "Unknown";
     }
 
-    const visibleThemes = themes.slice(0,4);
-    const hiddenThemes = themes.slice(4);
-
     return `
-        <div class="show-detail-theme-list">
-            ${visibleThemes.map(theme=>renderThemeItemHTML(theme)).join("")}
-            ${hiddenThemes.length ? `<button type="button" class="show-detail-theme-more-button" data-show-themes-more>...more</button>` : ""}
+        <div class="show-detail-theme-list show-detail-theme-list-expanded">
+            ${themes.map(theme=>renderThemeItemHTML(theme)).join("")}
         </div>
-        ${hiddenThemes.length ? `<div class="show-detail-theme-extra-list" data-show-themes-extra hidden>${hiddenThemes.map(theme=>renderThemeItemHTML(theme,"show-detail-theme-list-item")).join("")}</div>` : ""}
     `;
 }
 
@@ -5418,17 +5518,6 @@ function attachShowDetailsPageEvents(show,isTracked){
             event.preventDefault();
             event.stopPropagation();
             openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || ""});
-        });
-    });
-
-    document.querySelectorAll("[data-show-themes-more]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const value = this.closest(".episode-detail-value") || this.parentElement;
-            const extra = value && value.querySelector ? value.querySelector("[data-show-themes-extra]") : null;
-            if(extra){
-                extra.hidden = false;
-            }
-            this.remove();
         });
     });
 
