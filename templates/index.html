@@ -96,7 +96,26 @@
 
 
 
-    <main class="content" id="show-list"></main>
+    <main class="content" id="show-list">
+        {% if initial_app_path.startswith('/app/list/') %}
+        <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="Loading shows">
+            {% for _ in range(5) %}
+            <article class="watchlist-skeleton-row" aria-hidden="true">
+                <div class="watchlist-skeleton-block watchlist-skeleton-poster"></div>
+                <div class="watchlist-skeleton-content">
+                    <div class="watchlist-skeleton-block watchlist-skeleton-title watchlist-skeleton-title--{{ loop.index }}"></div>
+                    <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--{{ loop.index }}"></div>
+                    <div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--{{ loop.index }}"></div>
+                </div>
+                {% if initial_app_path != '/app/list/completed' %}
+                <div class="watchlist-skeleton-block watchlist-skeleton-action"></div>
+                {% endif %}
+            </article>
+            {% endfor %}
+            <span class="watchlist-skeleton-sr">Loading shows…</span>
+        </div>
+        {% endif %}
+    </main>
 
 </div>
 

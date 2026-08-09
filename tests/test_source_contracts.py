@@ -564,6 +564,22 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn(r'/app\/theme\/movie\/', router)
         self.assertIn('APP_MOVIE_THEME_PATH_RE', backend)
 
+    def test_main_list_initial_skeleton_and_hidden_soap_genre_exist(self):
+        ui = self.read('static/js/ui.js')
+        template = self.read('templates/index.html')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn("initial_app_path.startswith('/app/list/')", template)
+        self.assertIn('{% for _ in range(5) %}', template)
+        self.assertIn('watchlist-skeleton-row', template)
+        self.assertIn("initial_app_path != '/app/list/completed'", template)
+        self.assertIn('watchlist-skeleton-shimmer 1.4s infinite', source_css)
+        self.assertIn('rgba(255,255,255,.055)', source_css)
+        self.assertIn('@media (prefers-reduced-motion:reduce)', source_css)
+        self.assertIn('watchlist-skeleton-shimmer 1.4s infinite', built_css)
+        self.assertIn('cleanMedia === "tv" && name.toLowerCase() === "soap"', ui)
+
     def test_phase61_movie_tracking_foundation_exists(self):
         app = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')

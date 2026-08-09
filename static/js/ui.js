@@ -484,9 +484,16 @@ function getDiscoverGenreToneClass(name){
 }
 
 function renderDiscoverGenreCards(genres,media){
+    const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
+
     return (Array.isArray(genres) ? genres : [])
     .map(genre=>{
         const name = String(genre && genre.name || "").trim();
+
+        if(cleanMedia === "tv" && name.toLowerCase() === "soap"){
+            return null;
+        }
+
         const route = name && typeof getGenreRouteFromName === "function" ? getGenreRouteFromName(name,media) : "";
         return name && route ? {name,route} : null;
     })
