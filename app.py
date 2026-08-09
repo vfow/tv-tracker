@@ -158,7 +158,7 @@ CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STATE_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
-ALLOWED_STATE_KEYS = {"profile", "metadata_sync", "network_sync", "import_info"}
+ALLOWED_STATE_KEYS = {"profile", "movies", "metadata_sync", "network_sync", "import_info"}
 MAX_JSON_DEPTH = 16
 MAX_JSON_CONTAINER_ITEMS = 500000
 MAX_JSON_STRING_CHARS = 12 * 1024 * 1024
@@ -825,6 +825,10 @@ def normalized_identifier(value: Any, field: str, *, maximum: int = MAX_IDENTIFI
 
 
 def generated_history_id(entry: dict[str, Any], index: int) -> str:
+    if str(entry.get("media_type") or "").lower() == "movie" or entry.get("movie_id"):
+        movie_id = str(entry.get("movie_id") or entry.get("tmdb_id") or "").strip()
+        if movie_id:
+            return f"movie-watched-{movie_id}"
     signature = "|".join([
         str(entry.get("tmdb_id") or entry.get("show_id") or ""),
         str(entry.get("season") or 0),
@@ -973,29 +977,53 @@ def validate_history_record(
 
     validate_json_value(raw_entry, f"History entry {index + 1}")
     entry = clean_legacy_metadata(json_clone(raw_entry))
-    show_id = entry.get("tmdb_id", entry.get("show_id"))
-    entry["tmdb_id"] = normalized_identifier(
-        show_id, f"History entry {index + 1} show identifier", maximum=160
-    )
-    entry["season"] = backup_int(
-        entry.get("season"),
-        f"History entry {index + 1} season",
-        minimum=0,
-        maximum=10000,
-    )
-    entry["episode"] = backup_int(
-        entry.get("episode"),
-        f"History entry {index + 1} episode",
-        minimum=0,
-        maximum=100000,
-    )
+    is_movie = str(entry.get("media_type") or "").lower() == "movie" or bool(entry.get("movie_id"))
 
-    for text_field in ("title", "episode_name"):
-        if text_field in entry and entry[text_field] is not None:
-            if not isinstance(entry[text_field], str) or len(entry[text_field]) > 500:
-                raise BackupValidationError(
-                    f"History entry {index + 1} has invalid {text_field}"
-                )
+    if is_movie:
+        movie_id = entry.get("movie_id", entry.get("tmdb_id"))
+        entry["media_type"] = "movie"
+        entry["movie_id"] = normalized_identifier(
+            movie_id, f"History entry {index + 1} movie identifier", maximum=160
+        )
+        entry["tmdb_id"] = entry["movie_id"]
+        for text_field, limit in {
+            "title": 500,
+            "poster_path": 500,
+            "backdrop_path": 500,
+            "release_date": 40,
+            "year": 8,
+            "action": 80,
+        }.items():
+            if text_field in entry and entry[text_field] is not None:
+                if not isinstance(entry[text_field], (str, int, float)):
+                    raise BackupValidationError(
+                        f"History entry {index + 1} has invalid {text_field}"
+                    )
+                entry[text_field] = str(entry[text_field]).strip()[:limit]
+    else:
+        show_id = entry.get("tmdb_id", entry.get("show_id"))
+        entry["tmdb_id"] = normalized_identifier(
+            show_id, f"History entry {index + 1} show identifier", maximum=160
+        )
+        entry["season"] = backup_int(
+            entry.get("season"),
+            f"History entry {index + 1} season",
+            minimum=0,
+            maximum=10000,
+        )
+        entry["episode"] = backup_int(
+            entry.get("episode"),
+            f"History entry {index + 1} episode",
+            minimum=0,
+            maximum=100000,
+        )
+        for text_field in ("title", "episode_name"):
+            if text_field in entry and entry[text_field] is not None:
+                if not isinstance(entry[text_field], str) or len(entry[text_field]) > 500:
+                    raise BackupValidationError(
+                        f"History entry {index + 1} has invalid {text_field}"
+                    )
+
     if entry.get("date") is not None:
         if not isinstance(entry["date"], str):
             raise BackupValidationError(f"History entry {index + 1} has invalid date")
@@ -1026,8 +1054,9 @@ def validate_history_record(
     entry["id"] = entry_id
     return entry_id, entry
 
-
 def history_episode_identity(entry: dict[str, Any]) -> tuple[str, int, int] | None:
+    if str(entry.get("media_type") or "").lower() == "movie" or entry.get("movie_id"):
+        return None
     try:
         return (
             str(entry.get("tmdb_id", "")),
@@ -1272,6 +1301,80 @@ def validate_sync_metadata_state(key: str, raw_value: Any) -> dict[str, Any]:
     return value
 
 
+def validate_movie_tracking_state(raw_value: Any) -> dict[str, Any]:
+    if raw_value is None:
+        return {}
+    if not isinstance(raw_value, dict) or len(raw_value) > 50000:
+        raise BackupValidationError("State movies is invalid")
+    validate_json_value(raw_value, "State movies")
+    normalized: dict[str, Any] = {}
+    allowed_fields = {
+        "id", "tmdb_id", "movie_id", "title", "poster_path", "backdrop_path",
+        "release_date", "year", "watched", "plan", "plan_to_watch", "favorite",
+        "watched_at", "updated_at", "status",
+    }
+    for raw_movie_id, raw_record in raw_value.items():
+        movie_id = normalized_identifier(raw_movie_id, "Movie tracking identifier", maximum=160)
+        if not isinstance(raw_record, dict):
+            raise BackupValidationError("Movie tracking record is invalid")
+        if set(raw_record) - allowed_fields:
+            raise BackupValidationError("Movie tracking record contains unsupported fields")
+        record_id = normalized_identifier(
+            raw_record.get("id") or raw_record.get("tmdb_id") or raw_record.get("movie_id") or movie_id,
+            "Movie tracking record identifier",
+            maximum=160,
+        )
+        watched = raw_record.get("watched") is True or raw_record.get("status") == "watched"
+        plan = (not watched) and (
+            raw_record.get("plan") is True
+            or raw_record.get("plan_to_watch") is True
+            or raw_record.get("status") == "plan"
+        )
+        favorite = raw_record.get("favorite") is True
+        if not watched and not plan and not favorite:
+            continue
+        record: dict[str, Any] = {
+            "id": record_id,
+            "tmdb_id": record_id,
+            "title": "Untitled",
+            "poster_path": "",
+            "backdrop_path": "",
+            "release_date": "",
+            "year": "",
+            "watched": watched,
+            "plan": plan,
+            "favorite": favorite,
+            "watched_at": "",
+            "updated_at": "",
+        }
+        for field, limit in {
+            "title": 240,
+            "poster_path": 500,
+            "backdrop_path": 500,
+            "release_date": 40,
+            "year": 8,
+        }.items():
+            value = raw_record.get(field, record[field])
+            if value is None:
+                value = ""
+            if not isinstance(value, (str, int, float)):
+                raise BackupValidationError("Movie tracking record is invalid")
+            record[field] = str(value).strip()[:limit] or ("Untitled" if field == "title" else "")
+        for timestamp_field in ("watched_at", "updated_at"):
+            value = raw_record.get(timestamp_field, "")
+            if value is None:
+                value = ""
+            if not isinstance(value, str):
+                raise BackupValidationError("Movie tracking timestamp is invalid")
+            if value:
+                validate_timestamp(value, f"Movie tracking {timestamp_field}")
+            record[timestamp_field] = value
+        if not record["watched"]:
+            record["watched_at"] = ""
+        normalized[record_id] = record
+    return normalized
+
+
 def validate_import_info_state(raw_value: Any) -> dict[str, Any]:
     """Accept app-owned compatible-import metadata in native backups.
 
@@ -1293,6 +1396,8 @@ def validate_state_record(key: Any, raw_value: Any) -> tuple[str, Any]:
         raise BackupValidationError(f"Unsupported state key: {state_key}")
     if state_key == "profile":
         return state_key, validate_profile_record(raw_value)
+    if state_key == "movies":
+        return state_key, validate_movie_tracking_state(raw_value)
     if state_key == "import_info":
         return state_key, validate_import_info_state(raw_value)
     return state_key, validate_sync_metadata_state(state_key, raw_value)
@@ -1331,7 +1436,7 @@ def validate_tracker_data(raw_data: Any) -> dict[str, Any]:
         "history": history,
         "profile": validate_profile_record(raw_data.get("profile", {})),
     }
-    for state_key in ("metadata_sync", "network_sync", "import_info"):
+    for state_key in ("movies", "metadata_sync", "network_sync", "import_info"):
         if state_key in raw_data:
             _, state_value = validate_state_record(state_key, raw_data[state_key])
             result[state_key] = state_value

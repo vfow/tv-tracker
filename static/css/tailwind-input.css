@@ -4488,13 +4488,23 @@
 
     .show-detail-theme-chip{
         border-radius:9999px;
-        border:1px solid rgba(255,255,255,.14);
-        background:rgba(255,255,255,.05);
-        padding:.22rem .66rem;
-        font-size:.82rem;
-        font-weight:800;
-        line-height:1.15;
-        color:#d6d6d6;
+        border:1px solid rgba(255,255,255,.16);
+        background:rgba(255,255,255,.06);
+        padding:.125rem .5rem;
+        color:#f1f1f1;
+        font:inherit;
+        font-weight:700;
+        line-height:normal;
+        box-shadow:0 0 14px rgba(255,255,255,.08);
+        transition:background .15s ease,border-color .15s ease,color .15s ease;
+    }
+
+    .show-detail-theme-chip:hover,
+    .show-detail-theme-chip:focus-visible{
+        border-color:rgba(255,255,255,.28);
+        background:rgba(255,255,255,.1);
+        color:#fff;
+        outline:0;
     }
 
     .v2-person-card-link{
@@ -5289,12 +5299,13 @@
     right:0;
     z-index:30;
     display:grid;
-    min-width:96px;
+    min-width:118px;
     overflow:hidden;
-    border:1px solid rgba(255,255,255,.16);
-    border-radius:10px;
-    background:#111820;
-    box-shadow:0 16px 32px rgba(0,0,0,.42);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:8px;
+    background:#0b0b0b;
+    box-shadow:0 14px 34px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04);
+    padding:4px;
     text-transform:none;
     letter-spacing:0;
 }
@@ -5306,8 +5317,9 @@
 .movie-release-sort-menu-option{
     border:0;
     background:transparent;
-    padding:8px 11px;
-    color:#d9e4ee;
+    border-radius:6px;
+    padding:9px 11px;
+    color:#d6d6d6;
     font-size:.78rem;
     font-weight:750;
     text-align:left;
@@ -5317,7 +5329,7 @@
 .movie-release-sort-menu-option:hover,
 .movie-release-sort-menu-option:focus-visible,
 .movie-release-sort-menu-option.active{
-    background:rgba(255,255,255,.09);
+    background:rgba(255,255,255,.12);
     color:#ffffff;
     outline:0;
 }

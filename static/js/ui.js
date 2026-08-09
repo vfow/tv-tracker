@@ -3269,12 +3269,28 @@ function renderMovieTabsHTML(){
     `;
 }
 
-function renderMovieActionButtonsHTML(){
+function renderMovieTrackingButtonHTML(state,action,label){
+    const active = !!(state && state[action]);
     return `
-        <div class="modal-status-buttons show-page-status-buttons movie-page-status-buttons" aria-label="Movie tracking actions coming soon">
-            <button class="modal-status-button movie-page-disabled-status-button" type="button" disabled aria-disabled="true">Watched</button>
-            <button class="modal-status-button movie-page-disabled-status-button" type="button" disabled aria-disabled="true">Plan to Watch</button>
-            <button class="modal-status-button movie-page-disabled-status-button" type="button" disabled aria-disabled="true">Favorite</button>
+        <button
+        class="modal-status-button movie-page-status-button ${active ? "active" : ""}"
+        type="button"
+        data-movie-tracking-action="${escapeHTML(action)}"
+        aria-pressed="${active ? "true" : "false"}">
+            ${escapeHTML(label)}
+        </button>
+    `;
+}
+
+function renderMovieActionButtonsHTML(movie){
+    const state = typeof getMovieTrackingState === "function" ? getMovieTrackingState(movie && movie.id) : {watched:false,plan:false,favorite:false};
+    const hasAnyState = !!(state.watched || state.plan || state.favorite);
+    return `
+        <div class="modal-status-buttons show-page-status-buttons movie-page-status-buttons" aria-label="Movie tracking actions">
+            ${renderMovieTrackingButtonHTML(state,"watched","Watched")}
+            ${renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")}
+            ${renderMovieTrackingButtonHTML(state,"favorite","Favorite")}
+            ${hasAnyState ? `<button class="remove-show-button remove-movie-button" type="button" data-movie-tracking-action="remove">Remove</button>` : ""}
         </div>
     `;
 }
@@ -3836,7 +3852,7 @@ function renderMovieDetailPage(state){
                         <div class="modal-title show-page-title">${escapeHTML(title)}</div>
                         <div class="modal-meta modal-meta-under-status show-page-meta-line">${metaHTML}</div>
                         ${renderMovieExternalLinksHTML(movie)}
-                        <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML()}</div>
+                        <div class="show-page-actions-wrap movie-page-actions-wrap">${renderMovieActionButtonsHTML(movie)}</div>
                     </div>
                 </div>
             </div>
@@ -5099,6 +5115,7 @@ function renderShowDetailActionControlsHTML(show,isTracked){
             ${statusButtonHTML(show,"paused","Paused")}
             ${statusButtonHTML(show,"finished","Completed")}
             ${statusButtonHTML(show,"dropped","Dropped")}
+            <button class="modal-status-button show-page-favorite-button ${typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id) ? "active" : ""}" type="button" data-show-favorite-button="true" aria-pressed="${typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id) ? "true" : "false"}">Favorite</button>
             <button class="remove-show-button" id="remove-show-button">Remove</button>
         </div>
     `;
@@ -5655,6 +5672,23 @@ function attachShowDetailsPageEvents(show,isTracked){
             openEpisodeModal(show.tmdb_id,Number(this.dataset.season),Number(this.dataset.episode),{backToShow:true});
         });
     });
+
+    const favoriteButton = document.querySelector("[data-show-favorite-button]");
+    if(favoriteButton){
+        favoriteButton.addEventListener("click",async function(){
+            if(this.disabled){
+                return;
+            }
+            this.disabled = true;
+            try{
+                await toggleFavoriteShow(show.tmdb_id);
+            }finally{
+                if(this.isConnected){
+                    this.disabled = false;
+                }
+            }
+        });
+    }
 
     const removeButton = document.getElementById("remove-show-button");
     if(removeButton){

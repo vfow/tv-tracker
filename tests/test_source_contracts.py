@@ -371,13 +371,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderFavoriteMoviesPopup', ui)
         self.assertIn('renderMovieTabsHTML', ui)
         self.assertIn('Info","Cast","Crew","Details","Releases', ui)
-        self.assertIn('movie-page-disabled-status-button', ui)
+        self.assertIn('movie-page-status-button', ui)
         self.assertIn('renderMovieCrewTabHTML', ui)
         self.assertIn('function renderMovieDirectedByHTML(movie)', ui)
         self.assertIn('renderMovieReleasesHTML', ui)
         self.assertIn('lockSearchRouteBeforeResultOpen', ui)
         self.assertIn('favorites-popup-title', template)
-        self.assertIn('movie-page-disabled-status-button', css)
+        self.assertIn('movie-page-actions-wrap', css)
 
     def test_phase601_movie_layout_search_state_and_person_roles_exist(self):
         app_js = self.read('static/js/app.js')
@@ -530,10 +530,39 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('tvTrackerMovieReleaseSortOutsideBound', app)
         self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', source_css)
         self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', built_css)
-        self.assertIn('font-size:.82rem;', source_css)
-        self.assertIn('font-size:.82rem;', built_css)
+        self.assertIn('font:inherit;', source_css)
+        self.assertIn('font:inherit;', built_css)
         self.assertIn('margin-top:22px;', source_css)
         self.assertIn('margin-top:22px;', built_css)
+
+
+    def test_phase61_movie_tracking_foundation_exists(self):
+        app = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        backend = self.read('app.py')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('movies:{}', app)
+        self.assertIn('ensureMovieTrackingData()', app)
+        self.assertIn('async function updateMovieTracking(movie,action)', app)
+        self.assertIn('stateKeys:["movies"]', app)
+        self.assertIn('function isMovieHistoryEntry(entry,movieId="")', app)
+        self.assertIn('function toggleFavoriteShow(showId)', app)
+        self.assertIn('showAppConfirm({', app)
+        self.assertIn('data-movie-tracking-action="${escapeHTML(action)}"', ui)
+        self.assertIn('renderMovieTrackingButtonHTML(state,"watched","Watched")', ui)
+        self.assertIn('renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")', ui)
+        self.assertIn('renderMovieTrackingButtonHTML(state,"favorite","Favorite")', ui)
+        self.assertIn('data-show-favorite-button="true"', ui)
+        self.assertIn('ALLOWED_STATE_KEYS = {"profile", "movies",', backend)
+        self.assertIn('def validate_movie_tracking_state(raw_value: Any)', backend)
+        self.assertIn('entry["media_type"] = "movie"', backend)
+        self.assertIn('movie-watched-', backend)
+        self.assertIn('background:#0b0b0b;', source_css)
+        self.assertIn('background:#0b0b0b;', built_css)
+        self.assertIn('font:inherit;', source_css)
+        self.assertIn('font:inherit;', built_css)
 
 
 if __name__ == '__main__':
