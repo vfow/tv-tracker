@@ -219,6 +219,16 @@ for (const [route,type,value,slug] of [
 }
 
 {
+  const {calls,router}=createRouter('/app/theme/movie/1234-war');
+  assert.strictEqual(router.currentRoute(),'/app/theme/movie/1234-war');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'movie theme route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
+  assert.strictEqual(call[3].routeSlug,'war');
+  assert.strictEqual(call[3].media,'movie');
+}
+
+{
   const {calls,router}=createRouter('/app/language/ja-japanese');
   assert.strictEqual(router.currentRoute(),'/app/language/ja-japanese');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');

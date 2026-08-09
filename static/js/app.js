@@ -4748,12 +4748,13 @@ function getDiscoveryEntityRouteLabel(type,value,label=""){
         .replace(/^Shows\s+from\s+/i,"")
         .replace(/^Movies\s+from\s+/i,"")
         .replace(/^Shows\s+about\s+/i,"")
+        .replace(/^Movies\s+about\s+/i,"")
         .trim();
     }
     return "";
 }
 
-function getDiscoveryFilterDetailRoute(type,value,label=""){
+function getDiscoveryFilterDetailRoute(type,value,label="",media="tv"){
     const cleanType = normalizeDiscoveryFilterType(type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
     if(!cleanType || !cleanValue){
@@ -4776,6 +4777,9 @@ function getDiscoveryFilterDetailRoute(type,value,label=""){
     const routeLabel = getDiscoveryEntityRouteLabel(cleanType,cleanValue,label);
     if(cleanType === "network" || cleanType === "theme" || cleanType === "company" || cleanType === "provider"){
         const key = buildRouteKey(cleanValue,routeLabel);
+        if(cleanType === "theme" && normalizeBrowseMediaType(media) === "movie"){
+            return key && key.includes("-") ? `/app/theme/movie/${encodeURIComponent(key)}` : "/app/list/watching";
+        }
         return key && key.includes("-") ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}` : "/app/list/watching";
     }
     const slug = buildRouteSlug(routeLabel);
@@ -4832,7 +4836,7 @@ function getDiscoveryFilterFallbackName(type,value,media="tv"){
         return cleanValue ? `Shows from Network ${cleanValue}` : "Network Shows";
     }
     if(cleanType === "theme"){
-        return cleanValue ? `Shows about Theme ${cleanValue}` : "Theme Shows";
+        return cleanValue ? `${mediaWord} about Theme ${cleanValue}` : `Theme ${mediaWord}`;
     }
     if(cleanType === "company"){
         return cleanValue ? `${mediaWord} from Company ${cleanValue}` : `Company ${mediaWord}`;
@@ -5280,10 +5284,13 @@ function attachPersonDetailPageEvents(){
         });
     }
 
-    const mediaSelect = document.getElementById("person-media-filter");
-    if(mediaSelect){
-        mediaSelect.addEventListener("change",function(){
-            personPageState.media = normalizePersonMediaType(this.value);
+    document.querySelectorAll("[data-person-media]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const nextMedia = normalizePersonMediaType(this.dataset.personMedia || "tv");
+            if(nextMedia === personPageState.media){
+                return;
+            }
+            personPageState.media = nextMedia;
             if(personPageState.person){
                 personPageState.credits = getPersonCreditsForRole(personPageState.person,personPageState.role,personPageState.media);
                 renderActivePersonPage();
@@ -5291,7 +5298,7 @@ function attachPersonDetailPageEvents(){
                 loadPersonPageResults();
             }
         });
-    }
+    });
 
     document.querySelectorAll(".person-bio-more-button").forEach(button=>{
         button.addEventListener("click",function(){
@@ -5757,7 +5764,7 @@ function discoveryFilterForcedMedia(type,value){
 
 function getDiscoveryPageMediaFromState(){
     const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
-    if(discoveryFilterSupportsMediaSwitch(cleanType)){
+    if(discoveryFilterSupportsMediaSwitch(cleanType) || cleanType === "theme"){
         return normalizeBrowseMediaType(discoveryPageState && discoveryPageState.media);
     }
     return discoveryFilterForcedMedia(cleanType,discoveryPageState && discoveryPageState.value);
@@ -5896,13 +5903,13 @@ async function resolveDiscoveryFilterPageName(type,value,existingName="",media="
     }
 
     if(cleanType === "theme"){
-        if(supplied && !/^Shows about Theme \d+$/i.test(supplied)){
+        if(supplied && !/^(Shows|Movies) about Theme \d+$/i.test(supplied)){
             return supplied;
         }
         try{
             const keyword = await tmdbGetKeywordDetails(cleanValue);
             if(keyword && keyword.name){
-                return `Shows about ${keyword.name}`;
+                return `${mediaWord} about ${keyword.name}`;
             }
         }catch(error){}
     }
@@ -5955,7 +5962,10 @@ function getDiscoveryRouteValidationLabel(type,value,pageName){
         .trim();
     }
     if(cleanType === "theme"){
-        return name.replace(/^Shows\s+about\s+/i,"").trim();
+        return name
+        .replace(/^Shows\s+about\s+/i,"")
+        .replace(/^Movies\s+about\s+/i,"")
+        .trim();
     }
     return name;
 }
@@ -6062,11 +6072,12 @@ async function openDiscoveryFilterPage(type,value,options={}){
     const suppliedName = String(options && options.name || "").trim();
     const routeLabel = String(options && options.routeLabel || "").trim();
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
-    const initialDiscoveryRoute = getDiscoveryFilterDetailRoute(cleanType,cleanValue,routeLabel || suppliedName);
+    const requestedMedia = normalizeBrowseMediaType(options && options.media || "tv");
+    const initialDiscoveryRoute = getDiscoveryFilterDetailRoute(cleanType,cleanValue,routeLabel || suppliedName,requestedMedia);
     const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : initialDiscoveryRoute);
     const media = discoveryFilterSupportsMediaSwitch(cleanType)
     ? normalizeBrowseMediaType(options && options.media || (discoveryPageState && discoveryPageState.media) || "tv")
-    : discoveryFilterForcedMedia(cleanType,cleanValue);
+    : (cleanType === "theme" ? requestedMedia : discoveryFilterForcedMedia(cleanType,cleanValue));
     const isSamePage = activePage === "discovery-detail" &&
     selectedDiscoveryContext &&
     String(selectedDiscoveryContext.type || "") === cleanType &&
@@ -6594,7 +6605,7 @@ function attachMovieDetailPageEvents(){
             }
             event.preventDefault();
             event.stopPropagation();
-            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || ""});
+            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || "",media:this.dataset.discoveryMedia || ""});
         });
     });
 }

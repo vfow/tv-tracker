@@ -94,6 +94,7 @@ APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
 APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
+APP_MOVIE_THEME_PATH_RE = re.compile(rf"^/app/theme/movie/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
 APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/({APP_ROUTE_ID_SLUG})$")
 APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/({APP_ROUTE_ID_SLUG})$")
@@ -1710,6 +1711,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_THEME_PATH_RE.fullmatch(candidate):
         return candidate
+    if APP_MOVIE_THEME_PATH_RE.fullmatch(candidate):
+        return candidate
     if APP_MOVIE_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_COMPANY_PATH_RE.fullmatch(candidate):
@@ -1738,6 +1741,7 @@ def valid_app_path(value: str | None) -> bool:
         or APP_LANGUAGE_PATH_RE.fullmatch(candidate) is not None
         or APP_COUNTRY_PATH_RE.fullmatch(candidate) is not None
         or APP_THEME_PATH_RE.fullmatch(candidate) is not None
+        or APP_MOVIE_THEME_PATH_RE.fullmatch(candidate) is not None
         or APP_MOVIE_PATH_RE.fullmatch(candidate) is not None
         or APP_COMPANY_PATH_RE.fullmatch(candidate) is not None
         or APP_PROVIDER_PATH_RE.fullmatch(candidate) is not None
@@ -2045,6 +2049,16 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
+
+    @app.get("/app/theme/movie/<theme_key>", strict_slashes=False)
+    @login_required
+    def app_movie_theme_page(theme_key: str):
+        requested_path = request.path.rstrip("/")
+        if APP_MOVIE_THEME_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect(requested_path)
+        return render_app_shell(requested_path)
 
     @app.get("/app/theme/<theme_key>", strict_slashes=False)
     @login_required

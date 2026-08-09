@@ -449,6 +449,40 @@ function renderDiscoverHubSection(section){
     `;
 }
 
+const DISCOVER_GENRE_TONE_CLASSES = Object.freeze({
+    "action & adventure":"discover-genre-tone-action-adventure",
+    "animation":"discover-genre-tone-animation",
+    "comedy":"discover-genre-tone-comedy",
+    "crime":"discover-genre-tone-crime",
+    "documentary":"discover-genre-tone-documentary",
+    "drama":"discover-genre-tone-drama",
+    "family":"discover-genre-tone-family",
+    "kids":"discover-genre-tone-kids",
+    "mystery":"discover-genre-tone-mystery",
+    "news":"discover-genre-tone-news",
+    "reality":"discover-genre-tone-reality",
+    "sci-fi & fantasy":"discover-genre-tone-sci-fi-fantasy",
+    "soap":"discover-genre-tone-soap",
+    "talk":"discover-genre-tone-talk",
+    "war & politics":"discover-genre-tone-war-politics",
+    "western":"discover-genre-tone-western",
+    "action":"discover-genre-tone-action",
+    "adventure":"discover-genre-tone-adventure",
+    "fantasy":"discover-genre-tone-fantasy",
+    "history":"discover-genre-tone-history",
+    "horror":"discover-genre-tone-horror",
+    "music":"discover-genre-tone-music",
+    "romance":"discover-genre-tone-romance",
+    "science fiction":"discover-genre-tone-science-fiction",
+    "tv movie":"discover-genre-tone-tv-movie",
+    "thriller":"discover-genre-tone-thriller",
+    "war":"discover-genre-tone-war"
+});
+
+function getDiscoverGenreToneClass(name){
+    return DISCOVER_GENRE_TONE_CLASSES[String(name || "").trim().toLowerCase()] || "";
+}
+
 function renderDiscoverGenreCards(genres,media){
     return (Array.isArray(genres) ? genres : [])
     .map(genre=>{
@@ -457,7 +491,10 @@ function renderDiscoverGenreCards(genres,media){
         return name && route ? {name,route} : null;
     })
     .filter(Boolean)
-    .map(item=>`<a class="discover-genre-card" href="${escapeHTML(item.route)}">${escapeHTML(item.name)}</a>`)
+    .map(item=>{
+        const toneClass = getDiscoverGenreToneClass(item.name);
+        return `<a class="discover-genre-card ${escapeHTML(toneClass)}" href="${escapeHTML(item.route)}"><span>${escapeHTML(item.name)}</span></a>`;
+    })
     .join("");
 }
 
@@ -819,15 +856,17 @@ function normalizeThemeItems(show){
     });
 }
 
-function renderThemeItemHTML(theme,extraClass=""){
+function renderThemeItemHTML(theme,extraClass="",media="tv"){
     const id = Number(theme && theme.id || 0);
     const name = String(theme && theme.name || "").trim();
+    const cleanMedia = media === "movie" ? "movie" : "tv";
+    const mediaWord = cleanMedia === "movie" ? "Movies" : "Shows";
     if(!name){
         return "";
     }
     if(id > 0){
-        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("theme",id,name) : "";
-        return `<a class="show-detail-theme-chip show-detail-theme-link ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-discovery-type="theme" data-discovery-value="${escapeHTML(id)}" data-discovery-name="${escapeHTML(`Shows about ${name}`)}" data-discovery-label="${escapeHTML(name)}">${escapeHTML(name)}</a>`;
+        const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute("theme",id,name,cleanMedia) : "";
+        return `<a class="show-detail-theme-chip show-detail-theme-link ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-discovery-type="theme" data-discovery-value="${escapeHTML(id)}" data-discovery-media="${escapeHTML(cleanMedia)}" data-discovery-name="${escapeHTML(`${mediaWord} about ${name}`)}" data-discovery-label="${escapeHTML(name)}">${escapeHTML(name)}</a>`;
     }
     return `<span class="show-detail-theme-chip ${escapeHTML(extraClass)}">${escapeHTML(name)}</span>`;
 }
@@ -967,13 +1006,10 @@ function renderPersonDetailPage(state){
                     </div>
 
                     <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
-                        <label class="genre-filter-field" for="person-media-filter">
-                            <span>Media</span>
-                            <select id="person-media-filter">
-                                <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
-                                <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
-                            </select>
-                        </label>
+                        <div class="genre-media-switch person-media-switch" role="tablist" aria-label="Person media type">
+                            <button type="button" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-person-media="tv" role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</button>
+                            <button type="button" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-person-media="movie" role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</button>
+                        </div>
                     </div>
 
                     <div class="genre-result-content person-result-content">
@@ -3229,6 +3265,55 @@ function renderMovieGenresHTML(movie){
     return renderShowGenreLinksHTML(genres,"movie") || "Unknown";
 }
 
+function normalizeMovieThemeItems(movie){
+    const payload = movie && movie.keywords ? movie.keywords : null;
+    const source = payload && Array.isArray(payload.keywords)
+    ? payload.keywords
+    : (payload && Array.isArray(payload.results) ? payload.results : (Array.isArray(payload) ? payload : []));
+    return normalizeThemeItems({_tmdb_keywords:source});
+}
+
+function renderMovieThemesDetailsHTML(movie){
+    const themes = normalizeMovieThemeItems(movie);
+    if(!themes.length){
+        return "Unknown";
+    }
+
+    return `
+        <div class="show-detail-theme-list show-detail-theme-list-expanded">
+            ${themes.map(theme=>renderThemeItemHTML(theme,"","movie")).join("")}
+        </div>
+    `;
+}
+
+function renderMovieGenresTabHTML(movie){
+    const genres = Array.isArray(movie && movie.genres) ? movie.genres : [];
+    const themesHTML = renderMovieThemesDetailsHTML(movie);
+    const genreHTML = genres.length
+    ? `<div class="show-detail-genre-chips">${genres.map(genre=>{
+        const route = getShowGenreRoute(genre,"movie");
+        return route
+        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-media="movie" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
+        : `<span>${escapeHTML(genre)}</span>`;
+    }).join("")}</div>`
+    : `<div class="v2-api-empty">No genres available.</div>`;
+
+    return `
+        <div class="show-genres-tab-stack">
+            <section class="show-genres-tab-section">
+                <h3 class="modal-section-heading show-genres-tab-heading">Genres</h3>
+                ${genreHTML}
+            </section>
+            ${themesHTML !== "Unknown" ? `
+                <section class="show-genres-tab-section">
+                    <h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>
+                    ${themesHTML}
+                </section>
+            ` : ""}
+        </div>
+    `;
+}
+
 function renderMovieExternalLinksHTML(movie){
     const ids = movie && movie.external_ids ? movie.external_ids : {};
     const links = [];
@@ -3255,14 +3340,14 @@ function renderMovieExternalLinksHTML(movie){
 
 function getMovieActiveTab(){
     const tab = String(activeMovieDetailsTab || "Info");
-    return ["Info","Cast","Crew","Details","Releases"].includes(tab) ? tab : "Info";
+    return ["Info","Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Info";
 }
 
 function renderMovieTabsHTML(){
     const activeTab = getMovieActiveTab();
     return `
         <div class="show-detail-tabs movie-detail-tabs" role="tablist" aria-label="Movie details sections">
-            ${["Info","Cast","Crew","Details","Releases"].map(tab=>`
+            ${["Info","Cast","Crew","Details","Genres","Releases"].map(tab=>`
                 <button type="button" class="show-detail-tab ${activeTab === tab ? "active" : ""}" data-movie-detail-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
             `).join("")}
         </div>
@@ -3772,6 +3857,9 @@ function renderMovieActiveTabContentHTML(movie){
     }
     if(tab === "Details"){
         return `<section class="show-detail-section v2-show-info-section">${renderMovieDetailsTabHTML(movie)}</section>`;
+    }
+    if(tab === "Genres"){
+        return `<section class="show-detail-section v2-show-info-section">${renderMovieGenresTabHTML(movie)}</section>`;
     }
     if(tab === "Releases"){
         return `<section class="show-detail-section v2-show-info-section">${renderMovieReleasesHTML(movie)}</section>`;
@@ -5547,7 +5635,7 @@ function attachShowDetailsPageEvents(show,isTracked){
             }
             event.preventDefault();
             event.stopPropagation();
-            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || ""});
+            openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || "",media:this.dataset.discoveryMedia || ""});
         });
     });
 

@@ -100,7 +100,8 @@
         if(activePage === "discovery-detail" && typeof selectedDiscoveryContext !== "undefined" && selectedDiscoveryContext && selectedDiscoveryContext.type && selectedDiscoveryContext.value){
             if(typeof getDiscoveryFilterDetailRoute === "function"){
                 const routeName = typeof discoveryPageState !== "undefined" && discoveryPageState ? discoveryPageState.name : "";
-                return getDiscoveryFilterDetailRoute(selectedDiscoveryContext.type,selectedDiscoveryContext.value,routeName);
+                const routeMedia = typeof discoveryPageState !== "undefined" && discoveryPageState ? discoveryPageState.media : "tv";
+                return getDiscoveryFilterDetailRoute(selectedDiscoveryContext.type,selectedDiscoveryContext.value,routeName,routeMedia);
             }
             return "/app/list/watching";
         }
@@ -340,6 +341,15 @@
                 }
                 if(typeof openPersonPage === "function"){
                     openPersonPage(routePersonRole,routePersonId,{fromRoute:true,routeSlug:routePerson.slug});
+                }
+                return;
+            }
+
+            const movieThemeMatch = route.match(/^\/app\/theme\/movie\/([1-9][0-9]{0,11}-[a-z0-9]+(?:-[a-z0-9]+)*)$/);
+            if(movieThemeMatch){
+                const parsed = parseRouteIdSlug(movieThemeMatch[1]);
+                if(typeof openDiscoveryFilterPage === "function"){
+                    openDiscoveryFilterPage("theme",parsed.id,{fromRoute:true,routeSlug:parsed.slug,media:"movie"});
                 }
                 return;
             }
