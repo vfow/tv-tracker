@@ -562,7 +562,7 @@
                     discoverSearchState = Object.assign({},discoverSearchState,{query:params.query || "",media:params.media || "tv",loading:true});
                 }
             }else if(typeof discoverHubState !== "undefined"){
-                discoverHubState = Object.assign({},discoverHubState,{loading:true,error:""});
+                discoverHubState = Object.assign({},discoverHubState,{error:""});
             }
             if(typeof showSearchPageShell === "function"){
                 showSearchPageShell();
@@ -580,7 +580,14 @@
             if(parsed.type === "search" && typeof renderSearchLoading === "function"){
                 renderSearchLoading(params.query || "");
             }else if(parsed.type === "discover" && typeof renderDiscoverHub === "function"){
+                const discoverWasLoading = typeof discoverHubState !== "undefined" && discoverHubState.loading === true;
+                if(typeof discoverHubState !== "undefined"){
+                    discoverHubState = Object.assign({},discoverHubState,{loading:true,error:""});
+                }
                 renderDiscoverHub();
+                if(typeof discoverHubState !== "undefined" && !discoverWasLoading){
+                    discoverHubState = Object.assign({},discoverHubState,{loading:false});
+                }
             }
             if(typeof updateShellTitle === "function"){
                 updateShellTitle();

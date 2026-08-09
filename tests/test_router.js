@@ -400,6 +400,17 @@ for (const route of [
 }
 
 {
+  const {calls,context,router}=createRouter('/app/discover',{appDataReady:false});
+  assert.strictEqual(context.activePage,'discover');
+  assert(calls.some(item=>item[0]==='renderDiscoverHub'),'Discover startup should render the existing skeleton immediately');
+  assert.strictEqual(context.discoverHubState.loading,false,'startup skeleton must not claim the real Discover request is already running');
+  calls.length=0;
+  context.appDataReady=true;
+  router.applyRoute();
+  assert(calls.some(item=>item[0]==='openDiscoverHomePage'),'Discover should start its real loader after app state becomes ready');
+}
+
+{
   const {calls,context}=createRouter('/app/history',{appDataReady:false});
   assert.strictEqual(context.activeShowsTab,'history');
   assert.strictEqual(context.activePage,'shows');
