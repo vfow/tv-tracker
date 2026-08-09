@@ -123,15 +123,15 @@
         @apply tw-flex tw-h-full tw-w-full tw-flex-col tw-gap-0 tw-overflow-visible tw-p-0;
     }
 
-    .sidebar .sidebar-nav button{
-        @apply tw-w-full tw-border-0 tw-border-l-2 tw-border-solid tw-border-transparent tw-bg-transparent tw-p-[10px] tw-text-left tw-font-league tw-text-[50px] tw-font-normal tw-leading-none tw-text-tt-subtle tw-transition-colors;
+    .sidebar .sidebar-nav :is(button,a){
+        @apply tw-block tw-w-full tw-border-0 tw-border-l-2 tw-border-solid tw-border-transparent tw-bg-transparent tw-p-[10px] tw-text-left tw-font-league tw-text-[50px] tw-font-normal tw-leading-none tw-text-tt-subtle tw-no-underline tw-transition-colors;
     }
 
-    .sidebar .sidebar-nav button:hover{
+    .sidebar .sidebar-nav :is(button,a):hover{
         @apply tw-bg-tt-control tw-text-tt-text;
     }
 
-    .sidebar .sidebar-nav button.active{
+    .sidebar .sidebar-nav :is(button,a).active{
         @apply tw-border-l-white tw-text-tt-text;
     }
 
@@ -166,28 +166,28 @@
         @apply tw-grid tw-min-h-[70px] tw-shrink-0 tw-grid-cols-3 tw-items-center tw-gap-0 tw-overflow-visible tw-border-0 tw-border-b tw-border-solid tw-border-tt-line tw-bg-tt-bg tw-px-[30px] tw-py-0;
     }
 
-    .top-tabs button{
-        @apply tw-min-h-0 tw-border-0 tw-bg-transparent tw-p-0 tw-font-league tw-text-[50px] tw-font-normal tw-leading-none tw-text-tt-subtle tw-transition-colors;
+    .top-tabs :is(button,a){
+        @apply tw-block tw-min-h-0 tw-border-0 tw-bg-transparent tw-p-0 tw-font-league tw-text-[50px] tw-font-normal tw-leading-none tw-text-tt-subtle tw-no-underline tw-transition-colors;
     }
 
-    .top-tabs button:nth-child(1){
+    .top-tabs :is(button,a):nth-child(1){
         @apply tw-justify-self-start;
     }
 
-    .top-tabs button:nth-child(2){
+    .top-tabs :is(button,a):nth-child(2){
         @apply tw-justify-self-center;
     }
 
-    .top-tabs button:nth-child(3){
+    .top-tabs :is(button,a):nth-child(3){
         @apply tw-justify-self-end;
     }
 
-    .top-tabs button:hover,
-    .top-tabs button.active{
+    .top-tabs :is(button,a):hover,
+    .top-tabs :is(button,a).active{
         @apply tw-text-tt-text;
     }
 
-    .top-tabs button.active::after{
+    .top-tabs :is(button,a).active::after{
         display:none;
     }
 
@@ -199,15 +199,15 @@
         @apply tw-flex tw-min-w-0 tw-items-center tw-gap-[10px] tw-whitespace-nowrap;
     }
 
-    .filters button{
-        @apply tw-min-h-0 tw-shrink-0 tw-cursor-pointer tw-whitespace-nowrap tw-rounded-[5px] tw-border-0 tw-bg-tt-control tw-px-[18px] tw-py-2 tw-text-tt-controlText tw-transition-colors;
+    .filters :is(button,a){
+        @apply tw-inline-flex tw-min-h-0 tw-shrink-0 tw-cursor-pointer tw-items-center tw-whitespace-nowrap tw-rounded-[5px] tw-border-0 tw-bg-tt-control tw-px-[18px] tw-py-2 tw-text-tt-controlText tw-no-underline tw-transition-colors;
     }
 
-    .filters button:hover{
+    .filters :is(button,a):hover{
         @apply tw-bg-tt-controlHover tw-text-tt-text;
     }
 
-    .filters button.active{
+    .filters :is(button,a).active{
         @apply tw-bg-white tw-text-black;
     }
 
@@ -215,21 +215,21 @@
         @apply tw-fixed tw-inset-x-0 tw-bottom-0 tw-z-[140] tw-grid tw-h-[calc(64px_+_env(safe-area-inset-bottom))] tw-grid-cols-4 tw-border-0 tw-border-t tw-border-solid tw-border-tt-line tw-bg-black/95 tw-p-[0_env(safe-area-inset-right)_env(safe-area-inset-bottom)_env(safe-area-inset-left)] tw-backdrop-blur-md;
     }
 
-    .mobile-bottom-nav button{
-        @apply tw-relative tw-min-h-mobile-nav tw-min-w-0 tw-overflow-hidden tw-whitespace-nowrap tw-border-0 tw-bg-transparent tw-px-0.5 tw-pb-0.5 tw-pt-1 tw-font-league tw-text-[clamp(21px,6vw,28px)] tw-font-normal tw-leading-none tw-text-tt-subtle tw-transition-colors;
+    .mobile-bottom-nav :is(button,a){
+        @apply tw-relative tw-flex tw-min-h-mobile-nav tw-min-w-0 tw-items-center tw-justify-center tw-overflow-hidden tw-whitespace-nowrap tw-border-0 tw-bg-transparent tw-px-0.5 tw-pb-0.5 tw-pt-1 tw-font-league tw-text-[clamp(21px,6vw,28px)] tw-font-normal tw-leading-none tw-text-tt-subtle tw-no-underline tw-transition-colors;
     }
 
-    .mobile-bottom-nav button::before{
+    .mobile-bottom-nav :is(button,a)::before{
         @apply tw-absolute tw-left-[16%] tw-right-[16%] tw-top-0 tw-h-0.5 tw-bg-transparent;
         content:"";
     }
 
-    .mobile-bottom-nav button:hover,
-    .mobile-bottom-nav button.active{
+    .mobile-bottom-nav :is(button,a):hover,
+    .mobile-bottom-nav :is(button,a).active{
         @apply tw-text-tt-text;
     }
 
-    .mobile-bottom-nav button.active::before{
+    .mobile-bottom-nav :is(button,a).active::before{
         @apply tw-bg-white;
     }
 
@@ -313,7 +313,7 @@
     }
 
     @media (max-width:1199.98px) and (min-width:992px){
-        .sidebar .sidebar-nav button{
+        .sidebar .sidebar-nav :is(button,a){
             @apply tw-text-[46px];
         }
     }
@@ -343,7 +343,7 @@
             @apply tw-min-h-[70px] tw-px-5;
         }
 
-        .top-tabs button{
+        .top-tabs :is(button,a){
             @apply tw-text-[clamp(34px,9.5vw,44px)];
         }
 
@@ -376,7 +376,7 @@
             display:none;
         }
 
-        .filters button{
+        .filters :is(button,a){
             @apply tw-min-h-[38px] tw-px-[14px] tw-py-[7px] tw-text-sm;
         }
     }
@@ -386,11 +386,11 @@
             @apply tw-px-[14px];
         }
 
-        .top-tabs button{
+        .top-tabs :is(button,a){
             @apply tw-text-[clamp(31px,9.2vw,38px)];
         }
 
-        .mobile-bottom-nav button{
+        .mobile-bottom-nav :is(button,a){
             @apply tw-text-[clamp(20px,6.2vw,25px)];
         }
 
@@ -684,6 +684,29 @@
         @apply tw-relative tw-min-h-[124px] tw-items-center tw-gap-4 tw-overflow-hidden tw-bg-transparent tw-px-[30px] tw-py-3 tw-shadow-none;
     }
 
+
+    .watchlist-card-link{
+        @apply tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-4 tw-text-inherit tw-no-underline;
+    }
+
+    .app-route-card-link{
+        @apply tw-absolute tw-inset-0 tw-z-[1] tw-text-inherit tw-no-underline;
+    }
+
+    .app-route-card-link:focus-visible{
+        outline:1px solid rgba(255,255,255,.55);
+        outline-offset:-2px;
+    }
+
+    .watchlist-card .watchlist-action,
+    .upcoming-entry-card .upcoming-behind,
+    .upcoming-entry-card .upcoming-batch-button,
+    .upcoming-entry-card .upcoming-check,
+    .upcoming-batch-row .upcoming-batch-check,
+    .behind-episode-row .behind-episode-check{
+        @apply tw-relative tw-z-[2];
+    }
+
     .watchlist-card .poster,
     .watchlist-card .poster-placeholder{
         @apply tw-h-[94px] tw-w-16 tw-rounded-[5px];
@@ -781,7 +804,11 @@
 
     .upcoming-entry-card,
     .history-entry-card{
-        @apply tw-flex tw-items-center tw-gap-4 tw-rounded-none tw-bg-transparent tw-shadow-none;
+        @apply tw-relative tw-flex tw-items-center tw-gap-4 tw-rounded-none tw-bg-transparent tw-shadow-none;
+    }
+
+    .history-entry-card{
+        @apply tw-text-inherit tw-no-underline;
     }
 
     .upcoming-entry-card .info,
@@ -837,7 +864,7 @@
     }
 
     .upcoming-batch-row{
-        @apply tw-flex tw-cursor-pointer tw-items-center tw-gap-[14px] tw-rounded-lg tw-border tw-border-solid tw-border-[#1b1b1b] tw-bg-[#0b0b0b] tw-p-3 tw-transition-colors;
+        @apply tw-relative tw-z-[2] tw-flex tw-cursor-pointer tw-items-center tw-gap-[14px] tw-rounded-lg tw-border tw-border-solid tw-border-[#1b1b1b] tw-bg-[#0b0b0b] tw-p-3 tw-transition-colors;
     }
 
     .upcoming-batch-row:hover{
@@ -902,7 +929,7 @@
     }
 
     .behind-episode-row{
-        @apply tw-flex tw-cursor-pointer tw-items-center tw-gap-4 tw-border-0 tw-border-b tw-border-solid tw-border-[#1d1d1d] tw-py-[14px] tw-transition-colors;
+        @apply tw-relative tw-flex tw-cursor-pointer tw-items-center tw-gap-4 tw-border-0 tw-border-b tw-border-solid tw-border-[#1d1d1d] tw-py-[14px] tw-transition-colors;
     }
 
     .behind-episode-row:hover{
@@ -1021,7 +1048,7 @@
     }
 
     .discover-hub-card{
-        @apply tw-snap-start tw-overflow-hidden tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition;
+        @apply tw-no-underline tw-snap-start tw-overflow-hidden tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition;
     }
 
     .discover-hub-card:hover{
@@ -1212,7 +1239,7 @@
     }
 
     @media (max-width:575.98px){
-        .filters button{
+        .filters :is(button,a){
             @apply tw-min-h-[42px] tw-px-[14px] tw-py-2;
         }
 
@@ -1657,7 +1684,7 @@
 
     .episode-row,
     .episode-row.show{
-        @apply tw-mx-3 tw-my-2 tw-flex tw-cursor-pointer tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-[#181818] tw-bg-transparent tw-px-[14px] tw-py-3;
+        @apply tw-relative tw-mx-3 tw-my-2 tw-flex tw-cursor-pointer tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-[#181818] tw-bg-transparent tw-px-[14px] tw-py-3;
         transition:background-color .18s ease, box-shadow .18s ease, border-color .18s ease;
     }
 
@@ -1667,6 +1694,10 @@
 
     .episode-row:last-child{
         @apply tw-border-[#181818];
+    }
+
+    .episode-row .episode-check-button{
+        @apply tw-relative tw-z-[2];
     }
 
     .episode-row input{
@@ -1992,7 +2023,7 @@
     }
 
     .profile-favorite-slot{
-        @apply tw-flex tw-h-[180px] tw-w-[120px] tw-cursor-pointer tw-items-center tw-justify-center tw-overflow-hidden tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-text-tt-subtle;
+        @apply tw-no-underline tw-flex tw-h-[180px] tw-w-[120px] tw-cursor-pointer tw-items-center tw-justify-center tw-overflow-hidden tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-text-tt-subtle;
     }
 
     .profile-favorite-slot.empty{
@@ -3126,6 +3157,10 @@
 
     .episode-nav-button{
         @apply tw-min-w-[118px];
+    }
+
+    .episode-nav-button:is(a){
+        @apply tw-inline-flex tw-items-center tw-justify-center tw-no-underline;
     }
 
     .episode-detail-main{
@@ -4273,7 +4308,7 @@
     }
 
     .genre-result-card{
-        @apply tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition;
+        @apply tw-no-underline tw-cursor-pointer tw-border-0 tw-bg-transparent tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition;
     }
 
     .genre-result-card:hover,
@@ -4508,6 +4543,8 @@
     }
 
     .v2-person-card-link{
+        color:inherit;
+        text-decoration:none;
         cursor:pointer;
     }
 
@@ -4725,7 +4762,7 @@
 
     .discover-genre-tab,
     .genre-media-switch-button{
-        @apply tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-px-3 tw-py-2 tw-font-bold tw-text-tt-subtle tw-transition-colors;
+        @apply tw-inline-flex tw-cursor-pointer tw-items-center tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-px-3 tw-py-2 tw-font-bold tw-text-tt-subtle tw-no-underline tw-transition-colors;
     }
 
     .discover-genre-tab:hover,
@@ -4822,7 +4859,7 @@
     }
 
     .search-person-card{
-        @apply tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition-colors;
+        @apply tw-no-underline tw-cursor-pointer tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-0 tw-text-left tw-font-sans tw-text-white tw-transition-colors;
     }
 
     .search-person-card:hover,

@@ -17,29 +17,29 @@
 
 <aside class="sidebar" id="app-sidebar">
     <nav class="sidebar-nav app-primary-nav" aria-label="Primary navigation">
-        <button class="active" data-page="shows" aria-current="page">
+        <a class="active" data-page="shows" aria-current="page" href="/app/list/watching">
             SHOWS
-        </button>
+        </a>
 
-        <button data-page="discover">
+        <a data-page="discover" href="/app/discover">
             DiSCOVER
-        </button>
+        </a>
 
-        <button data-page="profile">
+        <a data-page="profile" href="/app/profile">
             PROFILE
-        </button>
+        </a>
 
-        <button class="sidebar-settings-button" data-page="settings">
+        <a class="sidebar-settings-button" data-page="settings" href="/app/settings">
             SETTINGS
-        </button>
+        </a>
     </nav>
 </aside>
 
 <nav class="mobile-bottom-nav app-primary-nav" aria-label="Primary navigation">
-    <button class="active" data-page="shows" aria-current="page">SHOWS</button>
-    <button data-page="discover">DiSCOVER</button>
-    <button data-page="profile">PROFILE</button>
-    <button data-page="settings">SETTINGS</button>
+    <a class="active" data-page="shows" aria-current="page" href="/app/list/watching">SHOWS</a>
+    <a data-page="discover" href="/app/discover">DiSCOVER</a>
+    <a data-page="profile" href="/app/profile">PROFILE</a>
+    <a data-page="settings" href="/app/settings">SETTINGS</a>
 </nav>
 
 <section class="main">
@@ -52,17 +52,17 @@
 
     <nav class="top-tabs">
 
-      <button class="active" data-tab="watchlist">
+      <a class="active" data-tab="watchlist" href="/app/list/watching">
         WATCHLIST
-      </button>
+      </a>
 
-      <button data-tab="upcoming">
+      <a data-tab="upcoming" href="/app/upcoming">
         UPCOMING
-      </button>
+      </a>
 
-      <button data-tab="history">
+      <a data-tab="history" href="/app/history">
         HISTORY
-     </button>
+     </a>
 
     </nav>
 
@@ -71,25 +71,25 @@
     <div class="filters">
 
         <div class="status-filter-track">
-            <button class="active" data-filter="watching">
+            <a class="active" data-filter="watching" href="/app/list/watching">
                 Watching
-            </button>
+            </a>
 
-            <button data-filter="paused">
+            <a data-filter="paused" href="/app/list/paused">
                 Paused
-            </button>
+            </a>
 
-            <button data-filter="finished">
+            <a data-filter="finished" href="/app/list/completed">
                 Completed
-            </button>
+            </a>
 
-            <button data-filter="plan">
+            <a data-filter="plan" href="/app/list/plan-to-watch">
                 Plan To Watch
-            </button>
+            </a>
 
-            <button data-filter="dropped">
+            <a data-filter="dropped" href="/app/list/dropped">
                 Dropped
-            </button>
+            </a>
         </div>
 
     </div>

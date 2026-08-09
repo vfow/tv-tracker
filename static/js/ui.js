@@ -52,6 +52,17 @@ function safeExternalURL(value){
     }
 }
 
+
+function isPlainAppLinkClick(event){
+    return !!event &&
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey;
+}
+
 function getCheckSuccessAnimationTarget(element){
 
     if(!element){
@@ -172,7 +183,7 @@ function normalizePrimaryNavPage(page){
 
 function setAppPrimaryNavActive(page){
     const active = normalizePrimaryNavPage(page);
-    document.querySelectorAll(".app-primary-nav button[data-page]").forEach(button=>{
+    document.querySelectorAll(".app-primary-nav [data-page]").forEach(button=>{
         const isActive = active && button.dataset.page === active;
         button.classList.toggle("active",!!isActive);
 
@@ -543,9 +554,13 @@ function renderDiscoverHubCard(item){
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
     : `<div class="discover-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
 
+    const route = mediaType === "movie"
+    ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item && item.id,title) : "")
+    : (typeof getShowDetailRoute === "function" ? getShowDetailRoute(item && item.id,title) : "");
+
     return `
-        <button
-        type="button"
+        <a
+        href="${escapeHTML(route)}"
         class="discover-hub-card"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(item && item.id)}"
@@ -559,7 +574,7 @@ function renderDiscoverHubCard(item){
             </div>
             <div class="discover-card-title">${escapeHTML(title)}</div>
             <div class="discover-card-meta">${escapeHTML(year)}</div>
-        </button>
+        </a>
     `;
 }
 
@@ -576,7 +591,9 @@ function attachDiscoverHubEvents(){
     });
 
     document.querySelectorAll(".discover-hub-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaType = String(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
             const mediaName = this.dataset.mediaName || "";
@@ -593,29 +610,6 @@ function attachDiscoverHubEvents(){
             }
         });
     });
-}
-
-function getSearchResultPersonRole(result){
-    const department = String(result && result.known_for_department || "").toLowerCase();
-    if(department.includes("direct")){
-        return "director";
-    }
-    if(department.includes("writ")){
-        return "writer";
-    }
-    if(department.includes("production") || department.includes("produc")){
-        return "producer";
-    }
-    if(department.includes("sound") || department.includes("music")){
-        return "composer";
-    }
-    if(department.includes("editing")){
-        return "editor";
-    }
-    if(department.includes("camera") || department.includes("cinemat")){
-        return "cinematographer";
-    }
-    return "actor";
 }
 
 function renderSearchTabButtonHTML(type,label,isActive){
@@ -642,9 +636,13 @@ function renderSearchResultPosterCard(result){
     const rating = Number(result && result.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
 
+    const route = mediaType === "movie"
+    ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(result && result.id,title) : "")
+    : (typeof getShowDetailRoute === "function" ? getShowDetailRoute(result && result.id,title) : "");
+
     return `
-        <button
-        type="button"
+        <a
+        href="${escapeHTML(route)}"
         class="genre-result-card search-result-poster-card"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(result && result.id)}"
@@ -656,7 +654,7 @@ function renderSearchResultPosterCard(result){
             <div class="genre-result-poster">${posterHTML}</div>
             <div class="genre-result-title">${escapeHTML(title)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
-        </button>
+        </a>
     `;
 }
 
@@ -666,9 +664,11 @@ function renderSearchPersonCard(result){
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.profile_path || result.poster_path,"h632"))}" alt="${escapeHTML(name + " photo")}">`
     : renderPersonSilhouettePlaceholderHTML("search-person-placeholder");
 
+    const route = typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("person",result && result.id,name) : "";
+
     return `
-        <button
-        type="button"
+        <a
+        href="${escapeHTML(route)}"
         class="search-person-card"
         data-media-type="person"
         data-media-id="${escapeHTML(result && result.id)}"
@@ -676,7 +676,7 @@ function renderSearchPersonCard(result){
         data-person-role="person">
             <div class="search-person-photo">${photoHTML}</div>
             <div class="search-person-name">${escapeHTML(name)}</div>
-        </button>
+        </a>
     `;
 }
 
@@ -773,7 +773,9 @@ function renderSearchResults(resultsList){
     });
 
     document.querySelectorAll(".search-result-poster-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaType = String(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
             const mediaName = this.dataset.mediaName || "";
@@ -792,7 +794,9 @@ function renderSearchResults(resultsList){
     });
 
     document.querySelectorAll(".search-person-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaId = Number(this.dataset.mediaId || 0);
             if(!mediaId || typeof openPersonPage !== "function"){
                 return;
@@ -890,9 +894,13 @@ function renderGenrePosterGridCard(show){
     const rating = Number(show && show.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
 
+    const route = mediaType === "movie"
+    ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(show && show.id,title) : "")
+    : (typeof getShowDetailRoute === "function" ? getShowDetailRoute(show && show.id,title) : "");
+
     return `
-        <button
-        type="button"
+        <a
+        href="${escapeHTML(route)}"
         class="genre-result-card"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(show && show.id)}"
@@ -905,7 +913,7 @@ function renderGenrePosterGridCard(show){
             <div class="genre-result-poster">${posterHTML}</div>
             <div class="genre-result-title">${escapeHTML(title)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
-        </button>
+        </a>
     `;
 }
 
@@ -938,9 +946,13 @@ function renderPersonResultCard(item){
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
     const roleMeta = item && item.person_role_label ? item.person_role_label : (item && item.character ? `Actor: ${item.character}` : (item && item.job ? item.job : ""));
 
+    const route = mediaType === "movie"
+    ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item && item.id,item && item.title || "") : "")
+    : (typeof getShowDetailRoute === "function" ? getShowDetailRoute(item && item.id,item && item.title || "") : "");
+
     return `
-        <button
-        type="button"
+        <a
+        href="${escapeHTML(route)}"
         class="genre-result-card person-result-card"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(item && item.id)}"
@@ -952,7 +964,7 @@ function renderPersonResultCard(item){
             <div class="genre-result-title">${escapeHTML(item && item.title || "Untitled")}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
             ${roleMeta ? `<div class="person-result-role">${escapeHTML(roleMeta)}</div>` : ""}
-        </button>
+        </a>
     `;
 }
 
@@ -1052,10 +1064,18 @@ function renderGenreDetailPage(state){
     const tvSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"tv") : "";
     const movieSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"movie") : "";
 
+    const renderGenreMediaSwitchLink = (targetMedia,label,route)=>{
+        const active = media === targetMedia;
+        if(route){
+            return `<a href="${escapeHTML(route)}" class="genre-media-switch-button ${active ? "active" : ""}" data-genre-media="${escapeHTML(targetMedia)}" role="tab" aria-selected="${active ? "true" : "false"}">${escapeHTML(label)}</a>`;
+        }
+        return `<button type="button" class="genre-media-switch-button ${active ? "active" : ""}" data-genre-media="${escapeHTML(targetMedia)}" disabled role="tab" aria-selected="${active ? "true" : "false"}">${escapeHTML(label)}</button>`;
+    };
+
     const genreSwitchHTML = `
         <div class="genre-media-switch" role="tablist" aria-label="Genre media type">
-            <button type="button" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-genre-media="tv" ${media !== "tv" && !tvSwitchRoute ? "disabled" : ""} role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</button>
-            <button type="button" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-genre-media="movie" ${media !== "movie" && !movieSwitchRoute ? "disabled" : ""} role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</button>
+            ${renderGenreMediaSwitchLink("tv","TV Shows",tvSwitchRoute)}
+            ${renderGenreMediaSwitchLink("movie","Movies",movieSwitchRoute)}
         </div>
     `;
 
@@ -1533,7 +1553,7 @@ function resetLibraryFiltersToDefault(){
     librarySortMode = "default";
     activeFilter = "watching";
 
-    document.querySelectorAll(".filters button[data-filter]").forEach(button=>{
+    document.querySelectorAll(".filters [data-filter]").forEach(button=>{
         button.classList.toggle("active",button.dataset.filter === activeFilter);
     });
 
@@ -2040,14 +2060,17 @@ function createWatchlistCard(show,options={}){
     `
     : "";
 
+    const showRoute = typeof getShowDetailRoute === "function" ? getShowDetailRoute(show.tmdb_id,show.title || "") : "/app/list/watching";
+
     card.innerHTML = `
 
-        ${posterHTML}
+        <a class="watchlist-card-link" href="${escapeHTML(showRoute)}" aria-label="Open ${escapeHTML(show.title || "show")} details">
+            ${posterHTML}
 
-        <div class="info watchlist-info">
+            <div class="info watchlist-info">
 
             <div class="watchlist-title-row">
-                <button type="button" class="title watchlist-title-button" aria-label="Open ${escapeHTML(show.title || "show")} details">${escapeHTML(show.title)}</button>
+                <div class="title">${escapeHTML(show.title)}</div>
             </div>
 
             <div class="episode">${episodeLine}</div>
@@ -2058,26 +2081,12 @@ function createWatchlistCard(show,options={}){
 
             ${releaseMeta ? `<div class="watchlist-release-meta">${escapeHTML(releaseMeta)}</div>` : ""}
 
-        </div>
+            </div>
+        </a>
 
         ${actionHTML}
 
     `;
-
-    const openDetails = ()=>{
-        openShowModal(show.tmdb_id);
-    };
-
-    card.addEventListener("click",openDetails);
-
-    const titleButton = card.querySelector(".watchlist-title-button");
-
-    if(titleButton){
-        titleButton.addEventListener("click",function(event){
-            event.stopPropagation();
-            openDetails();
-        });
-    }
 
     const actionButton = card.querySelector(".watchlist-action");
 
@@ -2372,7 +2381,13 @@ async function renderUpcoming(startBackgroundRefresh=true){
             ? renderUpcomingBatchEpisodesHTML(show,extraEpisodes)
             : "";
 
+            const episodeRoute = typeof getEpisodeDetailRoute === "function"
+            ? getEpisodeDetailRoute(show.tmdb_id,ep.season_number,ep.episode_number)
+            : "/app/list/watching";
+
             card.innerHTML = `
+
+                <a class="app-route-card-link" href="${escapeHTML(episodeRoute)}" aria-label="Open ${escapeHTML(show.title || "show")} episode"></a>
 
                 ${imageHTML}
 
@@ -2416,15 +2431,6 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
             `;
 
-            card.addEventListener("click",function(){
-                openEpisodeModal(
-                    show.tmdb_id,
-                    ep.season_number,
-                    ep.episode_number,
-                    {backToShow:false}
-                );
-            });
-
             const batchButton = card.querySelector(".upcoming-batch-button");
 
             if(batchButton){
@@ -2442,24 +2448,6 @@ async function renderUpcoming(startBackgroundRefresh=true){
                 });
 
             }
-
-            card.querySelectorAll(".upcoming-batch-row").forEach(row=>{
-
-                row.addEventListener("click",function(event){
-
-                    event.stopPropagation();
-
-                    openEpisodeModal(
-                        this.dataset.show,
-                        Number(this.dataset.season),
-                        Number(this.dataset.episode),
-                        {backToShow:false}
-                    );
-
-                });
-
-            });
-
 
             card.querySelectorAll(".upcoming-check, .upcoming-batch-check").forEach(check=>{
 
@@ -2653,6 +2641,8 @@ function renderUpcomingBatchEpisodesHTML(show,episodes){
         html += `
             <div class="upcoming-batch-row" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}">
 
+                <a class="app-route-card-link" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,ep.season_number,ep.episode_number) : "/app/list/watching")}" aria-label="Open ${escapeHTML(show.title || "show")} episode"></a>
+
                 ${imageHTML}
 
                 <div class="upcoming-batch-info">
@@ -2798,6 +2788,8 @@ function openBehindEpisodesPopup(showId,episodes){
         return `
             <div class="behind-episode-row" data-show="${show.tmdb_id}" data-season="${ep.season_number}" data-episode="${ep.episode_number}">
 
+                <a class="app-route-card-link" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,ep.season_number,ep.episode_number) : "/app/list/watching")}" aria-label="Open ${escapeHTML(show.title || "show")} episode"></a>
+
                 ${imageHTML}
 
                 <div class="behind-episode-info">
@@ -2856,27 +2848,6 @@ function openBehindEpisodesPopup(showId,episodes){
         }
 
     };
-
-    overlay.querySelectorAll(".behind-episode-row").forEach(row=>{
-
-        row.addEventListener("click",function(event){
-
-            if(event.target.closest(".behind-episode-check")){
-                return;
-            }
-
-            closeBehindEpisodesPopup();
-
-            openEpisodeModal(
-                this.dataset.show,
-                Number(this.dataset.season),
-                Number(this.dataset.episode),
-                {backToShow:false}
-            );
-
-        });
-
-    });
 
     overlay.querySelectorAll(".behind-episode-check").forEach(button=>{
 
@@ -2962,8 +2933,11 @@ function renderHistory(){
             episodeData.still_path ||
             "";
 
-            const card = document.createElement("div");
+            const card = document.createElement("a");
             card.className = "show history-entry-card";
+            card.href = typeof getEpisodeDetailRoute === "function"
+            ? getEpisodeDetailRoute(entry.tmdb_id,entry.season,entry.episode)
+            : "/app/history";
 
             const imageHTML = stillPath
             ? `<img class="history-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(stillPath,"w780"))}">`
@@ -2995,19 +2969,6 @@ function renderHistory(){
                 </div>
 
             `;
-
-            card.addEventListener("click",function(){
-
-                if(DATA.shows[String(entry.tmdb_id)]){
-                    openEpisodeModal(
-                        entry.tmdb_id,
-                        entry.season,
-                        entry.episode,
-                        {backToShow:false}
-                    );
-                }
-
-            });
 
             groupBox.appendChild(card);
 
@@ -4437,7 +4398,10 @@ function getPersonLinkNameHTML(person,role,fallbackName){
     const name = fallbackName || (person && person.name) || "Unknown";
 
     if(cleanRole && id > 0){
-        return `<button type="button" class="v2-person-link" data-person-role="${escapeHTML(cleanRole)}" data-person-id="${escapeHTML(id)}" data-person-name="${escapeHTML(name)}">${escapeHTML(name)}</button>`;
+        const route = typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(cleanRole,id,name) : "";
+        if(route){
+            return `<a class="v2-person-link" href="${escapeHTML(route)}" data-person-role="${escapeHTML(cleanRole)}" data-person-id="${escapeHTML(id)}" data-person-name="${escapeHTML(name)}">${escapeHTML(name)}</a>`;
+        }
     }
 
     return `<span>${escapeHTML(name)}</span>`;
@@ -4490,19 +4454,21 @@ function renderV2ActorListHTML(actors,limit=12){
 
     return list.map(actor=>{
         const actorId = Number(actor && actor.id || 0);
-        const linkAttributes = actorId > 0
-        ? ` role="button" tabindex="0" data-person-role="actor" data-person-id="${escapeHTML(actorId)}" data-person-name="${escapeHTML(actor && actor.name || "Unknown Actor")}"`
-        : "";
-        const linkClass = actorId > 0 ? " v2-person-card-link" : "";
+        const actorName = actor && actor.name || "Unknown Actor";
+        const route = actorId > 0 && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("actor",actorId,actorName) : "";
+        const openTag = route
+        ? `<a class="v2-actor-list-row v2-person-card-link" href="${escapeHTML(route)}" data-person-role="actor" data-person-id="${escapeHTML(actorId)}" data-person-name="${escapeHTML(actorName)}">`
+        : `<div class="v2-actor-list-row">`;
+        const closeTag = route ? "</a>" : "</div>";
 
         return `
-            <div class="v2-actor-list-row${linkClass}"${linkAttributes}>
+            ${openTag}
                 <div class="v2-actor-list-photo">${renderV2ActorImageHTML(actor)}</div>
                 <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${getPersonLinkNameHTML(actor,"actor",actor.name || "Unknown Actor")}</div>
+                    <div class="v2-actor-name">${escapeHTML(actorName)}</div>
                     <div class="v2-actor-role">${escapeHTML(actor.character || "Unknown Role")}</div>
                 </div>
-            </div>
+            ${closeTag}
         `;
     }).join("");
 }
@@ -4639,11 +4605,12 @@ function renderV2SimilarShowsHTML(show){
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
         : `<div class="poster-placeholder">TV</div>`;
 
+        const route = typeof getShowDetailRoute === "function" ? getShowDetailRoute(item.id,item.name || "") : "/app/list/watching";
         return `
-            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}">
+            <a href="${escapeHTML(route)}" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(item.name || "Untitled")}</div>
-            </button>
+            </a>
         `;
     }).join("");
 
@@ -4657,6 +4624,8 @@ function renderV2ShowAPISectionsHTML(show){
 function attachV2ShowModalEvents(show){
     document.querySelectorAll("[data-v2-similar-open]").forEach(button=>{
         button.addEventListener("click",async function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             event.stopPropagation();
             const id = this.getAttribute("data-v2-similar-open");
             await openShowDetailsPage(id,{showName:this.dataset.v2SimilarName || ""});
@@ -4906,19 +4875,18 @@ function renderDiscoverShowModal(show){
 
     document.querySelectorAll(".discover-episode-row").forEach(row=>{
 
-        row.addEventListener("click",async function(event){
-
-            if(event.target && event.target.closest("button, a, input, select, textarea")){
-                return;
-            }
-
-            await openDiscoverEpisodeModal(
-                show.tmdb_id,
-                this.dataset.season,
-                this.dataset.episode
-            );
-
-        });
+        const routeLink = row.querySelector(".app-route-card-link");
+        if(routeLink){
+            routeLink.addEventListener("click",async function(event){
+                if(!isPlainAppLinkClick(event)){ return; }
+                event.preventDefault();
+                await openDiscoverEpisodeModal(
+                    show.tmdb_id,
+                    row.dataset.season,
+                    row.dataset.episode
+                );
+            });
+        }
 
     });
 
@@ -5064,6 +5032,7 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
             class="episode-row discover-episode-row ${aired ? "" : "future"}"
             data-season="${seasonNumber}"
             data-episode="${ep.episode_number}">
+                <a class="app-route-card-link" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,seasonNumber,ep.episode_number,show.title || show.name || "") : "/app/discover")}" aria-label="Open ${escapeHTML(show.title || show.name || "show")} episode"></a>
                 <div class="episode-name">
                     E${ep.episode_number} — "${escapeHTML(ep.name || "Untitled Episode")}"
                 </div>
@@ -5234,14 +5203,22 @@ function renderV2CrewMemberRows(people,fallbackRole=""){
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"w185"))}" alt="">`
         : renderPersonSilhouettePlaceholderHTML("v2-actor-placeholder");
 
+        const personId = Number(person && person.id || 0);
+        const personName = person.name || "Unknown";
+        const route = routeRole && personId > 0 && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(routeRole,personId,personName) : "";
+        const openTag = route
+        ? `<a class="v2-actor-list-row v2-person-card-link" href="${escapeHTML(route)}" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(personId)}" data-person-name="${escapeHTML(personName)}">`
+        : `<div class="v2-actor-list-row">`;
+        const closeTag = route ? "</a>" : "</div>";
+
         return `
-            <div class="v2-actor-list-row ${routeRole && Number(person && person.id || 0) > 0 ? "v2-person-card-link" : ""}" ${routeRole && Number(person && person.id || 0) > 0 ? `role="button" tabindex="0" data-person-role="${escapeHTML(routeRole)}" data-person-id="${escapeHTML(Number(person.id || 0))}" data-person-name="${escapeHTML(person.name || "Unknown")}"` : ""}>
+            ${openTag}
                 <div class="v2-actor-list-photo">${photo}</div>
                 <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${getPersonLinkNameHTML(person,routeRole,person.name || "Unknown")}</div>
+                    <div class="v2-actor-name">${escapeHTML(personName)}</div>
                     <div class="v2-actor-role">${escapeHTML(person.job || "Crew")}${person.episode_count ? ` • ${Number(person.episode_count)} episodes` : ""}</div>
                 </div>
-            </div>
+            ${closeTag}
         `;
     }).join("");
 }
@@ -5627,7 +5604,7 @@ function attachShowDetailsPageEvents(show,isTracked){
 
     document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){
-            if(typeof openGenrePage !== "function"){
+            if(typeof openGenrePage !== "function" || !isPlainAppLinkClick(event)){
                 return;
             }
             event.preventDefault();
@@ -5637,7 +5614,7 @@ function attachShowDetailsPageEvents(show,isTracked){
 
     document.querySelectorAll("[data-discovery-type][data-discovery-value]").forEach(link=>{
         link.addEventListener("click",function(event){
-            if(typeof openDiscoveryFilterPage !== "function"){
+            if(typeof openDiscoveryFilterPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
             }
             event.preventDefault();
@@ -5648,7 +5625,7 @@ function attachShowDetailsPageEvents(show,isTracked){
 
     document.querySelectorAll(".v2-person-link[data-person-role][data-person-id]").forEach(link=>{
         link.addEventListener("click",function(event){
-            if(typeof openPersonPage !== "function"){
+            if(typeof openPersonPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
             }
             event.preventDefault();
@@ -5658,22 +5635,13 @@ function attachShowDetailsPageEvents(show,isTracked){
     });
 
     document.querySelectorAll(".v2-person-card-link[data-person-role][data-person-id]").forEach(card=>{
-        const activate = function(event){
-            if(typeof openPersonPage !== "function"){
+        card.addEventListener("click",function(event){
+            if(typeof openPersonPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
             }
-            if(event){
-                event.preventDefault();
-                event.stopPropagation();
-            }
+            event.preventDefault();
+            event.stopPropagation();
             openPersonPage(this.dataset.personRole,this.dataset.personId,{personName:this.dataset.personName || this.textContent || ""});
-        };
-
-        card.addEventListener("click",activate);
-        card.addEventListener("keydown",function(event){
-            if(event.key === "Enter" || event.key === " "){
-                activate.call(this,event);
-            }
         });
     });
 
@@ -5760,12 +5728,15 @@ function attachShowDetailsPageEvents(show,isTracked){
 
         row.addEventListener("pointerenter",warmEpisodeDetails,{once:true});
         row.addEventListener("focusin",warmEpisodeDetails,{once:true});
-        row.addEventListener("click",function(event){
-            if(event.target && event.target.closest("button, a, input, select, textarea")){
-                return;
-            }
-            openEpisodeModal(show.tmdb_id,Number(this.dataset.season),Number(this.dataset.episode),{backToShow:true});
-        });
+
+        const routeLink = row.querySelector(".app-route-card-link");
+        if(routeLink){
+            routeLink.addEventListener("click",function(event){
+                if(!isPlainAppLinkClick(event)){ return; }
+                event.preventDefault();
+                openEpisodeModal(show.tmdb_id,Number(row.dataset.season),Number(row.dataset.episode),{backToShow:true});
+            });
+        }
     });
 
     const favoriteButton = document.querySelector("[data-show-favorite-button]");
@@ -6004,9 +5975,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
                 ${
                 previousEpisodeTarget
-                ? `<button class="episode-detail-action-button episode-nav-button" id="episode-prev-button">
+                ? `<a class="episode-detail-action-button episode-nav-button" id="episode-prev-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,previousEpisodeTarget.season,previousEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">
                     ${escapeHTML(getEpisodeNavLabel("← Previous",previousEpisodeTarget))}
-                </button>`
+                </a>`
                 : `<button class="episode-detail-action-button episode-nav-button disabled" disabled>
                     First Episode
                 </button>`
@@ -6014,9 +5985,9 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
                 ${
                 nextEpisodeTarget
-                ? `<button class="episode-detail-action-button episode-nav-button" id="episode-next-button">
+                ? `<a class="episode-detail-action-button episode-nav-button" id="episode-next-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,nextEpisodeTarget.season,nextEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">
                     ${escapeHTML(getEpisodeNavLabel("Next",nextEpisodeTarget))} →
-                </button>`
+                </a>`
                 : `<button class="episode-detail-action-button episode-nav-button disabled" disabled>
                     Latest Episode
                 </button>`
@@ -6093,7 +6064,10 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     if(previousButton && previousEpisodeTarget){
 
-        previousButton.addEventListener("click",function(){
+        previousButton.addEventListener("click",function(event){
+
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
 
             if(isDiscoverPreview){
                 openEpisodeModal(
@@ -6120,7 +6094,10 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     if(nextButton && nextEpisodeTarget){
 
-        nextButton.addEventListener("click",function(){
+        nextButton.addEventListener("click",function(event){
+
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
 
             if(isDiscoverPreview){
                 openEpisodeModal(
@@ -6326,6 +6303,8 @@ function renderSeasonEpisodesHTML(show,seasonNumber){
         html += `
 
             <div class="${isWatched ? "episode-row watched" : aired ? "episode-row" : "episode-row future"}" data-season="${seasonNumber}" data-episode="${ep.episode_number}">
+
+                <a class="app-route-card-link" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,seasonNumber,ep.episode_number,show.title || show.name || "") : "/app/list/watching")}" aria-label="Open ${escapeHTML(show.title || show.name || "show")} episode"></a>
 
                 <div class="episode-name">
                     E${ep.episode_number} — "${escapeHTML(ep.name || "Untitled Episode")}"
@@ -8031,10 +8010,13 @@ function renderProfileFavoriteSlotsHTML(kind,items){
             ? `<img src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
             : `<div class="profile-favorite-placeholder">${cleanKind === "movie" ? "🎬" : "📺"}</div>`;
 
+            const route = cleanKind === "movie"
+            ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(id,title) : "/app/profile")
+            : (typeof getShowDetailRoute === "function" ? getShowDetailRoute(id,title) : "/app/profile");
             slotsHTML += `
-                <button class="profile-favorite-slot filled" type="button" data-favorite-kind="${cleanKind}" data-favorite-action="open" data-favorite-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(title)}">
+                <a class="profile-favorite-slot filled" href="${escapeHTML(route)}" data-favorite-kind="${cleanKind}" data-favorite-action="open" data-favorite-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(title)}">
                     ${posterHTML}
-                </button>
+                </a>
             `;
         }else{
             slotsHTML += `
@@ -8145,7 +8127,9 @@ function renderProfileHomeView(profile,stats){
 
     document.querySelectorAll("[data-favorite-action='open']").forEach(button=>{
 
-        button.addEventListener("click",function(){
+        button.addEventListener("click",function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const id = this.dataset.favoriteId || "";
             const kind = this.dataset.favoriteKind || "show";
             if(kind === "movie" && id && typeof openMoviePage === "function"){

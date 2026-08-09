@@ -1044,7 +1044,7 @@ function setupEvents(){
 
     document.addEventListener("click",function(event){
         const link = event.target && event.target.closest ? event.target.closest(".v2-person-link[data-person-role][data-person-id]") : null;
-        if(!link || typeof openPersonPage !== "function"){
+        if(!link || typeof openPersonPage !== "function" || (typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event))){
             return;
         }
         event.preventDefault();
@@ -3263,7 +3263,7 @@ function getRememberedRouteNavContext(route){
 }
 
 function getCurrentPrimaryNavContext(){
-    const active = document.querySelector(".app-primary-nav button[data-page].active");
+    const active = document.querySelector(".app-primary-nav [data-page].active");
     return normalizeNavContext(active && active.dataset ? active.dataset.page : "");
 }
 
@@ -4464,8 +4464,8 @@ function getShowDetailRoute(showId,showInfo=""){
     return key && key.includes("-") ? "/app/show/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
-function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber){
-    return getShowDetailRoute(showId) +
+function getEpisodeDetailRoute(showId,seasonNumber,episodeNumber,showInfo=""){
+    return getShowDetailRoute(showId,showInfo) +
     "/season/" + encodeURIComponent(String(Number(seasonNumber))) +
     "/episode/" + encodeURIComponent(String(Number(episodeNumber)));
 }
@@ -5312,7 +5312,9 @@ function attachPersonDetailPageEvents(){
     });
 
     document.querySelectorAll(".person-result-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaType = normalizePersonMediaType(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
 
@@ -5672,11 +5674,20 @@ function attachGenreDetailPageEvents(){
     }
 
     document.querySelectorAll(".genre-media-switch-button[data-genre-media]").forEach(button=>{
-        button.addEventListener("click",function(){
+        button.addEventListener("click",function(event){
+            if(this.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
+                return;
+            }
             const nextMedia = normalizeGenreMediaType(this.dataset.genreMedia || "tv");
             const route = getGenreMediaSwitchRoute(genrePageState.slug,genrePageState.media,nextMedia);
             if(!route || nextMedia === normalizeGenreMediaType(genrePageState.media)){
+                if(this.tagName === "A" && event){
+                    event.preventDefault();
+                }
                 return;
+            }
+            if(this.tagName === "A" && event){
+                event.preventDefault();
             }
             const parts = route.split("/");
             const nextSlug = parts[parts.length - 1] || "";
@@ -5685,7 +5696,9 @@ function attachGenreDetailPageEvents(){
     });
 
     document.querySelectorAll(".genre-result-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaType = normalizeBrowseMediaType(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
             if(!mediaId){
@@ -6168,7 +6181,9 @@ function attachDiscoveryFilterPageEvents(){
     }
 
     document.querySelectorAll(".discovery-filter-result-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(){
+        card.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
             const mediaType = normalizeBrowseMediaType(this.dataset.mediaType || "tv");
             const mediaId = Number(this.dataset.mediaId || 0);
             if(!mediaId){
@@ -6590,7 +6605,7 @@ function attachMovieDetailPageEvents(){
 
     document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){
-            if(typeof openGenrePage !== "function"){
+            if(typeof openGenrePage !== "function" || (typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event))){
                 return;
             }
             event.preventDefault();
@@ -6600,7 +6615,7 @@ function attachMovieDetailPageEvents(){
 
     document.querySelectorAll("[data-discovery-type][data-discovery-value]").forEach(link=>{
         link.addEventListener("click",function(event){
-            if(typeof openDiscoveryFilterPage !== "function"){
+            if(typeof openDiscoveryFilterPage !== "function" || (typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event))){
                 return;
             }
             event.preventDefault();
@@ -9966,7 +9981,7 @@ function getMovieTrackingState(movieId){
     return {
         watched:!!(record && record.watched),
         plan:!!(record && record.plan),
-        favorite:!!(record && record.favorite)
+        favorite:typeof isMovieFavorite === "function" ? isMovieFavorite(movieId) : !!(record && record.favorite)
     };
 }
 
@@ -10090,9 +10105,9 @@ function addMovieHistoryEntry(movie,watchedAt){
     return {entry,deletedIds};
 }
 
-async function saveMovieTrackingMutation(movieId,historyUpsertIds=[],historyDeleteIds=[]){
+async function saveMovieTrackingMutation(movieId,historyUpsertIds=[],historyDeleteIds=[],stateKeys=["movies"]){
     return saveData({
-        stateKeys:["movies"],
+        stateKeys:Array.from(new Set(Array.isArray(stateKeys) && stateKeys.length ? stateKeys : ["movies"])),
         historyUpsertIds:historyUpsertIds,
         historyDeleteIds:historyDeleteIds,
         historyOrder:true
@@ -10112,6 +10127,7 @@ async function updateMovieTracking(movie,action){
         plan:false,
         favorite:false
     };
+    const currentState = getMovieTrackingState(base.id);
     const now = new Date().toISOString();
     let historyResult = {entry:null,deletedIds:[]};
     let historyDeleteIds = [];
@@ -10160,8 +10176,11 @@ async function updateMovieTracking(movie,action){
             message = "Added to Plan to Watch";
         }
     }else if(action === "favorite"){
-        upsertMovieTrackingRecord(base,{favorite:!current.favorite,updated_at:now});
-        message = current.favorite ? "Removed from Favorites" : "Added to Favorites";
+        const result = await setMovieFavoriteState(base,!currentState.favorite,{showMessage:true});
+        if(!result || result.success !== true){
+            return;
+        }
+        return;
     }else if(action === "remove"){
         const confirmed = await showAppConfirm({
             title:"Remove Movie",
@@ -10174,6 +10193,10 @@ async function updateMovieTracking(movie,action){
             return;
         }
         historyDeleteIds = removeMovieHistoryEntries(base.id);
+        ensureProfileData();
+        DATA.profile.favorite_movies = DATA.profile.favorite_movies.filter(item=>{
+            return String(item && (item.id || item.tmdb_id)) !== base.id;
+        });
         delete DATA.movies[base.id];
         message = "Movie tracking removed";
     }else{
@@ -10190,7 +10213,8 @@ async function updateMovieTracking(movie,action){
     await saveMovieTrackingMutation(
         base.id,
         historyResult.entry ? [historyResult.entry.id] : [],
-        combineHistoryDeleteIds(historyResult.deletedIds,historyDeleteIds)
+        combineHistoryDeleteIds(historyResult.deletedIds,historyDeleteIds),
+        action === "remove" ? ["movies","profile"] : ["movies"]
     );
 }
 
@@ -10837,6 +10861,81 @@ function normalizeFavoriteMovieRecord(movie){
 
 }
 
+function isMovieFavorite(movieId){
+
+    ensureProfileData();
+
+    const id = normalizeRouteId(movieId);
+    if(!id){
+        return false;
+    }
+
+    return DATA.profile.favorite_movies.some(item=>{
+        return String(item && (item.id || item.tmdb_id)) === id;
+    });
+
+}
+
+async function setMovieFavoriteState(movie,shouldFavorite,options={}){
+
+    ensureProfileData();
+    ensureMovieTrackingData();
+
+    const record = normalizeFavoriteMovieRecord(movie);
+    if(!record){
+        return {success:false,changed:false};
+    }
+
+    const id = record.id;
+    const favorite = shouldFavorite === true;
+    const alreadyFavorite = isMovieFavorite(id);
+
+    if(favorite && !alreadyFavorite && DATA.profile.favorite_movies.length >= 8){
+        showToast("You can only choose 8 favorite movies");
+        return {success:false,changed:false,limit:true};
+    }
+
+    if(favorite){
+        if(!alreadyFavorite){
+            DATA.profile.favorite_movies.push(record);
+        }else{
+            DATA.profile.favorite_movies = DATA.profile.favorite_movies.map(item=>{
+                return String(item && (item.id || item.tmdb_id)) === id ? record : item;
+            });
+        }
+        upsertMovieTrackingRecord(record,{favorite:true,updated_at:new Date().toISOString()});
+    }else{
+        DATA.profile.favorite_movies = DATA.profile.favorite_movies.filter(item=>{
+            return String(item && (item.id || item.tmdb_id)) !== id;
+        });
+        const tracked = getMovieTrackingRecord(id);
+        if(tracked){
+            upsertMovieTrackingRecord(tracked,{favorite:false,updated_at:new Date().toISOString()});
+        }
+    }
+
+    if(typeof renderAll === "function"){
+        renderAll();
+    }
+    if(typeof renderFavoritesPopup === "function"){
+        const popup = document.getElementById("favorites-popup");
+        if(popup && popup.style.display === "flex"){
+            renderFavoritesPopup("movie");
+        }
+    }
+
+    if(options.showMessage === true){
+        showToast(favorite ? "Added to Favorites" : "Removed from Favorites");
+    }
+
+    await waitForNextPaint();
+    await saveData({stateKeys:["profile","movies"]});
+
+    return {success:true,changed:alreadyFavorite !== favorite};
+
+}
+
+
 function normalizeFavoriteMovieFromSearch(item){
 
     return normalizeFavoriteMovieRecord({
@@ -10909,28 +11008,7 @@ function getFavoriteMovieById(movieId){
 
 async function addFavoriteMovie(movie){
 
-    ensureProfileData();
-
-    const record = normalizeFavoriteMovieRecord(movie);
-    if(!record){
-        return;
-    }
-
-    if(DATA.profile.favorite_movies.some(item=>String(item && (item.id || item.tmdb_id)) === record.id)){
-        return;
-    }
-
-    if(DATA.profile.favorite_movies.length >= 8){
-        showToast("You can only choose 8 favorite movies");
-        return;
-    }
-
-    DATA.profile.favorite_movies.push(record);
-
-    renderAll();
-    renderFavoritesPopup("movie");
-    await waitForNextPaint();
-    await saveData({stateKeys:["profile"]});
+    return setMovieFavoriteState(movie,true,{showMessage:false});
 
 }
 
@@ -10938,17 +11016,17 @@ async function addFavoriteMovie(movie){
 
 async function removeFavoriteMovie(movieId){
 
-    ensureProfileData();
-
     const id = normalizeRouteId(movieId);
-    DATA.profile.favorite_movies = DATA.profile.favorite_movies.filter(item=>{
-        return String(item && (item.id || item.tmdb_id)) !== id;
-    });
+    if(!id){
+        return {success:false,changed:false};
+    }
 
-    renderAll();
-    renderFavoritesPopup("movie");
-    await waitForNextPaint();
-    await saveData({stateKeys:["profile"]});
+    const existing = getFavoriteMovieById(id) || getMovieTrackingRecord(id);
+    if(!existing){
+        return {success:true,changed:false};
+    }
+
+    return setMovieFavoriteState(existing,false,{showMessage:false});
 
 }
 

@@ -169,7 +169,7 @@
     }
 
     function setActiveFilterButtons(){
-        document.querySelectorAll(".filters button[data-filter]").forEach(button=>{
+        document.querySelectorAll(".filters [data-filter]").forEach(button=>{
             button.classList.toggle("active",button.dataset.filter === activeFilter);
         });
     }
@@ -183,7 +183,7 @@
         if(typeof librarySearchQuery !== "undefined"){
             librarySearchQuery = currentSearchQuery();
         }
-        document.querySelectorAll(".top-tabs button").forEach(button=>{
+        document.querySelectorAll(".top-tabs [data-tab]").forEach(button=>{
             button.classList.toggle("active",button.dataset.tab === "watchlist");
         });
         setActiveFilterButtons();
@@ -198,7 +198,7 @@
             tab = "watchlist";
         }
         activeShowsTab = tab;
-        document.querySelectorAll(".top-tabs button").forEach(button=>{
+        document.querySelectorAll(".top-tabs [data-tab]").forEach(button=>{
             button.classList.toggle("active",button.dataset.tab === tab);
         });
         if(typeof updateShellTitle === "function"){
