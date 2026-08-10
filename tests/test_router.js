@@ -24,6 +24,10 @@ function createRouter(route, options={}){
     activeShowsTab:'watchlist',
     activeFilter:'watching',
     librarySearchQuery:'',
+    libraryGenreFilter:'all',
+    libraryNetworkFilter:'all',
+    libraryYearFilter:'all',
+    librarySortMode:'default',
     selectedEpisodeContext:null,
     selectedShowId:null,
     selectedGenreSlug:null,
@@ -117,6 +121,28 @@ function createRouter(route, options={}){
   const {calls,router}=createRouter('/app/list/watching?q=dark');
   assert.strictEqual(router.currentRoute(),'/app/list/watching?q=dark');
   assert(calls.some(item=>item[0]==='showPage' && item[1]==='shows'),'list route should open shows page');
+}
+
+{
+  const {calls,context,router}=createRouter('/app/list/completed/?x=1&q=dark&genre=Drama&network=HBO%20Max&year=2024&sort=rating-desc');
+  assert.strictEqual(router.currentRoute(),'/app/list/completed?q=dark&genre=Drama&network=HBO%20Max&year=2024&sort=rating-desc');
+  assert.strictEqual(context.activeFilter,'finished');
+  assert.strictEqual(context.librarySearchQuery,'dark');
+  assert.strictEqual(context.libraryGenreFilter,'Drama');
+  assert.strictEqual(context.libraryNetworkFilter,'HBO Max');
+  assert.strictEqual(context.libraryYearFilter,'2024');
+  assert.strictEqual(context.librarySortMode,'rating-desc');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/list/completed?q=dark&genre=Drama&network=HBO%20Max&year=2024&sort=rating-desc'),'list filters should canonicalize without losing state');
+}
+
+{
+  const {calls,context,router}=createRouter('/app/list/paused?genre=all&network=all&year=twenty&sort=unknown');
+  assert.strictEqual(router.currentRoute(),'/app/list/paused');
+  assert.strictEqual(context.libraryGenreFilter,'all');
+  assert.strictEqual(context.libraryNetworkFilter,'all');
+  assert.strictEqual(context.libraryYearFilter,'all');
+  assert.strictEqual(context.librarySortMode,'default');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/list/paused'),'invalid/default advanced filters should be removed from the canonical URL');
 }
 
 {
@@ -351,8 +377,12 @@ for (const route of [
   context.activeShowsTab='watchlist';
   context.activeFilter='plan';
   context.librarySearchQuery='dark';
+  context.libraryGenreFilter='Drama';
+  context.libraryNetworkFilter='Netflix';
+  context.libraryYearFilter='2025';
+  context.librarySortMode='year-newest';
   router.updateRouteFromState(false);
-  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/list/plan-to-watch?q=dark'));
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/list/plan-to-watch?q=dark&genre=Drama&network=Netflix&year=2025&sort=year-newest'));
 }
 
 {
@@ -375,6 +405,16 @@ for (const route of [
   const {calls,router}=createRouter('/app/list/completed/?x=1&q=dark');
   assert.strictEqual(router.currentRoute(),'/app/list/completed?q=dark');
   assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/list/completed?q=dark'),'list route should normalize trailing slash and query');
+}
+
+{
+  const {context}=createRouter('/app/list/dropped?q=lost&genre=Crime&network=FX&year=2022&sort=title-az',{appDataReady:false});
+  assert.strictEqual(context.activeFilter,'dropped');
+  assert.strictEqual(context.librarySearchQuery,'lost');
+  assert.strictEqual(context.libraryGenreFilter,'Crime');
+  assert.strictEqual(context.libraryNetworkFilter,'FX');
+  assert.strictEqual(context.libraryYearFilter,'2022');
+  assert.strictEqual(context.librarySortMode,'title-az');
 }
 
 {
@@ -461,6 +501,19 @@ for (const route of [
   context.window.location.search='';
   listeners.popstate();
   assert(calls.some(item=>item[0]==='showPage' && item[1]==='profile'),'browser back/forward should route through the shared parser');
+}
+
+{
+  const {context,listeners}=createRouter('/app/list/watching?genre=Drama&year=2024&sort=rating-desc');
+  context.window.location.pathname='/app/list/completed';
+  context.window.location.search='?network=HBO&sort=title-az';
+  listeners.popstate();
+  assert.strictEqual(context.activeFilter,'finished');
+  assert.strictEqual(context.librarySearchQuery,'');
+  assert.strictEqual(context.libraryGenreFilter,'all');
+  assert.strictEqual(context.libraryNetworkFilter,'HBO');
+  assert.strictEqual(context.libraryYearFilter,'all');
+  assert.strictEqual(context.librarySortMode,'title-az');
 }
 
 {

@@ -112,6 +112,7 @@ var V2_EPISODE_DETAIL_CACHE_PREFIX = "tv-tracker-v2-episode-details:";
 var V2_EPISODE_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
 var libraryGenreFilter = "all";
 var libraryNetworkFilter = "all";
+var libraryYearFilter = "all";
 var librarySortMode = "default";
 var isRefreshingUpcoming = false;
 var lastCompatibleImportPreview = null;
@@ -4638,8 +4639,30 @@ function getLibraryListRoute(filter=activeFilter,query=librarySearchQuery){
         dropped:"dropped"
     };
     const routeSlug = routeMap[String(filter || "watching")] || "watching";
+    const params = [];
     const cleanQuery = String(query || "").trim();
-    return "/app/list/" + routeSlug + (cleanQuery ? "?q=" + encodeURIComponent(cleanQuery) : "");
+    const genre = String(typeof libraryGenreFilter !== "undefined" ? libraryGenreFilter : "all").trim();
+    const network = String(typeof libraryNetworkFilter !== "undefined" ? libraryNetworkFilter : "all").trim();
+    const year = String(typeof libraryYearFilter !== "undefined" ? libraryYearFilter : "all").trim();
+    const sort = String(typeof librarySortMode !== "undefined" ? librarySortMode : "default").trim();
+
+    if(cleanQuery){
+        params.push("q=" + encodeURIComponent(cleanQuery));
+    }
+    if(genre && genre !== "all"){
+        params.push("genre=" + encodeURIComponent(genre));
+    }
+    if(network && network !== "all"){
+        params.push("network=" + encodeURIComponent(network));
+    }
+    if(/^\d{4}$/.test(year)){
+        params.push("year=" + encodeURIComponent(year));
+    }
+    if(sort && sort !== "default"){
+        params.push("sort=" + encodeURIComponent(sort));
+    }
+
+    return "/app/list/" + routeSlug + (params.length ? "?" + params.join("&") : "");
 }
 
 function scheduleLibrarySearchRouteUpdate(){

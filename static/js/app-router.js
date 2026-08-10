@@ -16,6 +16,16 @@
         plan:"plan-to-watch",
         dropped:"dropped"
     };
+    const LIBRARY_SORT_MODES = new Set([
+        "default",
+        "title-az",
+        "title-za",
+        "recently-added",
+        "recently-watched",
+        "rating-desc",
+        "year-newest",
+        "year-oldest"
+    ]);
     let applyingRoute = false;
     let initialRoutePrepared = false;
 
@@ -54,9 +64,37 @@
     function canonicalListSearch(search){
         const params = readSearchParams(search);
         const query = String(params.get("q") || "").trim();
+        const genre = String(params.get("genre") || "").trim();
+        const network = String(params.get("network") || "").trim();
+        const rawYear = String(params.get("year") || "").trim();
+        const year = /^\d{4}$/.test(rawYear) ? rawYear : "";
+        const rawSort = String(params.get("sort") || "").trim().toLowerCase();
+        const sort = LIBRARY_SORT_MODES.has(rawSort) ? rawSort : "default";
+        const parts = [];
+
+        if(query){
+            parts.push("q=" + encodeURIComponent(query));
+        }
+        if(genre && genre !== "all"){
+            parts.push("genre=" + encodeURIComponent(genre));
+        }
+        if(network && network !== "all"){
+            parts.push("network=" + encodeURIComponent(network));
+        }
+        if(year){
+            parts.push("year=" + encodeURIComponent(year));
+        }
+        if(sort !== "default"){
+            parts.push("sort=" + encodeURIComponent(sort));
+        }
+
         return {
             query,
-            search:query ? "?q=" + encodeURIComponent(query) : ""
+            genre:genre && genre !== "all" ? genre : "all",
+            network:network && network !== "all" ? network : "all",
+            year:year || "all",
+            sort,
+            search:parts.length ? "?" + parts.join("&") : ""
         };
     }
 
@@ -90,7 +128,11 @@
             return buildParsedRoute("list",path,listSearch.search,{
                 listSlug:listMatch[1],
                 filter:LIST_ROUTE_TO_FILTER[listMatch[1]] || "watching",
-                query:listSearch.query
+                query:listSearch.query,
+                genre:listSearch.genre,
+                network:listSearch.network,
+                year:listSearch.year,
+                sort:listSearch.sort
             });
         }
 
@@ -346,7 +388,29 @@
     function getListRoute(filter,query=""){
         const routeSlug = FILTER_TO_LIST_ROUTE[String(filter || "watching")] || "watching";
         const cleanQuery = String(query || "").trim();
-        return "/app/list/" + routeSlug + (cleanQuery ? "?q=" + encodeURIComponent(cleanQuery) : "");
+        const genre = String(typeof libraryGenreFilter !== "undefined" ? libraryGenreFilter : "all").trim();
+        const network = String(typeof libraryNetworkFilter !== "undefined" ? libraryNetworkFilter : "all").trim();
+        const year = String(typeof libraryYearFilter !== "undefined" ? libraryYearFilter : "all").trim();
+        const sort = String(typeof librarySortMode !== "undefined" ? librarySortMode : "default").trim();
+        const parts = [];
+
+        if(cleanQuery){
+            parts.push("q=" + encodeURIComponent(cleanQuery));
+        }
+        if(genre && genre !== "all"){
+            parts.push("genre=" + encodeURIComponent(genre));
+        }
+        if(network && network !== "all"){
+            parts.push("network=" + encodeURIComponent(network));
+        }
+        if(/^\d{4}$/.test(year)){
+            parts.push("year=" + encodeURIComponent(year));
+        }
+        if(LIBRARY_SORT_MODES.has(sort) && sort !== "default"){
+            parts.push("sort=" + encodeURIComponent(sort));
+        }
+
+        return "/app/list/" + routeSlug + (parts.length ? "?" + parts.join("&") : "");
     }
 
     function setActiveFilterButtons(){
@@ -489,6 +553,18 @@
             if(typeof librarySearchQuery !== "undefined"){
                 librarySearchQuery = params.query || "";
             }
+            if(typeof libraryGenreFilter !== "undefined"){
+                libraryGenreFilter = params.genre || "all";
+            }
+            if(typeof libraryNetworkFilter !== "undefined"){
+                libraryNetworkFilter = params.network || "all";
+            }
+            if(typeof libraryYearFilter !== "undefined"){
+                libraryYearFilter = params.year || "all";
+            }
+            if(typeof librarySortMode !== "undefined"){
+                librarySortMode = params.sort || "default";
+            }
             configureInitialListSkeleton(activeFilter);
             setInitialShowsTab("watchlist");
             setActiveFilterButtons();
@@ -601,8 +677,21 @@
         clearDetailState();
         activeShowsTab = "watchlist";
         activeFilter = nextFilter;
+        const routeState = options && options.routeState ? options.routeState : null;
         if(typeof librarySearchQuery !== "undefined"){
-            librarySearchQuery = currentSearchQuery();
+            librarySearchQuery = routeState ? (routeState.query || "") : currentSearchQuery();
+        }
+        if(routeState && typeof libraryGenreFilter !== "undefined"){
+            libraryGenreFilter = routeState.genre || "all";
+        }
+        if(routeState && typeof libraryNetworkFilter !== "undefined"){
+            libraryNetworkFilter = routeState.network || "all";
+        }
+        if(routeState && typeof libraryYearFilter !== "undefined"){
+            libraryYearFilter = routeState.year || "all";
+        }
+        if(routeState && typeof librarySortMode !== "undefined"){
+            librarySortMode = routeState.sort || "default";
         }
         document.querySelectorAll(".top-tabs [data-tab]").forEach(button=>{
             button.classList.toggle("active",button.dataset.tab === "watchlist");
@@ -659,7 +748,7 @@
         const params = parsed.params || {};
 
         if(parsed.type === "list"){
-            activateListRoute(params.listSlug);
+            activateListRoute(params.listSlug,{routeState:params});
             return;
         }
         if(parsed.type === "search"){

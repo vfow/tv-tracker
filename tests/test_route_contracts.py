@@ -32,6 +32,7 @@ def load_route_helpers():
         "APP_CERTIFICATION_PATH_RE",
         "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
+        "APP_LIBRARY_SORT_MODES",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -79,6 +80,14 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/list"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/list/watching?q=dark"), "/app/list/watching?q=dark")
         self.assertEqual(safe_next_url("/app/list/plan-to-watch?x=1&q=the matrix"), "/app/list/plan-to-watch?q=the+matrix")
+        self.assertEqual(
+            safe_next_url("/app/list/completed?sort=rating-desc&year=2024&network=HBO Max&genre=Drama&q=dark&x=1"),
+            "/app/list/completed?q=dark&genre=Drama&network=HBO+Max&year=2024&sort=rating-desc",
+        )
+        self.assertEqual(
+            safe_next_url("/app/list/paused?genre=all&network=all&year=nope&sort=unknown"),
+            "/app/list/paused",
+        )
 
     def test_show_episode_genre_and_people_paths_are_allowed(self):
         self.assertTrue(valid_app_path("/app/show/1399"))

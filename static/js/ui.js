@@ -1445,6 +1445,10 @@ function getLibraryNetworkFilter(){
     return String(typeof libraryNetworkFilter !== "undefined" ? libraryNetworkFilter : "all") || "all";
 }
 
+function getLibraryYearFilter(){
+    return String(typeof libraryYearFilter !== "undefined" ? libraryYearFilter : "all") || "all";
+}
+
 function getLibrarySortMode(){
     return String(typeof librarySortMode !== "undefined" ? librarySortMode : "default") || "default";
 }
@@ -1514,18 +1518,44 @@ function getShowNetworkNames(show){
     return networks;
 }
 
-function buildLibraryOptionCounts(type){
-    const counts = new Map();
+function getLibraryBaseStatusShows(){
+    return Object.values(DATA.shows || {}).filter(show=>filterShow(show));
+}
 
-    Object.values(DATA.shows || {}).forEach(show=>{
-        const values = type === "network" ? getShowNetworkNames(show) : getShowGenreNames(show);
+function buildLibraryOptionCounts(type,baseShows=null){
+    const counts = new Map();
+    const statusShows = Array.isArray(baseShows) ? baseShows : getLibraryBaseStatusShows();
+
+    statusShows.forEach(show=>{
+        let values = [];
+        if(type === "network"){
+            values = getShowNetworkNames(show);
+        }else if(type === "year"){
+            const year = getShowReleaseYearValue(show);
+            values = year ? [String(year)] : [];
+        }else{
+            values = getShowGenreNames(show);
+        }
+
         values.forEach(value=>{
             counts.set(value,(counts.get(value) || 0) + 1);
         });
     });
 
+    const selectedValue = type === "network"
+    ? getLibraryNetworkFilter()
+    : type === "year"
+    ? getLibraryYearFilter()
+    : getLibraryGenreFilter();
+
+    if(selectedValue !== "all" && !counts.has(selectedValue)){
+        counts.set(selectedValue,0);
+    }
+
     return Array.from(counts.entries())
-    .sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:"base"}))
+    .sort((a,b)=>type === "year"
+        ? Number(b[0]) - Number(a[0])
+        : a[0].localeCompare(b[0],undefined,{sensitivity:"base"}))
     .map(([name,count])=>({value:name,label:name + " (" + count + ")"}));
 }
 
@@ -1546,40 +1576,52 @@ function setSelectOptions(select,firstLabel,options,value){
     }
 }
 
+function syncLibraryFilterRoute(){
+    if(
+        typeof window !== "undefined" &&
+        activePage === "shows" &&
+        activeShowsTab === "watchlist" &&
+        window.TVTrackerRouter &&
+        typeof window.TVTrackerRouter.updateRouteFromState === "function"
+    ){
+        window.TVTrackerRouter.updateRouteFromState(false);
+    }
+}
+
 function resetLibraryFiltersToDefault(){
-    librarySearchQuery = "";
     libraryGenreFilter = "all";
     libraryNetworkFilter = "all";
+    libraryYearFilter = "all";
     librarySortMode = "default";
-    activeFilter = "watching";
-
-    document.querySelectorAll(".filters [data-filter]").forEach(button=>{
-        button.classList.toggle("active",button.dataset.filter === activeFilter);
-    });
 
     renderLibrarySearchControl();
     renderWatchlist();
+    syncLibraryFilterRoute();
 }
 
 function hasActiveLibraryControls(){
     return Boolean(
-        getLibrarySearchQuery() ||
         getLibraryGenreFilter() !== "all" ||
         getLibraryNetworkFilter() !== "all" ||
-        getLibrarySortMode() !== "default" ||
-        activeFilter !== "watching"
+        getLibraryYearFilter() !== "all" ||
+        getLibrarySortMode() !== "default"
     );
 }
 
 function libraryShowMatchesAdvancedFilters(show){
     const genre = getLibraryGenreFilter();
     const network = getLibraryNetworkFilter();
+    const year = getLibraryYearFilter();
 
     if(genre !== "all" && !getShowGenreNames(show).includes(genre)){
         return false;
     }
 
     if(network !== "all" && !getShowNetworkNames(show).includes(network)){
+        return false;
+    }
+
+    if(year !== "all" && String(getShowReleaseYearValue(show)) !== year){
         return false;
     }
 
@@ -1721,6 +1763,7 @@ function renderLibrarySearchControl(){
     const input = box.querySelector("#library-search");
     const genreSelect = menu.querySelector("#library-genre-filter");
     const networkSelect = menu.querySelector("#library-network-filter");
+    const yearSelect = menu.querySelector("#library-year-filter");
     const sortSelect = menu.querySelector("#library-sort-mode");
     const resetButton = menu.querySelector("#library-reset-filters");
 
@@ -1729,8 +1772,10 @@ function renderLibrarySearchControl(){
         input.value = getLibrarySearchQuery();
     }
 
-    setSelectOptions(genreSelect,"All Genres",buildLibraryOptionCounts("genre"),getLibraryGenreFilter());
-    setSelectOptions(networkSelect,"All Networks",buildLibraryOptionCounts("network"),getLibraryNetworkFilter());
+    const baseStatusShows = getLibraryBaseStatusShows();
+    setSelectOptions(genreSelect,"All Genres",buildLibraryOptionCounts("genre",baseStatusShows),getLibraryGenreFilter());
+    setSelectOptions(networkSelect,"All Networks",buildLibraryOptionCounts("network",baseStatusShows),getLibraryNetworkFilter());
+    setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter());
 
     if(sortSelect){
         sortSelect.value = getLibrarySortMode();
@@ -1779,6 +1824,11 @@ function createLibraryFilterMenu(){
                 <option value="all">All Networks</option>
             </select>
 
+            <label class="library-filter-label" for="library-year-filter">Year</label>
+            <select id="library-year-filter" class="library-filter-select" aria-label="Filter by year">
+                <option value="all">All Years</option>
+            </select>
+
             <label class="library-filter-label" for="library-sort-mode">Sort</label>
             <select id="library-sort-mode" class="library-filter-select library-sort-select" aria-label="Sort library">
                 <option value="default">Default Order</option>
@@ -1799,6 +1849,7 @@ function createLibraryFilterMenu(){
     const dropdown = menu.querySelector("#library-filter-dropdown");
     const genreSelect = menu.querySelector("#library-genre-filter");
     const networkSelect = menu.querySelector("#library-network-filter");
+    const yearSelect = menu.querySelector("#library-year-filter");
     const sortSelect = menu.querySelector("#library-sort-mode");
     const resetButton = menu.querySelector("#library-reset-filters");
 
@@ -1816,16 +1867,25 @@ function createLibraryFilterMenu(){
     genreSelect.addEventListener("change",function(){
         libraryGenreFilter = this.value || "all";
         renderWatchlist();
+        syncLibraryFilterRoute();
     });
 
     networkSelect.addEventListener("change",function(){
         libraryNetworkFilter = this.value || "all";
         renderWatchlist();
+        syncLibraryFilterRoute();
+    });
+
+    yearSelect.addEventListener("change",function(){
+        libraryYearFilter = this.value || "all";
+        renderWatchlist();
+        syncLibraryFilterRoute();
     });
 
     sortSelect.addEventListener("change",function(){
         librarySortMode = this.value || "default";
         renderWatchlist();
+        syncLibraryFilterRoute();
     });
 
     resetButton.addEventListener("click",function(){
@@ -1892,7 +1952,8 @@ function getLibrarySearchEmptyHTML(query){
 
     const filterText = [
         getLibraryGenreFilter() !== "all" ? getLibraryGenreFilter() : "",
-        getLibraryNetworkFilter() !== "all" ? getLibraryNetworkFilter() : ""
+        getLibraryNetworkFilter() !== "all" ? getLibraryNetworkFilter() : "",
+        getLibraryYearFilter() !== "all" ? getLibraryYearFilter() : ""
     ].filter(Boolean).join(" • ");
 
     const detail = query

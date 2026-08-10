@@ -49,6 +49,75 @@ assert(ui.includes('function safeExternalURL'));
 assert(ui.includes('data-person-role="person"'));
 assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
 assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
+assert(ui.includes('for="library-year-filter">Year</label>'));
+assert(ui.includes('setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter())'));
+
+const libraryFilterSource = ui.slice(
+  ui.indexOf('function getLibraryGenreFilter'),
+  ui.indexOf('function removeLibrarySearchControl')
+);
+const libraryFilterContext = {
+  console,
+  Map,
+  Object,
+  Array,
+  Number,
+  String,
+  Date,
+  DATA:{
+    shows:{
+      1:{status:'watching',genres:['Drama'],networks:[{name:'Netflix'}],first_air_date:'2024-01-01'},
+      2:{status:'watching',genres:['Crime'],networks:[{name:'FX'}],first_air_date:'2023-02-02'},
+      3:{status:'finished',genres:['Comedy'],networks:[{name:'HBO'}],first_air_date:'2022-03-03'}
+    },
+    history:[]
+  },
+  activeFilter:'watching',
+  activePage:'shows',
+  activeShowsTab:'watchlist',
+  librarySearchQuery:'needle',
+  libraryGenreFilter:'Mystery',
+  libraryNetworkFilter:'all',
+  libraryYearFilter:'all',
+  librarySortMode:'default',
+  filterShow(show){ return show.status === libraryFilterContext.activeFilter; },
+  document:{querySelectorAll(){ return []; }},
+  window:{TVTrackerRouter:{updateRouteFromState(){}}},
+  renderLibrarySearchControl(){},
+  renderWatchlist(){},
+  getLibrarySearchQuery(){ return String(libraryFilterContext.librarySearchQuery || '').trim(); },
+  sortLibrarySearchResults(){ return 0; }
+};
+vm.createContext(libraryFilterContext);
+vm.runInContext(libraryFilterSource, libraryFilterContext);
+
+const genreCounts = Array.from(libraryFilterContext.buildLibraryOptionCounts('genre'));
+assert(genreCounts.some(item=>item.value === 'Drama' && item.label === 'Drama (1)'));
+assert(genreCounts.some(item=>item.value === 'Crime' && item.label === 'Crime (1)'));
+assert(!genreCounts.some(item=>item.value === 'Comedy'),'filter options should be scoped to the current status list');
+assert(genreCounts.some(item=>item.value === 'Mystery' && item.label === 'Mystery (0)'),'an active filter should remain visible after switching to a status with zero matches');
+
+const yearCounts = Array.from(libraryFilterContext.buildLibraryOptionCounts('year'));
+assert.deepStrictEqual(yearCounts.map(item=>item.value),['2024','2023']);
+libraryFilterContext.libraryGenreFilter='all';
+libraryFilterContext.libraryYearFilter='2024';
+assert.strictEqual(libraryFilterContext.libraryShowMatchesAdvancedFilters(libraryFilterContext.DATA.shows[1]),true);
+assert.strictEqual(libraryFilterContext.libraryShowMatchesAdvancedFilters(libraryFilterContext.DATA.shows[2]),false);
+
+libraryFilterContext.activeFilter='finished';
+libraryFilterContext.librarySearchQuery='keep me';
+libraryFilterContext.libraryGenreFilter='Comedy';
+libraryFilterContext.libraryNetworkFilter='HBO';
+libraryFilterContext.libraryYearFilter='2022';
+libraryFilterContext.librarySortMode='rating-desc';
+libraryFilterContext.resetLibraryFiltersToDefault();
+assert.strictEqual(libraryFilterContext.activeFilter,'finished','Reset Filters must keep the current status');
+assert.strictEqual(libraryFilterContext.librarySearchQuery,'keep me','Reset Filters must keep the search text');
+assert.strictEqual(libraryFilterContext.libraryGenreFilter,'all');
+assert.strictEqual(libraryFilterContext.libraryNetworkFilter,'all');
+assert.strictEqual(libraryFilterContext.libraryYearFilter,'all');
+assert.strictEqual(libraryFilterContext.librarySortMode,'default');
+assert.strictEqual(libraryFilterContext.hasActiveLibraryControls(),false,'status/search alone must not count as active advanced filters');
 
 const safeExternalURLSource = ui.slice(
   ui.indexOf('function safeExternalURL'),

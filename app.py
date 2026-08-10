@@ -104,6 +104,16 @@ APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
     r"^/app/discover/(?:(?:tv)/(?:popular|top-rated|airing-today|on-the-air)|(?:movie)/(?:popular|top-rated|now-playing|upcoming))$"
 )
 APP_LIST_PATH_RE = re.compile(r"^/app/list/(watching|paused|completed|plan-to-watch|dropped)$")
+APP_LIBRARY_SORT_MODES = {
+    "default",
+    "title-az",
+    "title-za",
+    "recently-added",
+    "recently-watched",
+    "rating-desc",
+    "year-newest",
+    "year-oldest",
+}
 APP_PERSON_PATH_RE = re.compile(rf"^/app/person/({APP_ROUTE_ID_SLUG})$")
 APP_SECTION_PATHS = {
     "/app/upcoming",
@@ -481,7 +491,7 @@ def login_required(view):
                     "code": "session_expired",
                 }), 401
 
-            destination = safe_next_url(request.path)
+            destination = safe_next_url(request.full_path)
             session.clear()
             session["post_login_path"] = destination
             return redirect(url_for("login"))
@@ -1650,12 +1660,36 @@ def safe_next_url(value: str | None) -> str:
         return "/app/search" + (("?" + urlencode({"q": query, "type": media_type})) if query else "")
     if APP_LIST_PATH_RE.fullmatch(candidate):
         query = ""
+        genre = ""
+        network = ""
+        year = ""
+        sort_mode = "default"
         if separator:
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
-                if key == "q" and value.strip():
-                    query = value.strip()[:120]
-                    break
-        return candidate + (("?" + urlencode({"q": query})) if query else "")
+                clean_value = value.strip()
+                if key == "q" and clean_value and not query:
+                    query = clean_value[:120]
+                elif key == "genre" and clean_value and clean_value.lower() != "all" and not genre:
+                    genre = clean_value[:120]
+                elif key == "network" and clean_value and clean_value.lower() != "all" and not network:
+                    network = clean_value[:120]
+                elif key == "year" and re.fullmatch(r"\d{4}", clean_value) and not year:
+                    year = clean_value
+                elif key == "sort" and clean_value.lower() in APP_LIBRARY_SORT_MODES:
+                    sort_mode = clean_value.lower()
+
+        params = {}
+        if query:
+            params["q"] = query
+        if genre:
+            params["genre"] = genre
+        if network:
+            params["network"] = network
+        if year:
+            params["year"] = year
+        if sort_mode != "default":
+            params["sort"] = sort_mode
+        return candidate + (("?" + urlencode(params)) if params else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
     if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
