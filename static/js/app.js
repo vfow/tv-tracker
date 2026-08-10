@@ -4561,14 +4561,16 @@ function getMovieDetailRoute(movieId,label=""){
     return key && key.includes("-") ? "/app/movie/" + encodeURIComponent(key) : "/app/list/watching";
 }
 
-function getCompanyDetailRoute(companyId,label=""){
+function getCompanyDetailRoute(companyId,label="",media="tv"){
     const key = buildRouteKey(companyId,label);
-    return key && key.includes("-") ? "/app/company/" + encodeURIComponent(key) : "/app/list/watching";
+    const cleanMedia = normalizeBrowseMediaType(media);
+    return key && key.includes("-") ? `/app/company/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(key)}` : "/app/list/watching";
 }
 
-function getProviderDetailRoute(providerId,label=""){
+function getProviderDetailRoute(providerId,label="",media="tv"){
     const key = buildRouteKey(providerId,label);
-    return key && key.includes("-") ? "/app/provider/" + encodeURIComponent(key) : "/app/list/watching";
+    const cleanMedia = normalizeBrowseMediaType(media);
+    return key && key.includes("-") ? `/app/provider/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(key)}` : "/app/list/watching";
 }
 
 function normalizeBrowseMediaType(media){
@@ -4581,9 +4583,10 @@ function normalizeYearValue(value){
     return /^(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$/.test(clean) ? clean : "";
 }
 
-function getYearDetailRoute(year){
+function getYearDetailRoute(year,media="tv"){
     const clean = normalizeYearValue(year);
-    return clean ? "/app/year/" + encodeURIComponent(clean) : "/app/list/watching";
+    const cleanMedia = normalizeBrowseMediaType(media);
+    return clean ? `/app/year/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(clean)}` : "/app/list/watching";
 }
 
 function normalizeStatusSlug(value){
@@ -4781,7 +4784,7 @@ function getDiscoveryFilterDetailRoute(type,value,label="",media="tv"){
         return config ? getDiscoverCategoryDetailRoute(config.media,config.category) : "/app/discover";
     }
     if(cleanType === "year"){
-        return getYearDetailRoute(cleanValue);
+        return getYearDetailRoute(cleanValue,media);
     }
     if(cleanType === "status"){
         return getStatusDetailRoute(cleanValue);
@@ -4791,19 +4794,21 @@ function getDiscoveryFilterDetailRoute(type,value,label="",media="tv"){
         return getCertificationDetailRoute(parts[0],parts[1]);
     }
     const routeLabel = getDiscoveryEntityRouteLabel(cleanType,cleanValue,label);
-    if(cleanType === "network" || cleanType === "theme" || cleanType === "company" || cleanType === "provider"){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    if(cleanType === "network"){
         const key = buildRouteKey(cleanValue,routeLabel);
-        if(cleanType === "theme" && normalizeBrowseMediaType(media) === "movie"){
-            return key && key.includes("-") ? `/app/theme/movie/${encodeURIComponent(key)}` : "/app/list/watching";
-        }
-        return key && key.includes("-") ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}` : "/app/list/watching";
+        return key && key.includes("-") ? `/app/network/${encodeURIComponent(key)}` : "/app/list/watching";
+    }
+    if(cleanType === "theme" || cleanType === "company" || cleanType === "provider"){
+        const key = buildRouteKey(cleanValue,routeLabel);
+        return key && key.includes("-") ? `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(key)}` : "/app/list/watching";
     }
     const slug = buildRouteSlug(routeLabel);
     if(!slug){
         return "/app/list/watching";
     }
     const key = `${cleanValue}-${slug}`;
-    return `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(key)}`;
+    return `/app/${encodeURIComponent(cleanType)}/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(key)}`;
 }
 
 function getLanguageName(code){
@@ -4843,10 +4848,10 @@ function getDiscoveryFilterFallbackName(type,value,media="tv"){
         return config ? config.title : "Discover";
     }
     if(cleanType === "language"){
-        return `${getLanguageName(cleanValue)} Shows`;
+        return `${getLanguageName(cleanValue)} ${mediaWord}`;
     }
     if(cleanType === "country"){
-        return `Shows from ${getDiscoveryCountryName(cleanValue)}`;
+        return `${mediaWord} from ${getDiscoveryCountryName(cleanValue)}`;
     }
     if(cleanType === "network"){
         return cleanValue ? `Shows from Network ${cleanValue}` : "Network Shows";
@@ -4962,10 +4967,14 @@ function getKnownPersonRouteLabel(personId,label=""){
     return "";
 }
 
-function getPersonDetailRoute(role,personId,label=""){
+function getPersonDetailRoute(role,personId,label="",media="tv"){
     const cleanId = normalizePersonId(personId);
     const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
-    return key && key.includes("-") ? `/app/person/${encodeURIComponent(key)}` : "/app/list/watching";
+    const cleanMedia = normalizePersonMediaType(media);
+    if(!key || !key.includes("-")){
+        return "/app/list/watching";
+    }
+    return `/app/person/${encodeURIComponent(key)}${cleanMedia === "movie" ? "?media=movie" : ""}`;
 }
 
 function getPersonPageTitle(role,media){
@@ -5197,7 +5206,7 @@ async function loadPersonPageResults(){
             throw new Error("Person not found.");
         }
 
-        const canonicalPersonRoute = getPersonDetailRoute("person",cleanId,person.name);
+        const canonicalPersonRoute = getPersonDetailRoute("person",cleanId,person.name,media);
         if(canonicalPersonRoute && canonicalPersonRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalPersonRoute,true);
             rememberRouteNavContext(canonicalPersonRoute,"discover");
@@ -5238,7 +5247,7 @@ async function openPersonPage(role,personId,options={}){
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const routeLabel = String(options && (options.personName || options.routeLabel) || "").trim();
     const media = normalizePersonMediaType(options && options.media || (personPageState && personPageState.media) || "tv");
-    const initialPersonRoute = getPersonDetailRoute(cleanRole,cleanId,routeLabel);
+    const initialPersonRoute = getPersonDetailRoute(cleanRole,cleanId,routeLabel,media);
     const navigationContext = getDetailNavContext("person",options,fromRoute ? getCurrentAppRoute() : initialPersonRoute);
     const isSamePerson = activePage === "person-detail" &&
     selectedPersonContext &&
@@ -5301,12 +5310,24 @@ function attachPersonDetailPageEvents(){
     }
 
     document.querySelectorAll("[data-person-media]").forEach(button=>{
-        button.addEventListener("click",function(){
+        button.addEventListener("click",function(event){
+            if(this.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
+                return;
+            }
             const nextMedia = normalizePersonMediaType(this.dataset.personMedia || "tv");
+            if(this.tagName === "A" && event){
+                event.preventDefault();
+            }
             if(nextMedia === personPageState.media){
                 return;
             }
             personPageState.media = nextMedia;
+            const personName = personPageState.person ? personPageState.person.name : (personPageState.routeSlug || "");
+            const nextRoute = getPersonDetailRoute("person",personPageState.personId,personName,nextMedia);
+            if(nextRoute && nextRoute !== "/app/list/watching"){
+                setAppHashRoute(nextRoute,false);
+                rememberRouteNavContext(nextRoute,"discover");
+            }
             if(personPageState.person){
                 personPageState.credits = getPersonCreditsForRole(personPageState.person,personPageState.role,personPageState.media);
                 renderActivePersonPage();
@@ -5769,7 +5790,7 @@ function renderActiveDiscoveryFilterPage(){
 
 function discoveryFilterSupportsMediaSwitch(type){
     const cleanType = normalizeDiscoveryFilterType(type);
-    return cleanType === "company" || cleanType === "provider" || cleanType === "year";
+    return cleanType === "language" || cleanType === "country" || cleanType === "company" || cleanType === "provider" || cleanType === "year";
 }
 
 function discoveryFilterForcedMedia(type,value){
@@ -5861,11 +5882,7 @@ function buildDiscoveryFilterRequest(type,value,filters,page){
     }else if(cleanType === "language"){
         params.with_original_language = cleanValue;
     }else if(cleanType === "country"){
-        if(media === "movie"){
-            params.region = cleanValue.toUpperCase();
-        }else{
-            params.with_origin_country = cleanValue.toUpperCase();
-        }
+        params.with_origin_country = cleanValue.toUpperCase();
     }else if(cleanType === "theme"){
         params.with_keywords = cleanValue;
     }else if(cleanType === "company"){
@@ -6131,7 +6148,8 @@ async function openDiscoveryFilterPage(type,value,options={}){
     const isSamePage = activePage === "discovery-detail" &&
     selectedDiscoveryContext &&
     String(selectedDiscoveryContext.type || "") === cleanType &&
-    String(selectedDiscoveryContext.value || "") === cleanValue;
+    String(selectedDiscoveryContext.value || "") === cleanValue &&
+    normalizeBrowseMediaType(discoveryPageState && discoveryPageState.media) === media;
 
     selectedDiscoveryContext = {type:cleanType,value:cleanValue};
     selectedShowId = null;
@@ -6193,8 +6211,18 @@ function attachDiscoveryFilterPageEvents(){
     const mediaSelect = document.getElementById("discovery-filter-media-filter");
     if(mediaSelect){
         mediaSelect.addEventListener("change",function(){
-            discoveryPageState.media = normalizeBrowseMediaType(this.value);
+            const nextMedia = normalizeBrowseMediaType(this.value);
+            if(nextMedia === normalizeBrowseMediaType(discoveryPageState.media)){
+                return;
+            }
+            discoveryPageState.media = nextMedia;
             discoveryPageState.name = getDiscoveryFilterFallbackName(discoveryPageState.type,discoveryPageState.value,discoveryPageState.media);
+            const routeLabel = discoveryPageState.routeSlug || getDiscoveryRouteValidationLabel(discoveryPageState.type,discoveryPageState.value,discoveryPageState.name);
+            const nextRoute = getDiscoveryFilterDetailRoute(discoveryPageState.type,discoveryPageState.value,routeLabel,discoveryPageState.media);
+            if(nextRoute && nextRoute !== "/app/list/watching"){
+                setAppHashRoute(nextRoute,false);
+                rememberRouteNavContext(nextRoute,"discover");
+            }
             loadDiscoveryFilterPageResults({append:false});
         });
     }

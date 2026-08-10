@@ -54,7 +54,16 @@ function createRouter(route, options={}){
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
     getKnownShowRouteLabel(){ return ''; },
     getEpisodeDetailRoute(id,season,episode,name=''){ return name ? `/app/show/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}/season/${season}/episode/${episode}` : `/app/show/${id}/season/${season}/episode/${episode}`; },
-    getDiscoveryFilterDetailRoute(type,value){ return `/app/${type}/${value}`; },
+    getDiscoveryFilterDetailRoute(type,value,label='',media='tv'){
+      if(type === 'network' || type === 'status'){ return `/app/${type}/${value}`; }
+      if(type === 'certification'){ return `/app/certification/${value}`; }
+      return `/app/${type}/${media || 'tv'}/${value}`;
+    },
+    getPersonDetailRoute(role,id,name='',media='tv'){
+      const slug = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+      const base = `/app/person/${id}${slug ? '-' + slug : ''}`;
+      return base + (media === 'movie' ? '?media=movie' : '');
+    },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openMoviePage(id,options){ calls.push(['openMoviePage',id,options]); },
@@ -244,11 +253,14 @@ for (const route of ['/app/genre/action-adventure','/app/genre/horror']) {
   assert(!calls.some(item=>item[0]==='openGenrePage'));
 }
 
-for (const [route,type,value,slug] of [
-  ['/app/network/213-netflix','network','213','netflix'],
-  ['/app/company/49-hbo','company','49','hbo'],
-  ['/app/provider/8-netflix','provider','8','netflix'],
-  ['/app/theme/1234-war','theme','1234','war'],
+for (const [route,type,value,slug,media] of [
+  ['/app/network/213-netflix','network','213','netflix','tv'],
+  ['/app/company/tv/49-hbo','company','49','hbo','tv'],
+  ['/app/company/movie/49-hbo','company','49','hbo','movie'],
+  ['/app/provider/tv/8-netflix','provider','8','netflix','tv'],
+  ['/app/provider/movie/8-netflix','provider','8','netflix','movie'],
+  ['/app/theme/tv/1234-war','theme','1234','war','tv'],
+  ['/app/theme/movie/1234-war','theme','1234','war','movie'],
 ]) {
   const {calls,router}=createRouter(route);
   assert.strictEqual(router.currentRoute(),route);
@@ -256,42 +268,36 @@ for (const [route,type,value,slug] of [
   assert(call,`${route} should open discovery filter page`);
   assert.deepStrictEqual(call.slice(1,3),[type,value]);
   assert.strictEqual(call[3].routeSlug,slug);
+  assert.strictEqual(call[3].media,media);
 }
 
 {
-  const {calls,router}=createRouter('/app/theme/movie/1234-war');
-  assert.strictEqual(router.currentRoute(),'/app/theme/movie/1234-war');
+  const {calls,router}=createRouter('/app/language/movie/ja-japanese');
+  assert.strictEqual(router.currentRoute(),'/app/language/movie/ja-japanese');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'movie theme route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['theme','1234']);
-  assert.strictEqual(call[3].routeSlug,'war');
+  assert(call,'pretty movie language route should open discovery filter page');
+  assert.deepStrictEqual(call.slice(1,3),['language','ja']);
+  assert.strictEqual(call[3].routeSlug,'japanese');
   assert.strictEqual(call[3].media,'movie');
 }
 
 {
-  const {calls,router}=createRouter('/app/language/ja-japanese');
-  assert.strictEqual(router.currentRoute(),'/app/language/ja-japanese');
+  const {calls,router}=createRouter('/app/country/movie/jp-japan');
+  assert.strictEqual(router.currentRoute(),'/app/country/movie/jp-japan');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'pretty language route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['language','ja']);
-  assert.strictEqual(call[3].routeSlug,'japanese');
-}
-
-{
-  const {calls,router}=createRouter('/app/country/jp-japan');
-  assert.strictEqual(router.currentRoute(),'/app/country/jp-japan');
-  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'pretty country route should open discovery filter page');
+  assert(call,'pretty movie country route should open discovery filter page');
   assert.deepStrictEqual(call.slice(1,3),['country','jp']);
   assert.strictEqual(call[3].routeSlug,'japan');
+  assert.strictEqual(call[3].media,'movie');
 }
 
 {
-  const {calls,router}=createRouter('/app/year/2024');
-  assert.strictEqual(router.currentRoute(),'/app/year/2024');
+  const {calls,router}=createRouter('/app/year/movie/2024');
+  assert.strictEqual(router.currentRoute(),'/app/year/movie/2024');
   const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'year route should open discovery filter page');
+  assert(call,'movie year route should open discovery filter page');
   assert.deepStrictEqual(call.slice(1,3),['year','2024']);
+  assert.strictEqual(call[3].media,'movie');
 }
 
 {
@@ -326,15 +332,36 @@ for (const [route,type,value,slug] of [
 }
 
 
+{
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan?media=movie');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan?media=movie');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'person movie media route should open person page');
+  assert.strictEqual(call[3].media,'movie');
+}
+
+{
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan?media=tv&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan');
+  assert(calls.some(item=>item[0]==='replaceState' && item[1]==='/app/person/525-christopher-nolan'),'TV/default person media should canonicalize without a query');
+}
+
+
 for (const [route,callName] of [
   ['/app/movie/603','openMoviePage'],
   ['/app/network/213','openDiscoveryFilterPage'],
-  ['/app/company/49','openDiscoveryFilterPage'],
-  ['/app/provider/8','openDiscoveryFilterPage'],
-  ['/app/theme/1234','openDiscoveryFilterPage'],
+  ['/app/company/tv/49','openDiscoveryFilterPage'],
+  ['/app/company/movie/49','openDiscoveryFilterPage'],
+  ['/app/provider/tv/8','openDiscoveryFilterPage'],
+  ['/app/provider/movie/8','openDiscoveryFilterPage'],
+  ['/app/theme/tv/1234','openDiscoveryFilterPage'],
   ['/app/theme/movie/1234','openDiscoveryFilterPage'],
-  ['/app/language/ja','openDiscoveryFilterPage'],
-  ['/app/country/jp','openDiscoveryFilterPage'],
+  ['/app/language/tv/ja','openDiscoveryFilterPage'],
+  ['/app/language/movie/ja','openDiscoveryFilterPage'],
+  ['/app/country/tv/jp','openDiscoveryFilterPage'],
+  ['/app/country/movie/jp','openDiscoveryFilterPage'],
+  ['/app/year/tv/2024','openDiscoveryFilterPage'],
+  ['/app/year/movie/2024','openDiscoveryFilterPage'],
 ]) {
   const {calls}=createRouter(route);
   assert(calls.some(item=>item[0]===callName), `${route} should load so its resolved label can canonicalize the URL`);
@@ -345,6 +372,12 @@ for (const route of [
   '/app/discover/tv/trending',
   '/app/discover/person/popular',
   '/app/genre/person/drama',
+  '/app/company/49-hbo',
+  '/app/provider/8-netflix',
+  '/app/theme/1234-war',
+  '/app/language/ja-japanese',
+  '/app/country/jp-japan',
+  '/app/year/2024',
 ]) {
   const {calls}=createRouter(route);
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'), `${route} should be 404`);
@@ -437,6 +470,13 @@ for (const route of [
   assert.strictEqual(context.activePage,'person-detail');
   assert.strictEqual(context.personPageState.role,'person');
   assert(calls.some(item=>item[0]==='renderActivePersonPage'),'startup should render the existing person loading layout');
+}
+
+{
+  const {calls,context}=createRouter('/app/person/525-christopher-nolan?media=movie',{appDataReady:false});
+  assert.strictEqual(context.activePage,'person-detail');
+  assert.strictEqual(context.personPageState.media,'movie');
+  assert(calls.some(item=>item[0]==='renderActivePersonPage'),'movie person startup should preserve media before app data is ready');
 }
 
 {

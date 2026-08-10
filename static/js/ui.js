@@ -982,6 +982,7 @@ function renderPersonDetailPage(state){
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
     const name = person && person.name ? person.name : "Person";
+    const personRouteLabel = person && person.name ? person.name : (pageState.routeSlug || "");
 
     const bodyHTML = error
     ? `
@@ -1026,8 +1027,8 @@ function renderPersonDetailPage(state){
 
                     <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
                         <div class="genre-media-switch person-media-switch" role="tablist" aria-label="Person media type">
-                            <button type="button" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-person-media="tv" role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</button>
-                            <button type="button" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-person-media="movie" role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</button>
+                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("person",pageState.personId,personRouteLabel,"tv") : "")}" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-person-media="tv" role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</a>
+                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("person",pageState.personId,personRouteLabel,"movie") : "")}" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-person-media="movie" role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</a>
                         </div>
                     </div>
 
@@ -3194,9 +3195,9 @@ function renderPlainInlineRouteLinkHTML(label,route,extraClass=""){
     return `<a class="show-detail-entity-link show-detail-inline-link ${escapeHTML(extraClass)}" href="${escapeHTML(href)}">${escapeHTML(text)}</a>`;
 }
 
-function renderYearLinkHTML(year){
+function renderYearLinkHTML(year,media="tv"){
     const cleanYear = String(year || "").trim();
-    const route = typeof getYearDetailRoute === "function" ? getYearDetailRoute(cleanYear) : "";
+    const route = typeof getYearDetailRoute === "function" ? getYearDetailRoute(cleanYear,media) : "";
     return cleanYear ? renderPlainInlineRouteLinkHTML(cleanYear,route,"show-detail-year-link") : "";
 }
 
@@ -3250,13 +3251,14 @@ function renderCreatedByHTML(show){
     return `<span>Created by ${creators.map(escapeHTML).join(" • ")}</span>`;
 }
 
-function renderCompanyLogoTilesHTML(companies){
+function renderCompanyLogoTilesHTML(companies,media="tv"){
+    const cleanMedia = media === "movie" ? "movie" : "tv";
     const items = (Array.isArray(companies) ? companies : [])
     .map(company=>{
         const id = Number(company && company.id || 0);
         const name = String(company && company.name || "").trim();
         const logoPath = String(company && company.logo_path || "").trim();
-        const route = id && typeof getCompanyDetailRoute === "function" ? getCompanyDetailRoute(id,name) : "";
+        const route = id && typeof getCompanyDetailRoute === "function" ? getCompanyDetailRoute(id,name,cleanMedia) : "";
         if(!name){
             return "";
         }
@@ -3275,11 +3277,11 @@ function renderCompanyLogoTilesHTML(companies){
 }
 
 function renderCompanyLinksHTML(companies){
-    return renderCompanyLogoTilesHTML(companies) || "Unknown";
+    return renderCompanyLogoTilesHTML(companies,"tv") || "Unknown";
 }
 
 function renderMovieCompanyLogosHTML(companies){
-    return renderCompanyLogoTilesHTML(companies);
+    return renderCompanyLogoTilesHTML(companies,"movie");
 }
 
 function getMovieCertification(movie){
@@ -3464,28 +3466,30 @@ function renderMovieCountryDetailsHTML(movie){
     return `<span class="show-detail-inline-link-list">${countries.map((country,index)=>{
         const label = country.code ? getCountryLabel(country.code) : country.name;
         const routeName = country.code ? `${getCountryName(country.code)} Movies` : country.name;
-        const link = country.code ? renderShowEntityLinkHTML(label,"country",country.code,{name:routeName}) : `<span>${escapeHTML(label)}</span>`;
+        const link = country.code ? renderShowEntityLinkHTML(label,"country",country.code,{name:routeName,media:"movie"}) : `<span>${escapeHTML(label)}</span>`;
         return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${link}`;
     }).join("")}</span>`;
 }
 
 function renderMovieLanguageDetailsHTML(movie){
+    const originalLanguage = String(movie && movie.original_language || "").trim().toLowerCase();
     const languages = (Array.isArray(movie && movie.spoken_languages) ? movie.spoken_languages : [])
     .map(language=>({
         code:String(language && (language.iso_639_1 || language.iso_639_2) || "").trim().toLowerCase(),
         label:String(language && (language.english_name || language.name) || "").trim()
     }))
     .filter(language=>language.code || language.label);
-    if(movie && movie.original_language && !languages.some(language=>language.code === String(movie.original_language).toLowerCase())){
-        const code = String(movie.original_language).toLowerCase();
-        languages.unshift({code:code,label:typeof getLanguageName === "function" ? getLanguageName(code) : code.toUpperCase()});
+    if(originalLanguage && !languages.some(language=>language.code === originalLanguage)){
+        languages.unshift({code:originalLanguage,label:typeof getLanguageName === "function" ? getLanguageName(originalLanguage) : originalLanguage.toUpperCase()});
     }
     if(!languages.length){
         return "Unknown";
     }
     return `<span class="show-detail-inline-link-list">${languages.map((language,index)=>{
         const label = language.label || (typeof getLanguageName === "function" ? getLanguageName(language.code) : language.code.toUpperCase());
-        const link = language.code ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} Movies`}) : `<span>${escapeHTML(label)}</span>`;
+        const link = language.code && language.code === originalLanguage
+        ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} Movies`,media:"movie"})
+        : `<span>${escapeHTML(label)}</span>`;
         return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${link}`;
     }).join("")}</span>`;
 }
@@ -3931,7 +3935,7 @@ function renderMovieDetailPage(state){
     const rating = Number(movie.vote_average || 0);
     const metaItems = [];
     if(movie.year){
-        metaItems.push(renderYearLinkHTML(movie.year));
+        metaItems.push(renderYearLinkHTML(movie.year,"movie"));
     }else{
         metaItems.push("Unknown");
     }
@@ -4085,12 +4089,13 @@ function renderShowEntityLinkHTML(label,type,value,options={}){
         return "";
     }
     const routeLabel = String(options && options.routeLabel || cleanLabel).trim();
-    const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute(type,value,routeLabel) : "";
+    const media = options && options.media === "movie" ? "movie" : "tv";
+    const route = typeof getDiscoveryFilterDetailRoute === "function" ? getDiscoveryFilterDetailRoute(type,value,routeLabel,media) : "";
     const name = String(options && options.name || cleanLabel).trim();
     const className = options && options.className ? String(options.className) : "show-detail-entity-link";
 
     if(route && route !== "/app/list/watching"){
-        return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-name="${escapeHTML(name)}" data-discovery-label="${escapeHTML(routeLabel)}">${escapeHTML(cleanLabel)}</a>`;
+        return `<a class="${escapeHTML(className)}" href="${escapeHTML(route)}" data-discovery-type="${escapeHTML(type)}" data-discovery-value="${escapeHTML(value)}" data-discovery-media="${escapeHTML(media)}" data-discovery-name="${escapeHTML(name)}" data-discovery-label="${escapeHTML(routeLabel)}">${escapeHTML(cleanLabel)}</a>`;
     }
 
     return `<span>${escapeHTML(cleanLabel)}</span>`;
@@ -4163,13 +4168,14 @@ function getShowLanguageItems(show){
 
 function renderShowLanguageDetailsHTML(show){
     const languages = getShowLanguageItems(show);
+    const originalLanguage = String(show && show.original_language || "").trim().toLowerCase();
     if(!languages.length){
         return "Unknown";
     }
     return `<span class="show-detail-inline-link-list">${languages.map((language,index)=>{
         const label = language.label || (typeof getLanguageName === "function" ? getLanguageName(language.code) : language.code);
-        const link = language.code
-        ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} TV Shows`})
+        const link = language.code && language.code === originalLanguage
+        ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} TV Shows`,media:"tv"})
         : `<span>${escapeHTML(label)}</span>`;
         return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${link}`;
     }).join("")}</span>`;

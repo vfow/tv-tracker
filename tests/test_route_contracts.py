@@ -23,7 +23,6 @@ def load_route_helpers():
         "APP_LANGUAGE_PATH_RE",
         "APP_COUNTRY_PATH_RE",
         "APP_THEME_PATH_RE",
-        "APP_MOVIE_THEME_PATH_RE",
         "APP_MOVIE_PATH_RE",
         "APP_COMPANY_PATH_RE",
         "APP_PROVIDER_PATH_RE",
@@ -105,6 +104,14 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertFalse(valid_app_path("/app/actor/123-leonardo-dicaprio"))
         self.assertFalse(valid_app_path("/app/cinematographer/456-roger-deakins"))
         self.assertEqual(safe_next_url("/app/person/525-christopher-nolan"), "/app/person/525-christopher-nolan")
+        self.assertEqual(
+            safe_next_url("/app/person/525-christopher-nolan?x=1&media=movie"),
+            "/app/person/525-christopher-nolan?media=movie",
+        )
+        self.assertEqual(
+            safe_next_url("/app/person/525-christopher-nolan?media=tv"),
+            "/app/person/525-christopher-nolan",
+        )
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
 
     def test_id_only_routes_are_allowed_for_client_canonicalization(self):
@@ -112,13 +119,17 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/show/1399",
             "/app/person/525",
             "/app/network/213",
-            "/app/language/ja",
-            "/app/country/jp",
-            "/app/theme/1234",
+            "/app/language/tv/ja",
+            "/app/language/movie/ja",
+            "/app/country/tv/jp",
+            "/app/country/movie/jp",
+            "/app/theme/tv/1234",
             "/app/theme/movie/1234",
             "/app/movie/603",
-            "/app/company/49",
-            "/app/provider/8",
+            "/app/company/tv/49",
+            "/app/company/movie/49",
+            "/app/provider/tv/8",
+            "/app/provider/movie/8",
         ):
             self.assertTrue(valid_app_path(path), path)
             self.assertEqual(safe_next_url(path), path)
@@ -126,13 +137,17 @@ class ProtectedRouteContractTests(unittest.TestCase):
     def test_discovery_paths_are_allowed(self):
         for path in (
             "/app/network/213-netflix",
-            "/app/language/ja-japanese",
-            "/app/country/jp-japan",
-            "/app/theme/1234-war",
+            "/app/language/tv/ja-japanese",
+            "/app/language/movie/ja-japanese",
+            "/app/country/tv/jp-japan",
+            "/app/country/movie/jp-japan",
+            "/app/theme/tv/1234-war",
             "/app/theme/movie/1234-war",
             "/app/movie/603-the-matrix",
-            "/app/company/49-hbo",
-            "/app/provider/8-netflix",
+            "/app/company/tv/49-hbo",
+            "/app/company/movie/49-hbo",
+            "/app/provider/tv/8-netflix",
+            "/app/provider/movie/8-netflix",
             "/app/discover/tv/popular",
             "/app/discover/tv/top-rated",
             "/app/discover/tv/airing-today",
@@ -141,7 +156,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/discover/movie/top-rated",
             "/app/discover/movie/now-playing",
             "/app/discover/movie/upcoming",
-            "/app/year/2024",
+            "/app/year/tv/2024",
+            "/app/year/movie/2024",
             "/app/status/returning-series",
             "/app/status/ended",
             "/app/status/canceled",
@@ -172,14 +188,25 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/actor/123-",
             "/app/person/525-",
             "/app/network/213-",
-            "/app/language/ja-",
-            "/app/country/jp-",
-            "/app/theme/1234-",
+            "/app/language/tv/ja-",
+            "/app/language/movie/ja-",
+            "/app/country/tv/jp-",
+            "/app/country/movie/jp-",
+            "/app/theme/tv/1234-",
             "/app/theme/movie/1234-",
             "/app/movie/603-",
-            "/app/company/49-",
-            "/app/provider/8-",
-            "/app/year/1899",
+            "/app/company/tv/49-",
+            "/app/company/movie/49-",
+            "/app/provider/tv/8-",
+            "/app/provider/movie/8-",
+            "/app/year/tv/1899",
+            "/app/year/movie/2200",
+            "/app/language/ja-japanese",
+            "/app/country/jp-japan",
+            "/app/theme/1234-war",
+            "/app/company/49-hbo",
+            "/app/provider/8-netflix",
+            "/app/year/2024",
             "/app/status/pilot",
             "/app/certification/music/pg",
             "/app/certification/movie/",
@@ -193,12 +220,17 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/network/0",
             "/app/network/not-a-number",
             "/app/language/",
-            "/app/language/japanese",
+            "/app/language/tv/",
+            "/app/language/person/ja",
+            "/app/language/tv/japanese",
             "/app/country/",
-            "/app/country/jpn",
+            "/app/country/tv/",
+            "/app/country/person/jp",
+            "/app/country/tv/jpn",
             "/app/theme/",
-            "/app/theme/0",
-            "/app/theme/not-a-number",
+            "/app/theme/tv/0",
+            "/app/theme/person/1234",
+            "/app/theme/tv/not-a-number",
         ):
             self.assertEqual(safe_next_url(value), "/app/list/watching")
 
@@ -226,10 +258,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/network/213-netflix/"), "/app/network/213-netflix")
         self.assertEqual(safe_next_url("/app/movie/603-the-matrix/"), "/app/movie/603-the-matrix")
-        self.assertEqual(safe_next_url("/app/company/49-hbo/"), "/app/company/49-hbo")
-        self.assertEqual(safe_next_url("/app/provider/8-netflix/"), "/app/provider/8-netflix")
+        self.assertEqual(safe_next_url("/app/company/tv/49-hbo/"), "/app/company/tv/49-hbo")
+        self.assertEqual(safe_next_url("/app/provider/movie/8-netflix/"), "/app/provider/movie/8-netflix")
         self.assertEqual(safe_next_url("/app/discover/movie/upcoming/"), "/app/discover/movie/upcoming")
-        self.assertEqual(safe_next_url("/app/year/2024/"), "/app/year/2024")
+        self.assertEqual(safe_next_url("/app/year/tv/2024/"), "/app/year/tv/2024")
         self.assertEqual(safe_next_url("/app/status/returning-series/"), "/app/status/returning-series")
         self.assertEqual(safe_next_url("/app/certification/movie/pg-13/"), "/app/certification/movie/pg-13")
 

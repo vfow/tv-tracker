@@ -90,14 +90,13 @@ APP_MOVIE_GENRE_SLUGS = {
     "western",
 }
 APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
-APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
-APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
-APP_THEME_PATH_RE = re.compile(rf"^/app/theme/({APP_ROUTE_ID_SLUG})$")
-APP_MOVIE_THEME_PATH_RE = re.compile(rf"^/app/theme/movie/({APP_ROUTE_ID_SLUG})$")
+APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/(tv|movie)/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/(tv|movie)/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
+APP_THEME_PATH_RE = re.compile(rf"^/app/theme/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
-APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/({APP_ROUTE_ID_SLUG})$")
-APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/({APP_ROUTE_ID_SLUG})$")
-APP_YEAR_PATH_RE = re.compile(r"^/app/year/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
+APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
+APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
+APP_YEAR_PATH_RE = re.compile(r"^/app/year/(tv|movie)/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
 APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
 APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
 APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
@@ -1701,7 +1700,12 @@ def safe_next_url(value: str | None) -> str:
     if APP_GENRE_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_PERSON_PATH_RE.fullmatch(candidate):
-        return candidate
+        media_type = "tv"
+        if separator:
+            for key, value in parse_qsl(raw_query, keep_blank_values=False):
+                if key == "media" and value.strip().lower() in {"tv", "movie"}:
+                    media_type = value.strip().lower()
+        return candidate + ("?media=movie" if media_type == "movie" else "")
     if APP_NETWORK_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_LANGUAGE_PATH_RE.fullmatch(candidate):
@@ -1709,8 +1713,6 @@ def safe_next_url(value: str | None) -> str:
     if APP_COUNTRY_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_THEME_PATH_RE.fullmatch(candidate):
-        return candidate
-    if APP_MOVIE_THEME_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_MOVIE_PATH_RE.fullmatch(candidate):
         return candidate
@@ -1740,7 +1742,6 @@ def valid_app_path(value: str | None) -> bool:
         or APP_LANGUAGE_PATH_RE.fullmatch(candidate) is not None
         or APP_COUNTRY_PATH_RE.fullmatch(candidate) is not None
         or APP_THEME_PATH_RE.fullmatch(candidate) is not None
-        or APP_MOVIE_THEME_PATH_RE.fullmatch(candidate) is not None
         or APP_MOVIE_PATH_RE.fullmatch(candidate) is not None
         or APP_COMPANY_PATH_RE.fullmatch(candidate) is not None
         or APP_PROVIDER_PATH_RE.fullmatch(candidate) is not None
@@ -2022,9 +2023,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/language/<language_code>", strict_slashes=False)
+    @app.get("/app/language/<media_type>/<language_code>", strict_slashes=False)
     @login_required
-    def app_language_page(language_code: str):
+    def app_language_page(media_type: str, language_code: str):
         requested_path = request.path.rstrip("/")
         if APP_LANGUAGE_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
@@ -2032,9 +2033,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/country/<country_code>", strict_slashes=False)
+    @app.get("/app/country/<media_type>/<country_code>", strict_slashes=False)
     @login_required
-    def app_country_page(country_code: str):
+    def app_country_page(media_type: str, country_code: str):
         requested_path = request.path.rstrip("/")
         if APP_COUNTRY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
@@ -2042,20 +2043,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-
-    @app.get("/app/theme/movie/<theme_key>", strict_slashes=False)
+    @app.get("/app/theme/<media_type>/<theme_key>", strict_slashes=False)
     @login_required
-    def app_movie_theme_page(theme_key: str):
-        requested_path = request.path.rstrip("/")
-        if APP_MOVIE_THEME_PATH_RE.fullmatch(requested_path) is None:
-            abort(404)
-        if request.path != requested_path:
-            return redirect(requested_path)
-        return render_app_shell(requested_path)
-
-    @app.get("/app/theme/<theme_key>", strict_slashes=False)
-    @login_required
-    def app_theme_page(theme_key: str):
+    def app_theme_page(media_type: str, theme_key: str):
         requested_path = request.path.rstrip("/")
         if APP_THEME_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
@@ -2073,9 +2063,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/company/<company_key>", strict_slashes=False)
+    @app.get("/app/company/<media_type>/<company_key>", strict_slashes=False)
     @login_required
-    def app_company_page(company_key: str):
+    def app_company_page(media_type: str, company_key: str):
         requested_path = request.path.rstrip("/")
         if APP_COMPANY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
@@ -2083,9 +2073,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/provider/<provider_key>", strict_slashes=False)
+    @app.get("/app/provider/<media_type>/<provider_key>", strict_slashes=False)
     @login_required
-    def app_provider_page(provider_key: str):
+    def app_provider_page(media_type: str, provider_key: str):
         requested_path = request.path.rstrip("/")
         if APP_PROVIDER_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
@@ -2093,9 +2083,9 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
-    @app.get("/app/year/<int:year_value>", strict_slashes=False)
+    @app.get("/app/year/<media_type>/<int:year_value>", strict_slashes=False)
     @login_required
-    def app_year_page(year_value: int):
+    def app_year_page(media_type: str, year_value: int):
         requested_path = request.path.rstrip("/")
         if APP_YEAR_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
