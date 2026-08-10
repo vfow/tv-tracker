@@ -39,7 +39,8 @@ function createRouter(route, options={}){
     moviePageState:{movieId:'',routeSlug:'',loading:false,error:'',movie:null},
     personPageState:{role:'',personId:'',media:'tv',loading:false,error:'',person:null,credits:[]},
     genrePageState:{media:'tv',slug:'',name:'',genreId:null,year:'',sort:'popularity.desc',page:1,totalPages:1,loading:false,error:'',shows:[]},
-    discoveryPageState:{type:'',value:'',name:'',media:'tv',routeSlug:'',year:'',sort:'popularity.desc',page:1,totalPages:1,loading:false,error:'',shows:[]},
+    discoveryPageState:{type:'',value:'',name:'',media:'tv',routeSlug:'',year:'',sort:'popularity.desc',browse:null,browseLabels:null,page:1,totalPages:1,loading:false,error:'',shows:[]},
+    browsePageState:{media:'tv',filters:null,labels:null,page:1,totalPages:1,loading:false,error:'',shows:[]},
     discoverSearchState:{query:'',media:'tv',loading:false},
     discoverHubState:{loaded:false,loading:false,error:'',sections:[],genres:{tv:[],movie:[]}},
     appDataReady:options.appDataReady !== false,
@@ -72,6 +73,7 @@ function createRouter(route, options={}){
     openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
     openDiscoverCategoryPage(media,category,options){ calls.push(['openDiscoverCategoryPage',media,category,options]); },
     openDiscoverHomePage(options){ calls.push(['openDiscoverHomePage',options]); },
+    openBrowsePage(state,options){ calls.push(['openBrowsePage',state,options]); },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
     showShowDetailPageShell(ctx){ context.activePage='show-detail'; calls.push(['showShowDetailPageShell',ctx]); },
     renderShowDetailLoading(id){ calls.push(['renderShowDetailLoading',id]); },
@@ -85,6 +87,9 @@ function createRouter(route, options={}){
     renderActiveGenrePage(){ calls.push(['renderActiveGenrePage']); },
     showDiscoveryFilterPageShell(ctx){ context.activePage='discovery-detail'; calls.push(['showDiscoveryFilterPageShell',ctx]); },
     renderActiveDiscoveryFilterPage(){ calls.push(['renderActiveDiscoveryFilterPage']); },
+    showBrowsePageShell(ctx){ context.activePage='browse-detail'; calls.push(['showBrowsePageShell',ctx]); },
+    renderActiveBrowsePage(){ calls.push(['renderActiveBrowsePage']); },
+    getBrowseRoute(state){ return context.window.TVTrackerBrowse.routeForState(state); },
     showSearchPageShell(){ context.activePage='search'; calls.push(['showSearchPageShell']); },
     renderSearchLoading(query){ calls.push(['renderSearchLoading',query]); },
     renderDiscoverHub(){ calls.push(['renderDiscoverHub']); },
@@ -111,6 +116,7 @@ function createRouter(route, options={}){
   context.window.showPage=context.showPage;
   context.window.URLSearchParams=URLSearchParams;
   vm.createContext(context);
+  vm.runInContext(fs.readFileSync('static/js/discover-browse.js','utf8'),context);
   vm.runInContext(fs.readFileSync('static/js/app-router.js','utf8'),context);
   while(queued.length){ queued.shift()(); }
   return {context,calls,listeners,router:context.window.TVTrackerRouter};
@@ -311,9 +317,8 @@ for (const [route,type,value,slug,media] of [
 {
   const {calls,router}=createRouter('/app/certification/tv/tv-ma');
   assert.strictEqual(router.currentRoute(),'/app/certification/tv/tv-ma');
-  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
-  assert(call,'TV certification route should open discovery filter page');
-  assert.deepStrictEqual(call.slice(1,3),['certification','tv/tv-ma']);
+  assert(!calls.some(item=>item[0]==='openDiscoveryFilterPage'),'TV certification must not open a misleading discovery page');
+  assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'retired TV certification route should render 404');
 }
 
 {
@@ -560,6 +565,47 @@ for (const route of [
   const {calls,router}=createRouter('/app/private/notes',{appDataReady:false});
   assert.strictEqual(router.parseRoute('/app/private/notes','').valid,false);
   assert(calls.some(item=>item[0]==='renderAppRouteNotFoundPage'),'unknown startup route should show 404 immediately');
+}
+
+
+{
+  const {calls,router}=createRouter('/app/browse/movie/?genre=18,80&country=JP&year=2024&sort=rating-desc&network=213&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18,80&country=jp&year=2024&sort=rating-desc');
+  const call=calls.find(item=>item[0]==='openBrowsePage');
+  assert(call,'generic Browse route should open the unified browse page');
+  assert.strictEqual(call[1].media,'movie');
+  assert.deepStrictEqual(Array.from(call[1].genres),['18','80']);
+  assert.strictEqual(call[1].country,'jp');
+  assert.strictEqual(call[1].year,'2024');
+  assert.strictEqual(call[1].network,'');
+}
+
+{
+  const {calls,router}=createRouter('/app/genre/tv/drama?year=2024&sort=rating-desc&country=jp');
+  assert.strictEqual(router.currentRoute(),'/app/genre/tv/drama?country=jp&year=2024&sort=rating-desc');
+  const call=calls.find(item=>item[0]==='openGenrePage');
+  assert(call,'genre route should preserve canonical browse state');
+  assert.strictEqual(call[2].browseState.year,'2024');
+  assert.strictEqual(call[2].browseState.country,'jp');
+  assert.strictEqual(call[2].browseState.sort,'rating-desc');
+}
+
+{
+  const {calls,router}=createRouter('/app/company/movie/49-hbo?genre=18&language=ja&certification=pg-13&status=ended');
+  assert.strictEqual(router.currentRoute(),'/app/company/movie/49-hbo?genre=18&language=ja&certification=pg-13');
+  const call=calls.find(item=>item[0]==='openDiscoveryFilterPage');
+  assert(call,'typed discovery route should preserve compatible Browse state');
+  assert.strictEqual(call[3].media,'movie');
+  assert.strictEqual(call[3].browseState.language,'ja');
+  assert.strictEqual(call[3].browseState.certification,'pg-13');
+  assert.deepStrictEqual(Array.from(call[3].browseState.statuses),[]);
+}
+
+{
+  const {context,calls}=createRouter('/app/browse/tv?genre=18&sort=title-asc',{appDataReady:false});
+  assert.strictEqual(context.activePage,'browse-detail');
+  assert(calls.some(item=>item[0]==='showBrowsePageShell'),'startup should immediately render the correct Browse shell');
+  assert.strictEqual(context.browsePageState.filters.sort,'title-asc');
 }
 
 console.log('Real-path router runtime checks passed');

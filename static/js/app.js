@@ -53,6 +53,8 @@ var genrePageState = {
     genreId:null,
     year:"",
     sort:"popularity.desc",
+    browse:null,
+    browseLabels:null,
     page:1,
     totalPages:1,
     loading:false,
@@ -66,12 +68,37 @@ var discoveryPageState = {
     media:"tv",
     year:"",
     sort:"popularity.desc",
+    browse:null,
+    browseLabels:null,
     page:1,
     totalPages:1,
     loading:false,
     error:"",
     shows:[]
 };
+var browsePageState = {
+    media:"tv",
+    filters:null,
+    labels:null,
+    page:1,
+    totalPages:1,
+    loading:false,
+    error:"",
+    shows:[]
+};
+var browseOptionState = {
+    genres:{tv:[],movie:[]},
+    countries:[],
+    languages:[],
+    movieCertifications:[],
+    loaded:{common:false,tvGenres:false,movieGenres:false,certifications:false},
+    picker:{type:"",query:"",loading:false,error:"",results:[]}
+};
+var browseReferencePromises = {common:null,tv:null,movie:null,certifications:null};
+var browsePickerSearchTimer = null;
+var genrePageRequestId = 0;
+var discoveryPageRequestId = 0;
+var browsePageRequestId = 0;
 var moviePageState = {
     movieId:"",
     routeSlug:"",
@@ -3571,6 +3598,11 @@ function openDiscoverHomePage(options={}){
     if(typeof renderDiscoverHub === "function"){
         renderDiscoverHub();
     }
+    ensureBrowseReferenceData(discoverGenreMedia || "tv").then(()=>{
+        if(activePage === "discover" && shouldShowDiscoverHub() && typeof renderDiscoverHub === "function"){
+            renderDiscoverHub();
+        }
+    }).catch(()=>{});
     loadDiscoverHub(false);
 }
 
@@ -4580,7 +4612,7 @@ function normalizeBrowseMediaType(media){
 
 function normalizeYearValue(value){
     const clean = String(value || "").trim();
-    return /^(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$/.test(clean) ? clean : "";
+    return /^((?:18|19|20|21)[0-9]{2})$/.test(clean) ? clean : "";
 }
 
 function getYearDetailRoute(year,media="tv"){
@@ -4622,9 +4654,11 @@ function normalizeCertificationValue(value){
 }
 
 function getCertificationDetailRoute(media,certification){
-    const cleanMedia = normalizeBrowseMediaType(media);
+    if(normalizeBrowseMediaType(media) !== "movie"){
+        return "";
+    }
     const slug = normalizeCertificationSlug(certification);
-    return slug ? `/app/certification/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(slug)}` : "/app/list/watching";
+    return slug ? `/app/certification/movie/${encodeURIComponent(slug)}` : "";
 }
 
 function getSearchRoute(query="",media="tv"){
@@ -4934,6 +4968,442 @@ async function tmdbGetWatchProviderDetails(providerId){
 function getBrowseTitleMediaWord(media){
     return normalizeBrowseMediaType(media) === "movie" ? "Movies" : "Shows";
 }
+
+
+function getBrowseStateAPI(){
+    return window.TVTrackerBrowse || null;
+}
+
+function createBrowseFilterState(media="tv",source={}){
+    const api = getBrowseStateAPI();
+    if(api && typeof api.normalizeState === "function"){
+        return api.normalizeState(source,normalizeBrowseMediaType(media));
+    }
+    return Object.assign({
+        media:normalizeBrowseMediaType(media),year:"",upcoming:false,genres:[],country:"",language:"",
+        themes:[],companies:[],network:"",provider:"",statuses:[],certification:"",sort:"popularity-desc"
+    },source || {});
+}
+
+function createBrowseLabelState(source={}){
+    const input = source && typeof source === "object" ? source : {};
+    const map = key=>Object.assign({},input[key] && typeof input[key] === "object" ? input[key] : {});
+    return {
+        genres:map("genres"),
+        themes:map("themes"),
+        companies:map("companies"),
+        networks:map("networks"),
+        providers:map("providers")
+    };
+}
+
+function setBrowseLabel(labels,group,value,label){
+    const cleanValue = String(value || "").trim();
+    const cleanLabel = String(label || "").trim();
+    if(!labels || !cleanValue || !cleanLabel){
+        return;
+    }
+    if(!labels[group] || typeof labels[group] !== "object"){
+        labels[group] = {};
+    }
+    labels[group][cleanValue] = cleanLabel;
+}
+
+function getBrowseLabel(labels,group,value,fallback=""){
+    const cleanValue = String(value || "").trim();
+    if(labels && labels[group] && labels[group][cleanValue]){
+        return String(labels[group][cleanValue]);
+    }
+    return String(fallback || cleanValue);
+}
+
+function legacyDiscoverySortToBrowseSort(sort){
+    const clean = String(sort || "").trim();
+    if(clean === "vote_average.desc"){
+        return "rating-desc";
+    }
+    if(clean === "first_air_date.desc" || clean === "primary_release_date.desc"){
+        return "date-desc";
+    }
+    return "popularity-desc";
+}
+
+function browseSortToLegacySort(sort){
+    const clean = String(sort || "").trim();
+    if(clean === "rating-desc"){
+        return "vote_average.desc";
+    }
+    if(clean === "date-desc"){
+        return "first_air_date.desc";
+    }
+    return "popularity.desc";
+}
+
+function getBrowseQueryStateFromOptions(options,media){
+    const api = getBrowseStateAPI();
+    const supplied = options && options.browseState ? options.browseState : null;
+    if(supplied){
+        return createBrowseFilterState(media,supplied);
+    }
+    if(api && options && typeof options.search === "string" && typeof api.parseSearch === "function"){
+        return api.parseSearch(options.search,media).state;
+    }
+    return createBrowseFilterState(media);
+}
+
+function addBrowseBaseFilter(state,group,value){
+    const api = getBrowseStateAPI();
+    let next = createBrowseFilterState(state && state.media,state);
+    const cleanValue = String(value || "").trim();
+    if(!cleanValue){
+        return next;
+    }
+    if(group === "genres" || group === "themes" || group === "companies" || group === "statuses"){
+        if(!next[group].includes(cleanValue)){
+            next[group] = next[group].concat(cleanValue);
+        }
+        return createBrowseFilterState(next.media,next);
+    }
+    if(api && typeof api.setSingle === "function"){
+        return api.setSingle(next,group,cleanValue);
+    }
+    next[group] = cleanValue;
+    return createBrowseFilterState(next.media,next);
+}
+
+function getGenreBrowseState(){
+    const media = normalizeBrowseMediaType(genrePageState && genrePageState.media || "tv");
+    let state = createBrowseFilterState(media,genrePageState && genrePageState.browse ? genrePageState.browse : {
+        year:genrePageState && genrePageState.year || "",
+        sort:legacyDiscoverySortToBrowseSort(genrePageState && genrePageState.sort)
+    });
+    const genreId = String(genrePageState && genrePageState.genreId || "").trim();
+    if(genreId){
+        state = addBrowseBaseFilter(state,"genres",genreId);
+    }
+    return state;
+}
+
+function stripDiscoveryBaseFromBrowseExtras(type,value,state,media="tv"){
+    const cleanType = normalizeDiscoveryFilterType(type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
+    const output = createBrowseFilterState(media,state || {});
+    if(cleanType === "network"){
+        output.network = "";
+    }else if(cleanType === "language"){
+        output.language = "";
+    }else if(cleanType === "country"){
+        output.country = "";
+    }else if(cleanType === "provider"){
+        output.provider = "";
+    }else if(cleanType === "year"){
+        output.year = "";
+        output.upcoming = false;
+    }else if(cleanType === "theme"){
+        output.themes = output.themes.filter(id=>id !== cleanValue);
+    }else if(cleanType === "company"){
+        output.companies = output.companies.filter(id=>id !== cleanValue);
+    }else if(cleanType === "status"){
+        output.statuses = output.statuses.filter(status=>status !== cleanValue);
+    }else if(cleanType === "certification"){
+        const parts = cleanValue.split("/");
+        if(parts[0] === "movie"){
+            output.certification = "";
+        }
+    }
+    return createBrowseFilterState(media,output);
+}
+
+function getDiscoveryBrowseState(){
+    const media = getDiscoveryPageMediaFromState();
+    let state = createBrowseFilterState(media,discoveryPageState && discoveryPageState.browse ? discoveryPageState.browse : {
+        year:discoveryPageState && discoveryPageState.year || "",
+        sort:legacyDiscoverySortToBrowseSort(discoveryPageState && discoveryPageState.sort)
+    });
+    const type = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
+    const value = normalizeDiscoveryFilterValue(type,discoveryPageState && discoveryPageState.value);
+    if(!type || !value || type === "discover-category"){
+        return state;
+    }
+    if(type === "network"){
+        state = addBrowseBaseFilter(state,"network",value);
+    }else if(type === "language"){
+        state = addBrowseBaseFilter(state,"language",value);
+    }else if(type === "country"){
+        state = addBrowseBaseFilter(state,"country",value);
+    }else if(type === "theme"){
+        state = addBrowseBaseFilter(state,"themes",value);
+    }else if(type === "company"){
+        state = addBrowseBaseFilter(state,"companies",value);
+    }else if(type === "provider"){
+        state = addBrowseBaseFilter(state,"provider",value);
+    }else if(type === "year"){
+        state = addBrowseBaseFilter(state,"year",value);
+    }else if(type === "status"){
+        state = addBrowseBaseFilter(state,"statuses",value);
+    }else if(type === "certification"){
+        const parts = value.split("/");
+        if(parts[0] === "movie"){
+            state = addBrowseBaseFilter(state,"certification",parts[1] || "");
+        }
+    }
+    return createBrowseFilterState(media,state);
+}
+
+function getCurrentBrowseState(){
+    if(activePage === "browse-detail"){
+        return createBrowseFilterState(browsePageState && browsePageState.media,browsePageState && browsePageState.filters || {});
+    }
+    if(activePage === "genre-detail"){
+        return getGenreBrowseState();
+    }
+    if(activePage === "discovery-detail"){
+        return getDiscoveryBrowseState();
+    }
+    if(activePage === "discover"){
+        return createBrowseFilterState(discoverGenreMedia || "tv");
+    }
+    return createBrowseFilterState("tv");
+}
+
+function getCurrentBrowseLabels(){
+    if(activePage === "browse-detail"){
+        return createBrowseLabelState(browsePageState && browsePageState.labels);
+    }
+    if(activePage === "genre-detail"){
+        return createBrowseLabelState(genrePageState && genrePageState.browseLabels);
+    }
+    if(activePage === "discovery-detail"){
+        return createBrowseLabelState(discoveryPageState && discoveryPageState.browseLabels);
+    }
+    return createBrowseLabelState();
+}
+
+function normalizeBrowseCountryOptions(payload){
+    return (Array.isArray(payload) ? payload : [])
+    .map(item=>{
+        const code = normalizeCountryCode(item && item.iso_3166_1 || "");
+        const name = String(item && (item.english_name || item.native_name) || "").trim();
+        return code && name ? {code,name} : null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function normalizeBrowseLanguageOptions(payload){
+    return (Array.isArray(payload) ? payload : [])
+    .map(item=>{
+        const code = normalizeLanguageCode(item && item.iso_639_1 || "");
+        const name = String(item && (item.english_name || item.name) || "").trim();
+        return code && name ? {code,name} : null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function normalizeMovieCertificationOptions(payload){
+    const source = payload && payload.certifications && Array.isArray(payload.certifications.US)
+    ? payload.certifications.US
+    : [];
+    const seen = new Set();
+    return source
+    .map(item=>String(item && item.certification || "").trim())
+    .filter(value=>{
+        const key = value.toLowerCase();
+        if(!value || seen.has(key)){
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
+async function ensureBrowseReferenceData(media="tv"){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const tasks = [];
+
+    if(!browseOptionState.loaded.common){
+        if(!browseReferencePromises.common){
+            browseReferencePromises.common = Promise.all([
+                tmdbFetchJSON("configuration/countries"),
+                tmdbFetchJSON("configuration/languages")
+            ]).then(([countries,languages])=>{
+                browseOptionState.countries = normalizeBrowseCountryOptions(countries);
+                browseOptionState.languages = normalizeBrowseLanguageOptions(languages);
+                browseOptionState.loaded.common = true;
+            }).catch(()=>{}).finally(()=>{
+                browseReferencePromises.common = null;
+            });
+        }
+        tasks.push(browseReferencePromises.common);
+    }
+
+    const genreKey = cleanMedia === "movie" ? "movieGenres" : "tvGenres";
+    if(!browseOptionState.loaded[genreKey]){
+        if(!browseReferencePromises[cleanMedia]){
+            browseReferencePromises[cleanMedia] = tmdbGetGenreList(cleanMedia).then(genres=>{
+                browseOptionState.genres[cleanMedia] = Array.isArray(genres) ? genres.slice() : [];
+                browseOptionState.loaded[genreKey] = true;
+            }).catch(()=>{}).finally(()=>{
+                browseReferencePromises[cleanMedia] = null;
+            });
+        }
+        tasks.push(browseReferencePromises[cleanMedia]);
+    }
+
+    if(cleanMedia === "movie" && !browseOptionState.loaded.certifications){
+        if(!browseReferencePromises.certifications){
+            browseReferencePromises.certifications = tmdbFetchJSON("certification/movie/list").then(payload=>{
+                browseOptionState.movieCertifications = normalizeMovieCertificationOptions(payload);
+                browseOptionState.loaded.certifications = true;
+            }).catch(()=>{}).finally(()=>{
+                browseReferencePromises.certifications = null;
+            });
+        }
+        tasks.push(browseReferencePromises.certifications);
+    }
+
+    if(tasks.length){
+        await Promise.allSettled(tasks);
+    }
+    return browseOptionState;
+}
+
+function browseGenreNameById(media,genreId){
+    const cleanId = String(genreId || "");
+    const list = Array.isArray(browseOptionState.genres[normalizeBrowseMediaType(media)]) ? browseOptionState.genres[normalizeBrowseMediaType(media)] : [];
+    const match = list.find(item=>String(item && item.id || "") === cleanId);
+    return match ? String(match.name || "").trim() : "";
+}
+
+async function resolveBrowseLabels(state,labels={}){
+    const cleanState = createBrowseFilterState(state && state.media,state);
+    const output = createBrowseLabelState(labels);
+    await ensureBrowseReferenceData(cleanState.media);
+
+    cleanState.genres.forEach(id=>{
+        const name = browseGenreNameById(cleanState.media,id);
+        if(name){ setBrowseLabel(output,"genres",id,name); }
+    });
+
+    const asyncTasks = [];
+    cleanState.themes.forEach(id=>{
+        if(output.themes[id]){ return; }
+        asyncTasks.push(tmdbGetKeywordDetails(id).then(item=>{
+            if(item && item.name){ setBrowseLabel(output,"themes",id,item.name); }
+        }).catch(()=>{}));
+    });
+    cleanState.companies.forEach(id=>{
+        if(output.companies[id]){ return; }
+        asyncTasks.push(tmdbGetCompanyDetails(id).then(item=>{
+            if(item && item.name){ setBrowseLabel(output,"companies",id,item.name); }
+        }).catch(()=>{}));
+    });
+    if(cleanState.network && !output.networks[cleanState.network]){
+        asyncTasks.push(tmdbGetNetworkDetails(cleanState.network).then(item=>{
+            if(item && item.name){ setBrowseLabel(output,"networks",cleanState.network,item.name); }
+        }).catch(()=>{}));
+    }
+    if(cleanState.provider && !output.providers[cleanState.provider]){
+        asyncTasks.push(tmdbGetWatchProviderDetails(cleanState.provider).then(item=>{
+            if(item && item.name){ setBrowseLabel(output,"providers",cleanState.provider,item.name); }
+        }).catch(()=>{}));
+    }
+    if(asyncTasks.length){
+        await Promise.allSettled(asyncTasks);
+    }
+    return output;
+}
+
+function getBrowsePickerResultsHTML(items,type,selectedValues=[]){
+    const selected = new Set((Array.isArray(selectedValues) ? selectedValues : []).map(String));
+    if(!Array.isArray(items) || !items.length){
+        return `<div class="browse-picker-empty">No matches found.</div>`;
+    }
+    const group = type === "theme" ? "themes" : "companies";
+    return items.slice(0,10).map(item=>{
+        const id = String(item && item.id || "");
+        const name = String(item && item.name || "").trim();
+        if(!id || !name){ return ""; }
+        const active = selected.has(id);
+        return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-toggle-multi="${group}" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${escapeHTML(name)}${active ? " ✓" : ""}</button>`;
+    }).join("");
+}
+
+async function searchBrowsePicker(type,query){
+    const cleanType = type === "theme" ? "theme" : (type === "company" ? "company" : "");
+    const cleanQuery = String(query || "").trim();
+    if(!cleanType || cleanQuery.length < 2){
+        return [];
+    }
+    const endpoint = cleanType === "theme" ? "search/keyword" : "search/company";
+    const payload = await tmdbFetchJSON(endpoint,{query:cleanQuery,page:1});
+    return (Array.isArray(payload && payload.results) ? payload.results : [])
+    .map(item=>({id:Number(item && item.id || 0),name:String(item && item.name || "").trim()}))
+    .filter(item=>item.id && item.name)
+    .slice(0,10);
+}
+
+async function mapBrowseGenresForMedia(state,targetMedia,labels={}){
+    const current = createBrowseFilterState(state && state.media,state);
+    const toMedia = normalizeBrowseMediaType(targetMedia);
+    if(current.media === toMedia || !current.genres.length){
+        return {state:createBrowseFilterState(toMedia,current),labels:createBrowseLabelState(labels)};
+    }
+    await Promise.allSettled([ensureBrowseReferenceData(current.media),ensureBrowseReferenceData(toMedia)]);
+    const targetGenres = Array.isArray(browseOptionState.genres[toMedia]) ? browseOptionState.genres[toMedia] : [];
+    const mappedIds = [];
+    const outputLabels = createBrowseLabelState(labels);
+
+    current.genres.forEach(id=>{
+        const sourceName = browseGenreNameById(current.media,id) || getBrowseLabel(labels,"genres",id,"");
+        const sourceSlug = normalizeGenreSlug(sourceName);
+        const targetSlug = getSmartGenreEquivalentSlug(sourceSlug,current.media,toMedia);
+        const match = targetGenres.find(genre=>normalizeGenreSlug(genre && genre.name) === targetSlug);
+        if(match && match.id && !mappedIds.includes(String(match.id))){
+            mappedIds.push(String(match.id));
+            setBrowseLabel(outputLabels,"genres",String(match.id),match.name || sourceName);
+        }
+    });
+
+    let next = getBrowseStateAPI() && typeof getBrowseStateAPI().switchMedia === "function"
+    ? getBrowseStateAPI().switchMedia(current,toMedia)
+    : createBrowseFilterState(toMedia,current);
+    next.genres = mappedIds;
+    next = createBrowseFilterState(toMedia,next);
+    return {state:next,labels:outputLabels};
+}
+
+function getBrowseRoute(state){
+    const api = getBrowseStateAPI();
+    return api && typeof api.routeForState === "function"
+    ? api.routeForState(state)
+    : `/app/browse/${encodeURIComponent(normalizeBrowseMediaType(state && state.media))}`;
+}
+
+function getTodayDateString(){
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2,"0");
+    const day = String(now.getDate()).padStart(2,"0");
+    return `${year}-${month}-${day}`;
+}
+
+function buildBrowseDiscoverParams(state,page){
+    const api = getBrowseStateAPI();
+    const cleanState = createBrowseFilterState(state && state.media,state);
+    if(api && typeof api.buildTMDBParams === "function"){
+        return api.buildTMDBParams(cleanState,page,{watchRegion:getAppWatchRegion(),today:getTodayDateString()});
+    }
+    return {page:Math.max(1,Number(page || 1)),sort_by:"popularity.desc",include_adult:"false"};
+}
+
+function getBrowseStateHasAnyChoice(state){
+    const api = getBrowseStateAPI();
+    const clean = createBrowseFilterState(state && state.media,state);
+    return !!((api && typeof api.hasFilters === "function" && api.hasFilters(clean)) || clean.sort !== "popularity-desc");
+}
+
 
 function normalizePersonRoleSlug(role){
     const clean = String(role || "").trim().toLowerCase().replace(/[^a-z]/g,"");
@@ -5501,16 +5971,18 @@ async function resolveTVGenreFromSlug(slug){
 }
 
 function getGenrePageFiltersFromState(){
-    const media = normalizeGenreMediaType(genrePageState && genrePageState.media);
-    const year = String(genrePageState && genrePageState.year ? genrePageState.year : "").trim();
-    const sort = GENRE_PAGE_SORTS.has(String(genrePageState && genrePageState.sort || ""))
-    ? String(genrePageState.sort)
-    : "popularity.desc";
-
+    const media = normalizeGenreMediaType(genrePageState && genrePageState.media || "tv");
+    const extras = createBrowseFilterState(media,genrePageState && genrePageState.browse ? genrePageState.browse : {
+        year:genrePageState && genrePageState.year || "",
+        sort:legacyDiscoverySortToBrowseSort(genrePageState && genrePageState.sort)
+    });
+    const browse = getGenreBrowseState();
     return {
-        media:media,
-        year:/^\d{4}$/.test(year) ? year : "",
-        sort:sort
+        media:browse.media,
+        year:browse.year,
+        sort:browseSortToLegacySort(browse.sort),
+        browse,
+        extras
     };
 }
 
@@ -5536,6 +6008,8 @@ async function loadGenrePageResults(options={}){
 
     const filters = getGenrePageFiltersFromState();
     const nextPage = append ? Number(genrePageState.page || 1) + 1 : 1;
+    const requestId = ++genrePageRequestId;
+    const requestIsCurrent = ()=>requestId === genrePageRequestId && activePage === "genre-detail" && String(selectedGenreSlug || "") === slug && normalizeGenreMediaType(selectedGenreMedia) === media;
 
     genrePageState.loading = true;
     genrePageState.error = "";
@@ -5548,33 +6022,26 @@ async function loadGenrePageResults(options={}){
 
     try{
         const genre = await resolveGenreFromSlug(slug,media);
+        if(!requestIsCurrent()){
+            return;
+        }
         if(!genre || !genre.id){
             renderAppRouteNotFoundPage();
             return;
         }
 
-        const params = {
-            with_genres:genre.id,
-            sort_by:getGenreDiscoverSort(filters.sort,media),
-            include_adult:"false",
-            page:nextPage
-        };
+        const genreExtras = createBrowseFilterState(media,filters.extras || {});
+        genreExtras.genres = genreExtras.genres.filter(id=>id !== String(genre.id));
+        genrePageState.browse = createBrowseFilterState(media,genreExtras);
+        const browseApi = getBrowseStateAPI();
+        const genreBrowseSearch = browseApi && typeof browseApi.serializeSearch === "function" ? browseApi.serializeSearch(genrePageState.browse) : "";
+        const canonicalGenreRoute = getGenreDetailRoute(slug,media) + genreBrowseSearch;
+        setAppHashRoute(canonicalGenreRoute,true);
+        rememberRouteNavContext(canonicalGenreRoute,"discover");
 
-        if(media === "tv"){
-            params.include_null_first_air_dates = "false";
-        }
-
-        if(filters.year){
-            if(media === "movie"){
-                params.primary_release_year = filters.year;
-            }else{
-                params.first_air_date_year = filters.year;
-            }
-        }
-
-        if(filters.sort === "vote_average.desc"){
-            params["vote_count.gte"] = 20;
-        }
+        let browseFilters = createBrowseFilterState(media,genrePageState.browse || {});
+        browseFilters = addBrowseBaseFilter(browseFilters,"genres",String(genre.id));
+        const params = buildBrowseDiscoverParams(browseFilters,nextPage);
 
         const existing = new Set((append ? genrePageState.shows : []).map(show=>String(show.id)));
         const fresh = [];
@@ -5584,6 +6051,9 @@ async function loadGenrePageResults(options={}){
 
         while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
             const payload = await tmdbGetDiscoverPage("discover/" + media,Object.assign({},params,{page:currentPage}));
+            if(!requestIsCurrent()){
+                return;
+            }
             totalPages = Number(payload.total_pages || currentPage || 1);
             lastPage = Number(payload.page || currentPage);
 
@@ -5607,8 +6077,14 @@ async function loadGenrePageResults(options={}){
             slug:slug,
             name:genre.name || genrePageState.name || "Genre",
             genreId:genre.id,
-            year:filters.year,
-            sort:filters.sort,
+            year:browseFilters.year,
+            sort:browseSortToLegacySort(browseFilters.sort),
+            browse:createBrowseFilterState(media,genrePageState.browse || {}),
+            browseLabels:(()=>{
+                const labels = createBrowseLabelState(genrePageState.browseLabels);
+                setBrowseLabel(labels,"genres",String(genre.id),genre.name || genrePageState.name || "Genre");
+                return labels;
+            })(),
             page:lastPage,
             totalPages:totalPages,
             loading:false,
@@ -5618,6 +6094,9 @@ async function loadGenrePageResults(options={}){
 
         renderActiveGenrePage();
     }catch(error){
+        if(!requestIsCurrent()){
+            return;
+        }
         genrePageState.loading = false;
         genrePageState.error = "Couldn’t load this page. Try again later.";
         renderActiveGenrePage();
@@ -5648,13 +6127,16 @@ async function openGenrePage(slug,options={}){
     discoverPreviewShow = null;
 
     if(!isSameGenre){
+        const routeBrowseState = getBrowseQueryStateFromOptions(options,media);
         genrePageState = {
             media:media,
             slug:cleanSlug,
             name:"",
             genreId:null,
-            year:"",
-            sort:"popularity.desc",
+            year:routeBrowseState.year || "",
+            sort:browseSortToLegacySort(routeBrowseState.sort),
+            browse:routeBrowseState,
+            browseLabels:createBrowseLabelState(options && options.browseLabels),
             page:1,
             totalPages:1,
             loading:false,
@@ -5664,9 +6146,20 @@ async function openGenrePage(slug,options={}){
     }else{
         genrePageState.media = media;
         genrePageState.slug = cleanSlug;
+        if(options && options.browseState){
+            genrePageState.browse = getBrowseQueryStateFromOptions(options,media);
+        }
     }
 
     showGenreDetailPageShell(navigationContext);
+
+    ensureBrowseReferenceData(media).then(async()=>{
+        const labels = await resolveBrowseLabels(getGenreBrowseState(),genrePageState.browseLabels);
+        if(activePage === "genre-detail" && String(selectedGenreSlug || "") === cleanSlug && String(selectedGenreMedia || "tv") === media){
+            genrePageState.browseLabels = labels;
+            renderActiveGenrePage();
+        }
+    }).catch(()=>{});
 
     if(!fromRoute){
         setAppHashRoute(genreRoute,replaceRoute);
@@ -5688,45 +6181,8 @@ function attachGenreDetailPageEvents(){
         });
     }
 
-    const yearInput = document.getElementById("genre-year-filter");
-    if(yearInput){
-        yearInput.addEventListener("change",function(){
-            const value = String(this.value || "").trim();
-            genrePageState.year = /^\d{4}$/.test(value) ? value : "";
-            this.value = genrePageState.year;
-            loadGenrePageResults({append:false});
-        });
-    }
 
-    const sortSelect = document.getElementById("genre-sort-filter");
-    if(sortSelect){
-        sortSelect.addEventListener("change",function(){
-            genrePageState.sort = GENRE_PAGE_SORTS.has(this.value) ? this.value : "popularity.desc";
-            loadGenrePageResults({append:false});
-        });
-    }
-
-    document.querySelectorAll(".genre-media-switch-button[data-genre-media]").forEach(button=>{
-        button.addEventListener("click",function(event){
-            if(this.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
-                return;
-            }
-            const nextMedia = normalizeGenreMediaType(this.dataset.genreMedia || "tv");
-            const route = getGenreMediaSwitchRoute(genrePageState.slug,genrePageState.media,nextMedia);
-            if(!route || nextMedia === normalizeGenreMediaType(genrePageState.media)){
-                if(this.tagName === "A" && event){
-                    event.preventDefault();
-                }
-                return;
-            }
-            if(this.tagName === "A" && event){
-                event.preventDefault();
-            }
-            const parts = route.split("/");
-            const nextSlug = parts[parts.length - 1] || "";
-            openGenrePage(nextSlug,{media:nextMedia});
-        });
-    });
+    attachBrowseControlsEvents({source:"genre"});
 
     document.querySelectorAll(".genre-result-card[data-media-id]").forEach(card=>{
         card.addEventListener("click",async function(event){
@@ -5818,15 +6274,17 @@ function getDiscoveryPageMediaFromState(){
 
 function getDiscoveryPageFiltersFromState(){
     const media = getDiscoveryPageMediaFromState();
-    const year = String(discoveryPageState && discoveryPageState.year ? discoveryPageState.year : "").trim();
-    const sort = GENRE_PAGE_SORTS.has(String(discoveryPageState && discoveryPageState.sort || ""))
-    ? String(discoveryPageState.sort)
-    : "popularity.desc";
-
+    const extras = createBrowseFilterState(media,discoveryPageState && discoveryPageState.browse ? discoveryPageState.browse : {
+        year:discoveryPageState && discoveryPageState.year || "",
+        sort:legacyDiscoverySortToBrowseSort(discoveryPageState && discoveryPageState.sort)
+    });
+    const browse = getDiscoveryBrowseState();
     return {
-        media:media,
-        year:/^\d{4}$/.test(year) ? year : "",
-        sort:sort
+        media:browse.media,
+        year:browse.year,
+        sort:browseSortToLegacySort(browse.sort),
+        browse,
+        extras
     };
 }
 
@@ -5858,65 +6316,13 @@ function normalizeBrowseResultItem(raw,media){
 
 function buildDiscoveryFilterRequest(type,value,filters,page){
     const cleanType = normalizeDiscoveryFilterType(type);
-    const cleanValue = normalizeDiscoveryFilterValue(cleanType,value);
-    const media = normalizeBrowseMediaType(filters && filters.media || "tv");
-    const sortBy = media === "movie" && filters.sort === "first_air_date.desc" ? "primary_release_date.desc" : filters.sort;
-    const params = {
-        sort_by:sortBy,
-        include_adult:"false",
-        page:page
-    };
-
-    if(media === "tv"){
-        params.include_null_first_air_dates = "false";
-    }else{
-        params.include_video = "false";
-    }
-
     if(cleanType === "discover-category"){
         return {page:page};
     }
-
-    if(cleanType === "network"){
-        params.with_networks = cleanValue;
-    }else if(cleanType === "language"){
-        params.with_original_language = cleanValue;
-    }else if(cleanType === "country"){
-        params.with_origin_country = cleanValue.toUpperCase();
-    }else if(cleanType === "theme"){
-        params.with_keywords = cleanValue;
-    }else if(cleanType === "company"){
-        params.with_companies = cleanValue;
-    }else if(cleanType === "provider"){
-        params.with_watch_providers = cleanValue;
-        params.watch_region = getAppWatchRegion();
-    }else if(cleanType === "year"){
-        if(media === "movie"){
-            params.primary_release_year = cleanValue;
-        }else{
-            params.first_air_date_year = cleanValue;
-        }
-    }else if(cleanType === "status"){
-        params.with_status = TV_STATUS_ROUTES[cleanValue] ? TV_STATUS_ROUTES[cleanValue].tmdbValue : "";
-    }else if(cleanType === "certification"){
-        const parts = cleanValue.split("/");
-        params.certification_country = "US";
-        params.certification = denormalizeCertificationSlug(parts[1] || "");
-    }
-
-    if(filters.year && cleanType !== "year"){
-        if(media === "movie"){
-            params.primary_release_year = filters.year;
-        }else{
-            params.first_air_date_year = filters.year;
-        }
-    }
-
-    if(filters.sort === "vote_average.desc"){
-        params["vote_count.gte"] = media === "movie" ? 50 : 20;
-    }
-
-    return params;
+    const browse = filters && filters.browse
+    ? createBrowseFilterState(filters.media,filters.browse)
+    : getDiscoveryBrowseState();
+    return buildBrowseDiscoverParams(browse,page);
 }
 
 async function resolveDiscoveryFilterPageName(type,value,existingName="",media="tv"){
@@ -6047,6 +6453,8 @@ async function loadDiscoveryFilterPageResults(options={}){
     const filters = getDiscoveryPageFiltersFromState();
     const media = filters.media;
     const nextPage = append ? Number(discoveryPageState.page || 1) + 1 : 1;
+    const requestId = ++discoveryPageRequestId;
+    const requestIsCurrent = ()=>requestId === discoveryPageRequestId && activePage === "discovery-detail" && selectedDiscoveryContext && String(selectedDiscoveryContext.type || "") === cleanType && String(selectedDiscoveryContext.value || "") === cleanValue && normalizeBrowseMediaType(discoveryPageState && discoveryPageState.media) === media;
 
     discoveryPageState.loading = true;
     discoveryPageState.error = "";
@@ -6065,13 +6473,21 @@ async function loadDiscoveryFilterPageResults(options={}){
         let lastPage = nextPage;
 
         const resolvedName = await resolveDiscoveryFilterPageName(cleanType,cleanValue,discoveryPageState.name,media);
+        if(!requestIsCurrent()){
+            return;
+        }
         const validationLabel = getDiscoveryRouteValidationLabel(cleanType,cleanValue,resolvedName);
 
         if(cleanType !== "discover-category"){
             const canonicalDiscoveryRoute = getDiscoveryFilterDetailRoute(cleanType,cleanValue,validationLabel,media);
             if(canonicalDiscoveryRoute && canonicalDiscoveryRoute !== "/app/list/watching"){
-                setAppHashRoute(canonicalDiscoveryRoute,true);
-                rememberRouteNavContext(canonicalDiscoveryRoute,"discover");
+                const browseApi = getBrowseStateAPI();
+                const browseSearch = browseApi && typeof browseApi.serializeSearch === "function"
+                ? browseApi.serializeSearch(createBrowseFilterState(media,discoveryPageState.browse || {}))
+                : "";
+                const canonicalRouteWithBrowse = canonicalDiscoveryRoute + browseSearch;
+                setAppHashRoute(canonicalRouteWithBrowse,true);
+                rememberRouteNavContext(canonicalRouteWithBrowse,"discover");
                 discoveryPageState.routeSlug = buildRouteSlug(validationLabel);
             }
         }
@@ -6082,6 +6498,9 @@ async function loadDiscoveryFilterPageResults(options={}){
         while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
             const params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
             const payload = await tmdbGetDiscoverPage(discoverPath,params);
+            if(!requestIsCurrent()){
+                return;
+            }
             totalPages = Number(payload.total_pages || currentPage || 1);
             lastPage = Number(payload.page || currentPage);
 
@@ -6106,8 +6525,9 @@ async function loadDiscoveryFilterPageResults(options={}){
             value:cleanValue,
             name:resolvedName,
             media:media,
-            year:filters.year,
-            sort:filters.sort,
+            year:filters.browse.year,
+            sort:browseSortToLegacySort(filters.browse.sort),
+            browse:createBrowseFilterState(media,filters.extras || {}),
             page:lastPage,
             totalPages:totalPages,
             loading:false,
@@ -6117,6 +6537,9 @@ async function loadDiscoveryFilterPageResults(options={}){
 
         renderActiveDiscoveryFilterPage();
     }catch(error){
+        if(!requestIsCurrent()){
+            return;
+        }
         if(isTMDBNotFoundError(error)){
             renderAppRouteNotFoundPage();
             return;
@@ -6162,14 +6585,17 @@ async function openDiscoveryFilterPage(type,value,options={}){
     discoverPreviewShow = null;
 
     if(!isSamePage){
+        const routeBrowseState = stripDiscoveryBaseFromBrowseExtras(cleanType,cleanValue,getBrowseQueryStateFromOptions(options,media),media);
         discoveryPageState = {
             type:cleanType,
             value:cleanValue,
             name:suppliedName || getDiscoveryFilterFallbackName(cleanType,cleanValue,media),
             routeSlug:routeSlug,
             media:media,
-            year:"",
-            sort:"popularity.desc",
+            year:routeBrowseState.year || "",
+            sort:browseSortToLegacySort(routeBrowseState.sort),
+            browse:routeBrowseState,
+            browseLabels:createBrowseLabelState(options && options.browseLabels),
             page:1,
             totalPages:1,
             loading:false,
@@ -6181,12 +6607,25 @@ async function openDiscoveryFilterPage(type,value,options={}){
         discoveryPageState.value = cleanValue;
         discoveryPageState.routeSlug = routeSlug;
         discoveryPageState.media = media;
+        if(options && options.browseState){
+            discoveryPageState.browse = stripDiscoveryBaseFromBrowseExtras(cleanType,cleanValue,getBrowseQueryStateFromOptions(options,media),media);
+        }
         if(suppliedName){
             discoveryPageState.name = suppliedName;
         }
     }
 
     showDiscoveryFilterPageShell(navigationContext);
+
+    if(cleanType !== "discover-category"){
+        ensureBrowseReferenceData(media).then(async()=>{
+            const labels = await resolveBrowseLabels(getDiscoveryBrowseState(),discoveryPageState.browseLabels);
+            if(activePage === "discovery-detail" && selectedDiscoveryContext && String(selectedDiscoveryContext.type || "") === cleanType && String(selectedDiscoveryContext.value || "") === cleanValue){
+                discoveryPageState.browseLabels = labels;
+                renderActiveDiscoveryFilterPage();
+            }
+        }).catch(()=>{});
+    }
 
     if(!fromRoute){
         setAppHashRoute(initialDiscoveryRoute,replaceRoute);
@@ -6207,6 +6646,8 @@ function attachDiscoveryFilterPageEvents(){
             navigateBackOrRouteFallback("/app/discover");
         });
     }
+
+    attachBrowseControlsEvents({source:"discovery"});
 
     const mediaSelect = document.getElementById("discovery-filter-media-filter");
     if(mediaSelect){
@@ -6273,6 +6714,372 @@ function attachDiscoveryFilterPageEvents(){
         moreButton.addEventListener("click",function(){
             if(!discoveryPageState.loading){
                 loadDiscoveryFilterPageResults({append:true});
+            }
+        });
+    }
+}
+
+
+function showBrowsePageShell(navigationContext=""){
+    activePage = "browse-detail";
+    document.querySelectorAll(".page").forEach(section=>section.classList.remove("active-page"));
+    activatePrimaryNavContext(navigationContext || "discover");
+    const pageElement = document.getElementById("genre-detail-page");
+    if(pageElement){
+        pageElement.classList.add("active-page");
+        pageElement.scrollTop = 0;
+    }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+function renderActiveBrowsePage(){
+    if(typeof renderBrowseDetailPage === "function"){
+        renderBrowseDetailPage(browsePageState);
+        attachBrowsePageEvents();
+    }
+    if(typeof updateShellTitle === "function"){
+        updateShellTitle();
+    }
+}
+
+async function loadBrowsePageResults(options={}){
+    const append = options && options.append === true;
+    const filters = createBrowseFilterState(browsePageState && browsePageState.media,browsePageState && browsePageState.filters || {});
+    const media = filters.media;
+    const nextPage = append ? Number(browsePageState.page || 1) + 1 : 1;
+    const requestRoute = getBrowseRoute(filters);
+    const requestId = ++browsePageRequestId;
+    const requestIsCurrent = ()=>requestId === browsePageRequestId && activePage === "browse-detail" && getBrowseRoute(browsePageState && browsePageState.filters || {media}) === requestRoute;
+
+    browsePageState.loading = true;
+    browsePageState.error = "";
+    browsePageState.filters = filters;
+    browsePageState.media = media;
+    if(!append){
+        browsePageState.shows = [];
+        browsePageState.page = 1;
+        browsePageState.totalPages = 1;
+    }
+    renderActiveBrowsePage();
+
+    try{
+        const existing = new Set((append ? browsePageState.shows : []).map(item=>`${item.media_type || media}:${item.id}`));
+        const fresh = [];
+        let totalPages = Number(browsePageState.totalPages || 1);
+        let currentPage = nextPage;
+        let lastPage = nextPage;
+        const path = media === "movie" ? "discover/movie" : "discover/tv";
+
+        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+            const params = buildBrowseDiscoverParams(filters,currentPage);
+            const payload = await tmdbGetDiscoverPage(path,params);
+            if(!requestIsCurrent()){
+                return;
+            }
+            totalPages = Number(payload.total_pages || currentPage || 1);
+            lastPage = Number(payload.page || currentPage);
+
+            (payload.results || []).forEach(raw=>{
+                const item = normalizeBrowseResultItem(raw,media);
+                const key = item ? `${item.media_type}:${item.id}` : "";
+                if(!item || existing.has(key) || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                    return;
+                }
+                existing.add(key);
+                fresh.push(item);
+            });
+
+            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+                break;
+            }
+            currentPage = lastPage + 1;
+        }
+
+        browsePageState = Object.assign({},browsePageState,{
+            media,
+            filters,
+            page:lastPage,
+            totalPages,
+            loading:false,
+            error:"",
+            shows:append ? (browsePageState.shows || []).concat(fresh) : fresh
+        });
+        renderActiveBrowsePage();
+    }catch(error){
+        if(!requestIsCurrent()){
+            return;
+        }
+        browsePageState.loading = false;
+        browsePageState.error = "Couldn’t load this page. Try again later.";
+        renderActiveBrowsePage();
+    }
+}
+
+async function openBrowsePage(state,options={}){
+    const filters = createBrowseFilterState(options && options.media || state && state.media,state || {});
+    const fromRoute = options && options.fromRoute === true;
+    const replaceRoute = options && options.replaceRoute === true;
+    const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : getBrowseRoute(filters));
+    const route = getBrowseRoute(filters);
+    const currentRoute = activePage === "browse-detail" && browsePageState && browsePageState.filters
+    ? getBrowseRoute(browsePageState.filters)
+    : "";
+    const isSamePage = currentRoute === route;
+
+    selectedShowId = null;
+    selectedEpisodeContext = null;
+    selectedGenreSlug = null;
+    selectedGenreMedia = "tv";
+    selectedDiscoveryContext = null;
+    selectedPersonContext = null;
+    selectedMovieId = null;
+    showDetailPreview = null;
+    discoverPreviewShow = null;
+
+    if(!isSamePage){
+        browsePageState = {
+            media:filters.media,
+            filters,
+            labels:createBrowseLabelState(options && options.labels),
+            page:1,
+            totalPages:1,
+            loading:false,
+            error:"",
+            shows:[]
+        };
+    }else{
+        browsePageState.media = filters.media;
+        browsePageState.filters = filters;
+        browsePageState.labels = createBrowseLabelState(options && options.labels || browsePageState.labels);
+    }
+
+    showBrowsePageShell(navigationContext);
+
+    if(!fromRoute){
+        setAppHashRoute(route,replaceRoute);
+        rememberRouteNavContext(route,navigationContext);
+    }
+
+    ensureBrowseReferenceData(filters.media).then(async()=>{
+        const labels = await resolveBrowseLabels(filters,browsePageState.labels);
+        if(activePage === "browse-detail" && getBrowseRoute(browsePageState.filters) === route){
+            browsePageState.labels = labels;
+            renderActiveBrowsePage();
+        }
+    }).catch(()=>{});
+
+    if(!isSamePage || !browsePageState.shows.length){
+        await loadBrowsePageResults({append:false});
+    }else{
+        renderActiveBrowsePage();
+    }
+}
+
+async function navigateToBrowseState(nextState,labels={},options={}){
+    const cleanState = createBrowseFilterState(nextState && nextState.media,nextState || {});
+    await openBrowsePage(cleanState,{
+        labels:createBrowseLabelState(labels),
+        replaceRoute:options && options.replaceRoute === true,
+        navigationContext:"discover"
+    });
+}
+
+function updateBrowsePickerResults(type,query,results,error=""){
+    const container = document.getElementById(type === "theme" ? "browse-theme-picker-results" : "browse-company-picker-results");
+    if(!container){
+        return;
+    }
+    const cleanQuery = String(query || "").trim();
+    if(error){
+        container.innerHTML = `<div class="browse-picker-empty">Couldn’t load matches.</div>`;
+        return;
+    }
+    if(cleanQuery.length < 2){
+        container.innerHTML = `<div class="browse-picker-empty">Type at least 2 characters.</div>`;
+        return;
+    }
+    const state = getCurrentBrowseState();
+    const selected = type === "theme" ? state.themes : state.companies;
+    container.innerHTML = getBrowsePickerResultsHTML(results,type,selected);
+    attachBrowsePickerResultEvents(container);
+}
+
+function attachBrowsePickerResultEvents(root=document){
+    root.querySelectorAll("[data-browse-toggle-multi]").forEach(button=>{
+        if(button.dataset.browseBound === "1"){
+            return;
+        }
+        button.dataset.browseBound = "1";
+        button.addEventListener("click",async function(){
+            const api = getBrowseStateAPI();
+            if(!api || typeof api.toggleMulti !== "function"){
+                return;
+            }
+            const group = String(this.dataset.browseToggleMulti || "");
+            const value = String(this.dataset.browseValue || "");
+            const label = String(this.dataset.browseLabel || "");
+            let state = getCurrentBrowseState();
+            const labels = getCurrentBrowseLabels();
+            state = api.toggleMulti(state,group,value);
+            const labelGroup = group === "themes" ? "themes" : (group === "companies" ? "companies" : (group === "genres" ? "genres" : ""));
+            if(labelGroup && label){
+                setBrowseLabel(labels,labelGroup,value,label);
+            }
+            await navigateToBrowseState(state,labels);
+        });
+    });
+}
+
+function attachBrowseControlsEvents(options={}){
+    const source = String(options && options.source || "");
+
+    document.querySelectorAll(".browse-menu").forEach(details=>{
+        details.addEventListener("toggle",function(){
+            if(!this.open){ return; }
+            document.querySelectorAll(".browse-menu").forEach(other=>{
+                if(other !== this){ other.open = false; }
+            });
+        });
+    });
+
+    document.querySelectorAll("[data-browse-media]").forEach(button=>{
+        button.addEventListener("click",async function(event){
+            if(this.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
+                return;
+            }
+            if(this.tagName === "A" && event){ event.preventDefault(); }
+            const targetMedia = normalizeBrowseMediaType(this.dataset.browseMedia || "tv");
+            if(source === "hub" || activePage === "discover"){
+                discoverGenreMedia = targetMedia;
+                await ensureBrowseReferenceData(targetMedia);
+                if(typeof renderDiscoverHub === "function"){
+                    renderDiscoverHub();
+                }
+                return;
+            }
+            const current = getCurrentBrowseState();
+            if(current.media === targetMedia){
+                return;
+            }
+            const mapped = await mapBrowseGenresForMedia(current,targetMedia,getCurrentBrowseLabels());
+            await navigateToBrowseState(mapped.state,mapped.labels);
+        });
+    });
+
+    document.querySelectorAll("[data-browse-set-single]").forEach(button=>{
+        button.addEventListener("click",async function(){
+            const api = getBrowseStateAPI();
+            if(!api || typeof api.setSingle !== "function"){
+                return;
+            }
+            const key = String(this.dataset.browseSetSingle || "");
+            const value = String(this.dataset.browseValue || "");
+            const current = getCurrentBrowseState();
+            const next = api.setSingle(current,key,key === "upcoming" ? value === "1" : value);
+            await navigateToBrowseState(next,getCurrentBrowseLabels());
+        });
+    });
+
+    document.querySelectorAll("[data-browse-set-sort]").forEach(button=>{
+        button.addEventListener("click",async function(){
+            const api = getBrowseStateAPI();
+            if(!api || typeof api.setSingle !== "function"){
+                return;
+            }
+            const next = api.setSingle(getCurrentBrowseState(),"sort",this.dataset.browseSetSort || "popularity-desc");
+            await navigateToBrowseState(next,getCurrentBrowseLabels());
+        });
+    });
+
+    attachBrowsePickerResultEvents(document);
+
+    document.querySelectorAll("[data-browse-remove]").forEach(button=>{
+        button.addEventListener("click",async function(){
+            const api = getBrowseStateAPI();
+            if(!api || typeof api.removeValue !== "function"){
+                return;
+            }
+            const key = String(this.dataset.browseRemove || "");
+            const value = String(this.dataset.browseValue || "");
+            const next = api.removeValue(getCurrentBrowseState(),key,value);
+            await navigateToBrowseState(next,getCurrentBrowseLabels());
+        });
+    });
+
+    const clearButton = document.querySelector("[data-browse-clear]");
+    if(clearButton){
+        clearButton.addEventListener("click",async function(){
+            const api = getBrowseStateAPI();
+            const current = getCurrentBrowseState();
+            const next = api && typeof api.clearFilters === "function" ? api.clearFilters(current) : createBrowseFilterState(current.media);
+            await navigateToBrowseState(next,createBrowseLabelState());
+        });
+    }
+
+    document.querySelectorAll("[data-browse-list-search]").forEach(input=>{
+        input.addEventListener("input",function(){
+            const type = String(this.dataset.browseListSearch || "");
+            const query = String(this.value || "").trim().toLowerCase();
+            document.querySelectorAll(`[data-browse-list="${type}"] [data-browse-option-label]`).forEach(option=>{
+                const label = String(option.dataset.browseOptionLabel || "").toLowerCase();
+                option.hidden = !!query && !label.includes(query);
+            });
+        });
+    });
+
+    document.querySelectorAll("[data-browse-picker-search]").forEach(input=>{
+        input.addEventListener("input",function(){
+            clearTimeout(browsePickerSearchTimer);
+            const type = String(this.dataset.browsePickerSearch || "");
+            const query = String(this.value || "").trim();
+            updateBrowsePickerResults(type,query,[]);
+            if(query.length < 2){
+                return;
+            }
+            browsePickerSearchTimer = setTimeout(async()=>{
+                try{
+                    const results = await searchBrowsePicker(type,query);
+                    updateBrowsePickerResults(type,query,results);
+                }catch(error){
+                    updateBrowsePickerResults(type,query,[],"error");
+                }
+            },250);
+        });
+    });
+}
+
+function attachBrowsePageEvents(){
+    const backButton = document.getElementById("browse-page-back-button");
+    if(backButton){
+        backButton.addEventListener("click",function(){
+            navigateBackOrRouteFallback("/app/discover");
+        });
+    }
+    attachBrowseControlsEvents({source:"browse"});
+
+    document.querySelectorAll(".browse-result-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
+            const mediaType = normalizeBrowseMediaType(this.dataset.mediaType || "tv");
+            const mediaId = Number(this.dataset.mediaId || 0);
+            if(!mediaId){ return; }
+            const backRoute = getBrowseRoute(getCurrentBrowseState());
+            if(mediaType === "movie"){
+                await openMoviePage(mediaId,{movieName:this.dataset.mediaName || "",navigationContext:"discover",backRoute});
+                return;
+            }
+            await openShowDetailsPage(mediaId,{showName:this.dataset.mediaName || "",navigationContext:"discover",backRoute});
+        });
+    });
+
+    const moreButton = document.getElementById("browse-load-more-button");
+    if(moreButton){
+        moreButton.addEventListener("click",function(){
+            if(!browsePageState.loading){
+                loadBrowsePageResults({append:true});
             }
         });
     }

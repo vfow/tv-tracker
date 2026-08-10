@@ -142,6 +142,7 @@ function getTrackerDocumentTitleLabel(){
         : "Episode",
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
         "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
+        "browse-detail":typeof browsePageState !== "undefined" && browsePageState && browsePageState.media === "movie" ? "Browse Movies" : "Browse TV Shows",
         "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person",
         "movie-detail":moviePageState && moviePageState.movie && moviePageState.movie.title ? moviePageState.movie.title : "Movie",
         "route-error":"Page Not Found"
@@ -340,8 +341,15 @@ function renderDiscoverHub(){
     const tvRows = sections.filter(section=>section.media === "tv");
     const movieRows = sections.filter(section=>section.media === "movie");
 
+    const browseMedia = typeof normalizeGenreMediaType === "function" ? normalizeGenreMediaType(typeof discoverGenreMedia !== "undefined" ? discoverGenreMedia : "tv") : "tv";
+    const browseState = getBrowseControlState({},browseMedia);
+
     results.innerHTML = `
         <div class="discover-page-shell">
+            <section class="discover-browse-panel" aria-label="Browse TV shows and movies">
+                ${renderBrowseMediaSwitchHTML(browseMedia)}
+                ${renderBrowseControlsHTML(browseState,{})}
+            </section>
             ${renderDiscoverSectionGroup("TV Shows",tvRows)}
             ${renderDiscoverSectionGroup("Movies",movieRows)}
             ${renderDiscoverGenreSection(state.genres || [])}
@@ -579,6 +587,10 @@ function renderDiscoverHubCard(item){
 }
 
 function attachDiscoverHubEvents(){
+    if(typeof attachBrowseControlsEvents === "function"){
+        attachBrowseControlsEvents({source:"hub"});
+    }
+
     document.querySelectorAll(".discover-genre-tab[data-discover-genre-media]").forEach(button=>{
         button.addEventListener("click",function(){
             if(typeof normalizeGenreMediaType === "function"){
@@ -1043,6 +1055,271 @@ function renderPersonDetailPage(state){
     `;
 }
 
+
+function renderBrowseMediaSwitchHTML(media){
+    const cleanMedia = String(media || "tv") === "movie" ? "movie" : "tv";
+    return `
+        <div class="genre-media-switch browse-media-switch" role="tablist" aria-label="Media type">
+            <button type="button" class="genre-media-switch-button ${cleanMedia === "tv" ? "active" : ""}" data-browse-media="tv" role="tab" aria-selected="${cleanMedia === "tv" ? "true" : "false"}">TV Shows</button>
+            <button type="button" class="genre-media-switch-button ${cleanMedia === "movie" ? "active" : ""}" data-browse-media="movie" role="tab" aria-selected="${cleanMedia === "movie" ? "true" : "false"}">Movies</button>
+        </div>
+    `;
+}
+
+function getBrowseControlState(state,media="tv"){
+    if(typeof createBrowseFilterState === "function"){
+        return createBrowseFilterState(media,state || {});
+    }
+    return Object.assign({media,year:"",upcoming:false,genres:[],country:"",language:"",themes:[],companies:[],network:"",provider:"",statuses:[],certification:"",sort:"popularity-desc"},state || {});
+}
+
+function getBrowseControlLabels(labels){
+    return typeof createBrowseLabelState === "function" ? createBrowseLabelState(labels) : (labels || {});
+}
+
+function renderBrowseYearMenu(state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const decadeGroups = [];
+    for(let decade=currentDecade; decade>=1870; decade-=10){
+        const topYear = decade === currentDecade ? currentYear : decade + 9;
+        const years = [];
+        for(let year=topYear; year>=decade; year-=1){
+            years.push(`<button type="button" class="browse-dropdown-option ${state.year === String(year) ? "selected" : ""}" data-browse-set-single="year" data-browse-value="${year}">${year}</button>`);
+        }
+        decadeGroups.push(`
+            <details class="browse-decade-group">
+                <summary>${decade}s <span aria-hidden="true">›</span></summary>
+                <div class="browse-decade-years">${years.join("")}</div>
+            </details>
+        `);
+    }
+    return `
+        <button type="button" class="browse-dropdown-option ${!state.year && !state.upcoming ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">Any</button>
+        <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">Upcoming</button>
+        <div class="browse-dropdown-divider"></div>
+        <div class="browse-year-groups">${decadeGroups.join("")}</div>
+    `;
+}
+
+function getBrowseGenreOptions(media){
+    const cleanMedia = String(media || "tv") === "movie" ? "movie" : "tv";
+    let genres = typeof browseOptionState !== "undefined" && browseOptionState && browseOptionState.genres
+    ? browseOptionState.genres[cleanMedia]
+    : [];
+    if((!Array.isArray(genres) || !genres.length) && typeof discoverHubState !== "undefined" && discoverHubState && discoverHubState.genres){
+        genres = discoverHubState.genres[cleanMedia];
+    }
+    return (Array.isArray(genres) ? genres : []).filter(genre=>!(cleanMedia === "tv" && String(genre && genre.name || "").trim().toLowerCase() === "soap"));
+}
+
+function renderBrowseGenreMenu(state){
+    const genres = getBrowseGenreOptions(state.media);
+    if(!genres.length){
+        return `<div class="browse-dropdown-empty">Genres are loading…</div>`;
+    }
+    return `<div class="browse-option-list browse-option-list-genre">${genres.map(genre=>{
+        const id = String(genre && genre.id || "");
+        const name = String(genre && genre.name || "").trim();
+        const selected = state.genres.includes(id);
+        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="genres" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${escapeHTML(name)}${selected ? " ✓" : ""}</button>`;
+    }).join("")}</div>`;
+}
+
+function renderBrowseCountryMenu(state){
+    const options = typeof browseOptionState !== "undefined" && browseOptionState ? browseOptionState.countries : [];
+    return `
+        <input class="browse-dropdown-search" type="search" placeholder="Search countries" aria-label="Search countries" data-browse-list-search="country">
+        <div class="browse-option-list" data-browse-list="country">
+            <button type="button" class="browse-dropdown-option ${!state.country ? "selected" : ""}" data-browse-set-single="country" data-browse-value="" data-browse-option-label="any">Any</button>
+            ${(Array.isArray(options) ? options : []).map(item=>`<button type="button" class="browse-dropdown-option ${state.country === item.code ? "selected" : ""}" data-browse-set-single="country" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}">${escapeHTML(item.name)}${state.country === item.code ? " ✓" : ""}</button>`).join("") || `<div class="browse-dropdown-empty">Countries are loading…</div>`}
+        </div>
+    `;
+}
+
+function renderBrowseLanguageMenu(state){
+    const options = typeof browseOptionState !== "undefined" && browseOptionState ? browseOptionState.languages : [];
+    return `
+        <input class="browse-dropdown-search" type="search" placeholder="Search languages" aria-label="Search languages" data-browse-list-search="language">
+        <div class="browse-option-list" data-browse-list="language">
+            <button type="button" class="browse-dropdown-option ${!state.language ? "selected" : ""}" data-browse-set-single="language" data-browse-value="" data-browse-option-label="any">Any</button>
+            ${(Array.isArray(options) ? options : []).map(item=>`<button type="button" class="browse-dropdown-option ${state.language === item.code ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}">${escapeHTML(item.name)}${state.language === item.code ? " ✓" : ""}</button>`).join("") || `<div class="browse-dropdown-empty">Languages are loading…</div>`}
+        </div>
+    `;
+}
+
+function renderBrowseOtherMenu(state){
+    const statusOptions = [
+        ["returning-series","Returning Series"],
+        ["in-production","In Production"],
+        ["ended","Ended"],
+        ["canceled","Canceled"]
+    ];
+    const certifications = typeof browseOptionState !== "undefined" && browseOptionState ? browseOptionState.movieCertifications : [];
+    return `
+        <div class="browse-other-section">
+            <span class="browse-other-heading">Theme</span>
+            <input class="browse-dropdown-search" type="search" placeholder="Search themes" aria-label="Search themes" data-browse-picker-search="theme">
+            <div class="browse-picker-results" id="browse-theme-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
+        </div>
+        <div class="browse-dropdown-divider"></div>
+        <div class="browse-other-section">
+            <span class="browse-other-heading">Company</span>
+            <input class="browse-dropdown-search" type="search" placeholder="Search companies" aria-label="Search companies" data-browse-picker-search="company">
+            <div class="browse-picker-results" id="browse-company-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
+        </div>
+        ${state.media === "tv" ? `
+            <div class="browse-dropdown-divider"></div>
+            <div class="browse-other-section">
+                <span class="browse-other-heading">Status</span>
+                <div class="browse-option-list">${statusOptions.map(([value,label])=>{
+                    const selected = state.statuses.includes(value);
+                    return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="statuses" data-browse-value="${escapeHTML(value)}">${escapeHTML(label)}${selected ? " ✓" : ""}</button>`;
+                }).join("")}</div>
+            </div>
+        ` : `
+            <div class="browse-dropdown-divider"></div>
+            <div class="browse-other-section">
+                <span class="browse-other-heading">US Certification</span>
+                <div class="browse-option-list">
+                    <button type="button" class="browse-dropdown-option ${!state.certification ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="">Any</button>
+                    ${(Array.isArray(certifications) ? certifications : []).map(value=>{
+                        const slug = String(value || "").trim().toLowerCase();
+                        const selected = state.certification === slug;
+                        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="${escapeHTML(slug)}">${escapeHTML(value)}${selected ? " ✓" : ""}</button>`;
+                    }).join("") || `<div class="browse-dropdown-empty">Certifications are loading…</div>`}
+                </div>
+            </div>
+        `}
+    `;
+}
+
+function renderBrowseSortMenu(state){
+    const dateName = state.media === "movie" ? "Release Date" : "First Air Date";
+    const options = [
+        ["popularity-desc","Popularity — High to Low"],
+        ["popularity-asc","Popularity — Low to High"],
+        ["rating-desc","Rating — High to Low"],
+        ["rating-asc","Rating — Low to High"],
+        ["date-desc",`${dateName} — Newest`],
+        ["date-asc",`${dateName} — Oldest`],
+        ["title-asc","Title — A to Z"],
+        ["title-desc","Title — Z to A"]
+    ];
+    return `<div class="browse-option-list">${options.map(([value,label])=>`<button type="button" class="browse-dropdown-option ${state.sort === value ? "selected" : ""}" data-browse-set-sort="${escapeHTML(value)}">${escapeHTML(label)}${state.sort === value ? " ✓" : ""}</button>`).join("")}</div>`;
+}
+
+function getBrowseSortSummary(state){
+    const labels = {
+        "popularity-desc":"POPULAR ↓",
+        "popularity-asc":"POPULAR ↑",
+        "rating-desc":"RATING ↓",
+        "rating-asc":"RATING ↑",
+        "date-desc":"DATE ↓",
+        "date-asc":"DATE ↑",
+        "title-asc":"TITLE A–Z",
+        "title-desc":"TITLE Z–A"
+    };
+    return state.sort === "popularity-desc" ? "" : (labels[state.sort] || "");
+}
+
+function renderBrowseActiveChipsHTML(state,labels){
+    const chips = [];
+    const push = (key,value,label)=>{
+        if(!label){ return; }
+        chips.push(`<button type="button" class="browse-active-chip" data-browse-remove="${escapeHTML(key)}" data-browse-value="${escapeHTML(value || "")}">${escapeHTML(label)} <span aria-hidden="true">×</span></button>`);
+    };
+    if(state.upcoming){ push("upcoming","1","Upcoming"); }
+    if(state.year){ push("year",state.year,state.year); }
+    state.genres.forEach(id=>push("genres",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"genres",id,`Genre ${id}`) : `Genre ${id}`));
+    if(state.country){ push("country",state.country,typeof getDiscoveryCountryName === "function" ? getDiscoveryCountryName(state.country) : state.country.toUpperCase()); }
+    if(state.language){ push("language",state.language,typeof getLanguageName === "function" ? getLanguageName(state.language) : state.language.toUpperCase()); }
+    state.themes.forEach(id=>push("themes",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"themes",id,`Theme ${id}`) : `Theme ${id}`));
+    state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,`Company ${id}`) : `Company ${id}`));
+    if(state.network){ push("network",state.network,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,`Network ${state.network}`) : `Network ${state.network}`); }
+    if(state.provider){ push("provider",state.provider,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,`Provider ${state.provider}`) : `Provider ${state.provider}`); }
+    state.statuses.forEach(value=>push("statuses",value,typeof getStatusRouteLabel === "function" ? getStatusRouteLabel(value) : value));
+    if(state.certification){ push("certification",state.certification,`US ${state.certification.toUpperCase()}`); }
+    const showClear = chips.length > 0 || state.sort !== "popularity-desc";
+    if(!chips.length && !showClear){ return ""; }
+    return `<div class="browse-active-row" aria-label="Active browse filters">${chips.join("")}${showClear ? `<button type="button" class="browse-clear-button" data-browse-clear>CLEAR ALL</button>` : ""}</div>`;
+}
+
+function renderBrowseControlsHTML(inputState,inputLabels={}){
+    const state = getBrowseControlState(inputState,inputState && inputState.media || "tv");
+    const labels = getBrowseControlLabels(inputLabels);
+    const sortSummary = getBrowseSortSummary(state);
+    return `
+        <div class="browse-controls">
+            <div class="browse-bar" aria-label="Browse filters">
+                <span class="browse-bar-kicker">BROWSE BY</span>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">YEAR <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown browse-dropdown-year">${renderBrowseYearMenu(state)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">GENRE <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown">${renderBrowseGenreMenu(state)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">COUNTRY <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown">${renderBrowseCountryMenu(state)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">LANGUAGE <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown">${renderBrowseLanguageMenu(state)}</div>
+                </details>
+                <details class="browse-menu browse-menu-other">
+                    <summary class="browse-bar-button">OTHER <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state)}</div>
+                </details>
+                <details class="browse-menu browse-menu-sort">
+                    <summary class="browse-bar-button">SORT ${sortSummary ? `<span class="browse-sort-summary">${escapeHTML(sortSummary)}</span>` : ""} <span aria-hidden="true">⌄</span></summary>
+                    <div class="browse-dropdown browse-dropdown-sort">${renderBrowseSortMenu(state)}</div>
+                </details>
+            </div>
+            ${renderBrowseActiveChipsHTML(state,labels)}
+        </div>
+    `;
+}
+
+function renderBrowseDetailPage(state){
+    const content = document.getElementById("genre-detail-content");
+    if(!content){ return; }
+    const pageState = state || {};
+    const filters = getBrowseControlState(pageState.filters,pageState.media || "tv");
+    const labels = getBrowseControlLabels(pageState.labels);
+    const media = filters.media;
+    const mediaWord = media === "movie" ? "movies" : "shows";
+    const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+    const page = Number(pageState.page || 1);
+    const totalPages = Number(pageState.totalPages || 1);
+    const canLoadMore = !loading && page < totalPages;
+    const bodyHTML = error
+    ? `<div class="empty-state genre-detail-empty"><h2>Browse could not load</h2><p>${escapeHTML(error)}</p></div>`
+    : shows.length
+    ? `<div class="genre-tight-grid">${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card browse-result-card"')).join("")}</div>${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="browse-load-more-button">VIEW MORE</button>` : ""}${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}`
+    : loading
+    ? `<div class="genre-tight-grid genre-tight-grid-loading">${renderTrackerPosterSkeletonCards(12)}</div>`
+    : `<div class="empty-state genre-detail-empty"><h2>No ${mediaWord} found</h2><p>Remove or change one or more filters.</p></div>`;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner browse-detail-page-inner">
+            <div class="genre-detail-header browse-detail-header">
+                <button type="button" class="show-page-back-button genre-page-back-button" id="browse-page-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button>
+                <div>
+                    <h1 class="genre-detail-title">Browse ${media === "movie" ? "Movies" : "TV Shows"}</h1>
+                    ${renderBrowseMediaSwitchHTML(media)}
+                </div>
+            </div>
+            ${renderBrowseControlsHTML(filters,labels)}
+            <div class="genre-result-content">${bodyHTML}</div>
+        </div>
+    `;
+}
+
 function renderGenreDetailPage(state){
     const content = document.getElementById("genre-detail-content");
     if(!content){
@@ -1061,24 +1338,9 @@ function renderGenreDetailPage(state){
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
     const mediaWord = media === "movie" ? "movies" : "shows";
-    const sortDateLabel = media === "movie" ? "Release Date" : "First Air Date";
-    const tvSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"tv") : "";
-    const movieSwitchRoute = typeof getGenreMediaSwitchRoute === "function" ? getGenreMediaSwitchRoute(pageState.slug,media,"movie") : "";
-
-    const renderGenreMediaSwitchLink = (targetMedia,label,route)=>{
-        const active = media === targetMedia;
-        if(route){
-            return `<a href="${escapeHTML(route)}" class="genre-media-switch-button ${active ? "active" : ""}" data-genre-media="${escapeHTML(targetMedia)}" role="tab" aria-selected="${active ? "true" : "false"}">${escapeHTML(label)}</a>`;
-        }
-        return `<button type="button" class="genre-media-switch-button ${active ? "active" : ""}" data-genre-media="${escapeHTML(targetMedia)}" disabled role="tab" aria-selected="${active ? "true" : "false"}">${escapeHTML(label)}</button>`;
-    };
-
-    const genreSwitchHTML = `
-        <div class="genre-media-switch" role="tablist" aria-label="Genre media type">
-            ${renderGenreMediaSwitchLink("tv","TV Shows",tvSwitchRoute)}
-            ${renderGenreMediaSwitchLink("movie","Movies",movieSwitchRoute)}
-        </div>
-    `;
+    const browseState = typeof getGenreBrowseState === "function" ? getGenreBrowseState() : getBrowseControlState({year,sort},media);
+    const browseLabels = typeof genrePageState !== "undefined" && genrePageState ? getBrowseControlLabels(genrePageState.browseLabels) : getBrowseControlLabels({});
+    const genreSwitchHTML = renderBrowseMediaSwitchHTML(media);
 
     const bodyHTML = error
     ? `
@@ -1104,7 +1366,7 @@ function renderGenreDetailPage(state){
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No ${mediaWord} found</h2>
-            <p>Try a different year or sort option.</p>
+            <p>Remove or change one or more filters.</p>
         </div>
     `;
 
@@ -1120,20 +1382,7 @@ function renderGenreDetailPage(state){
                 </div>
             </div>
 
-            <div class="genre-filter-bar" aria-label="Genre filters">
-                <label class="genre-filter-field" for="genre-year-filter">
-                    <span>Year</span>
-                    <input id="genre-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
-                </label>
-                <label class="genre-filter-field" for="genre-sort-filter">
-                    <span>Sort</span>
-                    <select id="genre-sort-filter">
-                        <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
-                        <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
-                        <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
-                    </select>
-                </label>
-            </div>
+            ${renderBrowseControlsHTML(browseState,browseLabels)}
 
             <div class="genre-result-content">
                 ${bodyHTML}
@@ -1160,16 +1409,17 @@ function renderDiscoveryFilterDetailPage(state){
     const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
-    const year = String(pageState.year || "").trim();
-    const sort = String(pageState.sort || "popularity.desc");
     const page = Number(pageState.page || 1);
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
-    const supportsMedia = typeof discoveryFilterSupportsMediaSwitch === "function" && discoveryFilterSupportsMediaSwitch(type);
     const isDiscoverCategory = type === "discover-category";
-    const showYearFilter = type !== "year" && !isDiscoverCategory;
-    const showSortFilter = !isDiscoverCategory;
-    const sortDateLabel = media === "movie" ? "Release Date" : "First Air Date";
+    const isBrowseCompatible = !isDiscoverCategory && !(type === "certification" && media === "tv");
+    const browseState = typeof getDiscoveryBrowseState === "function"
+    ? getDiscoveryBrowseState()
+    : getBrowseControlState({},media);
+    const browseLabels = typeof discoveryPageState !== "undefined" && discoveryPageState
+    ? getBrowseControlLabels(discoveryPageState.browseLabels)
+    : getBrowseControlLabels({});
 
     const bodyHTML = error
     ? `
@@ -1195,37 +1445,9 @@ function renderDiscoveryFilterDetailPage(state){
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No ${mediaWord} found</h2>
-            <p>Try a different year or sort option.</p>
+            <p>${isDiscoverCategory ? "No titles are available for this category right now." : "Remove or change one or more filters."}</p>
         </div>
     `;
-
-    const filterHTML = `
-        ${supportsMedia ? `
-            <label class="genre-filter-field" for="discovery-filter-media-filter">
-                <span>Media</span>
-                <select id="discovery-filter-media-filter">
-                    <option value="tv" ${media === "tv" ? "selected" : ""}>TV Shows</option>
-                    <option value="movie" ${media === "movie" ? "selected" : ""}>Movies</option>
-                </select>
-            </label>
-        ` : ""}
-        ${showYearFilter ? `
-            <label class="genre-filter-field" for="discovery-filter-year-filter">
-                <span>Year</span>
-                <input id="discovery-filter-year-filter" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="Any" value="${escapeHTML(year)}">
-            </label>
-        ` : ""}
-        ${showSortFilter ? `
-            <label class="genre-filter-field" for="discovery-filter-sort-filter">
-                <span>Sort</span>
-                <select id="discovery-filter-sort-filter">
-                    <option value="popularity.desc" ${sort === "popularity.desc" ? "selected" : ""}>Popularity</option>
-                    <option value="vote_average.desc" ${sort === "vote_average.desc" ? "selected" : ""}>Rating</option>
-                    <option value="first_air_date.desc" ${sort === "first_air_date.desc" ? "selected" : ""}>${escapeHTML(sortDateLabel)}</option>
-                </select>
-            </label>
-        ` : ""}
-    `.trim();
 
     content.innerHTML = `
         <div class="genre-detail-page-inner discovery-filter-page-inner">
@@ -1235,10 +1457,11 @@ function renderDiscoveryFilterDetailPage(state){
                 </button>
                 <div>
                     <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
+                    ${isBrowseCompatible ? renderBrowseMediaSwitchHTML(media) : ""}
                 </div>
             </div>
 
-            ${filterHTML ? `<div class="genre-filter-bar" aria-label="Page filters">${filterHTML}</div>` : ""}
+            ${isBrowseCompatible ? renderBrowseControlsHTML(browseState,browseLabels) : ""}
 
             <div class="genre-result-content">
                 ${bodyHTML}
@@ -1246,7 +1469,6 @@ function renderDiscoveryFilterDetailPage(state){
         </div>
     `;
 }
-
 
 
 function getWatchlistEmptyHTML(){
@@ -3203,9 +3425,14 @@ function renderYearLinkHTML(year,media="tv"){
 
 function renderCertificationLinkHTML(media,rating){
     const cleanRating = String(rating || "").trim();
-    const cleanMedia = media === "movie" ? "movie" : "tv";
-    const route = typeof getCertificationDetailRoute === "function" ? getCertificationDetailRoute(cleanMedia,cleanRating) : "";
-    return cleanRating ? renderPlainInlineRouteLinkHTML(cleanRating,route,"show-detail-certification-link") : "";
+    if(!cleanRating){
+        return "";
+    }
+    if(media !== "movie"){
+        return `<span>${escapeHTML(cleanRating)}</span>`;
+    }
+    const route = typeof getCertificationDetailRoute === "function" ? getCertificationDetailRoute("movie",cleanRating) : "";
+    return renderPlainInlineRouteLinkHTML(cleanRating,route,"show-detail-certification-link");
 }
 
 function getTVStatusSlugFromLabel(label){

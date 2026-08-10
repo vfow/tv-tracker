@@ -29,6 +29,9 @@ def load_route_helpers():
         "APP_YEAR_PATH_RE",
         "APP_STATUS_PATH_RE",
         "APP_CERTIFICATION_PATH_RE",
+        "APP_BROWSE_PATH_RE",
+        "APP_BROWSE_SORT_MODES",
+        "APP_BROWSE_STATUS_VALUES",
         "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
         "APP_LIBRARY_SORT_MODES",
@@ -46,6 +49,8 @@ def load_route_helpers():
             if names & wanted_names:
                 selected.append(node)
         elif isinstance(node, ast.FunctionDef) and node.name in {
+            "canonical_browse_query",
+            "app_browse_media_for_path",
             "safe_next_url",
             "valid_app_path",
         }:
@@ -136,6 +141,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
 
     def test_discovery_paths_are_allowed(self):
         for path in (
+            "/app/browse/tv",
+            "/app/browse/movie",
             "/app/network/213-netflix",
             "/app/language/tv/ja-japanese",
             "/app/language/movie/ja-japanese",
@@ -158,15 +165,35 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/discover/movie/upcoming",
             "/app/year/tv/2024",
             "/app/year/movie/2024",
+            "/app/year/tv/1899",
+            "/app/year/movie/1870",
             "/app/status/returning-series",
             "/app/status/ended",
             "/app/status/canceled",
             "/app/status/in-production",
-            "/app/certification/tv/tv-ma",
             "/app/certification/movie/pg-13",
         ):
             self.assertTrue(valid_app_path(path), path)
             self.assertEqual(safe_next_url(path), path)
+
+    def test_browse_query_state_is_preserved_and_canonicalized(self):
+        self.assertEqual(
+            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&country=JP&year=2024&sort=rating-desc&x=1"),
+            "/app/browse/movie?genre=18,80&country=jp&year=2024&sort=rating-desc",
+        )
+        self.assertEqual(
+            safe_next_url("/app/browse/tv?certification=tv-ma&genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&year=2024&status=ended,canceled&sort=title-asc"),
+            "/app/browse/tv?genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&status=ended,canceled&sort=title-asc",
+        )
+        self.assertEqual(
+            safe_next_url("/app/genre/tv/drama?country=JP&year=2024&sort=rating-desc"),
+            "/app/genre/tv/drama?country=jp&year=2024&sort=rating-desc",
+        )
+        self.assertEqual(
+            safe_next_url("/app/company/movie/49-hbo?genre=18&certification=pg-13&status=ended"),
+            "/app/company/movie/49-hbo?genre=18&certification=pg-13",
+        )
+        self.assertEqual(safe_next_url("/app/browse/tv?sort=popularity-desc"), "/app/browse/tv")
 
     def test_sensitive_or_external_destinations_are_rejected(self):
         for value in (
@@ -199,7 +226,6 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/company/movie/49-",
             "/app/provider/tv/8-",
             "/app/provider/movie/8-",
-            "/app/year/tv/1899",
             "/app/year/movie/2200",
             "/app/language/ja-japanese",
             "/app/country/jp-japan",
@@ -208,6 +234,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/provider/8-netflix",
             "/app/year/2024",
             "/app/status/pilot",
+            "/app/certification/tv/tv-ma",
             "/app/certification/music/pg",
             "/app/certification/movie/",
             "/app/actor/",

@@ -98,6 +98,16 @@
         };
     }
 
+    function canonicalBrowseSearch(search,media="tv"){
+        const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
+        const api = typeof window !== "undefined" ? window.TVTrackerBrowse : null;
+        if(api && typeof api.parseSearch === "function"){
+            const parsed = api.parseSearch(search,cleanMedia);
+            return {state:parsed.state,search:parsed.search};
+        }
+        return {state:{media:cleanMedia},search:""};
+    }
+
     function buildParsedRoute(type,path,search="",params={}){
         const canonicalRoute = path + search;
         return {
@@ -150,6 +160,11 @@
         if(path === "/app/discover"){
             return buildParsedRoute("discover",path,"",{});
         }
+        const browseMatch = path.match(/^\/app\/browse\/(tv|movie)$/);
+        if(browseMatch){
+            const browse = canonicalBrowseSearch(search,browseMatch[1]);
+            return buildParsedRoute("browse",path,browse.search,{media:browseMatch[1],browseState:browse.state});
+        }
         if(path === "/app/profile"){
             return buildParsedRoute("profile",path,"",{});
         }
@@ -193,60 +208,77 @@
         const networkMatch = path.match(/^\/app\/network\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(networkMatch){
             const parsed = parseRouteIdSlug(networkMatch[1]);
-            return buildParsedRoute("discovery-detail",path,"",{
+            const browse = canonicalBrowseSearch(search,"tv");
+            return buildParsedRoute("discovery-detail",path,browse.search,{
                 discoveryType:"network",
                 value:parsed.id,
                 slug:parsed.slug,
-                media:"tv"
+                media:"tv",
+                browseState:browse.state
             });
         }
 
         const typedDiscoveryIdMatch = path.match(/^\/app\/(theme|company|provider)\/(tv|movie)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(typedDiscoveryIdMatch){
             const parsed = parseRouteIdSlug(typedDiscoveryIdMatch[3]);
-            return buildParsedRoute("discovery-detail",path,"",{
+            const media = typedDiscoveryIdMatch[2];
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("discovery-detail",path,browse.search,{
                 discoveryType:typedDiscoveryIdMatch[1],
                 value:parsed.id,
                 slug:parsed.slug,
-                media:typedDiscoveryIdMatch[2]
+                media,
+                browseState:browse.state
             });
         }
 
         const languageMatch = path.match(/^\/app\/language\/(tv|movie)\/([a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(languageMatch){
             const parsed = parseRouteCodeSlug(languageMatch[2],/^([a-z]{2,3})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
-            return buildParsedRoute("discovery-detail",path,"",{discoveryType:"language",value:parsed.value,slug:parsed.slug,media:languageMatch[1]});
+            const media = languageMatch[1];
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("discovery-detail",path,browse.search,{discoveryType:"language",value:parsed.value,slug:parsed.slug,media,browseState:browse.state});
         }
 
         const countryMatch = path.match(/^\/app\/country\/(tv|movie)\/([a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(countryMatch){
             const parsed = parseRouteCodeSlug(countryMatch[2],/^([a-z]{2})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
-            return buildParsedRoute("discovery-detail",path,"",{discoveryType:"country",value:parsed.value,slug:parsed.slug,media:countryMatch[1]});
+            const media = countryMatch[1];
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("discovery-detail",path,browse.search,{discoveryType:"country",value:parsed.value,slug:parsed.slug,media,browseState:browse.state});
         }
 
-        const yearMatch = path.match(/^\/app\/year\/(tv|movie)\/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$/);
+        const yearMatch = path.match(/^\/app\/year\/(tv|movie)\/((?:18|19|20|21)[0-9]{2})$/);
         if(yearMatch){
-            return buildParsedRoute("discovery-detail",path,"",{discoveryType:"year",value:yearMatch[2],slug:"",media:yearMatch[1]});
+            const media = yearMatch[1];
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("discovery-detail",path,browse.search,{discoveryType:"year",value:yearMatch[2],slug:"",media,browseState:browse.state});
         }
 
         const statusMatch = path.match(/^\/app\/status\/(returning-series|ended|canceled|in-production)$/);
         if(statusMatch){
-            return buildParsedRoute("discovery-detail",path,"",{discoveryType:"status",value:statusMatch[1],slug:"",media:"tv"});
+            const browse = canonicalBrowseSearch(search,"tv");
+            return buildParsedRoute("discovery-detail",path,browse.search,{discoveryType:"status",value:statusMatch[1],slug:"",media:"tv",browseState:browse.state});
         }
 
-        const certificationMatch = path.match(/^\/app\/certification\/(tv|movie)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+        const certificationMatch = path.match(/^\/app\/certification\/movie\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
         if(certificationMatch){
-            return buildParsedRoute("discovery-detail",path,"",{
+            const media = "movie";
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("discovery-detail",path,browse.search,{
                 discoveryType:"certification",
-                value:certificationMatch[1] + "/" + certificationMatch[2],
+                value:"movie/" + certificationMatch[1],
                 slug:"",
-                media:certificationMatch[1]
+                media,
+                browseState:browse.state
             });
         }
 
         const genreMatch = path.match(/^\/app\/genre\/(tv|movie)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
         if(genreMatch){
-            return buildParsedRoute("genre",path,"",{media:genreMatch[1],slug:genreMatch[2]});
+            const media = genreMatch[1];
+            const browse = canonicalBrowseSearch(search,media);
+            return buildParsedRoute("genre",path,browse.search,{media,slug:genreMatch[2],browseState:browse.state});
         }
 
         const showMatch = path.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -297,6 +329,12 @@
     }
 
     function routeForState(){
+        if(activePage === "browse-detail" && typeof browsePageState !== "undefined" && browsePageState){
+            if(typeof getBrowseRoute === "function"){
+                return getBrowseRoute(browsePageState.filters || {media:browsePageState.media || "tv"});
+            }
+            return "/app/browse/" + (browsePageState.media === "movie" ? "movie" : "tv");
+        }
         if(activePage === "episode-detail" && selectedEpisodeContext){
             if(typeof getEpisodeDetailRoute === "function"){
                 const showId = String(selectedEpisodeContext.showId || "");
@@ -324,13 +362,23 @@
             if(typeof getDiscoveryFilterDetailRoute === "function"){
                 const routeName = typeof discoveryPageState !== "undefined" && discoveryPageState ? (discoveryPageState.routeSlug || discoveryPageState.name) : "";
                 const routeMedia = typeof discoveryPageState !== "undefined" && discoveryPageState ? discoveryPageState.media : "tv";
-                return getDiscoveryFilterDetailRoute(selectedDiscoveryContext.type,selectedDiscoveryContext.value,routeName,routeMedia);
+                const baseRoute = getDiscoveryFilterDetailRoute(selectedDiscoveryContext.type,selectedDiscoveryContext.value,routeName,routeMedia);
+                const api = typeof window !== "undefined" ? window.TVTrackerBrowse : null;
+                const browseSearch = api && typeof api.serializeSearch === "function" && typeof discoveryPageState !== "undefined" && discoveryPageState
+                ? api.serializeSearch(discoveryPageState.browse || {media:routeMedia})
+                : "";
+                return baseRoute + browseSearch;
             }
             return "/app/list/watching";
         }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
             const genreMedia = typeof selectedGenreMedia !== "undefined" && selectedGenreMedia === "movie" ? "movie" : "tv";
-            return "/app/genre/" + encodeURIComponent(genreMedia) + "/" + encodeURIComponent(String(selectedGenreSlug));
+            const baseRoute = "/app/genre/" + encodeURIComponent(genreMedia) + "/" + encodeURIComponent(String(selectedGenreSlug));
+            const api = typeof window !== "undefined" ? window.TVTrackerBrowse : null;
+            const browseSearch = api && typeof api.serializeSearch === "function" && typeof genrePageState !== "undefined" && genrePageState
+            ? api.serializeSearch(genrePageState.browse || {media:genreMedia})
+            : "";
+            return baseRoute + browseSearch;
         }
         if(activePage === "show-detail" && selectedShowId){
             if(typeof getShowDetailRoute === "function"){
@@ -494,8 +542,10 @@
                 slug:params.slug,
                 name:"",
                 genreId:null,
-                year:"",
-                sort:"popularity.desc",
+                year:params.browseState && params.browseState.year || "",
+                sort:params.browseState && params.browseState.sort === "rating-desc" ? "vote_average.desc" : (params.browseState && params.browseState.sort === "date-desc" ? "first_air_date.desc" : "popularity.desc"),
+                browse:params.browseState || null,
+                browseLabels:null,
                 page:1,
                 totalPages:1,
                 loading:true,
@@ -523,8 +573,10 @@
             name:"",
             routeSlug:params.slug || "",
             media:params.media || "tv",
-            year:"",
-            sort:"popularity.desc",
+            year:params.browseState && params.browseState.year || "",
+            sort:params.browseState && params.browseState.sort === "rating-desc" ? "vote_average.desc" : (params.browseState && params.browseState.sort === "date-desc" ? "first_air_date.desc" : "popularity.desc"),
+            browse:params.browseState || null,
+            browseLabels:null,
             page:1,
             totalPages:1,
             loading:true,
@@ -631,6 +683,28 @@
             }
             if(typeof renderActivePersonPage === "function"){
                 renderActivePersonPage();
+            }
+            return;
+        }
+        if(parsed.type === "browse"){
+            activePage = "browse-detail";
+            browsePageState = Object.assign({},browsePageState,{
+                media:params.media || "tv",
+                filters:params.browseState || {media:params.media || "tv"},
+                labels:null,
+                page:1,
+                totalPages:1,
+                loading:true,
+                error:"",
+                shows:[]
+            });
+            if(typeof showBrowsePageShell === "function"){
+                showBrowsePageShell("discover");
+            }else{
+                setPageActiveWithoutRender("genre-detail-page","discover");
+            }
+            if(typeof renderActiveBrowsePage === "function"){
+                renderActiveBrowsePage();
             }
             return;
         }
@@ -769,6 +843,15 @@
             }
             return;
         }
+        if(parsed.type === "browse"){
+            clearDetailState();
+            if(typeof openBrowsePage === "function"){
+                openBrowsePage(params.browseState || {media:params.media || "tv"},{fromRoute:true,media:params.media || "tv"});
+            }else{
+                showPage("discover");
+            }
+            return;
+        }
         if(parsed.type === "discover-category"){
             clearDetailState();
             if(typeof openDiscoverCategoryPage === "function"){
@@ -800,13 +883,13 @@
         }
         if(parsed.type === "discovery-detail"){
             if(typeof openDiscoveryFilterPage === "function"){
-                openDiscoveryFilterPage(params.discoveryType,params.value,{fromRoute:true,routeSlug:params.slug || "",media:params.media || "tv"});
+                openDiscoveryFilterPage(params.discoveryType,params.value,{fromRoute:true,routeSlug:params.slug || "",media:params.media || "tv",browseState:params.browseState});
             }
             return;
         }
         if(parsed.type === "genre"){
             if(typeof openGenrePage === "function"){
-                openGenrePage(params.slug,{fromRoute:true,media:params.media});
+                openGenrePage(params.slug,{fromRoute:true,media:params.media,browseState:params.browseState});
             }
             return;
         }

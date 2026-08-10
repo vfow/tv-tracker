@@ -16,5 +16,6 @@ if not node:
     raise SystemExit("Node.js is required for the frontend regression tests.")
 subprocess.run([node, str(ROOT / "tests" / "test_frontend.js")], cwd=ROOT, check=True)
 subprocess.run([node, str(ROOT / "tests" / "test_router.js")], cwd=ROOT, check=True)
+subprocess.run([node, str(ROOT / "tests" / "test_phase_63c.js")], cwd=ROOT, check=True)
 subprocess.run([node, str(ROOT / "tests" / "test_sync_reliability.js")], cwd=ROOT, check=True)
 print("All TV Tracker integration tests passed.")

@@ -96,9 +96,21 @@ APP_THEME_PATH_RE = re.compile(rf"^/app/theme/(tv|movie)/({APP_ROUTE_ID_SLUG})$"
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
 APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
-APP_YEAR_PATH_RE = re.compile(r"^/app/year/(tv|movie)/(19[0-9]{2}|20[0-9]{2}|21[0-9]{2})$")
+APP_YEAR_PATH_RE = re.compile(r"^/app/year/(tv|movie)/((?:18|19|20|21)[0-9]{2})$")
 APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
-APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/movie/[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_BROWSE_PATH_RE = re.compile(r"^/app/browse/(tv|movie)$")
+APP_BROWSE_SORT_MODES = {
+    "popularity-desc",
+    "popularity-asc",
+    "rating-desc",
+    "rating-asc",
+    "date-desc",
+    "date-asc",
+    "title-asc",
+    "title-desc",
+}
+APP_BROWSE_STATUS_VALUES = {"returning-series", "in-production", "ended", "canceled"}
 APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
     r"^/app/discover/(?:(?:tv)/(?:popular|top-rated|airing-today|on-the-air)|(?:movie)/(?:popular|top-rated|now-playing|upcoming))$"
 )
@@ -1637,6 +1649,111 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
     return revision
 
 
+def canonical_browse_query(raw_query: str, media_type: str) -> str:
+    """Return a small canonical query string for Discover browse state."""
+    media = "movie" if str(media_type or "").strip().lower() == "movie" else "tv"
+    raw_values: dict[str, str] = {}
+    for key, value in parse_qsl(str(raw_query or ""), keep_blank_values=False):
+        if key not in raw_values:
+            raw_values[key] = value.strip()
+
+    def clean_id_list(key: str) -> str:
+        values: list[str] = []
+        seen: set[str] = set()
+        for item in raw_values.get(key, "").split(","):
+            clean = item.strip()
+            if not re.fullmatch(r"[1-9][0-9]{0,11}", clean) or clean in seen:
+                continue
+            seen.add(clean)
+            values.append(clean)
+            if len(values) >= 12:
+                break
+        return ",".join(values)
+
+    params: dict[str, str] = {}
+    for key in ("genre", "theme", "company"):
+        clean = clean_id_list(key)
+        if clean:
+            params[key] = clean
+
+    if media == "tv":
+        network = raw_values.get("network", "")
+        if re.fullmatch(r"[1-9][0-9]{0,11}", network):
+            params["network"] = network
+
+    provider = raw_values.get("provider", "")
+    if re.fullmatch(r"[1-9][0-9]{0,11}", provider):
+        params["provider"] = provider
+
+    country = raw_values.get("country", "").lower()
+    if re.fullmatch(r"[a-z]{2}", country):
+        params["country"] = country
+
+    language = raw_values.get("language", "").lower()
+    if re.fullmatch(r"[a-z]{2,3}", language):
+        params["language"] = language
+
+    if raw_values.get("upcoming") == "1":
+        params["upcoming"] = "1"
+    else:
+        year = raw_values.get("year", "")
+        if re.fullmatch(r"(?:18|19|20|21)[0-9]{2}", year):
+            params["year"] = year
+
+    if media == "tv":
+        statuses: list[str] = []
+        seen_statuses: set[str] = set()
+        for item in raw_values.get("status", "").split(","):
+            clean = item.strip().lower()
+            if clean in APP_BROWSE_STATUS_VALUES and clean not in seen_statuses:
+                seen_statuses.add(clean)
+                statuses.append(clean)
+        if statuses:
+            params["status"] = ",".join(statuses)
+    else:
+        certification = raw_values.get("certification", "").lower()
+        if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", certification):
+            params["certification"] = certification
+
+    sort_mode = raw_values.get("sort", "").lower()
+    if sort_mode in APP_BROWSE_SORT_MODES and sort_mode != "popularity-desc":
+        params["sort"] = sort_mode
+
+    return urlencode(params, safe=",") if params else ""
+
+
+def app_browse_media_for_path(candidate: str) -> str | None:
+    match = APP_BROWSE_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_GENRE_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_LANGUAGE_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_COUNTRY_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_THEME_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_COMPANY_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_PROVIDER_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    match = APP_YEAR_PATH_RE.fullmatch(candidate)
+    if match:
+        return match.group(1)
+    if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
+        return "movie"
+    if APP_NETWORK_PATH_RE.fullmatch(candidate) or APP_STATUS_PATH_RE.fullmatch(candidate):
+        return "tv"
+    return None
+
+
 def safe_next_url(value: str | None) -> str:
     """Return a validated internal application route for post-login use."""
     raw_value = str(value or "").strip().split("#", 1)[0]
@@ -1689,6 +1806,10 @@ def safe_next_url(value: str | None) -> str:
         if sort_mode != "default":
             params["sort"] = sort_mode
         return candidate + (("?" + urlencode(params)) if params else "")
+    browse_media = app_browse_media_for_path(candidate)
+    if browse_media:
+        browse_query = canonical_browse_query(raw_query if separator else "", browse_media)
+        return candidate + (("?" + browse_query) if browse_query else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
     if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
@@ -1734,6 +1855,7 @@ def valid_app_path(value: str | None) -> bool:
     return (
         candidate in APP_SECTION_PATHS
         or APP_LIST_PATH_RE.fullmatch(candidate) is not None
+        or APP_BROWSE_PATH_RE.fullmatch(candidate) is not None
         or APP_SHOW_PATH_RE.fullmatch(candidate) is not None
         or APP_EPISODE_PATH_RE.fullmatch(candidate) is not None
         or APP_GENRE_PATH_RE.fullmatch(candidate) is not None
@@ -1966,6 +2088,10 @@ def create_app() -> Flask:
             initial_app_path=initial_app_path,
         )
 
+    def redirect_app_path_preserving_query(path: str):
+        query = request.query_string.decode("utf-8", errors="ignore")
+        return redirect(path + (("?" + query) if query else ""))
+
     @app.get("/app/upcoming", strict_slashes=False)
     @app.get("/app/history", strict_slashes=False)
     @app.get("/app/discover", strict_slashes=False)
@@ -1992,6 +2118,16 @@ def create_app() -> Flask:
             return redirect(requested_path)
         return render_app_shell(requested_path)
 
+    @app.get("/app/browse/<media_type>", strict_slashes=False)
+    @login_required
+    def app_browse_page(media_type: str):
+        requested_path = request.path.rstrip("/")
+        if APP_BROWSE_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect_app_path_preserving_query(requested_path)
+        return render_app_shell(requested_path)
+
     @app.get("/app/list/<list_slug>", strict_slashes=False)
     @login_required
     def app_list_page(list_slug: str):
@@ -2010,7 +2146,7 @@ def create_app() -> Flask:
         if APP_GENRE_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/network/<network_key>", strict_slashes=False)
@@ -2020,7 +2156,7 @@ def create_app() -> Flask:
         if APP_NETWORK_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/language/<media_type>/<language_code>", strict_slashes=False)
@@ -2030,7 +2166,7 @@ def create_app() -> Flask:
         if APP_LANGUAGE_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/country/<media_type>/<country_code>", strict_slashes=False)
@@ -2040,7 +2176,7 @@ def create_app() -> Flask:
         if APP_COUNTRY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/theme/<media_type>/<theme_key>", strict_slashes=False)
@@ -2050,7 +2186,7 @@ def create_app() -> Flask:
         if APP_THEME_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/movie/<movie_key>", strict_slashes=False)
@@ -2070,7 +2206,7 @@ def create_app() -> Flask:
         if APP_COMPANY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/provider/<media_type>/<provider_key>", strict_slashes=False)
@@ -2080,7 +2216,7 @@ def create_app() -> Flask:
         if APP_PROVIDER_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/year/<media_type>/<int:year_value>", strict_slashes=False)
@@ -2090,7 +2226,7 @@ def create_app() -> Flask:
         if APP_YEAR_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/status/<status_slug>", strict_slashes=False)
@@ -2100,7 +2236,7 @@ def create_app() -> Flask:
         if APP_STATUS_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/certification/<media_type>/<certification_slug>", strict_slashes=False)
@@ -2110,7 +2246,7 @@ def create_app() -> Flask:
         if APP_CERTIFICATION_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/person/<person_key>", strict_slashes=False)
