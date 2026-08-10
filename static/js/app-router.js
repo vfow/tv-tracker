@@ -176,7 +176,13 @@
         if(discoverCategoryMatch){
             const media = discoverCategoryMatch[1] || discoverCategoryMatch[3];
             const category = discoverCategoryMatch[2] || discoverCategoryMatch[4];
-            return buildParsedRoute("discover-category",path,"",{media,category,value:media + "/" + category});
+            const browse = canonicalBrowseSearch(search,media);
+            if(category === "popular" || category === "top-rated"){
+                browse.state.sort = "popularity-desc";
+                const api = typeof window !== "undefined" ? window.TVTrackerBrowse : null;
+                browse.search = api && typeof api.serializeSearch === "function" ? api.serializeSearch(browse.state) : browse.search;
+            }
+            return buildParsedRoute("discover-category",path,browse.search,{media,category,value:media + "/" + category,browseState:browse.state});
         }
 
         const episodeMatch = path.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)\/season\/(\d{1,5})\/episode\/([1-9][0-9]{0,5})$/);
@@ -855,9 +861,9 @@
         if(parsed.type === "discover-category"){
             clearDetailState();
             if(typeof openDiscoverCategoryPage === "function"){
-                openDiscoverCategoryPage(params.media,params.category,{fromRoute:true});
+                openDiscoverCategoryPage(params.media,params.category,{fromRoute:true,browseState:params.browseState});
             }else if(typeof openDiscoveryFilterPage === "function"){
-                openDiscoveryFilterPage("discover-category",params.value,{fromRoute:true});
+                openDiscoveryFilterPage("discover-category",params.value,{fromRoute:true,media:params.media,browseState:params.browseState});
             }else{
                 showPage("discover");
             }

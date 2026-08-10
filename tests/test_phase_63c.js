@@ -141,4 +141,29 @@ assert(browse,'browse module should load');
   assert.strictEqual(state.genres.length,12,'direct URL multi-select groups should be bounded');
 }
 
+{
+  const items = [
+    {id:1,name:'#blackAF'},
+    {id:2,name:'Zoo'},
+    {id:3,name:'American Teens'},
+    {id:4,name:'Crime'},
+    {id:5,name:'🌳 Forest'}
+  ];
+  assert.deepStrictEqual(
+    Array.from(browse.sortDisplayItems(items,'title-asc','tv')).map(item=>item.id),
+    [3,1,4,5,2],
+    'A-Z display sorting should ignore leading symbols and emoji'
+  );
+  assert.deepStrictEqual(
+    Array.from(browse.sortDisplayItems(items,'title-desc','tv')).map(item=>item.id),
+    [2,5,4,1,3],
+    'Z-A display sorting should be the reverse human-facing order'
+  );
+  assert.deepStrictEqual(
+    Array.from(browse.sortDisplayItems(items,'popularity-desc','tv')).map(item=>item.id),
+    [1,2,3,4,5],
+    'non-title sorts should keep API order untouched'
+  );
+}
+
 console.log('Phase 6.3C browse-state checks passed');

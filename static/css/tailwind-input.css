@@ -5734,13 +5734,21 @@
     background:#242424;
     outline:none;
 }
-.browse-sort-summary{
-    max-width:120px;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    color:#fff;
-    font-size:10px;
-    letter-spacing:.05em;
+.browse-chevron{
+    width:10px;
+    height:7px;
+    flex:0 0 auto;
+    display:block;
+    color:currentColor;
+    transition:transform .14s ease;
+}
+.browse-menu[open] > summary .browse-chevron-down{
+    transform:rotate(180deg);
+}
+.browse-chevron-right{
+    width:8px;
+    height:6px;
+    transform:rotate(-90deg);
 }
 .browse-dropdown{
     position:absolute;
@@ -5764,7 +5772,9 @@
     width:310px;
 }
 .browse-dropdown-year{
-    width:230px;
+    width:220px;
+    max-height:none;
+    overflow:visible;
 }
 .browse-dropdown-option,
 .browse-picker-result{
@@ -5791,6 +5801,11 @@
     background:#323438;
     color:#fff;
     outline:none;
+}
+.browse-dropdown-option[hidden],
+.browse-decade-year-panel[hidden],
+.browse-year-submenu[hidden]{
+    display:none !important;
 }
 .browse-dropdown-search{
     width:100%;
@@ -5845,37 +5860,63 @@
     max-height:180px;
     overflow:auto;
 }
-.browse-year-groups{
+.browse-year-picker{
+    position:relative;
+}
+.browse-year-decades{
     display:flex;
     flex-direction:column;
     gap:1px;
+    max-height:min(460px,65vh);
+    overflow-y:auto;
 }
-.browse-decade-group{
-    margin:0;
-}
-.browse-decade-group > summary{
+.browse-decade-option{
+    width:100%;
+    min-height:36px;
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:9px 10px;
+    gap:12px;
+    padding:8px 10px;
+    border:0;
+    background:transparent;
     color:#c8c8c8;
     font:600 13px/1.2 Graphik,Arial,Helvetica,sans-serif;
-    list-style:none;
+    text-align:left;
     cursor:pointer;
+    transition:background-color .14s ease,color .14s ease;
 }
-.browse-decade-group > summary::-webkit-details-marker{
-    display:none;
-}
-.browse-decade-group > summary:hover,
-.browse-decade-group[open] > summary{
-    color:#fff;
+.browse-decade-option:hover,
+.browse-decade-option:focus-visible,
+.browse-decade-option.active{
     background:#323438;
+    color:#fff;
+    outline:none;
+}
+.browse-year-submenu{
+    position:absolute;
+    top:0;
+    left:calc(100% + 9px);
+    z-index:110;
+    width:150px;
+    max-height:min(460px,65vh);
+    overflow-y:auto;
+    padding:8px;
+    border:1px solid #424242;
+    background:#202124;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+}
+.browse-decade-year-heading{
+    padding:5px 10px 8px;
+    color:#858585;
+    font:700 10px/1 Graphik,Arial,Helvetica,sans-serif;
+    letter-spacing:.11em;
+    text-transform:uppercase;
 }
 .browse-decade-years{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
+    display:flex;
+    flex-direction:column;
     gap:1px;
-    padding:2px 0 5px 10px;
 }
 .browse-active-row{
     display:flex;
@@ -5963,5 +6004,20 @@
     .browse-menu-sort .browse-dropdown{
         right:0;
         left:auto;
+    }
+    .browse-dropdown-year{
+        max-height:60vh;
+        overflow:auto;
+    }
+    .browse-year-decades{
+        max-height:none;
+        overflow:visible;
+    }
+    .browse-year-submenu{
+        position:static;
+        width:100%;
+        max-height:none;
+        margin-top:7px;
+        box-shadow:none;
     }
 }

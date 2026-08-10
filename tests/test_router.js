@@ -197,6 +197,26 @@ function createRouter(route, options={}){
 }
 
 {
+  const {calls,router}=createRouter('/app/discover/movie/upcoming?genre=18&country=JP&year=2024&sort=title-desc&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/discover/movie/upcoming?genre=18&country=jp&year=2024&sort=title-desc');
+  const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
+  assert(call,'filtered movie category route should preserve canonical Browse state');
+  assert.strictEqual(call[3].browseState.country,'jp');
+  assert.strictEqual(call[3].browseState.year,'2024');
+  assert.strictEqual(call[3].browseState.sort,'title-desc');
+  assert.deepStrictEqual(Array.from(call[3].browseState.genres),['18']);
+}
+
+{
+  const {calls,router}=createRouter('/app/discover/tv/top-rated?genre=18&sort=title-desc');
+  assert.strictEqual(router.currentRoute(),'/app/discover/tv/top-rated?genre=18');
+  const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
+  assert(call,'top-rated category route should keep filters but normalize away conflicting sort');
+  assert.strictEqual(call[3].browseState.sort,'popularity-desc');
+  assert.deepStrictEqual(Array.from(call[3].browseState.genres),['18']);
+}
+
+{
   const {calls}=createRouter('/app/show/1399/season/1/episode/3');
   const call=calls.find(item=>item[0]==='openEpisodeModal');
   assert(call,'episode route should open episode page');

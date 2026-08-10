@@ -55,6 +55,7 @@ var genrePageState = {
     sort:"popularity.desc",
     browse:null,
     browseLabels:null,
+    categoryDates:null,
     page:1,
     totalPages:1,
     loading:false,
@@ -96,6 +97,8 @@ var browseOptionState = {
 };
 var browseReferencePromises = {common:null,tv:null,movie:null,certifications:null};
 var browsePickerSearchTimer = null;
+var browsePickerSearchRequestId = 0;
+var browseGlobalEventsBound = false;
 var genrePageRequestId = 0;
 var discoveryPageRequestId = 0;
 var browsePageRequestId = 0;
@@ -3706,7 +3709,11 @@ async function tmdbGetDiscoverPage(path,params={}){
         results:data.results || [],
         page:Number(data.page || pageNumber),
         total_pages:Number(data.total_pages || pageNumber || 1),
-        total_results:Number(data.total_results || 0)
+        total_results:Number(data.total_results || 0),
+        dates:data && data.dates && typeof data.dates === "object" ? {
+            minimum:String(data.dates.minimum || ""),
+            maximum:String(data.dates.maximum || "")
+        } : null
     };
 
 }
@@ -3731,6 +3738,81 @@ function getDiscoverCategoryConfig(mediaOrKey,category=""){
 function getDiscoverCategoryDetailRoute(media,category){
     const config = getDiscoverCategoryConfig(media,category);
     return config ? `/app/discover/${encodeURIComponent(config.media)}/${encodeURIComponent(config.category)}` : "/app/discover";
+}
+
+function addDaysToDateString(dateString,days){
+    const match = String(dateString || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!match){
+        return "";
+    }
+    const date = new Date(Number(match[1]),Number(match[2]) - 1,Number(match[3]) + Number(days || 0),12,0,0,0);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2,"0");
+    const day = String(date.getDate()).padStart(2,"0");
+    return `${year}-${month}-${day}`;
+}
+
+function validDiscoverCategoryDateRange(value){
+    const minimum = String(value && value.minimum || "");
+    const maximum = String(value && value.maximum || "");
+    return /^\d{4}-\d{2}-\d{2}$/.test(minimum) && /^\d{4}-\d{2}-\d{2}$/.test(maximum)
+    ? {minimum,maximum}
+    : null;
+}
+
+async function ensureDiscoverCategoryDateRange(config){
+    if(!config || config.media !== "movie" || (config.category !== "now-playing" && config.category !== "upcoming")){
+        return null;
+    }
+    const existing = validDiscoverCategoryDateRange(discoveryPageState && discoveryPageState.categoryDates);
+    if(existing){
+        return existing;
+    }
+    const payload = await tmdbGetDiscoverPage(config.path,{page:1});
+    const dates = validDiscoverCategoryDateRange(payload && payload.dates);
+    if(dates){
+        discoveryPageState.categoryDates = dates;
+    }
+    return dates;
+}
+
+function buildDiscoverCategoryBrowseRequest(config,browseState,page,dateRange=null){
+    if(!config){
+        return null;
+    }
+    const params = buildBrowseDiscoverParams(browseState,page);
+    const path = config.media === "movie" ? "discover/movie" : "discover/tv";
+    const category = config.category;
+
+    if(category === "popular"){
+        params.sort_by = "popularity.desc";
+    }else if(category === "top-rated"){
+        params.sort_by = "vote_average.desc";
+        params["vote_count.gte"] = 200;
+        if(config.media === "movie"){
+            params.without_genres = "99,10755";
+        }
+    }else if(config.media === "tv" && category === "airing-today"){
+        const today = getTodayDateString();
+        params["air_date.gte"] = today;
+        params["air_date.lte"] = today;
+    }else if(config.media === "tv" && category === "on-the-air"){
+        const today = getTodayDateString();
+        params["air_date.gte"] = today;
+        params["air_date.lte"] = addDaysToDateString(today,6);
+    }else if(config.media === "movie" && (category === "now-playing" || category === "upcoming")){
+        const dates = validDiscoverCategoryDateRange(dateRange);
+        if(!dates){
+            return null;
+        }
+        params.with_release_type = "2|3";
+        params["release_date.gte"] = dates.minimum;
+        params["release_date.lte"] = dates.maximum;
+    }else{
+        return null;
+    }
+
+    return {path,params};
 }
 
 function normalizeDiscoverMediaResultItem(raw,media){
@@ -5110,6 +5192,11 @@ function stripDiscoveryBaseFromBrowseExtras(type,value,state,media="tv"){
         if(parts[0] === "movie"){
             output.certification = "";
         }
+    }else if(cleanType === "discover-category"){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        if(config && (config.category === "popular" || config.category === "top-rated")){
+            output.sort = "popularity-desc";
+        }
     }
     return createBrowseFilterState(media,output);
 }
@@ -5396,6 +5483,15 @@ function buildBrowseDiscoverParams(state,page){
         return api.buildTMDBParams(cleanState,page,{watchRegion:getAppWatchRegion(),today:getTodayDateString()});
     }
     return {page:Math.max(1,Number(page || 1)),sort_by:"popularity.desc",include_adult:"false"};
+}
+
+function sortBrowseResultsForDisplay(items,state,media="tv"){
+    const api = getBrowseStateAPI();
+    const cleanState = createBrowseFilterState(media,state || {});
+    if(api && typeof api.sortDisplayItems === "function"){
+        return api.sortDisplayItems(items,cleanState.sort,cleanState.media);
+    }
+    return Array.isArray(items) ? items.slice() : [];
 }
 
 function getBrowseStateHasAnyChoice(state){
@@ -6089,7 +6185,7 @@ async function loadGenrePageResults(options={}){
             totalPages:totalPages,
             loading:false,
             error:"",
-            shows:append ? (genrePageState.shows || []).concat(fresh) : fresh
+            shows:sortBrowseResultsForDisplay(append ? (genrePageState.shows || []).concat(fresh) : fresh,browseFilters,media)
         });
 
         renderActiveGenrePage();
@@ -6137,6 +6233,7 @@ async function openGenrePage(slug,options={}){
             sort:browseSortToLegacySort(routeBrowseState.sort),
             browse:routeBrowseState,
             browseLabels:createBrowseLabelState(options && options.browseLabels),
+            categoryDates:null,
             page:1,
             totalPages:1,
             loading:false,
@@ -6493,13 +6590,38 @@ async function loadDiscoveryFilterPageResults(options={}){
         }
 
         const categoryConfig = cleanType === "discover-category" ? getDiscoverCategoryConfig(cleanValue) : null;
-        const discoverPath = categoryConfig ? categoryConfig.path : (media === "movie" ? "discover/movie" : "discover/tv");
-
-        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
-            const params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
-            const payload = await tmdbGetDiscoverPage(discoverPath,params);
+        const categoryHasBrowseChanges = !!(categoryConfig && getBrowseStateHasAnyChoice(filters.browse));
+        let categoryDateRange = null;
+        if(categoryHasBrowseChanges && categoryConfig && categoryConfig.media === "movie" && (categoryConfig.category === "now-playing" || categoryConfig.category === "upcoming")){
+            categoryDateRange = await ensureDiscoverCategoryDateRange(categoryConfig);
             if(!requestIsCurrent()){
                 return;
+            }
+            if(!categoryDateRange){
+                throw new Error("Could not resolve the category release window.");
+            }
+        }
+
+        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+            let requestPath = categoryConfig ? categoryConfig.path : (media === "movie" ? "discover/movie" : "discover/tv");
+            let params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
+            if(categoryHasBrowseChanges){
+                const categoryRequest = buildDiscoverCategoryBrowseRequest(categoryConfig,filters.browse,currentPage,categoryDateRange);
+                if(!categoryRequest){
+                    throw new Error("This category cannot be filtered accurately.");
+                }
+                requestPath = categoryRequest.path;
+                params = categoryRequest.params;
+            }
+            const payload = await tmdbGetDiscoverPage(requestPath,params);
+            if(!requestIsCurrent()){
+                return;
+            }
+            if(categoryConfig && payload && payload.dates){
+                const dates = validDiscoverCategoryDateRange(payload.dates);
+                if(dates){
+                    discoveryPageState.categoryDates = dates;
+                }
             }
             totalPages = Number(payload.total_pages || currentPage || 1);
             lastPage = Number(payload.page || currentPage);
@@ -6532,7 +6654,7 @@ async function loadDiscoveryFilterPageResults(options={}){
             totalPages:totalPages,
             loading:false,
             error:"",
-            shows:append ? (discoveryPageState.shows || []).concat(fresh) : fresh
+            shows:sortBrowseResultsForDisplay(append ? (discoveryPageState.shows || []).concat(fresh) : fresh,filters.browse,media)
         });
 
         renderActiveDiscoveryFilterPage();
@@ -6617,7 +6739,7 @@ async function openDiscoveryFilterPage(type,value,options={}){
 
     showDiscoveryFilterPageShell(navigationContext);
 
-    if(cleanType !== "discover-category"){
+    if(!(cleanType === "certification" && media === "tv")){
         ensureBrowseReferenceData(media).then(async()=>{
             const labels = await resolveBrowseLabels(getDiscoveryBrowseState(),discoveryPageState.browseLabels);
             if(activePage === "discovery-detail" && selectedDiscoveryContext && String(selectedDiscoveryContext.type || "") === cleanType && String(selectedDiscoveryContext.value || "") === cleanValue){
@@ -6804,7 +6926,7 @@ async function loadBrowsePageResults(options={}){
             totalPages,
             loading:false,
             error:"",
-            shows:append ? (browsePageState.shows || []).concat(fresh) : fresh
+            shows:sortBrowseResultsForDisplay(append ? (browsePageState.shows || []).concat(fresh) : fresh,filters,media)
         });
         renderActiveBrowsePage();
     }catch(error){
@@ -6878,7 +7000,28 @@ async function openBrowsePage(state,options={}){
 }
 
 async function navigateToBrowseState(nextState,labels={},options={}){
-    const cleanState = createBrowseFilterState(nextState && nextState.media,nextState || {});
+    let cleanState = createBrowseFilterState(nextState && nextState.media,nextState || {});
+    const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
+    const cleanValue = normalizeDiscoveryFilterValue(cleanType,discoveryPageState && discoveryPageState.value);
+
+    if(activePage === "discovery-detail" && cleanType === "discover-category" && cleanValue){
+        const config = getDiscoverCategoryConfig(cleanValue);
+        if(config){
+            cleanState = stripDiscoveryBaseFromBrowseExtras(cleanType,cleanValue,cleanState,config.media);
+            discoveryPageState.browse = cleanState;
+            discoveryPageState.browseLabels = createBrowseLabelState(labels);
+            discoveryPageState.year = cleanState.year || "";
+            discoveryPageState.sort = browseSortToLegacySort(cleanState.sort);
+            const api = getBrowseStateAPI();
+            const search = api && typeof api.serializeSearch === "function" ? api.serializeSearch(cleanState) : "";
+            const route = getDiscoverCategoryDetailRoute(config.media,config.category) + search;
+            setAppHashRoute(route,options && options.replaceRoute === true);
+            rememberRouteNavContext(route,"discover");
+            await loadDiscoveryFilterPageResults({append:false});
+            return;
+        }
+    }
+
     await openBrowsePage(cleanState,{
         labels:createBrowseLabelState(labels),
         replaceRoute:options && options.replaceRoute === true,
@@ -6886,72 +7029,162 @@ async function navigateToBrowseState(nextState,labels={},options={}){
     });
 }
 
-function updateBrowsePickerResults(type,query,results,error=""){
-    const container = document.getElementById(type === "theme" ? "browse-theme-picker-results" : "browse-company-picker-results");
-    if(!container){
+function updateBrowsePickerResults(type,query,results,error="",container=null){
+    const target = container || document.getElementById(type === "theme" ? "browse-theme-picker-results" : "browse-company-picker-results");
+    if(!target){
         return;
     }
     const cleanQuery = String(query || "").trim();
     if(error){
-        container.innerHTML = `<div class="browse-picker-empty">Couldn’t load matches.</div>`;
+        target.innerHTML = `<div class="browse-picker-empty">Couldn’t load matches.</div>`;
         return;
     }
     if(cleanQuery.length < 2){
-        container.innerHTML = `<div class="browse-picker-empty">Type at least 2 characters.</div>`;
+        target.innerHTML = `<div class="browse-picker-empty">Type at least 2 characters.</div>`;
         return;
     }
     const state = getCurrentBrowseState();
     const selected = type === "theme" ? state.themes : state.companies;
-    container.innerHTML = getBrowsePickerResultsHTML(results,type,selected);
-    attachBrowsePickerResultEvents(container);
+    target.innerHTML = getBrowsePickerResultsHTML(results,type,selected);
 }
 
-function attachBrowsePickerResultEvents(root=document){
-    root.querySelectorAll("[data-browse-toggle-multi]").forEach(button=>{
-        if(button.dataset.browseBound === "1"){
+function closeBrowseMenus(except=null){
+    document.querySelectorAll(".browse-menu[open]").forEach(menu=>{
+        if(menu !== except){
+            menu.open = false;
+        }
+    });
+}
+
+function showBrowseDecade(decade,button){
+    const menu = button && typeof button.closest === "function" ? button.closest(".browse-dropdown-year") : null;
+    if(!menu){
+        return;
+    }
+    const cleanDecade = String(decade || "").trim();
+    const submenu = menu.querySelector(".browse-year-submenu");
+    menu.querySelectorAll("[data-browse-decade]").forEach(item=>{
+        const active = String(item.dataset.browseDecade || "") === cleanDecade;
+        item.classList.toggle("active",active);
+        item.setAttribute("aria-expanded",active ? "true" : "false");
+    });
+    menu.querySelectorAll("[data-browse-decade-panel]").forEach(panel=>{
+        panel.hidden = String(panel.dataset.browseDecadePanel || "") !== cleanDecade;
+    });
+    if(submenu){
+        submenu.hidden = !cleanDecade;
+    }
+}
+
+function filterBrowseListFromInput(input){
+    const type = String(input && input.dataset && input.dataset.browseListSearch || "");
+    const menu = input && typeof input.closest === "function" ? input.closest(".browse-menu") : null;
+    if(!type || !menu){
+        return;
+    }
+    const query = String(input.value || "").trim().toLowerCase();
+    menu.querySelectorAll(`[data-browse-list="${type}"] [data-browse-option-label]`).forEach(option=>{
+        const searchable = String(option.dataset.browseOptionSearch || option.dataset.browseOptionLabel || "").toLowerCase();
+        option.hidden = !!query && !searchable.includes(query);
+    });
+}
+
+function scheduleBrowsePickerSearch(input){
+    clearTimeout(browsePickerSearchTimer);
+    const type = String(input && input.dataset && input.dataset.browsePickerSearch || "");
+    const query = String(input && input.value || "").trim();
+    const section = input && typeof input.closest === "function" ? input.closest(".browse-other-section") : null;
+    const container = section ? section.querySelector(".browse-picker-results") : null;
+    const requestId = ++browsePickerSearchRequestId;
+
+    updateBrowsePickerResults(type,query,[],"",container);
+    if(query.length < 2){
+        return;
+    }
+    if(container){
+        container.innerHTML = `<div class="browse-picker-empty">Searching…</div>`;
+    }
+
+    browsePickerSearchTimer = setTimeout(async()=>{
+        try{
+            const results = await searchBrowsePicker(type,query);
+            if(requestId !== browsePickerSearchRequestId || !input.isConnected || String(input.value || "").trim() !== query){
+                return;
+            }
+            updateBrowsePickerResults(type,query,results,"",container);
+        }catch(error){
+            if(requestId !== browsePickerSearchRequestId || !input.isConnected || String(input.value || "").trim() !== query){
+                return;
+            }
+            updateBrowsePickerResults(type,query,[],"error",container);
+        }
+    },220);
+}
+
+function ensureBrowseGlobalInteractionEvents(){
+    if(browseGlobalEventsBound){
+        return;
+    }
+    browseGlobalEventsBound = true;
+
+    document.addEventListener("pointerdown",function(event){
+        const target = event && event.target;
+        if(target && typeof target.closest === "function" && target.closest(".browse-menu")){
             return;
         }
-        button.dataset.browseBound = "1";
-        button.addEventListener("click",async function(){
-            const api = getBrowseStateAPI();
-            if(!api || typeof api.toggleMulti !== "function"){
-                return;
-            }
-            const group = String(this.dataset.browseToggleMulti || "");
-            const value = String(this.dataset.browseValue || "");
-            const label = String(this.dataset.browseLabel || "");
-            let state = getCurrentBrowseState();
-            const labels = getCurrentBrowseLabels();
-            state = api.toggleMulti(state,group,value);
-            const labelGroup = group === "themes" ? "themes" : (group === "companies" ? "companies" : (group === "genres" ? "genres" : ""));
-            if(labelGroup && label){
-                setBrowseLabel(labels,labelGroup,value,label);
-            }
-            await navigateToBrowseState(state,labels);
-        });
-    });
-}
-
-function attachBrowseControlsEvents(options={}){
-    const source = String(options && options.source || "");
-
-    document.querySelectorAll(".browse-menu").forEach(details=>{
-        details.addEventListener("toggle",function(){
-            if(!this.open){ return; }
-            document.querySelectorAll(".browse-menu").forEach(other=>{
-                if(other !== this){ other.open = false; }
-            });
-        });
+        closeBrowseMenus();
     });
 
-    document.querySelectorAll("[data-browse-media]").forEach(button=>{
-        button.addEventListener("click",async function(event){
-            if(this.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
+    document.addEventListener("keydown",function(event){
+        if(event && event.key === "Escape"){
+            closeBrowseMenus();
+        }
+    });
+
+    document.addEventListener("input",function(event){
+        const target = event && event.target;
+        if(!target || !target.dataset){
+            return;
+        }
+        if(target.dataset.browseListSearch){
+            filterBrowseListFromInput(target);
+            return;
+        }
+        if(target.dataset.browsePickerSearch){
+            scheduleBrowsePickerSearch(target);
+        }
+    });
+
+    document.addEventListener("click",async function(event){
+        const target = event && event.target;
+        if(!target || typeof target.closest !== "function"){
+            return;
+        }
+
+        const summary = target.closest(".browse-menu > summary");
+        if(summary){
+            closeBrowseMenus(summary.parentElement);
+            return;
+        }
+
+        const decadeButton = target.closest("[data-browse-decade]");
+        if(decadeButton){
+            event.preventDefault();
+            event.stopPropagation();
+            showBrowseDecade(decadeButton.dataset.browseDecade,decadeButton);
+            return;
+        }
+
+        const mediaButton = target.closest("[data-browse-media]");
+        if(mediaButton){
+            if(mediaButton.tagName === "A" && typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
                 return;
             }
-            if(this.tagName === "A" && event){ event.preventDefault(); }
-            const targetMedia = normalizeBrowseMediaType(this.dataset.browseMedia || "tv");
-            if(source === "hub" || activePage === "discover"){
+            if(mediaButton.tagName === "A"){
+                event.preventDefault();
+            }
+            const targetMedia = normalizeBrowseMediaType(mediaButton.dataset.browseMedia || "tv");
+            if(activePage === "discover"){
                 discoverGenreMedia = targetMedia;
                 await ensureBrowseReferenceData(targetMedia);
                 if(typeof renderDiscoverHub === "function"){
@@ -6965,89 +7198,77 @@ function attachBrowseControlsEvents(options={}){
             }
             const mapped = await mapBrowseGenresForMedia(current,targetMedia,getCurrentBrowseLabels());
             await navigateToBrowseState(mapped.state,mapped.labels);
-        });
-    });
+            return;
+        }
 
-    document.querySelectorAll("[data-browse-set-single]").forEach(button=>{
-        button.addEventListener("click",async function(){
+        const singleButton = target.closest("[data-browse-set-single]");
+        if(singleButton){
             const api = getBrowseStateAPI();
             if(!api || typeof api.setSingle !== "function"){
                 return;
             }
-            const key = String(this.dataset.browseSetSingle || "");
-            const value = String(this.dataset.browseValue || "");
-            const current = getCurrentBrowseState();
-            const next = api.setSingle(current,key,key === "upcoming" ? value === "1" : value);
+            const key = String(singleButton.dataset.browseSetSingle || "");
+            const value = String(singleButton.dataset.browseValue || "");
+            const next = api.setSingle(getCurrentBrowseState(),key,key === "upcoming" ? value === "1" : value);
             await navigateToBrowseState(next,getCurrentBrowseLabels());
-        });
-    });
+            return;
+        }
 
-    document.querySelectorAll("[data-browse-set-sort]").forEach(button=>{
-        button.addEventListener("click",async function(){
+        const sortButton = target.closest("[data-browse-set-sort]");
+        if(sortButton){
             const api = getBrowseStateAPI();
             if(!api || typeof api.setSingle !== "function"){
                 return;
             }
-            const next = api.setSingle(getCurrentBrowseState(),"sort",this.dataset.browseSetSort || "popularity-desc");
+            const next = api.setSingle(getCurrentBrowseState(),"sort",sortButton.dataset.browseSetSort || "popularity-desc");
             await navigateToBrowseState(next,getCurrentBrowseLabels());
-        });
-    });
+            return;
+        }
 
-    attachBrowsePickerResultEvents(document);
+        const multiButton = target.closest("[data-browse-toggle-multi]");
+        if(multiButton){
+            const api = getBrowseStateAPI();
+            if(!api || typeof api.toggleMulti !== "function"){
+                return;
+            }
+            const group = String(multiButton.dataset.browseToggleMulti || "");
+            const value = String(multiButton.dataset.browseValue || "");
+            const label = String(multiButton.dataset.browseLabel || "");
+            const labels = getCurrentBrowseLabels();
+            const next = api.toggleMulti(getCurrentBrowseState(),group,value);
+            const labelGroup = group === "themes" ? "themes" : (group === "companies" ? "companies" : (group === "genres" ? "genres" : ""));
+            if(labelGroup && label){
+                setBrowseLabel(labels,labelGroup,value,label);
+            }
+            await navigateToBrowseState(next,labels);
+            return;
+        }
 
-    document.querySelectorAll("[data-browse-remove]").forEach(button=>{
-        button.addEventListener("click",async function(){
+        const removeButton = target.closest("[data-browse-remove]");
+        if(removeButton){
             const api = getBrowseStateAPI();
             if(!api || typeof api.removeValue !== "function"){
                 return;
             }
-            const key = String(this.dataset.browseRemove || "");
-            const value = String(this.dataset.browseValue || "");
+            const key = String(removeButton.dataset.browseRemove || "");
+            const value = String(removeButton.dataset.browseValue || "");
             const next = api.removeValue(getCurrentBrowseState(),key,value);
             await navigateToBrowseState(next,getCurrentBrowseLabels());
-        });
-    });
+            return;
+        }
 
-    const clearButton = document.querySelector("[data-browse-clear]");
-    if(clearButton){
-        clearButton.addEventListener("click",async function(){
+        const clearButton = target.closest("[data-browse-clear]");
+        if(clearButton){
             const api = getBrowseStateAPI();
             const current = getCurrentBrowseState();
             const next = api && typeof api.clearFilters === "function" ? api.clearFilters(current) : createBrowseFilterState(current.media);
             await navigateToBrowseState(next,createBrowseLabelState());
-        });
-    }
-
-    document.querySelectorAll("[data-browse-list-search]").forEach(input=>{
-        input.addEventListener("input",function(){
-            const type = String(this.dataset.browseListSearch || "");
-            const query = String(this.value || "").trim().toLowerCase();
-            document.querySelectorAll(`[data-browse-list="${type}"] [data-browse-option-label]`).forEach(option=>{
-                const label = String(option.dataset.browseOptionLabel || "").toLowerCase();
-                option.hidden = !!query && !label.includes(query);
-            });
-        });
+        }
     });
+}
 
-    document.querySelectorAll("[data-browse-picker-search]").forEach(input=>{
-        input.addEventListener("input",function(){
-            clearTimeout(browsePickerSearchTimer);
-            const type = String(this.dataset.browsePickerSearch || "");
-            const query = String(this.value || "").trim();
-            updateBrowsePickerResults(type,query,[]);
-            if(query.length < 2){
-                return;
-            }
-            browsePickerSearchTimer = setTimeout(async()=>{
-                try{
-                    const results = await searchBrowsePicker(type,query);
-                    updateBrowsePickerResults(type,query,results);
-                }catch(error){
-                    updateBrowsePickerResults(type,query,[],"error");
-                }
-            },250);
-        });
-    });
+function attachBrowseControlsEvents(){
+    ensureBrowseGlobalInteractionEvents();
 }
 
 function attachBrowsePageEvents(){

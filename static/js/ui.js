@@ -341,15 +341,8 @@ function renderDiscoverHub(){
     const tvRows = sections.filter(section=>section.media === "tv");
     const movieRows = sections.filter(section=>section.media === "movie");
 
-    const browseMedia = typeof normalizeGenreMediaType === "function" ? normalizeGenreMediaType(typeof discoverGenreMedia !== "undefined" ? discoverGenreMedia : "tv") : "tv";
-    const browseState = getBrowseControlState({},browseMedia);
-
     results.innerHTML = `
         <div class="discover-page-shell">
-            <section class="discover-browse-panel" aria-label="Browse TV shows and movies">
-                ${renderBrowseMediaSwitchHTML(browseMedia)}
-                ${renderBrowseControlsHTML(browseState,{})}
-            </section>
             ${renderDiscoverSectionGroup("TV Shows",tvRows)}
             ${renderDiscoverSectionGroup("Movies",movieRows)}
             ${renderDiscoverGenreSection(state.genres || [])}
@@ -587,10 +580,6 @@ function renderDiscoverHubCard(item){
 }
 
 function attachDiscoverHubEvents(){
-    if(typeof attachBrowseControlsEvents === "function"){
-        attachBrowseControlsEvents({source:"hub"});
-    }
-
     document.querySelectorAll(".discover-genre-tab[data-discover-genre-media]").forEach(button=>{
         button.addEventListener("click",function(){
             if(typeof normalizeGenreMediaType === "function"){
@@ -1077,28 +1066,37 @@ function getBrowseControlLabels(labels){
     return typeof createBrowseLabelState === "function" ? createBrowseLabelState(labels) : (labels || {});
 }
 
+function renderBrowseChevronIcon(className="browse-chevron-down"){
+    return `<svg class="browse-chevron ${escapeHTML(className)}" viewBox="0 0 12 8" aria-hidden="true" focusable="false"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+}
+
 function renderBrowseYearMenu(state){
     const currentYear = new Date().getFullYear();
     const currentDecade = Math.floor(currentYear / 10) * 10;
-    const decadeGroups = [];
+    const selectedYear = Number(state.year || 0);
+    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : 0;
+    const decadeButtons = [];
+    const decadePanels = [];
+
     for(let decade=currentDecade; decade>=1870; decade-=10){
         const topYear = decade === currentDecade ? currentYear : decade + 9;
         const years = [];
         for(let year=topYear; year>=decade; year-=1){
             years.push(`<button type="button" class="browse-dropdown-option ${state.year === String(year) ? "selected" : ""}" data-browse-set-single="year" data-browse-value="${year}">${year}</button>`);
         }
-        decadeGroups.push(`
-            <details class="browse-decade-group">
-                <summary>${decade}s <span aria-hidden="true">›</span></summary>
-                <div class="browse-decade-years">${years.join("")}</div>
-            </details>
-        `);
+        const active = selectedDecade === decade;
+        decadeButtons.push(`<button type="button" class="browse-decade-option ${active ? "active" : ""}" data-browse-decade="${decade}" aria-expanded="${active ? "true" : "false"}"><span>${decade}s</span>${renderBrowseChevronIcon("browse-chevron-right")}</button>`);
+        decadePanels.push(`<div class="browse-decade-year-panel" data-browse-decade-panel="${decade}" ${active ? "" : "hidden"}><div class="browse-decade-year-heading">${decade}s</div><div class="browse-decade-years">${years.join("")}</div></div>`);
     }
+
     return `
         <button type="button" class="browse-dropdown-option ${!state.year && !state.upcoming ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">Any</button>
         <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">Upcoming</button>
         <div class="browse-dropdown-divider"></div>
-        <div class="browse-year-groups">${decadeGroups.join("")}</div>
+        <div class="browse-year-picker">
+            <div class="browse-year-decades">${decadeButtons.join("")}</div>
+            <div class="browse-year-submenu" ${selectedDecade ? "" : "hidden"}>${decadePanels.join("")}</div>
+        </div>
     `;
 }
 
@@ -1132,7 +1130,11 @@ function renderBrowseCountryMenu(state){
         <input class="browse-dropdown-search" type="search" placeholder="Search countries" aria-label="Search countries" data-browse-list-search="country">
         <div class="browse-option-list" data-browse-list="country">
             <button type="button" class="browse-dropdown-option ${!state.country ? "selected" : ""}" data-browse-set-single="country" data-browse-value="" data-browse-option-label="any">Any</button>
-            ${(Array.isArray(options) ? options : []).map(item=>`<button type="button" class="browse-dropdown-option ${state.country === item.code ? "selected" : ""}" data-browse-set-single="country" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}">${escapeHTML(item.name)}${state.country === item.code ? " ✓" : ""}</button>`).join("") || `<div class="browse-dropdown-empty">Countries are loading…</div>`}
+            ${(Array.isArray(options) ? options : []).map(item=>{
+                const aliases = String(item.code || "").toLowerCase() === "gb" ? " uk great britain britain" : "";
+                const searchTerms = `${item.name || ""} ${item.code || ""}${aliases}`.trim();
+                return `<button type="button" class="browse-dropdown-option ${state.country === item.code ? "selected" : ""}" data-browse-set-single="country" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${escapeHTML(item.name)}${state.country === item.code ? " ✓" : ""}</button>`;
+            }).join("") || `<div class="browse-dropdown-empty">Countries are loading…</div>`}
         </div>
     `;
 }
@@ -1143,7 +1145,10 @@ function renderBrowseLanguageMenu(state){
         <input class="browse-dropdown-search" type="search" placeholder="Search languages" aria-label="Search languages" data-browse-list-search="language">
         <div class="browse-option-list" data-browse-list="language">
             <button type="button" class="browse-dropdown-option ${!state.language ? "selected" : ""}" data-browse-set-single="language" data-browse-value="" data-browse-option-label="any">Any</button>
-            ${(Array.isArray(options) ? options : []).map(item=>`<button type="button" class="browse-dropdown-option ${state.language === item.code ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}">${escapeHTML(item.name)}${state.language === item.code ? " ✓" : ""}</button>`).join("") || `<div class="browse-dropdown-empty">Languages are loading…</div>`}
+            ${(Array.isArray(options) ? options : []).map(item=>{
+                const searchTerms = `${item.name || ""} ${item.code || ""}`.trim();
+                return `<button type="button" class="browse-dropdown-option ${state.language === item.code ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${escapeHTML(item.name)}${state.language === item.code ? " ✓" : ""}</button>`;
+            }).join("") || `<div class="browse-dropdown-empty">Languages are loading…</div>`}
         </div>
     `;
 }
@@ -1209,20 +1214,6 @@ function renderBrowseSortMenu(state){
     return `<div class="browse-option-list">${options.map(([value,label])=>`<button type="button" class="browse-dropdown-option ${state.sort === value ? "selected" : ""}" data-browse-set-sort="${escapeHTML(value)}">${escapeHTML(label)}${state.sort === value ? " ✓" : ""}</button>`).join("")}</div>`;
 }
 
-function getBrowseSortSummary(state){
-    const labels = {
-        "popularity-desc":"POPULAR ↓",
-        "popularity-asc":"POPULAR ↑",
-        "rating-desc":"RATING ↓",
-        "rating-asc":"RATING ↑",
-        "date-desc":"DATE ↓",
-        "date-asc":"DATE ↑",
-        "title-asc":"TITLE A–Z",
-        "title-desc":"TITLE Z–A"
-    };
-    return state.sort === "popularity-desc" ? "" : (labels[state.sort] || "");
-}
-
 function renderBrowseActiveChipsHTML(state,labels){
     const chips = [];
     const push = (key,value,label)=>{
@@ -1231,13 +1222,17 @@ function renderBrowseActiveChipsHTML(state,labels){
     };
     if(state.upcoming){ push("upcoming","1","Upcoming"); }
     if(state.year){ push("year",state.year,state.year); }
-    state.genres.forEach(id=>push("genres",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"genres",id,`Genre ${id}`) : `Genre ${id}`));
+    state.genres.forEach(id=>{
+        const option = getBrowseGenreOptions(state.media).find(genre=>String(genre && genre.id || "") === String(id));
+        const fallback = option && option.name ? String(option.name) : "Genre";
+        push("genres",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"genres",id,fallback) : fallback);
+    });
     if(state.country){ push("country",state.country,typeof getDiscoveryCountryName === "function" ? getDiscoveryCountryName(state.country) : state.country.toUpperCase()); }
     if(state.language){ push("language",state.language,typeof getLanguageName === "function" ? getLanguageName(state.language) : state.language.toUpperCase()); }
-    state.themes.forEach(id=>push("themes",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"themes",id,`Theme ${id}`) : `Theme ${id}`));
-    state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,`Company ${id}`) : `Company ${id}`));
-    if(state.network){ push("network",state.network,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,`Network ${state.network}`) : `Network ${state.network}`); }
-    if(state.provider){ push("provider",state.provider,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,`Provider ${state.provider}`) : `Provider ${state.provider}`); }
+    state.themes.forEach(id=>push("themes",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"themes",id,"Theme") : "Theme"));
+    state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,"Company") : "Company"));
+    if(state.network){ push("network",state.network,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network"); }
+    if(state.provider){ push("provider",state.provider,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider"); }
     state.statuses.forEach(value=>push("statuses",value,typeof getStatusRouteLabel === "function" ? getStatusRouteLabel(value) : value));
     if(state.certification){ push("certification",state.certification,`US ${state.certification.toUpperCase()}`); }
     const showClear = chips.length > 0 || state.sort !== "popularity-desc";
@@ -1245,38 +1240,40 @@ function renderBrowseActiveChipsHTML(state,labels){
     return `<div class="browse-active-row" aria-label="Active browse filters">${chips.join("")}${showClear ? `<button type="button" class="browse-clear-button" data-browse-clear>CLEAR ALL</button>` : ""}</div>`;
 }
 
-function renderBrowseControlsHTML(inputState,inputLabels={}){
+function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
     const state = getBrowseControlState(inputState,inputState && inputState.media || "tv");
     const labels = getBrowseControlLabels(inputLabels);
-    const sortSummary = getBrowseSortSummary(state);
+    const hideSort = options && options.hideSort === true;
     return `
         <div class="browse-controls">
             <div class="browse-bar" aria-label="Browse filters">
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu">
-                    <summary class="browse-bar-button">YEAR <span aria-hidden="true">⌄</span></summary>
+                    <summary class="browse-bar-button">YEAR ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-year">${renderBrowseYearMenu(state)}</div>
                 </details>
                 <details class="browse-menu">
-                    <summary class="browse-bar-button">GENRE <span aria-hidden="true">⌄</span></summary>
+                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown">${renderBrowseGenreMenu(state)}</div>
                 </details>
                 <details class="browse-menu">
-                    <summary class="browse-bar-button">COUNTRY <span aria-hidden="true">⌄</span></summary>
+                    <summary class="browse-bar-button">COUNTRY ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown">${renderBrowseCountryMenu(state)}</div>
                 </details>
                 <details class="browse-menu">
-                    <summary class="browse-bar-button">LANGUAGE <span aria-hidden="true">⌄</span></summary>
+                    <summary class="browse-bar-button">LANGUAGE ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown">${renderBrowseLanguageMenu(state)}</div>
                 </details>
                 <details class="browse-menu browse-menu-other">
-                    <summary class="browse-bar-button">OTHER <span aria-hidden="true">⌄</span></summary>
+                    <summary class="browse-bar-button">OTHER ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state)}</div>
                 </details>
-                <details class="browse-menu browse-menu-sort">
-                    <summary class="browse-bar-button">SORT ${sortSummary ? `<span class="browse-sort-summary">${escapeHTML(sortSummary)}</span>` : ""} <span aria-hidden="true">⌄</span></summary>
-                    <div class="browse-dropdown browse-dropdown-sort">${renderBrowseSortMenu(state)}</div>
-                </details>
+                ${hideSort ? "" : `
+                    <details class="browse-menu browse-menu-sort">
+                        <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
+                        <div class="browse-dropdown browse-dropdown-sort">${renderBrowseSortMenu(state)}</div>
+                    </details>
+                `}
             </div>
             ${renderBrowseActiveChipsHTML(state,labels)}
         </div>
@@ -1413,7 +1410,10 @@ function renderDiscoveryFilterDetailPage(state){
     const totalPages = Number(pageState.totalPages || 1);
     const canLoadMore = !loading && page < totalPages;
     const isDiscoverCategory = type === "discover-category";
-    const isBrowseCompatible = !isDiscoverCategory && !(type === "certification" && media === "tv");
+    const isBrowseCompatible = !(type === "certification" && media === "tv");
+    const showBrowseMediaSwitch = isBrowseCompatible && !isDiscoverCategory;
+    const categoryConfig = isDiscoverCategory && typeof getDiscoverCategoryConfig === "function" ? getDiscoverCategoryConfig(pageState.value) : null;
+    const hideBrowseSort = !!(categoryConfig && (categoryConfig.category === "popular" || categoryConfig.category === "top-rated"));
     const browseState = typeof getDiscoveryBrowseState === "function"
     ? getDiscoveryBrowseState()
     : getBrowseControlState({},media);
@@ -1457,11 +1457,11 @@ function renderDiscoveryFilterDetailPage(state){
                 </button>
                 <div>
                     <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
-                    ${isBrowseCompatible ? renderBrowseMediaSwitchHTML(media) : ""}
+                    ${showBrowseMediaSwitch ? renderBrowseMediaSwitchHTML(media) : ""}
                 </div>
             </div>
 
-            ${isBrowseCompatible ? renderBrowseControlsHTML(browseState,browseLabels) : ""}
+            ${isBrowseCompatible ? renderBrowseControlsHTML(browseState,browseLabels,{hideSort:hideBrowseSort}) : ""}
 
             <div class="genre-result-content">
                 ${bodyHTML}
