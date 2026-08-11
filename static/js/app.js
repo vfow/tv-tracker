@@ -5115,7 +5115,7 @@ function createBrowseFilterState(media="tv",source={}){
         return api.normalizeState(source,normalizeBrowseMediaType(media));
     }
     return Object.assign({
-        media:normalizeBrowseMediaType(media),year:"",upcoming:false,genres:[],country:"",language:"",
+        media:normalizeBrowseMediaType(media),year:"",decade:"",upcoming:false,genres:[],country:"",language:"",
         themes:[],companies:[],network:"",providers:[],runtime:"",statuses:[],certification:"",sort:"popularity-desc"
     },source || {});
 }
@@ -5233,6 +5233,7 @@ function stripDiscoveryBaseFromBrowseExtras(type,value,state,media="tv"){
         output.providers = output.providers.filter(id=>id !== cleanValue);
     }else if(cleanType === "year"){
         output.year = "";
+        output.decade = "";
         output.upcoming = false;
     }else if(cleanType === "theme"){
         output.themes = output.themes.filter(id=>id !== cleanValue);
@@ -7452,12 +7453,18 @@ function ensureBrowseGlobalInteractionEvents(){
             event.preventDefault();
             event.stopPropagation();
             const decade = Number(decadeOpenButton.dataset.browseYearOpenDecade || 0);
-            const controls = decadeOpenButton.closest(".browse-controls");
-            const bar = controls ? controls.querySelector(".browse-bar") : null;
-            if(decade && controls && bar && typeof renderBrowseYearSecondaryBarHTML === "function"){
-                controls.querySelectorAll("[data-browse-year-secondary-bar]").forEach(item=>item.remove());
-                bar.insertAdjacentHTML("afterend",renderBrowseYearSecondaryBarHTML(decade,getCurrentBrowseState()));
-                closeBrowseMenus();
+            const api = getBrowseStateAPI();
+            if(decade && api && typeof api.setSingle === "function"){
+                const next = api.setSingle(getCurrentBrowseState(),"decade",String(decade));
+                await navigateToBrowseState(next,getCurrentBrowseLabels());
+            }else{
+                const controls = decadeOpenButton.closest(".browse-controls");
+                const bar = controls ? controls.querySelector(".browse-bar") : null;
+                if(decade && controls && bar && typeof renderBrowseYearSecondaryBarHTML === "function"){
+                    controls.querySelectorAll("[data-browse-year-secondary-bar]").forEach(item=>item.remove());
+                    bar.insertAdjacentHTML("afterend",renderBrowseYearSecondaryBarHTML(decade,getCurrentBrowseState()));
+                    closeBrowseMenus();
+                }
             }
             return;
         }

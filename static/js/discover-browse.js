@@ -58,6 +58,16 @@
         return /^(18|19|20|21)[0-9]{2}$/.test(clean) ? clean : "";
     }
 
+    function normalizeDecade(value){
+        const clean = String(value || "").trim();
+        if(!/^(18|19|20|21)[0-9]0$/.test(clean)){
+            return "";
+        }
+        const decade = Number(clean);
+        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+        return decade >= 1870 && decade <= currentDecade ? String(decade) : "";
+    }
+
     function normalizeCertification(value){
         const clean = String(value || "").trim().toLowerCase();
         return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(clean) ? clean : "";
@@ -102,6 +112,7 @@
         return {
             media:normalizeMedia(media),
             year:"",
+            decade:"",
             upcoming:false,
             genres:[],
             country:"",
@@ -121,9 +132,12 @@
         const source = input && typeof input === "object" ? input : {};
         const cleanMedia = normalizeMedia(media || source.media || "tv");
         const upcoming = source.upcoming === true || String(source.upcoming || "") === "1";
+        const cleanYear = upcoming ? "" : normalizeYear(source.year);
+        const cleanDecade = upcoming || cleanYear ? "" : normalizeDecade(source.decade);
         const state = {
             media:cleanMedia,
-            year:upcoming ? "" : normalizeYear(source.year),
+            year:cleanYear,
+            decade:cleanDecade,
             upcoming,
             genres:parseList(source.genres || source.genre,normalizeId),
             country:normalizeCountry(source.country),
@@ -160,6 +174,7 @@
         const state = normalizeState({
             media,
             year:params.get("year") || "",
+            decade:params.get("decade") || "",
             upcoming:params.get("upcoming") === "1",
             genres:params.get("genre") || "",
             country:params.get("country") || "",
@@ -195,6 +210,8 @@
             parts.push("upcoming=1");
         }else if(state.year){
             parts.push("year=" + encodeURIComponent(state.year));
+        }else if(state.decade){
+            parts.push("decade=" + encodeURIComponent(state.decade));
         }
         if(state.media === "tv" && state.statuses.length){ parts.push("status=" + encodeList(state.statuses)); }
         if(state.media === "movie" && state.certification){ parts.push("certification=" + encodeURIComponent(state.certification)); }
@@ -243,10 +260,18 @@
         const state = cloneState(input);
         if(key === "year"){
             state.year = normalizeYear(value);
+            state.decade = "";
+            state.upcoming = false;
+        }else if(key === "decade"){
+            state.decade = normalizeDecade(value);
+            state.year = "";
             state.upcoming = false;
         }else if(key === "upcoming"){
             state.upcoming = value === true || String(value || "") === "1";
-            if(state.upcoming){ state.year = ""; }
+            if(state.upcoming){
+                state.year = "";
+                state.decade = "";
+            }
         }else if(key === "country"){
             state.country = normalizeCountry(value);
         }else if(key === "language"){
@@ -304,7 +329,7 @@
     function hasFilters(input){
         const state = normalizeState(input,input && input.media);
         return !!(
-            state.year || state.upcoming || state.genres.length || state.country || state.language ||
+            state.year || state.decade || state.upcoming || state.genres.length || state.country || state.language ||
             state.themes.length || state.companies.length || state.network || state.providers.length || state.runtime ||
             state.statuses.length || state.certification
         );
@@ -370,6 +395,17 @@
             }else{
                 params.first_air_date_year = state.year;
             }
+        }else if(state.decade){
+            const decadeStart = Number(state.decade);
+            const startDate = String(decadeStart) + "-01-01";
+            const endDate = String(decadeStart + 9) + "-12-31";
+            if(media === "movie"){
+                params["primary_release_date.gte"] = startDate;
+                params["primary_release_date.lte"] = endDate;
+            }else{
+                params["first_air_date.gte"] = startDate;
+                params["first_air_date.lte"] = endDate;
+            }
         }
         if(media === "tv" && state.statuses.length){
             params.with_status = state.statuses.map(status=>TV_STATUS_VALUES[status]).filter(Boolean).join("|");
@@ -420,6 +456,7 @@
         sortLabel,
         normalizeMedia,
         normalizeYear,
+        normalizeDecade,
         normalizeCountry,
         normalizeLanguage,
         normalizeId,

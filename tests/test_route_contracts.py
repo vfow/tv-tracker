@@ -179,8 +179,12 @@ class ProtectedRouteContractTests(unittest.TestCase):
 
     def test_browse_query_state_is_preserved_and_canonicalized(self):
         self.assertEqual(
-            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&provider=8,9&country=JP&year=2024&runtime=120-149&sort=rating-desc&x=1"),
+            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&provider=8,9&country=JP&year=2024&decade=2020&runtime=120-149&sort=rating-desc&x=1"),
             "/app/browse/movie?genre=18,80&provider=8,9&runtime=120-149&country=jp&year=2024&sort=rating-desc",
+        )
+        self.assertEqual(
+            safe_next_url("/app/browse/tv?year=bad&decade=2020&sort=rating-desc"),
+            "/app/browse/tv?decade=2020&sort=rating-desc",
         )
         self.assertEqual(
             safe_next_url("/app/browse/tv?certification=tv-ma&genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&year=2024&status=ended,canceled&sort=title-asc"),

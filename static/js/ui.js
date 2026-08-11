@@ -928,7 +928,6 @@ function renderPersonProfileHTML(person,role){
     return `
         <aside class="person-profile-panel" aria-label="Person details">
             <div class="person-profile-photo">${photo}</div>
-            <div class="person-profile-name">${escapeHTML(person && person.name || "Unknown Person")}</div>
             <div class="person-profile-bio-wrap ${hasLongBio ? "is-collapsed" : ""}">
                 <p class="person-profile-bio-text">${escapeHTML(biography || "No biography available yet.")}</p>
                 ${hasLongBio ? `<button type="button" class="person-bio-more-button">more</button>` : ""}
@@ -1118,7 +1117,8 @@ function renderBrowseDecadeListHTML(state){
     const currentYear = new Date().getFullYear();
     const currentDecade = Math.floor(currentYear / 10) * 10;
     const selectedYear = Number(state && state.year || 0);
-    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : 0;
+    const selectedDecadeValue = Number(state && state.decade || 0);
+    const selectedDecade = selectedDecadeValue || (selectedYear ? Math.floor(selectedYear / 10) * 10 : 0);
     const rows = [];
     for(let decade=currentDecade;decade>=1870;decade-=10){
         const selected = selectedDecade === decade;
@@ -1133,7 +1133,7 @@ function renderBrowseDecadeListHTML(state){
 }
 
 function renderBrowseYearMenu(state){
-    const anySelected = !state.year && !state.upcoming;
+    const anySelected = !state.year && !state.decade && !state.upcoming;
     return `
         <div class="browse-year-decade-menu" data-browse-year-decade-menu>
             <div class="browse-option-list">
@@ -1356,6 +1356,28 @@ function renderBrowseSortMenu(state){
     }).join("")}</div>`;
 }
 
+function getBrowseYearControlLabel(state){
+    if(state && state.upcoming){
+        return "UPCOMING";
+    }
+    if(state && state.year){
+        return String(state.year);
+    }
+    if(state && state.decade){
+        return String(state.decade) + "s";
+    }
+    return "YEAR";
+}
+
+function getBrowseSelectedDecade(state){
+    const year = Number(state && state.year || 0);
+    if(year){
+        return Math.floor(year / 10) * 10;
+    }
+    const decade = Number(state && state.decade || 0);
+    return decade || 0;
+}
+
 function renderBrowseActiveChipsHTML(state,labels){
     const chips = [];
     const push = (key,value,label)=>{
@@ -1364,6 +1386,7 @@ function renderBrowseActiveChipsHTML(state,labels){
     };
     if(state.upcoming){ push("upcoming","1","Upcoming"); }
     if(state.year){ push("year",state.year,state.year); }
+    if(!state.year && state.decade){ push("decade",state.decade,`${state.decade}s`); }
     state.genres.forEach(id=>{
         const option = getBrowseGenreOptions(state.media).find(genre=>String(genre && genre.id || "") === String(id));
         const fallback = option && option.name ? String(option.name) : "Genre";
@@ -1397,7 +1420,7 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
             <div class="browse-bar" aria-label="Browse filters">
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu browse-menu-year">
-                    <summary class="browse-bar-button">YEAR ${renderBrowseChevronIcon()}</summary>
+                    <summary class="browse-bar-button">${escapeHTML(getBrowseYearControlLabel(state))} ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-year">${renderBrowseYearMenu(state)}</div>
                 </details>
                 <details class="browse-menu">
@@ -1431,6 +1454,7 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
                     </details>
                 `}
             </div>
+            ${getBrowseSelectedDecade(state) ? renderBrowseYearSecondaryBarHTML(getBrowseSelectedDecade(state),state) : ""}
             ${renderBrowseActiveChipsHTML(state,labels)}
         </div>
     `;

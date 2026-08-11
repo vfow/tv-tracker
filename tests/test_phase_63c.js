@@ -37,6 +37,44 @@ assert(browse,'browse module should load');
 }
 
 {
+  const parsed = browse.parseSearch('?decade=2020&year=2024&upcoming=0','movie');
+  assert.strictEqual(parsed.state.year,'2024');
+  assert.strictEqual(parsed.state.decade,'','exact year should override decade when both are present');
+  assert.strictEqual(parsed.search,'?year=2024');
+}
+
+{
+  const parsed = browse.parseSearch('?decade=2020','tv');
+  assert.strictEqual(parsed.state.year,'');
+  assert.strictEqual(parsed.state.decade,'2020');
+  assert.strictEqual(parsed.search,'?decade=2020');
+}
+
+{
+  const params = browse.buildTMDBParams(browse.normalizeState({media:'movie',decade:'1990'}),1,{});
+  assert.strictEqual(params['primary_release_date.gte'],'1990-01-01');
+  assert.strictEqual(params['primary_release_date.lte'],'1999-12-31');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(params,'primary_release_year'),false);
+}
+
+{
+  const state = browse.setSingle(browse.normalizeState({media:'tv',year:'2024'}),'decade','2020');
+  assert.strictEqual(state.year,'');
+  assert.strictEqual(state.decade,'2020');
+  const params = browse.buildTMDBParams(state,1,{});
+  assert.strictEqual(params['first_air_date.gte'],'2020-01-01');
+  assert.strictEqual(params['first_air_date.lte'],'2029-12-31');
+}
+
+{
+  const parsed = browse.parseSearch('?upcoming=1&decade=2020&year=2024','tv');
+  assert.strictEqual(parsed.state.upcoming,true);
+  assert.strictEqual(parsed.state.year,'');
+  assert.strictEqual(parsed.state.decade,'');
+  assert.strictEqual(parsed.search,'?upcoming=1');
+}
+
+{
   const parsed = browse.parseSearch('?genre=bad,18,18&network=213&status=ended,canceled&certification=pg-13&sort=nope&x=1','tv');
   assert.deepStrictEqual(Array.from(parsed.state.genres),['18']);
   assert.strictEqual(parsed.state.network,'213');

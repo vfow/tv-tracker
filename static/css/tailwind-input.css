@@ -2710,6 +2710,10 @@
         @apply tw-hidden;
     }
 
+    .v2-more-like-section{
+        @apply tw-mt-7;
+    }
+
     .v2-section-title-row{
         @apply tw-mb-3 tw-flex tw-items-center tw-justify-between tw-gap-3;
     }

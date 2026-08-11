@@ -626,6 +626,16 @@ for (const route of [
 }
 
 {
+  const {calls,router}=createRouter('/app/browse/tv?decade=2020&year=bad&sort=rating-desc');
+  assert.strictEqual(router.currentRoute(),'/app/browse/tv?decade=2020&sort=rating-desc');
+  const call=calls.find(item=>item[0]==='openBrowsePage');
+  assert(call,'browse decade route should open the unified browse page');
+  assert.strictEqual(call[1].year,'');
+  assert.strictEqual(call[1].decade,'2020');
+  assert.strictEqual(call[1].sort,'rating-desc');
+}
+
+{
   const {calls,router}=createRouter('/app/genre/tv/18-drama?year=2024&sort=rating-desc&country=jp');
   assert.strictEqual(router.currentRoute(),'/app/genre/tv/18-drama?country=jp&year=2024&sort=rating-desc');
   const call=calls.find(item=>item[0]==='openGenrePage');

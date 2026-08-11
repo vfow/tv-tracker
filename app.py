@@ -1675,8 +1675,13 @@ def canonical_browse_query(raw_query: str, media_type: str) -> str:
         params["upcoming"] = "1"
     else:
         year = raw_values.get("year", "")
+        decade = raw_values.get("decade", "")
         if re.fullmatch(r"(?:18|19|20|21)[0-9]{2}", year):
             params["year"] = year
+        elif re.fullmatch(r"(?:18|19|20|21)[0-9]0", decade):
+            decade_value = int(decade)
+            if 1870 <= decade_value <= 2190:
+                params["decade"] = decade
 
     if media == "tv":
         statuses: list[str] = []
