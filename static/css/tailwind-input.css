@@ -5772,6 +5772,11 @@
     width:310px;
 }
 .browse-dropdown-year{
+    width:260px;
+    max-height:min(520px,70vh);
+    overflow:auto;
+}
+.browse-dropdown-year.showing-years{
     width:min(820px,calc(100vw - 64px));
     max-height:none;
     overflow:hidden;
@@ -5858,6 +5863,35 @@
     max-height:180px;
     overflow:auto;
 }
+.browse-picker-main{
+    min-width:0;
+    display:flex;
+    align-items:center;
+    gap:9px;
+}
+.browse-picker-logo{
+    width:28px;
+    height:28px;
+    flex:0 0 28px;
+    object-fit:contain;
+    padding:2px;
+    background:#171717;
+}
+.browse-picker-copy{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+}
+.browse-picker-name{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.browse-picker-meta{
+    color:#858585;
+    font:400 10px/1.15 Graphik,Arial,Helvetica,sans-serif;
+}
 .browse-selected-check{
     width:12px;
     height:10px;
@@ -5869,21 +5903,29 @@
     padding:0 0 8px;
     border-bottom:1px solid #343434;
 }
-.browse-selected-heading{
-    display:block;
-    padding:4px 10px 6px;
-    color:#6f6f6f;
-    font:700 9px/1 Graphik,Arial,Helvetica,sans-serif;
-    letter-spacing:.11em;
-    text-transform:uppercase;
-}
 .browse-selected-option{
     background:#2a2c2f;
 }
-.browse-year-quick-options{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:1px;
+.browse-year-decade-menu[hidden],
+.browse-year-strip-wrap[hidden]{
+    display:none !important;
+}
+.browse-year-decade-list{
+    max-height:min(420px,58vh);
+    overflow:auto;
+}
+.browse-decade-list-option{
+    min-height:36px;
+}
+.browse-decade-list-icons{
+    display:inline-flex;
+    align-items:center;
+    gap:9px;
+}
+.browse-decade-list-icons .browse-decade-nav-icon{
+    width:7px;
+    height:10px;
+    color:#7f8b95;
 }
 .browse-year-strip{
     display:flex;
@@ -5929,10 +5971,19 @@
     padding:0 12px;
     border-left:1px solid #34373a;
     border-right:1px solid #34373a;
+    border-top:0;
+    border-bottom:0;
     background:#8899a8;
     color:#1d252d;
     font:600 12px/1 Graphik,Arial,Helvetica,sans-serif;
     letter-spacing:.03em;
+    cursor:pointer;
+}
+.browse-decade-current:hover,
+.browse-decade-current:focus-visible{
+    background:#9bacba;
+    color:#111820;
+    outline:none;
 }
 .browse-year-strip-years{
     min-width:0;

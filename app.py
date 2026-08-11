@@ -10,6 +10,7 @@ import secrets
 import threading
 import time
 import math
+import unicodedata
 from collections import defaultdict, deque
 from datetime import date, datetime, timedelta
 from functools import wraps
@@ -158,6 +159,16 @@ SYNC_WINDOW_SECONDS = 60
 SYNC_MAX_REQUESTS = 180
 SYNC_REQUESTS: dict[str, deque[float]] = defaultdict(deque)
 SYNC_LOCK = threading.Lock()
+TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS = 6 * 60 * 60
+TMDB_NETWORK_EXPORT_LOOKBACK_DAYS = 4
+TMDB_NETWORK_SEARCH_MAX_RESULTS = 20
+TMDB_NETWORK_SEARCH_QUERY_MAX_CHARS = 80
+TMDB_NETWORK_EXPORT_CACHE: dict[str, Any] = {
+    "loaded_at": 0.0,
+    "source_date": "",
+    "records": [],
+}
+TMDB_NETWORK_EXPORT_LOCK = threading.Lock()
 CHANGE_LOG_RETENTION_REVISIONS = 5000
 CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
@@ -1897,6 +1908,143 @@ def render_page_error(status_code: int):
     ), status_code
 
 
+def normalize_tmdb_network_search_text(value: Any) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", ascii_value.casefold()).split())
+
+
+def tmdb_network_export_candidate_dates(now: datetime | None = None) -> list[date]:
+    current = now or datetime.utcnow()
+    first_date = current.date()
+    if current.hour < 8:
+        first_date -= timedelta(days=1)
+    return [first_date - timedelta(days=offset) for offset in range(TMDB_NETWORK_EXPORT_LOOKBACK_DAYS)]
+
+
+def parse_tmdb_network_export_payload(compressed: bytes) -> list[dict[str, Any]]:
+    payload = gzip.decompress(compressed).decode("utf-8", errors="replace")
+    records: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        try:
+            network_id = int(item.get("id") or 0)
+        except (TypeError, ValueError):
+            continue
+        name = str(item.get("name") or item.get("original_name") or "").strip()
+        if network_id <= 0 or not name or network_id in seen_ids:
+            continue
+        search_key = normalize_tmdb_network_search_text(name)
+        if not search_key:
+            continue
+        seen_ids.add(network_id)
+        record: dict[str, Any] = {
+            "id": network_id,
+            "name": name,
+            "search_key": search_key,
+        }
+        origin_country = str(item.get("origin_country") or "").strip().upper()
+        if re.fullmatch(r"[A-Z]{2}", origin_country):
+            record["origin_country"] = origin_country
+        records.append(record)
+    records.sort(key=lambda item: (str(item["name"]).casefold(), int(item["id"])))
+    return records
+
+
+def fetch_tmdb_network_export(export_date: date) -> list[dict[str, Any]]:
+    filename = f"tv_network_ids_{export_date:%m_%d_%Y}.json.gz"
+    target = f"https://files.tmdb.org/p/exports/{filename}"
+    upstream_request = Request(
+        target,
+        headers={
+            "Accept": "application/gzip, application/octet-stream",
+            "User-Agent": "TVTracker/1.0",
+        },
+    )
+    with urlopen(upstream_request, timeout=20) as upstream:
+        compressed = upstream.read()
+    return parse_tmdb_network_export_payload(compressed)
+
+
+def get_tmdb_network_export_records() -> tuple[list[dict[str, Any]], str]:
+    now = time.time()
+    cached_records = TMDB_NETWORK_EXPORT_CACHE.get("records")
+    loaded_at = float(TMDB_NETWORK_EXPORT_CACHE.get("loaded_at") or 0.0)
+    if isinstance(cached_records, list) and cached_records and now - loaded_at < TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS:
+        return cached_records, str(TMDB_NETWORK_EXPORT_CACHE.get("source_date") or "")
+
+    with TMDB_NETWORK_EXPORT_LOCK:
+        now = time.time()
+        cached_records = TMDB_NETWORK_EXPORT_CACHE.get("records")
+        loaded_at = float(TMDB_NETWORK_EXPORT_CACHE.get("loaded_at") or 0.0)
+        if isinstance(cached_records, list) and cached_records and now - loaded_at < TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS:
+            return cached_records, str(TMDB_NETWORK_EXPORT_CACHE.get("source_date") or "")
+
+        last_error: Exception | None = None
+        for export_date in tmdb_network_export_candidate_dates():
+            try:
+                records = fetch_tmdb_network_export(export_date)
+            except (HTTPError, URLError, TimeoutError, OSError, EOFError) as error:
+                last_error = error
+                continue
+            if not records:
+                continue
+            TMDB_NETWORK_EXPORT_CACHE.update({
+                "loaded_at": now,
+                "source_date": export_date.isoformat(),
+                "records": records,
+            })
+            return records, export_date.isoformat()
+
+        if isinstance(cached_records, list) and cached_records:
+            return cached_records, str(TMDB_NETWORK_EXPORT_CACHE.get("source_date") or "")
+        raise RuntimeError("TMDB network export is unavailable") from last_error
+
+
+def search_tmdb_network_export(query: str, *, limit: int = TMDB_NETWORK_SEARCH_MAX_RESULTS) -> tuple[list[dict[str, Any]], str]:
+    clean_query = normalize_tmdb_network_search_text(query)
+    if len(clean_query) < 2:
+        return [], ""
+    records, source_date = get_tmdb_network_export_records()
+    query_tokens = clean_query.split()
+    matches: list[tuple[tuple[int, int, str, int], dict[str, Any]]] = []
+    for item in records:
+        search_key = str(item.get("search_key") or "")
+        if not search_key:
+            continue
+        if search_key == clean_query:
+            rank = 0
+        elif search_key.startswith(clean_query):
+            rank = 1
+        elif all(token in search_key.split() for token in query_tokens):
+            rank = 2
+        elif all(token in search_key for token in query_tokens):
+            rank = 3
+        elif clean_query in search_key:
+            rank = 4
+        else:
+            continue
+        public_item = {
+            "id": int(item["id"]),
+            "name": str(item["name"]),
+        }
+        if item.get("origin_country"):
+            public_item["origin_country"] = str(item["origin_country"])
+        matches.append(((rank, len(search_key), search_key, int(item["id"])), public_item))
+    matches.sort(key=lambda item: item[0])
+    safe_limit = max(1, min(int(limit or TMDB_NETWORK_SEARCH_MAX_RESULTS), TMDB_NETWORK_SEARCH_MAX_RESULTS))
+    return [item for _, item in matches[:safe_limit]], source_date
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     if env_flag("TRUST_PROXY_HEADERS"):
@@ -2876,6 +3024,26 @@ def create_app() -> Flask:
             "ok": True,
             "revision": revision,
             "summary": summary,
+        })
+
+    @app.get("/api/tmdb/network-search")
+    @login_required
+    def tmdb_network_search():
+        query = str(request.args.get("q") or "").strip()[:TMDB_NETWORK_SEARCH_QUERY_MAX_CHARS]
+        if len(normalize_tmdb_network_search_text(query)) < 2:
+            return jsonify({"results": [], "source_date": ""})
+        try:
+            results, source_date = search_tmdb_network_export(query)
+        except RuntimeError:
+            app.logger.exception("TMDB network export search failed")
+            return jsonify({
+                "ok": False,
+                "error": "Network search is temporarily unavailable",
+                "code": "network_index_unavailable",
+            }), 502
+        return jsonify({
+            "results": results,
+            "source_date": source_date,
         })
 
     @app.get("/api/tmdb/<path:tmdb_path>")

@@ -1097,6 +1097,24 @@ function renderBrowseDecadeYearsHTML(decade,state){
     return years.join("");
 }
 
+function renderBrowseDecadeListHTML(state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const selectedYear = Number(state && state.year || 0);
+    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : 0;
+    const rows = [];
+    for(let decade=currentDecade;decade>=1870;decade-=10){
+        const selected = selectedDecade === decade;
+        rows.push(`
+            <button type="button" class="browse-dropdown-option browse-decade-list-option ${selected ? "selected" : ""}" data-browse-year-open-decade="${decade}" aria-pressed="${selected ? "true" : "false"}">
+                <span>${decade}s</span>
+                <span class="browse-decade-list-icons">${selected ? renderBrowseCheckIcon() : ""}${renderBrowseDirectionalChevronIcon("right")}</span>
+            </button>
+        `);
+    }
+    return rows.join("");
+}
+
 function renderBrowseYearMenu(state){
     const currentYear = new Date().getFullYear();
     const currentDecade = Math.floor(currentYear / 10) * 10;
@@ -1108,16 +1126,21 @@ function renderBrowseYearMenu(state){
     const anySelected = !state.year && !state.upcoming;
 
     return `
-        <div class="browse-year-quick-options">
-            <button type="button" class="browse-dropdown-option ${anySelected ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">${renderBrowseOptionLabel("Any",anySelected)}</button>
-            <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">${renderBrowseOptionLabel("Upcoming",state.upcoming)}</button>
+        <div class="browse-year-decade-menu" data-browse-year-decade-menu>
+            <div class="browse-option-list">
+                <button type="button" class="browse-dropdown-option ${anySelected ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">${renderBrowseOptionLabel("Any",anySelected)}</button>
+                <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">${renderBrowseOptionLabel("Upcoming",state.upcoming)}</button>
+            </div>
+            <div class="browse-dropdown-divider"></div>
+            <div class="browse-option-list browse-year-decade-list">${renderBrowseDecadeListHTML(state)}</div>
         </div>
-        <div class="browse-dropdown-divider"></div>
-        <div class="browse-year-strip" data-browse-year-decade="${visibleDecade}" data-browse-current-decade="${currentDecade}" data-browse-min-decade="1870">
-            <button type="button" class="browse-decade-nav browse-decade-nav-prev" data-browse-year-shift="-10" aria-label="Previous decade" ${atFirstDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("left")}</button>
-            <span class="browse-decade-current" data-browse-decade-current>${visibleDecade}s</span>
-            <div class="browse-year-strip-years" data-browse-decade-years>${renderBrowseDecadeYearsHTML(visibleDecade,state)}</div>
-            <button type="button" class="browse-decade-nav browse-decade-nav-next" data-browse-year-shift="10" aria-label="Next decade" ${atCurrentDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("right")}</button>
+        <div class="browse-year-strip-wrap" data-browse-year-strip-wrap hidden>
+            <div class="browse-year-strip" data-browse-year-decade="${visibleDecade}" data-browse-current-decade="${currentDecade}" data-browse-min-decade="1870">
+                <button type="button" class="browse-decade-nav browse-decade-nav-prev" data-browse-year-shift="-10" aria-label="Previous decade" ${atFirstDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("left")}</button>
+                <button type="button" class="browse-decade-current" data-browse-decade-current data-browse-year-show-decades aria-label="Back to decades">${visibleDecade}s</button>
+                <div class="browse-year-strip-years" data-browse-decade-years>${renderBrowseDecadeYearsHTML(visibleDecade,state)}</div>
+                <button type="button" class="browse-decade-nav browse-decade-nav-next" data-browse-year-shift="10" aria-label="Next decade" ${atCurrentDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("right")}</button>
+            </div>
         </div>
     `;
 }
@@ -1184,7 +1207,6 @@ function renderBrowseSelectedPickerValues(state,labels,group,heading){
     const fallback = group === "themes" ? "Theme" : "Production Company";
     return `
         <div class="browse-selected-block">
-            <span class="browse-selected-heading">Selected</span>
             <div class="browse-option-list">
                 ${values.map(value=>{
                     const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,labelGroup,value,fallback) : fallback;
@@ -1197,10 +1219,6 @@ function renderBrowseSelectedPickerValues(state,labels,group,heading){
 
 function renderBrowseContextSelectionHTML(state,labels){
     const sections = [];
-    if(state.network){
-        const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network";
-        sections.push(`<div class="browse-other-section"><span class="browse-other-heading">Network</span><div class="browse-option-list"><button type="button" class="browse-dropdown-option selected" data-browse-set-single="network" data-browse-value="">${renderBrowseOptionLabel(label,true)}</button></div></div>`);
-    }
     if(state.provider){
         const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider";
         sections.push(`<div class="browse-other-section"><span class="browse-other-heading">Provider</span><div class="browse-option-list"><button type="button" class="browse-dropdown-option selected" data-browse-set-single="provider" data-browse-value="">${renderBrowseOptionLabel(label,true)}</button></div></div>`);
@@ -1232,6 +1250,16 @@ function renderBrowseOtherMenu(state,labels={}){
             <div class="browse-picker-results" id="browse-company-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
         </div>
         ${state.media === "tv" ? `
+            <div class="browse-dropdown-divider"></div>
+            <div class="browse-other-section">
+                <span class="browse-other-heading">Network</span>
+                ${state.network ? (()=>{
+                    const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network";
+                    return `<div class="browse-selected-block"><div class="browse-option-list"><button type="button" class="browse-dropdown-option browse-selected-option selected" data-browse-set-single="network" data-browse-value="" data-browse-label="${escapeHTML(label)}">${renderBrowseOptionLabel(label,true)}</button></div></div>`;
+                })() : ""}
+                <input class="browse-dropdown-search" type="search" placeholder="Search networks" aria-label="Search networks" data-browse-picker-search="network">
+                <div class="browse-picker-results" id="browse-network-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
+            </div>
             <div class="browse-dropdown-divider"></div>
             <div class="browse-other-section">
                 <span class="browse-other-heading">Status</span>

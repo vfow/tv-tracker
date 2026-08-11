@@ -5407,40 +5407,81 @@ function getBrowsePickerResultsHTML(items,type,selectedValues=[]){
     if(!Array.isArray(items) || !items.length){
         return `<div class="browse-picker-empty">No matches found.</div>`;
     }
-    const group = type === "theme" ? "themes" : "companies";
+    const cleanType = type === "theme" ? "theme" : (type === "network" ? "network" : "company");
+    const group = cleanType === "theme" ? "themes" : "companies";
+    const nameCounts = new Map();
+    items.forEach(item=>{
+        const name = String(item && item.name || "").trim().toLocaleLowerCase();
+        if(name){ nameCounts.set(name,(nameCounts.get(name) || 0) + 1); }
+    });
     return items.slice(0,10).map(item=>{
         const id = String(item && item.id || "");
         const name = String(item && item.name || "").trim();
         if(!id || !name){ return ""; }
         const active = selected.has(id);
-        const content = typeof renderBrowseOptionLabel === "function"
-        ? renderBrowseOptionLabel(name,active)
-        : `<span>${escapeHTML(name)}</span>`;
-        return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-toggle-multi="${group}" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${content}</button>`;
+        const duplicateName = (nameCounts.get(name.toLocaleLowerCase()) || 0) > 1;
+        const originCountry = String(item && item.origin_country || "").trim().toUpperCase();
+        const countryLabel = duplicateName && originCountry
+        ? (typeof getDiscoveryCountryName === "function" ? getDiscoveryCountryName(originCountry) : originCountry)
+        : "";
+        const displayLabel = countryLabel ? `${name} · ${countryLabel}` : name;
+        const logoPath = cleanType === "company" ? String(item && item.logo_path || "").trim() : "";
+        const logo = logoPath
+        ? `<img class="browse-picker-logo" src="${escapeHTML("https://image.tmdb.org/t/p/w92" + logoPath)}" alt="" loading="lazy">`
+        : "";
+        const copy = `<span class="browse-picker-copy"><span class="browse-picker-name">${escapeHTML(name)}</span>${countryLabel ? `<span class="browse-picker-meta">${escapeHTML(countryLabel)}</span>` : ""}</span>`;
+        const content = `<span class="browse-picker-main">${logo}${copy}</span>${active && typeof renderBrowseCheckIcon === "function" ? renderBrowseCheckIcon() : ""}`;
+        if(cleanType === "network"){
+            return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-set-single="network" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(displayLabel)}">${content}</button>`;
+        }
+        return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-toggle-multi="${group}" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(displayLabel)}">${content}</button>`;
     }).join("");
 }
 
 async function searchBrowsePicker(type,query){
-    const cleanType = type === "theme" ? "theme" : (type === "company" ? "company" : "");
+    const cleanType = type === "theme" ? "theme" : (type === "company" ? "company" : (type === "network" ? "network" : ""));
     const cleanQuery = String(query || "").trim();
     if(!cleanType || cleanQuery.length < 2){
         return [];
     }
+    if(cleanType === "network"){
+        const response = await fetch("/api/tmdb/network-search?q=" + encodeURIComponent(cleanQuery),{
+            headers:{"Accept":"application/json"}
+        });
+        if(!response.ok){
+            throw new Error("Network search error: " + response.status);
+        }
+        const payload = await response.json();
+        const seenIds = new Set();
+        return (Array.isArray(payload && payload.results) ? payload.results : []).filter(item=>{
+            const id = Number(item && item.id || 0);
+            const name = String(item && item.name || "").trim();
+            if(!id || !name || seenIds.has(id)){ return false; }
+            seenIds.add(id);
+            return true;
+        }).slice(0,10).map(item=>({
+            id:Number(item.id),
+            name:String(item.name || "").trim(),
+            origin_country:String(item.origin_country || "").trim().toUpperCase()
+        }));
+    }
     const endpoint = cleanType === "theme" ? "search/keyword" : "search/company";
     const payload = await tmdbFetchJSON(endpoint,{query:cleanQuery,page:1});
     const seenIds = new Set();
-    const seenNames = new Set();
     const output = [];
     (Array.isArray(payload && payload.results) ? payload.results : []).forEach(item=>{
         const id = Number(item && item.id || 0);
         const name = String(item && item.name || "").trim();
-        const nameKey = name.toLocaleLowerCase();
-        if(!id || !name || seenIds.has(id) || seenNames.has(nameKey)){
+        if(!id || !name || seenIds.has(id)){
             return;
         }
         seenIds.add(id);
-        seenNames.add(nameKey);
-        output.push({id,name});
+        output.push({
+            id,
+            name,
+            logo_path:String(item && item.logo_path || "").trim(),
+            origin_country:String(item && item.origin_country || "").trim().toUpperCase()
+        });
     });
     return output.slice(0,10);
 }
@@ -7044,7 +7085,10 @@ async function navigateToBrowseState(nextState,labels={},options={}){
 }
 
 function updateBrowsePickerResults(type,query,results,error="",container=null){
-    const target = container || document.getElementById(type === "theme" ? "browse-theme-picker-results" : "browse-company-picker-results");
+    const targetId = type === "theme"
+    ? "browse-theme-picker-results"
+    : (type === "network" ? "browse-network-picker-results" : "browse-company-picker-results");
+    const target = container || document.getElementById(targetId);
     if(!target){
         return;
     }
@@ -7058,7 +7102,7 @@ function updateBrowsePickerResults(type,query,results,error="",container=null){
         return;
     }
     const state = getCurrentBrowseState();
-    const selected = type === "theme" ? state.themes : state.companies;
+    const selected = type === "theme" ? state.themes : (type === "network" ? [state.network].filter(Boolean) : state.companies);
     target.innerHTML = getBrowsePickerResultsHTML(results,type,selected);
 }
 
@@ -7068,6 +7112,17 @@ function closeBrowseMenus(except=null){
             menu.open = false;
         }
     });
+}
+
+function resetBrowseYearDropdown(menu){
+    if(!menu){ return; }
+    const dropdown = menu.querySelector(".browse-dropdown-year");
+    if(!dropdown){ return; }
+    const decadeMenu = dropdown.querySelector("[data-browse-year-decade-menu]");
+    const stripWrap = dropdown.querySelector("[data-browse-year-strip-wrap]");
+    if(decadeMenu){ decadeMenu.hidden = false; }
+    if(stripWrap){ stripWrap.hidden = true; }
+    dropdown.classList.remove("showing-years");
 }
 
 function shiftBrowseYearDecade(button,delta){
@@ -7182,7 +7237,11 @@ function ensureBrowseGlobalInteractionEvents(){
 
         const summary = target.closest(".browse-menu > summary");
         if(summary){
-            closeBrowseMenus(summary.parentElement);
+            const menu = summary.parentElement;
+            if(menu && !menu.open){
+                resetBrowseYearDropdown(menu);
+            }
+            closeBrowseMenus(menu);
             return;
         }
 
@@ -7191,6 +7250,51 @@ function ensureBrowseGlobalInteractionEvents(){
             event.preventDefault();
             event.stopPropagation();
             shiftBrowseYearDecade(decadeShiftButton,decadeShiftButton.dataset.browseYearShift);
+            return;
+        }
+
+        const decadeOpenButton = target.closest("[data-browse-year-open-decade]");
+        if(decadeOpenButton){
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = decadeOpenButton.closest(".browse-dropdown-year");
+            const decadeMenu = menu ? menu.querySelector("[data-browse-year-decade-menu]") : null;
+            const stripWrap = menu ? menu.querySelector("[data-browse-year-strip-wrap]") : null;
+            const strip = stripWrap ? stripWrap.querySelector(".browse-year-strip") : null;
+            const decade = Number(decadeOpenButton.dataset.browseYearOpenDecade || 0);
+            if(decadeMenu && stripWrap && strip && decade){
+                decadeMenu.hidden = true;
+                stripWrap.hidden = false;
+                menu.classList.add("showing-years");
+                strip.dataset.browseYearDecade = String(decade);
+                const heading = strip.querySelector("[data-browse-decade-current]");
+                const years = strip.querySelector("[data-browse-decade-years]");
+                if(heading){ heading.textContent = `${decade}s`; }
+                if(years && typeof renderBrowseDecadeYearsHTML === "function"){
+                    years.innerHTML = renderBrowseDecadeYearsHTML(decade,getCurrentBrowseState());
+                }
+                const minDecade = Number(strip.dataset.browseMinDecade || 1870);
+                const currentDecade = Number(strip.dataset.browseCurrentDecade || decade);
+                const previous = strip.querySelector('[data-browse-year-shift="-10"]');
+                const next = strip.querySelector('[data-browse-year-shift="10"]');
+                if(previous){ previous.disabled = decade <= minDecade; }
+                if(next){ next.disabled = decade >= currentDecade; }
+            }
+            return;
+        }
+
+        const showDecadesButton = target.closest("[data-browse-year-show-decades]");
+        if(showDecadesButton){
+            event.preventDefault();
+            event.stopPropagation();
+            const menu = showDecadesButton.closest(".browse-dropdown-year");
+            const decadeMenu = menu ? menu.querySelector("[data-browse-year-decade-menu]") : null;
+            const stripWrap = menu ? menu.querySelector("[data-browse-year-strip-wrap]") : null;
+            if(decadeMenu && stripWrap){
+                decadeMenu.hidden = false;
+                stripWrap.hidden = true;
+                menu.classList.remove("showing-years");
+            }
             return;
         }
 
@@ -7229,7 +7333,12 @@ function ensureBrowseGlobalInteractionEvents(){
             const key = String(singleButton.dataset.browseSetSingle || "");
             const value = String(singleButton.dataset.browseValue || "");
             const next = api.setSingle(getCurrentBrowseState(),key,key === "upcoming" ? value === "1" : value);
-            await navigateToBrowseState(next,getCurrentBrowseLabels());
+            const labels = getCurrentBrowseLabels();
+            const label = String(singleButton.dataset.browseLabel || "");
+            if(key === "network" && value && label){
+                setBrowseLabel(labels,"networks",value,label);
+            }
+            await navigateToBrowseState(next,labels);
             return;
         }
 
