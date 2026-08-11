@@ -16,8 +16,6 @@ def load_route_helpers():
         "APP_SHOW_PATH_RE",
         "APP_EPISODE_PATH_RE",
         "APP_GENRE_PATH_RE",
-        "APP_TV_GENRE_SLUGS",
-        "APP_MOVIE_GENRE_SLUGS",
         "APP_PERSON_PATH_RE",
         "APP_NETWORK_PATH_RE",
         "APP_LANGUAGE_PATH_RE",
