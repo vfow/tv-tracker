@@ -107,8 +107,6 @@ APP_BROWSE_SORT_MODES = {
     "rating-asc",
     "date-desc",
     "date-asc",
-    "title-asc",
-    "title-desc",
 }
 APP_BROWSE_STATUS_VALUES = {"returning-series", "in-production", "ended", "canceled"}
 APP_DISCOVER_CATEGORY_PATH_RE = re.compile(

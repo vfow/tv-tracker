@@ -198,12 +198,12 @@ function createRouter(route, options={}){
 
 {
   const {calls,router}=createRouter('/app/discover/movie/upcoming?genre=18&country=JP&year=2024&sort=title-desc&x=1');
-  assert.strictEqual(router.currentRoute(),'/app/discover/movie/upcoming?genre=18&country=jp&year=2024&sort=title-desc');
+  assert.strictEqual(router.currentRoute(),'/app/discover/movie/upcoming?genre=18&country=jp&year=2024');
   const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
   assert(call,'filtered movie category route should preserve canonical Browse state');
   assert.strictEqual(call[3].browseState.country,'jp');
   assert.strictEqual(call[3].browseState.year,'2024');
-  assert.strictEqual(call[3].browseState.sort,'title-desc');
+  assert.strictEqual(call[3].browseState.sort,'popularity-desc');
   assert.deepStrictEqual(Array.from(call[3].browseState.genres),['18']);
 }
 
@@ -622,10 +622,10 @@ for (const route of [
 }
 
 {
-  const {context,calls}=createRouter('/app/browse/tv?genre=18&sort=title-asc',{appDataReady:false});
+  const {context,calls}=createRouter('/app/browse/tv?genre=18&sort=rating-desc',{appDataReady:false});
   assert.strictEqual(context.activePage,'browse-detail');
   assert(calls.some(item=>item[0]==='showBrowsePageShell'),'startup should immediately render the correct Browse shell');
-  assert.strictEqual(context.browsePageState.filters.sort,'title-asc');
+  assert.strictEqual(context.browsePageState.filters.sort,'rating-desc');
 }
 
 console.log('Real-path router runtime checks passed');

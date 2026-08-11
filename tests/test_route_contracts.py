@@ -183,7 +183,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         )
         self.assertEqual(
             safe_next_url("/app/browse/tv?certification=tv-ma&genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&year=2024&status=ended,canceled&sort=title-asc"),
-            "/app/browse/tv?genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&status=ended,canceled&sort=title-asc",
+            "/app/browse/tv?genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&status=ended,canceled",
         )
         self.assertEqual(
             safe_next_url("/app/genre/tv/drama?country=JP&year=2024&sort=rating-desc"),

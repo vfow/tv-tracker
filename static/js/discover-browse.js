@@ -8,9 +8,7 @@
         "rating-desc",
         "rating-asc",
         "date-desc",
-        "date-asc",
-        "title-asc",
-        "title-desc"
+        "date-asc"
     ]);
     const TV_STATUS_VALUES = Object.freeze({
         "returning-series":"0",
@@ -294,9 +292,7 @@
             "rating-desc":"vote_average.desc",
             "rating-asc":"vote_average.asc",
             "date-desc":cleanMedia === "movie" ? "primary_release_date.desc" : "first_air_date.desc",
-            "date-asc":cleanMedia === "movie" ? "primary_release_date.asc" : "first_air_date.asc",
-            "title-asc":cleanMedia === "movie" ? "title.asc" : "name.asc",
-            "title-desc":cleanMedia === "movie" ? "title.desc" : "name.desc"
+            "date-asc":cleanMedia === "movie" ? "primary_release_date.asc" : "first_air_date.asc"
         };
         return map[cleanSort] || "popularity.desc";
     }
@@ -353,47 +349,6 @@
         return params;
     }
 
-    function getDisplayTitle(item,media="tv"){
-        const cleanMedia = normalizeMedia(media || (item && item.media_type));
-        if(!item || typeof item !== "object"){
-            return "";
-        }
-        return String(cleanMedia === "movie"
-        ? (item.title || item.name || item.original_title || "")
-        : (item.name || item.title || item.original_name || "")).trim();
-    }
-
-    function normalizeDisplayTitle(value){
-        let text = String(value || "").trim();
-        if(typeof text.normalize === "function"){
-            text = text.normalize("NFKD").replace(/[\u0300-\u036f]/g,"");
-        }
-        // Human-facing alphabetical order should not put punctuation/emoji ahead of letters.
-        text = text.replace(/^[^\p{L}\p{N}]+/u,"").trim();
-        return text.toLowerCase();
-    }
-
-    function compareDisplayTitles(a,b,media="tv"){
-        const aTitle = normalizeDisplayTitle(getDisplayTitle(a,media));
-        const bTitle = normalizeDisplayTitle(getDisplayTitle(b,media));
-        const options = {sensitivity:"base",numeric:true,ignorePunctuation:true};
-        const comparison = aTitle.localeCompare(bTitle,"en",options);
-        if(comparison){
-            return comparison;
-        }
-        return String(a && a.id || "").localeCompare(String(b && b.id || ""),"en",{numeric:true});
-    }
-
-    function sortDisplayItems(items,sort,media="tv"){
-        const source = Array.isArray(items) ? items.slice() : [];
-        const cleanSort = normalizeSort(sort);
-        if(cleanSort !== "title-asc" && cleanSort !== "title-desc"){
-            return source;
-        }
-        const direction = cleanSort === "title-desc" ? -1 : 1;
-        return source.sort((a,b)=>direction * compareDisplayTitles(a,b,media));
-    }
-
     function sortLabel(sort,media="tv"){
         const cleanSort = normalizeSort(sort);
         const dateName = normalizeMedia(media) === "movie" ? "Release Date" : "First Air Date";
@@ -403,9 +358,7 @@
             "rating-desc":"Rating — High to Low",
             "rating-asc":"Rating — Low to High",
             "date-desc":dateName + " — Newest",
-            "date-asc":dateName + " — Oldest",
-            "title-asc":"Title — A to Z",
-            "title-desc":"Title — Z to A"
+            "date-asc":dateName + " — Oldest"
         };
         return labels[cleanSort] || labels[DEFAULT_SORT];
     }
@@ -429,7 +382,6 @@
         sortToTMDB,
         buildTMDBParams,
         sortLabel,
-        sortDisplayItems,
         normalizeMedia,
         normalizeYear,
         normalizeCountry,

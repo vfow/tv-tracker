@@ -1070,32 +1070,54 @@ function renderBrowseChevronIcon(className="browse-chevron-down"){
     return `<svg class="browse-chevron ${escapeHTML(className)}" viewBox="0 0 12 8" aria-hidden="true" focusable="false"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 }
 
+function renderBrowseDirectionalChevronIcon(direction="right"){
+    const cleanDirection = direction === "left" ? "left" : "right";
+    const path = cleanDirection === "left" ? "M6.5 1 1.5 6 6.5 11" : "M1.5 1 6.5 6 1.5 11";
+    return `<svg class="browse-decade-nav-icon browse-decade-nav-icon-${cleanDirection}" viewBox="0 0 8 12" aria-hidden="true" focusable="false"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+}
+
+function renderBrowseCheckIcon(){
+    return `<svg class="browse-selected-check" viewBox="0 0 12 10" aria-hidden="true" focusable="false"><path d="M1 5.2 4.2 8.3 11 1.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+}
+
+function renderBrowseOptionLabel(label,selected=false){
+    return `<span>${escapeHTML(label)}</span>${selected ? renderBrowseCheckIcon() : ""}`;
+}
+
+function renderBrowseDecadeYearsHTML(decade,state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const cleanDecade = Math.max(1870,Math.min(currentDecade,Number(decade || currentDecade)));
+    const topYear = cleanDecade === currentDecade ? currentYear : cleanDecade + 9;
+    const years = [];
+    for(let year=cleanDecade;year<=topYear;year+=1){
+        const selected = String(state && state.year || "") === String(year);
+        years.push(`<button type="button" class="browse-year-strip-year ${selected ? "selected" : ""}" data-browse-set-single="year" data-browse-value="${year}" aria-pressed="${selected ? "true" : "false"}">${renderBrowseOptionLabel(String(year),selected)}</button>`);
+    }
+    return years.join("");
+}
+
 function renderBrowseYearMenu(state){
     const currentYear = new Date().getFullYear();
     const currentDecade = Math.floor(currentYear / 10) * 10;
     const selectedYear = Number(state.year || 0);
-    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : 0;
-    const decadeButtons = [];
-    const decadePanels = [];
-
-    for(let decade=currentDecade; decade>=1870; decade-=10){
-        const topYear = decade === currentDecade ? currentYear : decade + 9;
-        const years = [];
-        for(let year=topYear; year>=decade; year-=1){
-            years.push(`<button type="button" class="browse-dropdown-option ${state.year === String(year) ? "selected" : ""}" data-browse-set-single="year" data-browse-value="${year}">${year}</button>`);
-        }
-        const active = selectedDecade === decade;
-        decadeButtons.push(`<button type="button" class="browse-decade-option ${active ? "active" : ""}" data-browse-decade="${decade}" aria-expanded="${active ? "true" : "false"}"><span>${decade}s</span>${renderBrowseChevronIcon("browse-chevron-right")}</button>`);
-        decadePanels.push(`<div class="browse-decade-year-panel" data-browse-decade-panel="${decade}" ${active ? "" : "hidden"}><div class="browse-decade-year-heading">${decade}s</div><div class="browse-decade-years">${years.join("")}</div></div>`);
-    }
+    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : currentDecade;
+    const visibleDecade = Math.max(1870,Math.min(currentDecade,selectedDecade));
+    const atFirstDecade = visibleDecade <= 1870;
+    const atCurrentDecade = visibleDecade >= currentDecade;
+    const anySelected = !state.year && !state.upcoming;
 
     return `
-        <button type="button" class="browse-dropdown-option ${!state.year && !state.upcoming ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">Any</button>
-        <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">Upcoming</button>
+        <div class="browse-year-quick-options">
+            <button type="button" class="browse-dropdown-option ${anySelected ? "selected" : ""}" data-browse-set-single="year" data-browse-value="">${renderBrowseOptionLabel("Any",anySelected)}</button>
+            <button type="button" class="browse-dropdown-option ${state.upcoming ? "selected" : ""}" data-browse-set-single="upcoming" data-browse-value="1">${renderBrowseOptionLabel("Upcoming",state.upcoming)}</button>
+        </div>
         <div class="browse-dropdown-divider"></div>
-        <div class="browse-year-picker">
-            <div class="browse-year-decades">${decadeButtons.join("")}</div>
-            <div class="browse-year-submenu" ${selectedDecade ? "" : "hidden"}>${decadePanels.join("")}</div>
+        <div class="browse-year-strip" data-browse-year-decade="${visibleDecade}" data-browse-current-decade="${currentDecade}" data-browse-min-decade="1870">
+            <button type="button" class="browse-decade-nav browse-decade-nav-prev" data-browse-year-shift="-10" aria-label="Previous decade" ${atFirstDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("left")}</button>
+            <span class="browse-decade-current" data-browse-decade-current>${visibleDecade}s</span>
+            <div class="browse-year-strip-years" data-browse-decade-years>${renderBrowseDecadeYearsHTML(visibleDecade,state)}</div>
+            <button type="button" class="browse-decade-nav browse-decade-nav-next" data-browse-year-shift="10" aria-label="Next decade" ${atCurrentDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("right")}</button>
         </div>
     `;
 }
@@ -1120,7 +1142,7 @@ function renderBrowseGenreMenu(state){
         const id = String(genre && genre.id || "");
         const name = String(genre && genre.name || "").trim();
         const selected = state.genres.includes(id);
-        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="genres" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${escapeHTML(name)}${selected ? " ✓" : ""}</button>`;
+        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="genres" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${renderBrowseOptionLabel(name,selected)}</button>`;
     }).join("")}</div>`;
 }
 
@@ -1129,11 +1151,12 @@ function renderBrowseCountryMenu(state){
     return `
         <input class="browse-dropdown-search" type="search" placeholder="Search countries" aria-label="Search countries" data-browse-list-search="country">
         <div class="browse-option-list" data-browse-list="country">
-            <button type="button" class="browse-dropdown-option ${!state.country ? "selected" : ""}" data-browse-set-single="country" data-browse-value="" data-browse-option-label="any">Any</button>
+            <button type="button" class="browse-dropdown-option ${!state.country ? "selected" : ""}" data-browse-set-single="country" data-browse-value="" data-browse-option-label="any">${renderBrowseOptionLabel("Any",!state.country)}</button>
             ${(Array.isArray(options) ? options : []).map(item=>{
                 const aliases = String(item.code || "").toLowerCase() === "gb" ? " uk great britain britain" : "";
                 const searchTerms = `${item.name || ""} ${item.code || ""}${aliases}`.trim();
-                return `<button type="button" class="browse-dropdown-option ${state.country === item.code ? "selected" : ""}" data-browse-set-single="country" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${escapeHTML(item.name)}${state.country === item.code ? " ✓" : ""}</button>`;
+                const selected = state.country === item.code;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="country" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${renderBrowseOptionLabel(item.name,selected)}</button>`;
             }).join("") || `<div class="browse-dropdown-empty">Countries are loading…</div>`}
         </div>
     `;
@@ -1144,16 +1167,48 @@ function renderBrowseLanguageMenu(state){
     return `
         <input class="browse-dropdown-search" type="search" placeholder="Search languages" aria-label="Search languages" data-browse-list-search="language">
         <div class="browse-option-list" data-browse-list="language">
-            <button type="button" class="browse-dropdown-option ${!state.language ? "selected" : ""}" data-browse-set-single="language" data-browse-value="" data-browse-option-label="any">Any</button>
+            <button type="button" class="browse-dropdown-option ${!state.language ? "selected" : ""}" data-browse-set-single="language" data-browse-value="" data-browse-option-label="any">${renderBrowseOptionLabel("Any",!state.language)}</button>
             ${(Array.isArray(options) ? options : []).map(item=>{
                 const searchTerms = `${item.name || ""} ${item.code || ""}`.trim();
-                return `<button type="button" class="browse-dropdown-option ${state.language === item.code ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${escapeHTML(item.name)}${state.language === item.code ? " ✓" : ""}</button>`;
+                const selected = state.language === item.code;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(item.code)}" data-browse-option-label="${escapeHTML(item.name)}" data-browse-option-search="${escapeHTML(searchTerms)}">${renderBrowseOptionLabel(item.name,selected)}</button>`;
             }).join("") || `<div class="browse-dropdown-empty">Languages are loading…</div>`}
         </div>
     `;
 }
 
-function renderBrowseOtherMenu(state){
+function renderBrowseSelectedPickerValues(state,labels,group,heading){
+    const values = Array.isArray(state && state[group]) ? state[group] : [];
+    if(!values.length){ return ""; }
+    const labelGroup = group === "themes" ? "themes" : "companies";
+    const fallback = group === "themes" ? "Theme" : "Production Company";
+    return `
+        <div class="browse-selected-block">
+            <span class="browse-selected-heading">Selected</span>
+            <div class="browse-option-list">
+                ${values.map(value=>{
+                    const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,labelGroup,value,fallback) : fallback;
+                    return `<button type="button" class="browse-dropdown-option browse-selected-option selected" data-browse-toggle-multi="${escapeHTML(group)}" data-browse-value="${escapeHTML(value)}" data-browse-label="${escapeHTML(label)}">${renderBrowseOptionLabel(label,true)}</button>`;
+                }).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function renderBrowseContextSelectionHTML(state,labels){
+    const sections = [];
+    if(state.network){
+        const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network";
+        sections.push(`<div class="browse-other-section"><span class="browse-other-heading">Network</span><div class="browse-option-list"><button type="button" class="browse-dropdown-option selected" data-browse-set-single="network" data-browse-value="">${renderBrowseOptionLabel(label,true)}</button></div></div>`);
+    }
+    if(state.provider){
+        const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider";
+        sections.push(`<div class="browse-other-section"><span class="browse-other-heading">Provider</span><div class="browse-option-list"><button type="button" class="browse-dropdown-option selected" data-browse-set-single="provider" data-browse-value="">${renderBrowseOptionLabel(label,true)}</button></div></div>`);
+    }
+    return sections.length ? `${sections.join('<div class="browse-dropdown-divider"></div>')}<div class="browse-dropdown-divider"></div>` : "";
+}
+
+function renderBrowseOtherMenu(state,labels={}){
     const statusOptions = [
         ["returning-series","Returning Series"],
         ["in-production","In Production"],
@@ -1162,15 +1217,18 @@ function renderBrowseOtherMenu(state){
     ];
     const certifications = typeof browseOptionState !== "undefined" && browseOptionState ? browseOptionState.movieCertifications : [];
     return `
+        ${renderBrowseContextSelectionHTML(state,labels)}
         <div class="browse-other-section">
             <span class="browse-other-heading">Theme</span>
+            ${renderBrowseSelectedPickerValues(state,labels,"themes","Theme")}
             <input class="browse-dropdown-search" type="search" placeholder="Search themes" aria-label="Search themes" data-browse-picker-search="theme">
             <div class="browse-picker-results" id="browse-theme-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
         </div>
         <div class="browse-dropdown-divider"></div>
         <div class="browse-other-section">
-            <span class="browse-other-heading">Company</span>
-            <input class="browse-dropdown-search" type="search" placeholder="Search companies" aria-label="Search companies" data-browse-picker-search="company">
+            <span class="browse-other-heading">Production Company</span>
+            ${renderBrowseSelectedPickerValues(state,labels,"companies","Production Company")}
+            <input class="browse-dropdown-search" type="search" placeholder="Search production companies" aria-label="Search production companies" data-browse-picker-search="company">
             <div class="browse-picker-results" id="browse-company-picker-results"><div class="browse-picker-empty">Type at least 2 characters.</div></div>
         </div>
         ${state.media === "tv" ? `
@@ -1179,7 +1237,7 @@ function renderBrowseOtherMenu(state){
                 <span class="browse-other-heading">Status</span>
                 <div class="browse-option-list">${statusOptions.map(([value,label])=>{
                     const selected = state.statuses.includes(value);
-                    return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="statuses" data-browse-value="${escapeHTML(value)}">${escapeHTML(label)}${selected ? " ✓" : ""}</button>`;
+                    return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="statuses" data-browse-value="${escapeHTML(value)}">${renderBrowseOptionLabel(label,selected)}</button>`;
                 }).join("")}</div>
             </div>
         ` : `
@@ -1187,11 +1245,11 @@ function renderBrowseOtherMenu(state){
             <div class="browse-other-section">
                 <span class="browse-other-heading">US Certification</span>
                 <div class="browse-option-list">
-                    <button type="button" class="browse-dropdown-option ${!state.certification ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="">Any</button>
+                    <button type="button" class="browse-dropdown-option ${!state.certification ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="">${renderBrowseOptionLabel("Any",!state.certification)}</button>
                     ${(Array.isArray(certifications) ? certifications : []).map(value=>{
                         const slug = String(value || "").trim().toLowerCase();
                         const selected = state.certification === slug;
-                        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="${escapeHTML(slug)}">${escapeHTML(value)}${selected ? " ✓" : ""}</button>`;
+                        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="certification" data-browse-value="${escapeHTML(slug)}">${renderBrowseOptionLabel(value,selected)}</button>`;
                     }).join("") || `<div class="browse-dropdown-empty">Certifications are loading…</div>`}
                 </div>
             </div>
@@ -1207,11 +1265,12 @@ function renderBrowseSortMenu(state){
         ["rating-desc","Rating — High to Low"],
         ["rating-asc","Rating — Low to High"],
         ["date-desc",`${dateName} — Newest`],
-        ["date-asc",`${dateName} — Oldest`],
-        ["title-asc","Title — A to Z"],
-        ["title-desc","Title — Z to A"]
+        ["date-asc",`${dateName} — Oldest`]
     ];
-    return `<div class="browse-option-list">${options.map(([value,label])=>`<button type="button" class="browse-dropdown-option ${state.sort === value ? "selected" : ""}" data-browse-set-sort="${escapeHTML(value)}">${escapeHTML(label)}${state.sort === value ? " ✓" : ""}</button>`).join("")}</div>`;
+    return `<div class="browse-option-list">${options.map(([value,label])=>{
+        const selected = state.sort === value;
+        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-sort="${escapeHTML(value)}">${renderBrowseOptionLabel(label,selected)}</button>`;
+    }).join("")}</div>`;
 }
 
 function renderBrowseActiveChipsHTML(state,labels){
@@ -1230,7 +1289,7 @@ function renderBrowseActiveChipsHTML(state,labels){
     if(state.country){ push("country",state.country,typeof getDiscoveryCountryName === "function" ? getDiscoveryCountryName(state.country) : state.country.toUpperCase()); }
     if(state.language){ push("language",state.language,typeof getLanguageName === "function" ? getLanguageName(state.language) : state.language.toUpperCase()); }
     state.themes.forEach(id=>push("themes",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"themes",id,"Theme") : "Theme"));
-    state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,"Company") : "Company"));
+    state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,"Production Company") : "Production Company"));
     if(state.network){ push("network",state.network,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network"); }
     if(state.provider){ push("provider",state.provider,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider"); }
     state.statuses.forEach(value=>push("statuses",value,typeof getStatusRouteLabel === "function" ? getStatusRouteLabel(value) : value));
@@ -1266,7 +1325,7 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
                 </details>
                 <details class="browse-menu browse-menu-other">
                     <summary class="browse-bar-button">OTHER ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state)}</div>
+                    <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state,labels)}</div>
                 </details>
                 ${hideSort ? "" : `
                     <details class="browse-menu browse-menu-sort">

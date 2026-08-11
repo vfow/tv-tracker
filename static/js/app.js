@@ -5413,7 +5413,10 @@ function getBrowsePickerResultsHTML(items,type,selectedValues=[]){
         const name = String(item && item.name || "").trim();
         if(!id || !name){ return ""; }
         const active = selected.has(id);
-        return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-toggle-multi="${group}" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${escapeHTML(name)}${active ? " ✓" : ""}</button>`;
+        const content = typeof renderBrowseOptionLabel === "function"
+        ? renderBrowseOptionLabel(name,active)
+        : `<span>${escapeHTML(name)}</span>`;
+        return `<button type="button" class="browse-picker-result ${active ? "selected" : ""}" data-browse-toggle-multi="${group}" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(name)}">${content}</button>`;
     }).join("");
 }
 
@@ -5425,10 +5428,21 @@ async function searchBrowsePicker(type,query){
     }
     const endpoint = cleanType === "theme" ? "search/keyword" : "search/company";
     const payload = await tmdbFetchJSON(endpoint,{query:cleanQuery,page:1});
-    return (Array.isArray(payload && payload.results) ? payload.results : [])
-    .map(item=>({id:Number(item && item.id || 0),name:String(item && item.name || "").trim()}))
-    .filter(item=>item.id && item.name)
-    .slice(0,10);
+    const seenIds = new Set();
+    const seenNames = new Set();
+    const output = [];
+    (Array.isArray(payload && payload.results) ? payload.results : []).forEach(item=>{
+        const id = Number(item && item.id || 0);
+        const name = String(item && item.name || "").trim();
+        const nameKey = name.toLocaleLowerCase();
+        if(!id || !name || seenIds.has(id) || seenNames.has(nameKey)){
+            return;
+        }
+        seenIds.add(id);
+        seenNames.add(nameKey);
+        output.push({id,name});
+    });
+    return output.slice(0,10);
 }
 
 async function mapBrowseGenresForMedia(state,targetMedia,labels={}){
@@ -7056,24 +7070,29 @@ function closeBrowseMenus(except=null){
     });
 }
 
-function showBrowseDecade(decade,button){
-    const menu = button && typeof button.closest === "function" ? button.closest(".browse-dropdown-year") : null;
-    if(!menu){
-        return;
+function shiftBrowseYearDecade(button,delta){
+    const strip = button && typeof button.closest === "function" ? button.closest(".browse-year-strip") : null;
+    if(!strip){ return; }
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const minDecade = Number(strip.dataset.browseMinDecade || 1870);
+    const visibleDecade = Number(strip.dataset.browseYearDecade || currentDecade);
+    const shift = Number(delta || 0);
+    const nextDecade = Math.max(minDecade,Math.min(currentDecade,visibleDecade + shift));
+    if(nextDecade === visibleDecade){ return; }
+
+    strip.dataset.browseYearDecade = String(nextDecade);
+    strip.dataset.browseCurrentDecade = String(currentDecade);
+    const heading = strip.querySelector("[data-browse-decade-current]");
+    const years = strip.querySelector("[data-browse-decade-years]");
+    if(heading){ heading.textContent = `${nextDecade}s`; }
+    if(years && typeof renderBrowseDecadeYearsHTML === "function"){
+        years.innerHTML = renderBrowseDecadeYearsHTML(nextDecade,getCurrentBrowseState());
     }
-    const cleanDecade = String(decade || "").trim();
-    const submenu = menu.querySelector(".browse-year-submenu");
-    menu.querySelectorAll("[data-browse-decade]").forEach(item=>{
-        const active = String(item.dataset.browseDecade || "") === cleanDecade;
-        item.classList.toggle("active",active);
-        item.setAttribute("aria-expanded",active ? "true" : "false");
-    });
-    menu.querySelectorAll("[data-browse-decade-panel]").forEach(panel=>{
-        panel.hidden = String(panel.dataset.browseDecadePanel || "") !== cleanDecade;
-    });
-    if(submenu){
-        submenu.hidden = !cleanDecade;
-    }
+    const previous = strip.querySelector('[data-browse-year-shift="-10"]');
+    const next = strip.querySelector('[data-browse-year-shift="10"]');
+    if(previous){ previous.disabled = nextDecade <= minDecade; }
+    if(next){ next.disabled = nextDecade >= currentDecade; }
 }
 
 function filterBrowseListFromInput(input){
@@ -7167,11 +7186,11 @@ function ensureBrowseGlobalInteractionEvents(){
             return;
         }
 
-        const decadeButton = target.closest("[data-browse-decade]");
-        if(decadeButton){
+        const decadeShiftButton = target.closest("[data-browse-year-shift]");
+        if(decadeShiftButton){
             event.preventDefault();
             event.stopPropagation();
-            showBrowseDecade(decadeButton.dataset.browseDecade,decadeButton);
+            shiftBrowseYearDecade(decadeShiftButton,decadeShiftButton.dataset.browseYearShift);
             return;
         }
 

@@ -54,7 +54,8 @@ assert(browse,'browse module should load');
 
 {
   assert.strictEqual(browse.serializeSearch(browse.emptyState('tv')),'');
-  assert.strictEqual(browse.routeForState({media:'movie',year:'2024',sort:'title-asc'}),'/app/browse/movie?year=2024&sort=title-asc');
+  assert.strictEqual(browse.routeForState({media:'movie',year:'2024',sort:'title-asc'}),'/app/browse/movie?year=2024');
+  assert.strictEqual(browse.normalizeSort('title-desc'),'popularity-desc','Discover title sorting should normalize to the supported default');
 }
 
 {
@@ -95,10 +96,10 @@ assert(browse,'browse module should load');
   assert.strictEqual(movie.country,'us');
   assert.strictEqual(movie.sort,'date-desc');
 
-  const back = browse.switchMedia(browse.normalizeState({media:'movie',certification:'pg-13',year:'2024',sort:'title-desc'}),'tv');
+  const back = browse.switchMedia(browse.normalizeState({media:'movie',certification:'pg-13',year:'2024',sort:'date-desc'}),'tv');
   assert.strictEqual(back.certification,'');
   assert.strictEqual(back.year,'2024');
-  assert.strictEqual(back.sort,'title-desc');
+  assert.strictEqual(back.sort,'date-desc');
 }
 
 {
@@ -126,9 +127,7 @@ assert(browse,'browse module should load');
     ['rating-desc','tv','vote_average.desc'],
     ['rating-asc','movie','vote_average.asc'],
     ['date-desc','tv','first_air_date.desc'],
-    ['date-asc','movie','primary_release_date.asc'],
-    ['title-asc','tv','name.asc'],
-    ['title-desc','movie','title.desc']
+    ['date-asc','movie','primary_release_date.asc']
   ];
   cases.forEach(([sort,media,expected])=>{
     assert.strictEqual(browse.sortToTMDB(sort,media),expected,`${media} ${sort}`);
@@ -141,29 +140,5 @@ assert(browse,'browse module should load');
   assert.strictEqual(state.genres.length,12,'direct URL multi-select groups should be bounded');
 }
 
-{
-  const items = [
-    {id:1,name:'#blackAF'},
-    {id:2,name:'Zoo'},
-    {id:3,name:'American Teens'},
-    {id:4,name:'Crime'},
-    {id:5,name:'🌳 Forest'}
-  ];
-  assert.deepStrictEqual(
-    Array.from(browse.sortDisplayItems(items,'title-asc','tv')).map(item=>item.id),
-    [3,1,4,5,2],
-    'A-Z display sorting should ignore leading symbols and emoji'
-  );
-  assert.deepStrictEqual(
-    Array.from(browse.sortDisplayItems(items,'title-desc','tv')).map(item=>item.id),
-    [2,5,4,1,3],
-    'Z-A display sorting should be the reverse human-facing order'
-  );
-  assert.deepStrictEqual(
-    Array.from(browse.sortDisplayItems(items,'popularity-desc','tv')).map(item=>item.id),
-    [1,2,3,4,5],
-    'non-title sorts should keep API order untouched'
-  );
-}
 
 console.log('Phase 6.3C browse-state checks passed');
