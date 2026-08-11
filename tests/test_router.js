@@ -64,7 +64,11 @@ function createRouter(route, options={}){
     getPersonDetailRoute(role,id,name='',media='tv'){
       const slug = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
       const base = `/app/person/${id}${slug ? '-' + slug : ''}`;
-      return base + (media === 'movie' ? '?media=movie' : '');
+      const parts = [];
+      if(media === 'movie'){ parts.push('media=movie'); }
+      const cleanRole = String(role || '').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+      if(cleanRole && cleanRole !== 'person'){ parts.push('role=' + encodeURIComponent(cleanRole)); }
+      return base + (parts.length ? '?' + parts.join('&') : '');
     },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
@@ -239,7 +243,7 @@ function createRouter(route, options={}){
   assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan');
   const call=calls.find(item=>item[0]==='openPersonPage');
   assert(call,'neutral person route should open person page');
-  assert.deepStrictEqual(call.slice(1,3),['person','525']);
+  assert.deepStrictEqual(call.slice(1,3),['','525']);
   assert.strictEqual(call[3].fromRoute,true);
   assert.strictEqual(call[3].routeSlug,'christopher-nolan');
 }
@@ -249,7 +253,7 @@ function createRouter(route, options={}){
   assert.strictEqual(router.currentRoute(),'/app/person/525');
   const call=calls.find(item=>item[0]==='openPersonPage');
   assert(call,'ID-only person route should load so the fetched name can canonicalize the slug');
-  assert.deepStrictEqual(call.slice(1,3),['person','525']);
+  assert.deepStrictEqual(call.slice(1,3),['','525']);
   assert.strictEqual(call[3].routeSlug,'');
 }
 
@@ -364,6 +368,23 @@ for (const [route,type,value,slug,media] of [
   const call=calls.find(item=>item[0]==='openPersonPage');
   assert(call,'person movie media route should open person page');
   assert.strictEqual(call[3].media,'movie');
+}
+
+{
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan?media=movie&role=director');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan?media=movie&role=director');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'person role query should open the canonical person page');
+  assert.deepStrictEqual(call.slice(1,3),['director','525']);
+  assert.strictEqual(call[3].media,'movie');
+}
+
+{
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan?role=executive-producer&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan?role=executive-producer');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'TV person roles should survive canonical query cleanup');
+  assert.deepStrictEqual(call.slice(1,3),['executive-producer','525']);
 }
 
 {
@@ -495,7 +516,7 @@ for (const route of [
 {
   const {calls,context}=createRouter('/app/person/525-christopher-nolan',{appDataReady:false});
   assert.strictEqual(context.activePage,'person-detail');
-  assert.strictEqual(context.personPageState.role,'person');
+  assert.strictEqual(context.personPageState.role,'');
   assert(calls.some(item=>item[0]==='renderActivePersonPage'),'startup should render the existing person loading layout');
 }
 
@@ -591,8 +612,8 @@ for (const route of [
 
 
 {
-  const {calls,router}=createRouter('/app/browse/movie/?genre=18,80&provider=8,9&country=JP&year=2024&sort=rating-desc&network=213&x=1');
-  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18,80&provider=8,9&country=jp&year=2024&sort=rating-desc');
+  const {calls,router}=createRouter('/app/browse/movie/?genre=18,80&provider=8,9&country=JP&year=2024&runtime=120-149&sort=rating-desc&network=213&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18,80&provider=8,9&runtime=120-149&country=jp&year=2024&sort=rating-desc');
   const call=calls.find(item=>item[0]==='openBrowsePage');
   assert(call,'generic Browse route should open the unified browse page');
   assert.strictEqual(call[1].media,'movie');
@@ -600,6 +621,7 @@ for (const route of [
   assert.strictEqual(call[1].country,'jp');
   assert.deepStrictEqual(Array.from(call[1].providers),['8','9']);
   assert.strictEqual(call[1].year,'2024');
+  assert.strictEqual(call[1].runtime,'120-149');
   assert.strictEqual(call[1].network,'');
 }
 

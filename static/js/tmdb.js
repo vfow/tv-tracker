@@ -6,6 +6,7 @@ const TMDB_SHOW_APPEND_TO_RESPONSE = [
     "external_ids",
     "videos",
     "content_ratings",
+    "watch/providers",
     "similar",
     "aggregate_credits",
     "alternative_titles",
@@ -105,15 +106,6 @@ async function tmdbGetWatchProviderCatalog(media,watchRegion="US"){
     });
     writeCachedTMDBProviderCatalog(cleanMedia,region,results);
     return results;
-}
-
-async function tmdbGetTitleWatchProviders(media,titleId,options={}){
-    const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
-    const id = String(titleId || "").trim();
-    if(!/^[1-9][0-9]{0,11}$/.test(id)){
-        throw new Error("Invalid TMDB title ID");
-    }
-    return await tmdbFetchJSON(cleanMedia + "/" + encodeURIComponent(id) + "/watch/providers",{},options);
 }
 
 function normalizeTMDBSearchQuery(query){

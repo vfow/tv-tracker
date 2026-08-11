@@ -17,6 +17,22 @@
         "canceled":"4"
     });
     const MULTI_KEYS = Object.freeze(["genres","themes","companies","providers","statuses"]);
+    const RUNTIME_RANGES = Object.freeze({
+        tv:Object.freeze({
+            "under-30":Object.freeze({label:"Under 30 min",min:0,max:29}),
+            "30-44":Object.freeze({label:"30–44 min",min:30,max:44}),
+            "45-59":Object.freeze({label:"45–59 min",min:45,max:59}),
+            "60-89":Object.freeze({label:"60–89 min",min:60,max:89}),
+            "90-plus":Object.freeze({label:"90+ min",min:90,max:null})
+        }),
+        movie:Object.freeze({
+            "under-90":Object.freeze({label:"Under 90 min",min:0,max:89}),
+            "90-119":Object.freeze({label:"90–119 min",min:90,max:119}),
+            "120-149":Object.freeze({label:"120–149 min",min:120,max:149}),
+            "150-179":Object.freeze({label:"150–179 min",min:150,max:179}),
+            "180-plus":Object.freeze({label:"180+ min",min:180,max:null})
+        })
+    });
 
     function normalizeMedia(media){
         return String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
@@ -45,6 +61,12 @@
     function normalizeCertification(value){
         const clean = String(value || "").trim().toLowerCase();
         return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(clean) ? clean : "";
+    }
+
+    function normalizeRuntime(value,media="tv"){
+        const cleanMedia = normalizeMedia(media);
+        const clean = String(value || "").trim().toLowerCase();
+        return Object.prototype.hasOwnProperty.call(RUNTIME_RANGES[cleanMedia],clean) ? clean : "";
     }
 
     function normalizeSort(value){
@@ -88,6 +110,7 @@
             companies:[],
             network:"",
             providers:[],
+            runtime:"",
             statuses:[],
             certification:"",
             sort:DEFAULT_SORT
@@ -109,6 +132,7 @@
             companies:parseList(source.companies || source.company,normalizeId),
             network:normalizeId(source.network),
             providers:parseList(source.providers || source.provider,normalizeId),
+            runtime:normalizeRuntime(source.runtime,cleanMedia),
             statuses:parseList(source.statuses || source.status,normalizeStatus),
             certification:normalizeCertification(source.certification),
             sort:normalizeSort(source.sort)
@@ -144,6 +168,7 @@
             companies:params.get("company") || "",
             network:params.get("network") || "",
             providers:params.get("provider") || "",
+            runtime:params.get("runtime") || "",
             statuses:params.get("status") || "",
             certification:params.get("certification") || "",
             sort:params.get("sort") || DEFAULT_SORT
@@ -163,6 +188,7 @@
         if(state.companies.length){ parts.push("company=" + encodeList(state.companies)); }
         if(state.network){ parts.push("network=" + encodeURIComponent(state.network)); }
         if(state.providers.length){ parts.push("provider=" + encodeList(state.providers)); }
+        if(state.runtime){ parts.push("runtime=" + encodeURIComponent(state.runtime)); }
         if(state.country){ parts.push("country=" + encodeURIComponent(state.country)); }
         if(state.language){ parts.push("language=" + encodeURIComponent(state.language)); }
         if(state.upcoming){
@@ -227,6 +253,8 @@
             state.language = normalizeLanguage(value);
         }else if(key === "network"){
             state.network = normalizeId(value);
+        }else if(key === "runtime"){
+            state.runtime = normalizeRuntime(value,state.media);
         }else if(key === "certification"){
             state.certification = normalizeCertification(value);
         }else if(key === "sort"){
@@ -277,7 +305,7 @@
         const state = normalizeState(input,input && input.media);
         return !!(
             state.year || state.upcoming || state.genres.length || state.country || state.language ||
-            state.themes.length || state.companies.length || state.network || state.providers.length ||
+            state.themes.length || state.companies.length || state.network || state.providers.length || state.runtime ||
             state.statuses.length || state.certification
         );
     }
@@ -317,6 +345,13 @@
             params.with_watch_providers = state.providers.join("|");
             params.watch_region = String(options.watchRegion || "US").toUpperCase();
             params.with_watch_monetization_types = "flatrate";
+        }
+        if(state.runtime){
+            const range = RUNTIME_RANGES[media][state.runtime];
+            if(range){
+                if(Number.isFinite(range.min) && range.min > 0){ params["with_runtime.gte"] = range.min; }
+                if(Number.isFinite(range.max)){ params["with_runtime.lte"] = range.max; }
+            }
         }
         if(state.country){ params.with_origin_country = state.country.toUpperCase(); }
         if(state.language){ params.with_original_language = state.language; }
@@ -367,6 +402,7 @@
         DEFAULT_SORT,
         SORTS,
         TV_STATUS_VALUES,
+        RUNTIME_RANGES,
         emptyState,
         normalizeState,
         parseSearch,
@@ -388,6 +424,7 @@
         normalizeLanguage,
         normalizeId,
         normalizeCertification,
+        normalizeRuntime,
         normalizeSort
     });
 }(window));

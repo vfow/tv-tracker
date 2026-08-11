@@ -71,6 +71,10 @@ APP_BROWSE_SORT_MODES = {
     "date-asc",
 }
 APP_BROWSE_STATUS_VALUES = {"returning-series", "in-production", "ended", "canceled"}
+APP_BROWSE_RUNTIME_VALUES = {
+    "tv": {"under-30", "30-44", "45-59", "60-89", "90-plus"},
+    "movie": {"under-90", "90-119", "120-149", "150-179", "180-plus"},
+}
 APP_DISCOVER_CATEGORY_PATH_RE = re.compile(
     r"^/app/discover/(?:(?:tv)/(?:popular|top-rated|airing-today|on-the-air)|(?:movie)/(?:popular|top-rated|now-playing|upcoming))$"
 )
@@ -1655,6 +1659,10 @@ def canonical_browse_query(raw_query: str, media_type: str) -> str:
     if provider:
         params["provider"] = provider
 
+    runtime = raw_values.get("runtime", "").lower()
+    if runtime in APP_BROWSE_RUNTIME_VALUES[media]:
+        params["runtime"] = runtime
+
     country = raw_values.get("country", "").lower()
     if re.fullmatch(r"[a-z]{2}", country):
         params["country"] = country
@@ -1792,11 +1800,20 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_PERSON_PATH_RE.fullmatch(candidate):
         media_type = "tv"
+        role = ""
         if separator:
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
-                if key == "media" and value.strip().lower() in {"tv", "movie"}:
-                    media_type = value.strip().lower()
-        return candidate + ("?media=movie" if media_type == "movie" else "")
+                clean_value = value.strip().lower()
+                if key == "media" and clean_value in {"tv", "movie"}:
+                    media_type = clean_value
+                elif key == "role" and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", clean_value):
+                    role = clean_value
+        params = {}
+        if media_type == "movie":
+            params["media"] = "movie"
+        if role:
+            params["role"] = role
+        return candidate + (("?" + urlencode(params)) if params else "")
     if APP_NETWORK_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_LANGUAGE_PATH_RE.fullmatch(candidate):
@@ -2363,7 +2380,7 @@ def create_app() -> Flask:
         if APP_PERSON_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/show/<show_key>", strict_slashes=False)

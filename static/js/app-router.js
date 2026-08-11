@@ -207,8 +207,13 @@
             const person = parseRouteIdSlug(personMatch[1]);
             const personSearchParams = readSearchParams(search);
             const media = String(personSearchParams.get("media") || "").trim().toLowerCase() === "movie" ? "movie" : "tv";
-            const personSearch = media === "movie" ? "?media=movie" : "";
-            return buildParsedRoute("person",path,personSearch,{id:person.id,slug:person.slug,role:"person",media});
+            const rawRole = String(personSearchParams.get("role") || "").trim().toLowerCase();
+            const role = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(rawRole) ? rawRole : "";
+            const personParts = [];
+            if(media === "movie"){ personParts.push("media=movie"); }
+            if(role){ personParts.push("role=" + encodeURIComponent(role)); }
+            const personSearch = personParts.length ? "?" + personParts.join("&") : "";
+            return buildParsedRoute("person",path,personSearch,{id:person.id,slug:person.slug,role,media});
         }
 
         const networkMatch = path.match(/^\/app\/network\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -361,7 +366,8 @@
             if(typeof getPersonDetailRoute === "function"){
                 const personName = typeof personPageState !== "undefined" && personPageState && personPageState.person ? personPageState.person.name : (typeof personPageState !== "undefined" && personPageState ? personPageState.routeSlug : "");
                 const personMedia = typeof personPageState !== "undefined" && personPageState ? personPageState.media : "tv";
-                return getPersonDetailRoute("person",selectedPersonContext.personId,personName,personMedia);
+                const personRole = typeof personPageState !== "undefined" && personPageState ? personPageState.role : "";
+                return getPersonDetailRoute(personRole,selectedPersonContext.personId,personName,personMedia);
             }
             return "/app/list/watching";
         }
@@ -686,8 +692,8 @@
             return;
         }
         if(parsed.type === "person"){
-            selectedPersonContext = {role:"person",personId:params.id};
-            personPageState = Object.assign({},personPageState,{role:"person",personId:params.id,routeSlug:params.slug,media:params.media || "tv",loading:true,error:"",person:null,credits:[]});
+            selectedPersonContext = {role:params.role || "",personId:params.id};
+            personPageState = Object.assign({},personPageState,{role:params.role || "",personId:params.id,routeSlug:params.slug,media:params.media || "tv",loading:true,error:"",person:null,credits:[]});
             if(typeof showPersonDetailPageShell === "function"){
                 showPersonDetailPageShell("discover");
             }
@@ -887,7 +893,7 @@
         }
         if(parsed.type === "person"){
             if(typeof openPersonPage === "function"){
-                openPersonPage("person",params.id,{fromRoute:true,routeSlug:params.slug,media:params.media || "tv"});
+                openPersonPage(params.role || "",params.id,{fromRoute:true,routeSlug:params.slug,media:params.media || "tv"});
             }
             return;
         }

@@ -24,15 +24,16 @@ const browse = context.window.TVTrackerBrowse;
 assert(browse,'browse module should load');
 
 {
-  const parsed = browse.parseSearch('?genre=18,80&theme=10,11&company=49,50&country=jp&language=ja&year=2024&sort=rating-desc','movie');
+  const parsed = browse.parseSearch('?genre=18,80&theme=10,11&company=49,50&runtime=120-149&country=jp&language=ja&year=2024&sort=rating-desc','movie');
   assert.deepStrictEqual(Array.from(parsed.state.genres),['18','80']);
   assert.deepStrictEqual(Array.from(parsed.state.themes),['10','11']);
   assert.deepStrictEqual(Array.from(parsed.state.companies),['49','50']);
+  assert.strictEqual(parsed.state.runtime,'120-149');
   assert.strictEqual(parsed.state.country,'jp');
   assert.strictEqual(parsed.state.language,'ja');
   assert.strictEqual(parsed.state.year,'2024');
   assert.strictEqual(parsed.state.sort,'rating-desc');
-  assert.strictEqual(parsed.search,'?genre=18,80&theme=10,11&company=49,50&country=jp&language=ja&year=2024&sort=rating-desc');
+  assert.strictEqual(parsed.search,'?genre=18,80&theme=10,11&company=49,50&runtime=120-149&country=jp&language=ja&year=2024&sort=rating-desc');
 }
 
 {
@@ -59,7 +60,7 @@ assert(browse,'browse module should load');
 }
 
 {
-  const state = browse.normalizeState({media:'tv',genres:['18','80'],themes:['10','11'],companies:['49','50'],network:'213',country:'jp',language:'ja',statuses:['ended','canceled'],year:'2024',sort:'rating-desc'});
+  const state = browse.normalizeState({media:'tv',genres:['18','80'],themes:['10','11'],companies:['49','50'],network:'213',country:'jp',language:'ja',statuses:['ended','canceled'],year:'2024',runtime:'45-59',sort:'rating-desc'});
   const params = browse.buildTMDBParams(state,2,{today:'2026-08-10',watchRegion:'MY'});
   assert.strictEqual(params.page,2);
   assert.strictEqual(params.with_genres,'18|80');
@@ -70,12 +71,14 @@ assert(browse,'browse module should load');
   assert.strictEqual(params.with_original_language,'ja');
   assert.strictEqual(params.with_status,'3|4');
   assert.strictEqual(params.first_air_date_year,'2024');
+  assert.strictEqual(params['with_runtime.gte'],45);
+  assert.strictEqual(params['with_runtime.lte'],59);
   assert.strictEqual(params.sort_by,'vote_average.desc');
   assert.strictEqual(params['vote_count.gte'],20);
 }
 
 {
-  const movie = browse.normalizeState({media:'movie',upcoming:true,certification:'pg-13',providers:['8','9'],sort:'rating-asc'});
+  const movie = browse.normalizeState({media:'movie',upcoming:true,certification:'pg-13',providers:['8','9'],runtime:'180-plus',sort:'rating-asc'});
   const params = browse.buildTMDBParams(movie,1,{today:'2026-08-10',watchRegion:'MY'});
   assert.strictEqual(params['primary_release_date.gte'],'2026-08-10');
   assert.strictEqual(params.certification_country,'US');
@@ -83,19 +86,22 @@ assert(browse,'browse module should load');
   assert.strictEqual(params.with_watch_providers,'8|9');
   assert.strictEqual(params.with_watch_monetization_types,'flatrate');
   assert.strictEqual(params.watch_region,'MY');
+  assert.strictEqual(params['with_runtime.gte'],180);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(params,'with_runtime.lte'),false);
   assert.deepStrictEqual(Array.from(movie.providers),['8','9']);
   assert.strictEqual(params.sort_by,'vote_average.asc');
   assert.strictEqual(params['vote_count.gte'],50);
 }
 
 {
-  const tv = browse.normalizeState({media:'tv',network:'213',statuses:['ended'],genres:['18'],country:'us',certification:'pg-13',sort:'date-desc'});
+  const tv = browse.normalizeState({media:'tv',network:'213',statuses:['ended'],genres:['18'],country:'us',runtime:'45-59',certification:'pg-13',sort:'date-desc'});
   const movie = browse.switchMedia(tv,'movie');
   assert.strictEqual(movie.media,'movie');
   assert.strictEqual(movie.network,'');
   assert.deepStrictEqual(Array.from(movie.statuses),[]);
   assert.deepStrictEqual(Array.from(movie.genres),['18']);
   assert.strictEqual(movie.country,'us');
+  assert.strictEqual(movie.runtime,'','TV-only runtime range should be cleared when it does not exist for movies');
   assert.strictEqual(movie.sort,'date-desc');
 
   const back = browse.switchMedia(browse.normalizeState({media:'movie',certification:'pg-13',year:'2024',sort:'date-desc'}),'tv');
@@ -120,6 +126,14 @@ assert(browse,'browse module should load');
   assert.strictEqual(tvUpcoming.year,'');
   assert.strictEqual(params['first_air_date.gte'],'2026-08-10');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(params,'first_air_date_year'),false);
+}
+
+{
+  const shortMovie = browse.normalizeState({media:'movie',runtime:'under-90'});
+  const params = browse.buildTMDBParams(shortMovie,1,{});
+  assert.strictEqual(params['with_runtime.lte'],89);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(params,'with_runtime.gte'),false);
+  assert.strictEqual(browse.routeForState(shortMovie),'/app/browse/movie?runtime=under-90');
 }
 
 {

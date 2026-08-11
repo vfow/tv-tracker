@@ -32,6 +32,7 @@ def load_route_helpers():
         "APP_BROWSE_PATH_RE",
         "APP_BROWSE_SORT_MODES",
         "APP_BROWSE_STATUS_VALUES",
+        "APP_BROWSE_RUNTIME_VALUES",
         "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
         "APP_LIBRARY_SORT_MODES",
@@ -178,8 +179,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
 
     def test_browse_query_state_is_preserved_and_canonicalized(self):
         self.assertEqual(
-            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&provider=8,9&country=JP&year=2024&sort=rating-desc&x=1"),
-            "/app/browse/movie?genre=18,80&provider=8,9&country=jp&year=2024&sort=rating-desc",
+            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&provider=8,9&country=JP&year=2024&runtime=120-149&sort=rating-desc&x=1"),
+            "/app/browse/movie?genre=18,80&provider=8,9&runtime=120-149&country=jp&year=2024&sort=rating-desc",
         )
         self.assertEqual(
             safe_next_url("/app/browse/tv?certification=tv-ma&genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&year=2024&status=ended,canceled&sort=title-asc"),
@@ -194,6 +195,16 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/company/movie/49-hbo?genre=18&certification=pg-13",
         )
         self.assertEqual(safe_next_url("/app/browse/tv?sort=popularity-desc"), "/app/browse/tv")
+        self.assertEqual(safe_next_url("/app/browse/tv?runtime=45-59"), "/app/browse/tv?runtime=45-59")
+        self.assertEqual(safe_next_url("/app/browse/movie?runtime=45-59"), "/app/browse/movie")
+        self.assertEqual(
+            safe_next_url("/app/person/525-christopher-nolan?media=movie&role=director&x=1"),
+            "/app/person/525-christopher-nolan?media=movie&role=director",
+        )
+        self.assertEqual(
+            safe_next_url("/app/person/525-christopher-nolan?media=tv&role=executive-producer"),
+            "/app/person/525-christopher-nolan?role=executive-producer",
+        )
 
     def test_sensitive_or_external_destinations_are_rejected(self):
         for value in (

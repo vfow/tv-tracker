@@ -110,8 +110,6 @@ var moviePageState = {
     error:"",
     movie:null
 };
-var detailWatchProviderState = {tv:{},movie:{}};
-var detailWatchProviderPending = new Map();
 var showDetailPreview = null;
 var showDetailBackStack = [];
 var showDetailOpeningFromRoute = false;
@@ -201,17 +199,6 @@ const TV_STATUS_ROUTES = {
     "ended":{label:"Ended",tmdbValue:"3"},
     "canceled":{label:"Canceled",tmdbValue:"4"},
     "in-production":{label:"In Production",tmdbValue:"2"}
-};
-const PERSON_ROLE_CONFIGS = {
-    person:{label:"Person",titleTV:"TV Shows",titleMovie:"Movies"},
-    actor:{label:"Actor",titleTV:"Shows starring",titleMovie:"Movies starring",source:"cast"},
-    creator:{label:"Creator",titleTV:"Shows created by",titleMovie:"Movies created by",jobs:["creator","created by"]},
-    director:{label:"Director",titleTV:"Shows directed by",titleMovie:"Movies directed by",jobs:["director"]},
-    writer:{label:"Writer",titleTV:"Shows written by",titleMovie:"Movies written by",jobs:["writer","screenplay","teleplay","story"]},
-    producer:{label:"Producer",titleTV:"Shows produced by",titleMovie:"Movies produced by",jobs:["producer"]},
-    editor:{label:"Editor",titleTV:"Shows edited by",titleMovie:"Movies edited by",jobs:["editor"]},
-    composer:{label:"Composer",titleTV:"Shows composed by",titleMovie:"Movies composed by",jobs:["composer","music"]},
-    cinematographer:{label:"Cinematographer",titleTV:"Shows shot by",titleMovie:"Movies shot by",jobs:["cinematographer","cinematography","director of photography"]}
 };
 
 
@@ -1083,7 +1070,10 @@ function setupEvents(){
         }
         event.preventDefault();
         event.stopPropagation();
-        openPersonPage(link.dataset.personRole,link.dataset.personId);
+        openPersonPage(link.dataset.personRole,link.dataset.personId,{
+            personName:link.dataset.personName || link.textContent || "",
+            media:link.dataset.personMedia || "tv"
+        });
     });
 
 
@@ -2119,6 +2109,23 @@ function normalizeTMDBSimilarShows(similar,limit=10){
     }));
 }
 
+function normalizeTMDBSimilarMovies(similar,limit=10){
+    const results = similar && Array.isArray(similar.results) ? similar.results : [];
+    return results
+    .filter(movie=>movie && movie.id && (movie.title || movie.original_title))
+    .slice(0,Number(limit || 10))
+    .map(movie=>({
+        id:Number(movie.id || 0),
+        title:movie.title || movie.original_title || "Untitled",
+        poster_path:movie.poster_path || "",
+        backdrop_path:movie.backdrop_path || "",
+        overview:movie.overview || "",
+        release_date:movie.release_date || "",
+        vote_average:Number(movie.vote_average || 0),
+        popularity:Number(movie.popularity || 0)
+    }));
+}
+
 function normalizeTMDBContentRatings(contentRatings){
     const results = contentRatings && Array.isArray(contentRatings.results) ? contentRatings.results : [];
 
@@ -2160,62 +2167,41 @@ function normalizeCrewJob(value){
 
 function normalizeTMDBAggregateCrew(aggregateCredits){
     const crew = aggregateCredits && Array.isArray(aggregateCredits.crew) ? aggregateCredits.crew : [];
-    const grouped = {
-        creators:[],
-        directors:[],
-        writers:[],
-        producers:[],
-        music:[],
-        other:[]
-    };
+    const rows = [];
     const seen = new Set();
 
     crew.forEach(person=>{
         if(!person || !person.name){
             return;
         }
+        const jobs = Array.isArray(person.jobs) && person.jobs.length
+        ? person.jobs
+        : [{job:person.job || "Crew",episode_count:person.episode_count || person.total_episode_count || 0}];
 
-        const jobs = Array.isArray(person.jobs) ? person.jobs : [];
-        const jobNames = jobs.map(job=>normalizeCrewJob(job && job.job)).filter(Boolean);
-        const department = String(person.department || person.known_for_department || "").toLowerCase();
-        const combined = jobNames.join(" / ") || normalizeCrewJob(person.job) || "Crew";
-        const lowerJobs = combined.toLowerCase();
-        let group = "other";
-
-        if(lowerJobs.includes("creator") || lowerJobs.includes("created by")){
-            group = "creators";
-        }else if(lowerJobs.includes("director") || department === "directing"){
-            group = "directors";
-        }else if(lowerJobs.includes("writer") || lowerJobs.includes("screenplay") || lowerJobs.includes("teleplay") || department === "writing"){
-            group = "writers";
-        }else if(lowerJobs.includes("producer") || department === "production"){
-            group = "producers";
-        }else if(lowerJobs.includes("music") || lowerJobs.includes("composer") || department === "sound"){
-            group = "music";
-        }
-
-        const key = [group,person.id || person.name,combined].join(":");
-        if(seen.has(key)){
-            return;
-        }
-        seen.add(key);
-
-        grouped[group].push({
-            id:Number(person.id || 0),
-            name:String(person.name || "").trim(),
-            job:combined,
-            profile_path:person.profile_path || "",
-            episode_count:Number(person.total_episode_count || jobs.reduce((total,job)=>total + Number(job && job.episode_count || 0),0) || person.episode_count || 0)
+        jobs.forEach(jobItem=>{
+            const job = normalizeCrewJob(jobItem && jobItem.job) || "Crew";
+            const key = [person.id || person.name,String(job).toLowerCase()].join(":");
+            if(seen.has(key)){
+                return;
+            }
+            seen.add(key);
+            rows.push({
+                id:Number(person.id || 0),
+                name:String(person.name || "").trim(),
+                job,
+                department:String(person.department || person.known_for_department || "Crew").trim() || "Crew",
+                profile_path:person.profile_path || "",
+                episode_count:Number(jobItem && jobItem.episode_count || person.total_episode_count || person.episode_count || 0)
+            });
         });
     });
 
-    Object.keys(grouped).forEach(key=>{
-        grouped[key] = grouped[key]
-        .sort((a,b)=>Number(b.episode_count || 0) - Number(a.episode_count || 0))
-        .slice(0,12);
+    return rows.sort((a,b)=>{
+        const jobDiff = String(a.job || "").localeCompare(String(b.job || ""));
+        if(jobDiff){ return jobDiff; }
+        const episodeDiff = Number(b.episode_count || 0) - Number(a.episode_count || 0);
+        return episodeDiff || String(a.name || "").localeCompare(String(b.name || ""));
     });
-
-    return grouped;
 }
 
 function normalizeTMDBExternalIds(details){
@@ -2815,7 +2801,7 @@ function createShowObject(details,status){
         _tmdb_production_companies:[],
         created_by_people:[],
         _tmdb_cast:[],
-        _tmdb_crew:{creators:[],directors:[],writers:[],producers:[],music:[],other:[]},
+        _tmdb_crew:[],
         _v2_cast_loaded_at:"",
         _v2_bundle7_loaded_at:"",
         _v2_bundle7_2_loaded_at:"",
@@ -5130,7 +5116,7 @@ function createBrowseFilterState(media="tv",source={}){
     }
     return Object.assign({
         media:normalizeBrowseMediaType(media),year:"",upcoming:false,genres:[],country:"",language:"",
-        themes:[],companies:[],network:"",providers:[],statuses:[],certification:"",sort:"popularity-desc"
+        themes:[],companies:[],network:"",providers:[],runtime:"",statuses:[],certification:"",sort:"popularity-desc"
     },source || {});
 }
 
@@ -5631,6 +5617,31 @@ function buildBrowseDiscoverParams(state,page){
     return {page:Math.max(1,Number(page || 1)),sort_by:"popularity.desc",include_adult:"false"};
 }
 
+function getRuntimeBrowseRangeKey(runtimeMinutes,media="tv"){
+    const minutes = Number(runtimeMinutes || 0);
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const api = getBrowseStateAPI();
+    const ranges = api && api.RUNTIME_RANGES ? api.RUNTIME_RANGES[cleanMedia] : null;
+    if(!Number.isFinite(minutes) || minutes <= 0 || !ranges){
+        return "";
+    }
+    return Object.keys(ranges).find(key=>{
+        const range = ranges[key];
+        const min = Number(range && range.min || 0);
+        const max = range && Number.isFinite(range.max) ? Number(range.max) : null;
+        return minutes >= min && (max === null || minutes <= max);
+    }) || "";
+}
+
+function getRuntimeBrowseRoute(runtimeMinutes,media="tv"){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const runtime = getRuntimeBrowseRangeKey(runtimeMinutes,cleanMedia);
+    if(!runtime){
+        return "";
+    }
+    return getBrowseRoute(createBrowseFilterState(cleanMedia,{runtime}));
+}
+
 function sortBrowseResultsForDisplay(items,state,media="tv"){
     const api = getBrowseStateAPI();
     const cleanState = createBrowseFilterState(media,state || {});
@@ -5648,13 +5659,25 @@ function getBrowseStateHasAnyChoice(state){
 
 
 function normalizePersonRoleSlug(role){
-    const clean = String(role || "").trim().toLowerCase().replace(/[^a-z]/g,"");
-    return PERSON_ROLE_CONFIGS[clean] ? clean : "";
+    const raw = String(role || "").trim().toLowerCase();
+    if(!raw || raw === "person" || raw === "all" || raw === "all-roles"){
+        return "";
+    }
+    if(raw === "actor"){
+        return "acting";
+    }
+    const slug = typeof buildRouteSlug === "function" ? buildRouteSlug(raw) : raw.replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ? slug : "";
 }
 
-function getPersonRoleConfig(role){
-    const clean = normalizePersonRoleSlug(role);
-    return clean ? PERSON_ROLE_CONFIGS[clean] : null;
+function normalizePersonRoleLabel(value){
+    const label = String(value || "").trim();
+    return label || "Crew";
+}
+
+function getPersonRoleKeyFromLabel(value){
+    const label = normalizePersonRoleLabel(value);
+    return normalizePersonRoleSlug(label);
 }
 
 function normalizePersonMediaType(media){
@@ -5683,39 +5706,73 @@ function getPersonDetailRoute(role,personId,label="",media="tv"){
     const cleanId = normalizePersonId(personId);
     const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
     const cleanMedia = normalizePersonMediaType(media);
+    const cleanRole = normalizePersonRoleSlug(role);
     if(!key || !key.includes("-")){
         return "/app/list/watching";
     }
-    return `/app/person/${encodeURIComponent(key)}${cleanMedia === "movie" ? "?media=movie" : ""}`;
+    const params = [];
+    if(cleanMedia === "movie"){
+        params.push("media=movie");
+    }
+    if(cleanRole){
+        params.push("role=" + encodeURIComponent(cleanRole));
+    }
+    return `/app/person/${encodeURIComponent(key)}${params.length ? "?" + params.join("&") : ""}`;
 }
 
-function getPersonPageTitle(role,media){
-    const config = getPersonRoleConfig(role);
+function getPersonRoleDisplayLabel(role,person=null,media=""){
+    const cleanRole = normalizePersonRoleSlug(role);
+    if(!cleanRole){
+        return "All Roles";
+    }
+    if(cleanRole === "acting"){
+        return "Acting";
+    }
+    const targetPerson = person || (personPageState && personPageState.person) || null;
+    const targetMedia = normalizePersonMediaType(media || (personPageState && personPageState.media) || "tv");
+    const match = getPersonAvailableRoles(targetPerson,targetMedia).find(item=>item.key === cleanRole);
+    if(match){
+        return match.label;
+    }
+    return cleanRole.split("-").filter(Boolean).map(word=>word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function getPersonAvailableRoles(person,media="tv"){
     const cleanMedia = normalizePersonMediaType(media);
+    const combined = person && person.combined_credits ? person.combined_credits : {};
+    const cast = Array.isArray(combined.cast) ? combined.cast : [];
+    const crew = Array.isArray(combined.crew) ? combined.crew : [];
+    const roles = new Map();
 
-    if(!config){
-        return cleanMedia === "movie" ? "Movies" : "Shows";
+    if(cast.some(credit=>credit && String(credit.media_type || "") === cleanMedia)){
+        roles.set("acting",{key:"acting",label:"Acting"});
     }
 
-    return cleanMedia === "movie" ? (config.titleMovie || "Movies") : (config.titleTV || "Shows");
+    crew.forEach(credit=>{
+        if(!credit || String(credit.media_type || "") !== cleanMedia){
+            return;
+        }
+        const label = normalizePersonRoleLabel(credit.job || credit.department || "Crew");
+        const key = getPersonRoleKeyFromLabel(label);
+        if(key && !roles.has(key)){
+            roles.set(key,{key,label});
+        }
+    });
+
+    const values = Array.from(roles.values());
+    return values.sort((a,b)=>{
+        if(a.key === "acting"){ return -1; }
+        if(b.key === "acting"){ return 1; }
+        return a.label.localeCompare(b.label);
+    });
 }
 
-function normalizePersonCreditJob(value){
-    return String(value || "").trim().toLowerCase();
-}
-
-function personCrewJobMatchesRole(credit,role){
-    const config = getPersonRoleConfig(role);
-    if(!config || !Array.isArray(config.jobs)){
-        return false;
+function personHasRole(person,role,media="tv"){
+    const cleanRole = normalizePersonRoleSlug(role);
+    if(!cleanRole){
+        return true;
     }
-
-    const job = normalizePersonCreditJob(credit && credit.job);
-    const department = normalizePersonCreditJob(credit && credit.department);
-    const knownFor = normalizePersonCreditJob(credit && credit.known_for_department);
-    const joined = [job,department,knownFor].filter(Boolean).join(" ");
-
-    return config.jobs.some(pattern=>joined.includes(pattern));
+    return getPersonAvailableRoles(person,media).some(item=>item.key === cleanRole);
 }
 
 function getPersonCreditRoleLabel(credit){
@@ -5800,7 +5857,7 @@ function getPersonCreditsForRole(person,role,media){
     const combined = person && person.combined_credits ? person.combined_credits : {};
     const cast = Array.isArray(combined.cast) ? combined.cast : [];
     const crew = Array.isArray(combined.crew) ? combined.crew : [];
-    const source = cleanRole === "person" ? cast.concat(crew) : cleanRole === "actor" ? cast : crew;
+    const source = !cleanRole ? cast.concat(crew) : cleanRole === "acting" ? cast : crew;
     const merged = new Map();
 
     source
@@ -5808,10 +5865,10 @@ function getPersonCreditsForRole(person,role,media){
         if(!credit || String(credit.media_type || "") !== cleanMedia){
             return false;
         }
-        if(cleanRole === "person" || cleanRole === "actor"){
+        if(!cleanRole || cleanRole === "acting"){
             return true;
         }
-        return personCrewJobMatchesRole(credit,cleanRole);
+        return getPersonRoleKeyFromLabel(credit.job || credit.department || "Crew") === cleanRole;
     })
     .forEach(credit=>{
         const item = normalizePersonCreditItem(credit,cleanMedia);
@@ -5832,8 +5889,7 @@ function getPersonCreditsForRole(person,role,media){
             return Number(b.popularity || 0) - Number(a.popularity || 0);
         }
         return String(b.date || "").localeCompare(String(a.date || ""));
-    })
-    .slice(0,DISCOVERY_GRID_PAGE_SIZE);
+    });
 }
 
 function normalizePersonDetails(person){
@@ -5894,11 +5950,11 @@ function renderActivePersonPage(){
 }
 
 async function loadPersonPageResults(){
-    const cleanRole = normalizePersonRoleSlug(personPageState && personPageState.role);
+    const requestedRole = normalizePersonRoleSlug(personPageState && personPageState.role);
     const cleanId = normalizePersonId(personPageState && personPageState.personId);
     const media = normalizePersonMediaType(personPageState && personPageState.media);
 
-    if(!cleanRole || !cleanId){
+    if(!cleanId){
         personPageState.error = "Person not found.";
         personPageState.loading = false;
         renderActivePersonPage();
@@ -5918,18 +5974,20 @@ async function loadPersonPageResults(){
             throw new Error("Person not found.");
         }
 
-        const canonicalPersonRoute = getPersonDetailRoute("person",cleanId,person.name,media);
+        const role = personHasRole(person,requestedRole,media) ? requestedRole : "";
+        const canonicalPersonRoute = getPersonDetailRoute(role,cleanId,person.name,media);
         if(canonicalPersonRoute && canonicalPersonRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalPersonRoute,true);
             rememberRouteNavContext(canonicalPersonRoute,"discover");
         }
 
+        selectedPersonContext = {role,personId:cleanId};
         personPageState = Object.assign({},personPageState,{
-            role:cleanRole,
+            role,
             personId:cleanId,
-            media:media,
-            person:person,
-            credits:getPersonCreditsForRole(person,cleanRole,media),
+            media,
+            person,
+            credits:getPersonCreditsForRole(person,role,media),
             loading:false,
             error:""
         });
@@ -5947,7 +6005,7 @@ async function loadPersonPageResults(){
 }
 
 async function openPersonPage(role,personId,options={}){
-    const cleanRole = "person";
+    const cleanRole = normalizePersonRoleSlug(role);
     const cleanId = normalizePersonId(personId);
 
     if(!cleanId){
@@ -5963,7 +6021,6 @@ async function openPersonPage(role,personId,options={}){
     const navigationContext = getDetailNavContext("person",options,fromRoute ? getCurrentAppRoute() : initialPersonRoute);
     const isSamePerson = activePage === "person-detail" &&
     selectedPersonContext &&
-    String(selectedPersonContext.role || "") === cleanRole &&
     String(selectedPersonContext.personId || "") === cleanId;
 
     selectedPersonContext = {role:cleanRole,personId:cleanId};
@@ -5980,8 +6037,8 @@ async function openPersonPage(role,personId,options={}){
         personPageState = {
             role:cleanRole,
             personId:cleanId,
-            routeSlug:routeSlug,
-            media:media,
+            routeSlug,
+            media,
             loading:false,
             error:"",
             person:null,
@@ -6008,7 +6065,15 @@ async function openPersonPage(role,personId,options={}){
     if(!isSamePerson || !personPageState.person){
         await loadPersonPageResults();
     }else{
-        personPageState.credits = getPersonCreditsForRole(personPageState.person,cleanRole,personPageState.media);
+        const nextRole = personHasRole(personPageState.person,cleanRole,media) ? cleanRole : "";
+        personPageState.role = nextRole;
+        selectedPersonContext.role = nextRole;
+        personPageState.credits = getPersonCreditsForRole(personPageState.person,nextRole,media);
+        const personName = personPageState.person ? personPageState.person.name : routeLabel;
+        const nextRoute = getPersonDetailRoute(nextRole,cleanId,personName,media);
+        if(nextRoute && nextRoute !== "/app/list/watching" && nextRoute !== getCurrentAppRoute()){
+            setAppHashRoute(nextRoute,true);
+        }
         renderActivePersonPage();
     }
 }
@@ -6033,19 +6098,45 @@ function attachPersonDetailPageEvents(){
             if(nextMedia === personPageState.media){
                 return;
             }
+            const nextRole = personPageState.person && personHasRole(personPageState.person,personPageState.role,nextMedia)
+            ? normalizePersonRoleSlug(personPageState.role)
+            : "";
             personPageState.media = nextMedia;
+            personPageState.role = nextRole;
+            if(selectedPersonContext){ selectedPersonContext.role = nextRole; }
             const personName = personPageState.person ? personPageState.person.name : (personPageState.routeSlug || "");
-            const nextRoute = getPersonDetailRoute("person",personPageState.personId,personName,nextMedia);
+            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,nextMedia);
             if(nextRoute && nextRoute !== "/app/list/watching"){
                 setAppHashRoute(nextRoute,false);
                 rememberRouteNavContext(nextRoute,"discover");
             }
             if(personPageState.person){
-                personPageState.credits = getPersonCreditsForRole(personPageState.person,personPageState.role,personPageState.media);
+                personPageState.credits = getPersonCreditsForRole(personPageState.person,nextRole,nextMedia);
                 renderActivePersonPage();
             }else{
                 loadPersonPageResults();
             }
+        });
+    });
+
+    document.querySelectorAll("[data-person-role-filter]").forEach(button=>{
+        button.addEventListener("click",function(event){
+            event.preventDefault();
+            const requestedRole = normalizePersonRoleSlug(this.dataset.personRoleFilter || "");
+            const nextRole = personPageState.person && personHasRole(personPageState.person,requestedRole,personPageState.media) ? requestedRole : "";
+            if(nextRole === normalizePersonRoleSlug(personPageState.role)){
+                return;
+            }
+            personPageState.role = nextRole;
+            if(selectedPersonContext){ selectedPersonContext.role = nextRole; }
+            personPageState.credits = getPersonCreditsForRole(personPageState.person,nextRole,personPageState.media);
+            const personName = personPageState.person ? personPageState.person.name : (personPageState.routeSlug || "");
+            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,personPageState.media);
+            if(nextRoute && nextRoute !== "/app/list/watching"){
+                setAppHashRoute(nextRoute,false);
+                rememberRouteNavContext(nextRoute,"discover");
+            }
+            renderActivePersonPage();
         });
     });
 
@@ -7675,6 +7766,7 @@ function normalizeMovieDetails(movie){
         crew:Array.isArray(credits.crew) ? credits.crew : [],
         release_dates:releaseDates,
         watch_providers:watchProviders,
+        similar:normalizeTMDBSimilarMovies(movie.similar,10),
         keywords:movie.keywords || {keywords:[]}
     };
 }
@@ -7682,7 +7774,7 @@ function normalizeMovieDetails(movie){
 async function tmdbGetMovieDetails(movieId){
     return await tmdbFetchJSON(
         "movie/" + encodeURIComponent(String(movieId)),
-        {append_to_response:"external_ids,videos,release_dates,credits,similar,keywords"}
+        {append_to_response:"external_ids,videos,release_dates,watch/providers,credits,similar,keywords"}
     );
 }
 
@@ -7769,52 +7861,6 @@ function renderMovieDetailError(){
     }
 }
 
-function getDetailWatchProviderState(media,titleId){
-    const cleanMedia = normalizeBrowseMediaType(media);
-    const id = String(titleId || "").trim();
-    const bucket = detailWatchProviderState[cleanMedia] || (detailWatchProviderState[cleanMedia] = {});
-    if(!bucket[id]){
-        bucket[id] = {loading:false,error:"",data:null,loadedAt:""};
-    }
-    return bucket[id];
-}
-
-async function loadDetailWatchProviders(media,titleId,{force=true}={}){
-    const cleanMedia = normalizeBrowseMediaType(media);
-    const id = String(titleId || "").trim();
-    if(!/^[1-9][0-9]{0,11}$/.test(id) || typeof tmdbGetTitleWatchProviders !== "function"){
-        return null;
-    }
-    const key = cleanMedia + ":" + id;
-    if(detailWatchProviderPending.has(key)){
-        return await detailWatchProviderPending.get(key);
-    }
-    const state = getDetailWatchProviderState(cleanMedia,id);
-    if(!force && state.data){ return state.data; }
-    if(force){
-        state.data = null;
-        state.loadedAt = "";
-    }
-    state.loading = true;
-    state.error = "";
-    const request = (async()=>{
-        try{
-            const payload = await tmdbGetTitleWatchProviders(cleanMedia,id);
-            state.data = payload || {results:{}};
-            state.loadedAt = new Date().toISOString();
-            return state.data;
-        }catch(error){
-            state.error = "Couldn’t load watch options.";
-            return null;
-        }finally{
-            state.loading = false;
-            detailWatchProviderPending.delete(key);
-        }
-    })();
-    detailWatchProviderPending.set(key,request);
-    return await request;
-}
-
 function renderActiveMoviePage(){
     if(typeof renderMovieDetailPage === "function"){
         renderMovieDetailPage(moviePageState);
@@ -7835,11 +7881,6 @@ function attachMovieDetailPageEvents(){
         button.addEventListener("click",function(){
             activeMovieDetailsTab = this.dataset.movieDetailTab || "Info";
             renderActiveMoviePage();
-            if(activeMovieDetailsTab === "Where to Watch" && moviePageState && moviePageState.movie){
-                loadDetailWatchProviders("movie",moviePageState.movie.id,{force:true}).then(()=>{
-                    if(activePage === "movie-detail" && activeMovieDetailsTab === "Where to Watch"){ renderActiveMoviePage(); }
-                });
-            }
         });
     });
 
@@ -7943,6 +7984,28 @@ function attachMovieDetailPageEvents(){
             openDiscoveryFilterPage(this.dataset.discoveryType,this.dataset.discoveryValue,{name:this.dataset.discoveryName || "",routeLabel:this.dataset.discoveryLabel || "",media:this.dataset.discoveryMedia || ""});
         });
     });
+
+    document.querySelectorAll("[data-movie-similar-open]").forEach(link=>{
+        link.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const id = Number(this.dataset.movieSimilarOpen || 0);
+            if(!id){
+                return;
+            }
+            const backRoute = moviePageState && moviePageState.movie
+            ? getMovieDetailRoute(moviePageState.movie.id,moviePageState.movie.title || "")
+            : "";
+            await openMoviePage(id,{movieName:this.dataset.movieSimilarName || "",backRoute});
+        });
+    });
+
+    if(typeof attachV2RailScrollEvents === "function"){
+        attachV2RailScrollEvents();
+    }
 }
 
 async function openMoviePage(movieId,options={}){

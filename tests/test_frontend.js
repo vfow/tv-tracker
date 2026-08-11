@@ -19,7 +19,9 @@ const fs = require('fs');
 const app = fs.readFileSync('static/js/app.js','utf8');
 assert(!app.includes('api.' + 'tv' + 'maze.com'));
 assert(app.includes('function cleanLegacyMetadata'));
-assert(app.includes('person:{label'));
+assert(app.includes('function getPersonAvailableRoles'));
+assert(app.includes('function getPersonCreditsForRole'));
+assert(!app.includes('PERSON_ROLE_CONFIGS'));
 assert(app.includes('function syncNextEpisodeFromTMDB'));
 
 
