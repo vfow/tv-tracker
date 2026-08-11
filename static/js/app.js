@@ -92,10 +92,11 @@ var browseOptionState = {
     countries:[],
     languages:[],
     movieCertifications:[],
-    loaded:{common:false,tvGenres:false,movieGenres:false,certifications:false},
+    providers:{tv:[],movie:[]},
+    loaded:{common:false,tvGenres:false,movieGenres:false,certifications:false,tvProviders:false,movieProviders:false},
     picker:{type:"",query:"",loading:false,error:"",results:[]}
 };
-var browseReferencePromises = {common:null,tv:null,movie:null,certifications:null};
+var browseReferencePromises = {common:null,tv:null,movie:null,certifications:null,tvProviders:null,movieProviders:null};
 var browsePickerSearchTimer = null;
 var browsePickerSearchRequestId = 0;
 var browseGlobalEventsBound = false;
@@ -109,6 +110,8 @@ var moviePageState = {
     error:"",
     movie:null
 };
+var detailWatchProviderState = {tv:{},movie:{}};
+var detailWatchProviderPending = new Map();
 var showDetailPreview = null;
 var showDetailBackStack = [];
 var showDetailOpeningFromRoute = false;
@@ -1721,21 +1724,25 @@ async function refreshShowDetails(show){
     try{
 
         if(!canUseTMDBShow(show)){
-            return;
+            return false;
         }
 
         const details = await tmdbGetShowDetails(show.tmdb_id);
 
         if(!details){
-            return;
+            return false;
         }
 
         show.title = details.name || show.title || "";
+        show.original_name = details.original_name || show.original_name || "";
         show.poster_path = details.poster_path || show.poster_path || "";
         show.backdrop_path = details.backdrop_path || show.backdrop_path || "";
         show.overview = details.overview || show.overview || "";
         show.first_air_date = details.first_air_date || show.first_air_date || "";
+        show.last_air_date = details.last_air_date || show.last_air_date || "";
+        show.episode_run_time = Array.isArray(details.episode_run_time) ? details.episode_run_time : (show.episode_run_time || []);
         show.genres = (details.genres || []).map(genre=>genre.name);
+        show.genre_items = (details.genres || []).map(genre=>({id:Number(genre.id || 0),name:String(genre.name || "")})).filter(genre=>genre.id && genre.name);
         show.networks = normalizeTMDBNetworks(details);
         show._network_metadata_version = 1;
         show.tmdb_status = details.status || show.tmdb_status || "";
@@ -1748,18 +1755,57 @@ async function refreshShowDetails(show){
         applyV2TMDBDetails(show,details);
         syncNextEpisodeFromTMDB(show);
         show.last_tmdb_refresh = new Date().toISOString();
+        return true;
 
     }catch(error){
-
-        return;
-
+        return false;
     }
 
 }
 
+function getTrackedShowExternalMetadataFingerprint(show){
+    if(!show){ return ""; }
+    const snapshot = {
+        title:show.title || "",
+        poster_path:show.poster_path || "",
+        backdrop_path:show.backdrop_path || "",
+        overview:show.overview || "",
+        first_air_date:show.first_air_date || "",
+        last_air_date:show.last_air_date || "",
+        genres:Array.isArray(show.genres) ? show.genres : [],
+        genre_items:Array.isArray(show.genre_items) ? show.genre_items : [],
+        networks:Array.isArray(show.networks) ? show.networks : [],
+        tmdb_status:show.tmdb_status || "",
+        tmdb_rating:Number(show.tmdb_rating || 0),
+        tmdb_vote_count:Number(show.tmdb_vote_count || 0),
+        number_of_seasons:Number(show.number_of_seasons || 0),
+        number_of_episodes:Number(show.number_of_episodes || 0),
+        next_episode_to_air:show.next_episode_to_air || null,
+        last_episode_to_air:show.last_episode_to_air || null,
+        content_rating:show.content_rating || "",
+        production_companies:Array.isArray(show._tmdb_production_companies) ? show._tmdb_production_companies : [],
+        cast:Array.isArray(show._tmdb_cast) ? show._tmdb_cast : [],
+        crew:show._tmdb_crew || {},
+        themes:Array.isArray(show._tmdb_keywords) ? show._tmdb_keywords : []
+    };
+    try{ return JSON.stringify(snapshot); }catch(error){ return String(Date.now()); }
+}
 
-
-
+async function refreshOpenTrackedShowMetadata(showId){
+    const id = String(showId || "");
+    const show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+    if(!show || !shouldRefreshShow(show)){ return false; }
+    const before = getTrackedShowExternalMetadataFingerprint(show);
+    const refreshed = await refreshShowDetails(show);
+    if(!refreshed){ return false; }
+    await saveData({showIds:[id]});
+    const changed = before !== getTrackedShowExternalMetadataFingerprint(show);
+    if(changed && String(selectedShowId || "") === id && selectedEpisodeContext === null){
+        renderShowDetailsPagePreservingScroll(show);
+        if(typeof updateShellTitle === "function"){ updateShellTitle(); }
+    }
+    return changed;
+}
 
 function shouldRefreshShow(show){
 
@@ -2737,6 +2783,7 @@ function createShowObject(details,status){
         last_air_date:details.last_air_date || "",
         episode_run_time:Array.isArray(details.episode_run_time) ? details.episode_run_time : [],
         genres:(details.genres || []).map(genre=>genre.name),
+        genre_items:(details.genres || []).map(genre=>({id:Number(genre.id || 0),name:String(genre.name || "")})).filter(genre=>genre.id && genre.name),
         networks:normalizeTMDBNetworks(details),
         _network_metadata_version:1,
         status:status,
@@ -4638,22 +4685,48 @@ function getSmartGenreEquivalentSlug(slug,currentMedia,targetMedia){
     return mapped && getGenreSlugSet(toMedia).has(mapped) ? mapped : "";
 }
 
-function getGenreRouteFromName(name,media="tv"){
+function getKnownGenreOptions(media="tv"){
+    const cleanMedia = normalizeGenreMediaType(media);
+    const fromBrowse = typeof browseOptionState !== "undefined" && browseOptionState && browseOptionState.genres ? browseOptionState.genres[cleanMedia] : [];
+    if(Array.isArray(fromBrowse) && fromBrowse.length){ return fromBrowse; }
+    const fromDiscover = typeof discoverHubState !== "undefined" && discoverHubState && discoverHubState.genres ? discoverHubState.genres[cleanMedia] : [];
+    return Array.isArray(fromDiscover) ? fromDiscover : [];
+}
+
+function getKnownGenreByName(name,media="tv"){
     const slug = normalizeGenreSlug(name);
-    const cleanMedia = normalizeGenreMediaType(media);
-    return slug ? "/app/genre/" + encodeURIComponent(cleanMedia) + "/" + encodeURIComponent(slug) : "";
+    if(!slug){ return null; }
+    return getKnownGenreOptions(media).find(item=>normalizeGenreSlug(item && item.name) === slug) || null;
 }
 
-function getGenreDetailRoute(slug,media="tv"){
-    const cleanSlug = normalizeGenreSlug(slug);
-    const cleanMedia = normalizeGenreMediaType(media);
-    return cleanSlug ? "/app/genre/" + encodeURIComponent(cleanMedia) + "/" + encodeURIComponent(cleanSlug) : "/app/list/watching";
+function getKnownGenreById(genreId,media="tv"){
+    const id = String(genreId || "").trim();
+    if(!/^[1-9][0-9]{0,11}$/.test(id)){ return null; }
+    return getKnownGenreOptions(media).find(item=>String(item && item.id || "") === id) || null;
 }
 
-function getGenreMediaSwitchRoute(slug,currentMedia,targetMedia){
+function getGenreRouteFromName(name,media="tv"){
+    const genre = getKnownGenreByName(name,media);
+    return genre && genre.id ? getGenreDetailRoute(genre.id,genre.name,media) : "";
+}
+
+function getGenreDetailRoute(genreId,label="",media="tv"){
+    const id = String(genreId || "").trim();
+    const cleanMedia = normalizeGenreMediaType(media);
+    if(!/^[1-9][0-9]{0,11}$/.test(id)){ return "/app/list/watching"; }
+    const known = getKnownGenreById(id,cleanMedia);
+    const key = buildRouteKey(id,label || (known && known.name) || "genre");
+    return key && key.includes("-") ? `/app/genre/${encodeURIComponent(cleanMedia)}/${encodeURIComponent(key)}` : "/app/list/watching";
+}
+
+function getGenreMediaSwitchRoute(genreId,currentMedia,targetMedia){
+    const fromMedia = normalizeGenreMediaType(currentMedia);
     const cleanTarget = normalizeGenreMediaType(targetMedia);
-    const equivalent = getSmartGenreEquivalentSlug(slug,currentMedia,cleanTarget);
-    return equivalent ? getGenreDetailRoute(equivalent,cleanTarget) : "";
+    const source = getKnownGenreById(genreId,fromMedia);
+    if(!source || !source.name){ return ""; }
+    const equivalentSlug = getSmartGenreEquivalentSlug(source.name,fromMedia,cleanTarget);
+    const target = equivalentSlug ? getKnownGenreByName(equivalentSlug,cleanTarget) : null;
+    return target && target.id ? getGenreDetailRoute(target.id,target.name,cleanTarget) : "";
 }
 
 function getGenreDisplayNameFromSlug(slug){
@@ -4799,12 +4872,6 @@ function scheduleLibrarySearchRouteUpdate(){
 }
 
 function getAppWatchRegion(){
-    if(typeof v2GetWatchRegion === "function"){
-        return String(v2GetWatchRegion() || "US").toUpperCase();
-    }
-    if(typeof getStaticWatchRegion === "function"){
-        return String(getStaticWatchRegion() || "US").toUpperCase();
-    }
     return "US";
 }
 
@@ -5033,11 +5100,11 @@ async function tmdbGetWatchProviderDetails(providerId){
     }
     const region = getAppWatchRegion();
     const lists = await Promise.all([
-        tmdbFetchJSON("watch/providers/tv",{watch_region:region}).catch(()=>({results:[]})),
-        tmdbFetchJSON("watch/providers/movie",{watch_region:region}).catch(()=>({results:[]}))
+        typeof tmdbGetWatchProviderCatalog === "function" ? tmdbGetWatchProviderCatalog("tv",region).catch(()=>[]) : [],
+        typeof tmdbGetWatchProviderCatalog === "function" ? tmdbGetWatchProviderCatalog("movie",region).catch(()=>[]) : []
     ]);
     for(const list of lists){
-        const match = (Array.isArray(list && list.results) ? list.results : [])
+        const match = (Array.isArray(list) ? list : [])
         .map(normalizeProviderDetails)
         .find(provider=>provider && String(provider.id) === cleanId);
         if(match){
@@ -5063,7 +5130,7 @@ function createBrowseFilterState(media="tv",source={}){
     }
     return Object.assign({
         media:normalizeBrowseMediaType(media),year:"",upcoming:false,genres:[],country:"",language:"",
-        themes:[],companies:[],network:"",provider:"",statuses:[],certification:"",sort:"popularity-desc"
+        themes:[],companies:[],network:"",providers:[],statuses:[],certification:"",sort:"popularity-desc"
     },source || {});
 }
 
@@ -5140,7 +5207,7 @@ function addBrowseBaseFilter(state,group,value){
     if(!cleanValue){
         return next;
     }
-    if(group === "genres" || group === "themes" || group === "companies" || group === "statuses"){
+    if(group === "genres" || group === "themes" || group === "companies" || group === "providers" || group === "statuses"){
         if(!next[group].includes(cleanValue)){
             next[group] = next[group].concat(cleanValue);
         }
@@ -5177,7 +5244,7 @@ function stripDiscoveryBaseFromBrowseExtras(type,value,state,media="tv"){
     }else if(cleanType === "country"){
         output.country = "";
     }else if(cleanType === "provider"){
-        output.provider = "";
+        output.providers = output.providers.filter(id=>id !== cleanValue);
     }else if(cleanType === "year"){
         output.year = "";
         output.upcoming = false;
@@ -5223,7 +5290,7 @@ function getDiscoveryBrowseState(){
     }else if(type === "company"){
         state = addBrowseBaseFilter(state,"companies",value);
     }else if(type === "provider"){
-        state = addBrowseBaseFilter(state,"provider",value);
+        state = addBrowseBaseFilter(state,"providers",value);
     }else if(type === "year"){
         state = addBrowseBaseFilter(state,"year",value);
     }else if(type === "status"){
@@ -5350,6 +5417,20 @@ async function ensureBrowseReferenceData(media="tv"){
         tasks.push(browseReferencePromises.certifications);
     }
 
+    const providerLoadedKey = cleanMedia === "movie" ? "movieProviders" : "tvProviders";
+    if(!browseOptionState.loaded[providerLoadedKey] && typeof tmdbGetWatchProviderCatalog === "function"){
+        const providerPromiseKey = cleanMedia === "movie" ? "movieProviders" : "tvProviders";
+        if(!browseReferencePromises[providerPromiseKey]){
+            browseReferencePromises[providerPromiseKey] = tmdbGetWatchProviderCatalog(cleanMedia,getAppWatchRegion()).then(items=>{
+                browseOptionState.providers[cleanMedia] = Array.isArray(items) ? items.map(normalizeProviderDetails).filter(Boolean) : [];
+                browseOptionState.loaded[providerLoadedKey] = true;
+            }).catch(()=>{}).finally(()=>{
+                browseReferencePromises[providerPromiseKey] = null;
+            });
+        }
+        tasks.push(browseReferencePromises[providerPromiseKey]);
+    }
+
     if(tasks.length){
         await Promise.allSettled(tasks);
     }
@@ -5391,11 +5472,12 @@ async function resolveBrowseLabels(state,labels={}){
             if(item && item.name){ setBrowseLabel(output,"networks",cleanState.network,item.name); }
         }).catch(()=>{}));
     }
-    if(cleanState.provider && !output.providers[cleanState.provider]){
-        asyncTasks.push(tmdbGetWatchProviderDetails(cleanState.provider).then(item=>{
-            if(item && item.name){ setBrowseLabel(output,"providers",cleanState.provider,item.name); }
+    cleanState.providers.forEach(id=>{
+        if(output.providers[id]){ return; }
+        asyncTasks.push(tmdbGetWatchProviderDetails(id).then(item=>{
+            if(item && item.name){ setBrowseLabel(output,"providers",id,item.name); }
         }).catch(()=>{}));
-    }
+    });
     if(asyncTasks.length){
         await Promise.allSettled(asyncTasks);
     }
@@ -5489,14 +5571,16 @@ async function searchBrowsePicker(type,query){
 async function mapBrowseGenresForMedia(state,targetMedia,labels={}){
     const current = createBrowseFilterState(state && state.media,state);
     const toMedia = normalizeBrowseMediaType(targetMedia);
-    if(current.media === toMedia || !current.genres.length){
-        return {state:createBrowseFilterState(toMedia,current),labels:createBrowseLabelState(labels)};
-    }
-    await Promise.allSettled([ensureBrowseReferenceData(current.media),ensureBrowseReferenceData(toMedia)]);
-    const targetGenres = Array.isArray(browseOptionState.genres[toMedia]) ? browseOptionState.genres[toMedia] : [];
-    const mappedIds = [];
     const outputLabels = createBrowseLabelState(labels);
 
+    if(current.media === toMedia){
+        return {state:createBrowseFilterState(toMedia,current),labels:outputLabels};
+    }
+
+    await Promise.allSettled([ensureBrowseReferenceData(current.media),ensureBrowseReferenceData(toMedia)]);
+
+    const targetGenres = Array.isArray(browseOptionState.genres[toMedia]) ? browseOptionState.genres[toMedia] : [];
+    const mappedIds = [];
     current.genres.forEach(id=>{
         const sourceName = browseGenreNameById(current.media,id) || getBrowseLabel(labels,"genres",id,"");
         const sourceSlug = normalizeGenreSlug(sourceName);
@@ -5512,6 +5596,13 @@ async function mapBrowseGenresForMedia(state,targetMedia,labels={}){
     ? getBrowseStateAPI().switchMedia(current,toMedia)
     : createBrowseFilterState(toMedia,current);
     next.genres = mappedIds;
+
+    const supportedProviderIds = new Set(
+        (Array.isArray(browseOptionState.providers[toMedia]) ? browseOptionState.providers[toMedia] : [])
+        .map(item=>String(item && item.id || ""))
+        .filter(Boolean)
+    );
+    next.providers = current.providers.filter(id=>supportedProviderIds.has(String(id)));
     next = createBrowseFilterState(toMedia,next);
     return {state:next,labels:outputLabels};
 }
@@ -6106,19 +6197,17 @@ async function tmdbGetMovieGenreList(){
     return tmdbGetGenreList("movie");
 }
 
-async function resolveGenreFromSlug(slug,media="tv"){
-    const cleanSlug = normalizeGenreSlug(slug);
+async function resolveGenreById(genreId,media="tv"){
+    const id = String(genreId || "").trim();
     const cleanMedia = normalizeGenreMediaType(media);
-    if(!cleanSlug){
-        return null;
-    }
-
+    if(!/^[1-9][0-9]{0,11}$/.test(id)){ return null; }
     const genres = await tmdbGetGenreList(cleanMedia);
-    return genres.find(genre=>normalizeGenreSlug(genre && genre.name) === cleanSlug) || null;
+    return genres.find(genre=>String(genre && genre.id || "") === id) || null;
 }
 
 async function resolveTVGenreFromSlug(slug){
-    return resolveGenreFromSlug(slug,"tv");
+    const genre = getKnownGenreByName(slug,"tv");
+    return genre && genre.id ? resolveGenreById(genre.id,"tv") : null;
 }
 
 function getGenrePageFiltersFromState(){
@@ -6147,10 +6236,10 @@ function getGenreDiscoverSort(sort,media){
 
 async function loadGenrePageResults(options={}){
     const append = options && options.append === true;
-    const slug = normalizeGenreSlug(genrePageState && genrePageState.slug);
+    const genreId = String(genrePageState && genrePageState.genreId || "").trim();
     const media = normalizeGenreMediaType(genrePageState && genrePageState.media);
 
-    if(!slug){
+    if(!/^[1-9][0-9]{0,11}$/.test(genreId)){
         genrePageState.error = "Genre not found.";
         genrePageState.loading = false;
         renderActiveGenrePage();
@@ -6160,7 +6249,7 @@ async function loadGenrePageResults(options={}){
     const filters = getGenrePageFiltersFromState();
     const nextPage = append ? Number(genrePageState.page || 1) + 1 : 1;
     const requestId = ++genrePageRequestId;
-    const requestIsCurrent = ()=>requestId === genrePageRequestId && activePage === "genre-detail" && String(selectedGenreSlug || "") === slug && normalizeGenreMediaType(selectedGenreMedia) === media;
+    const requestIsCurrent = ()=>requestId === genrePageRequestId && activePage === "genre-detail" && String(genrePageState && genrePageState.genreId || "") === genreId && normalizeGenreMediaType(selectedGenreMedia) === media;
 
     genrePageState.loading = true;
     genrePageState.error = "";
@@ -6172,7 +6261,7 @@ async function loadGenrePageResults(options={}){
     renderActiveGenrePage();
 
     try{
-        const genre = await resolveGenreFromSlug(slug,media);
+        const genre = await resolveGenreById(genreId,media);
         if(!requestIsCurrent()){
             return;
         }
@@ -6186,7 +6275,7 @@ async function loadGenrePageResults(options={}){
         genrePageState.browse = createBrowseFilterState(media,genreExtras);
         const browseApi = getBrowseStateAPI();
         const genreBrowseSearch = browseApi && typeof browseApi.serializeSearch === "function" ? browseApi.serializeSearch(genrePageState.browse) : "";
-        const canonicalGenreRoute = getGenreDetailRoute(slug,media) + genreBrowseSearch;
+        const canonicalGenreRoute = getGenreDetailRoute(genre.id,genre.name,media) + genreBrowseSearch;
         setAppHashRoute(canonicalGenreRoute,true);
         rememberRouteNavContext(canonicalGenreRoute,"discover");
 
@@ -6225,7 +6314,8 @@ async function loadGenrePageResults(options={}){
 
         genrePageState = Object.assign({},genrePageState,{
             media:media,
-            slug:slug,
+            slug:normalizeGenreSlug(genre.name),
+            routeKey:buildRouteKey(genre.id,genre.name),
             name:genre.name || genrePageState.name || "Genre",
             genreId:genre.id,
             year:browseFilters.year,
@@ -6254,20 +6344,31 @@ async function loadGenrePageResults(options={}){
     }
 }
 
-async function openGenrePage(slug,options={}){
-    const cleanSlug = normalizeGenreSlug(slug);
+async function openGenrePage(genreKey,options={}){
     const media = normalizeGenreMediaType(options && options.media || (genrePageState && genrePageState.media) || "tv");
-    if(!cleanSlug){
+    const rawKey = String(genreKey || "").trim().toLowerCase();
+    const match = rawKey.match(/^([1-9][0-9]{0,11})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/);
+    let genreId = match ? match[1] : "";
+    let routeSlug = match ? (match[2] || normalizeGenreSlug(options && options.routeSlug || "")) : "";
+    if(!genreId){
+        const fallback = getKnownGenreByName(rawKey,media);
+        genreId = fallback && fallback.id ? String(fallback.id) : "";
+        routeSlug = fallback ? normalizeGenreSlug(fallback.name) : routeSlug;
+    }
+    if(!genreId){
+        renderAppRouteNotFoundPage();
         return;
     }
 
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
-    const genreRoute = getGenreDetailRoute(cleanSlug,media);
+    const knownGenre = getKnownGenreById(genreId,media);
+    const routeLabel = knownGenre && knownGenre.name ? knownGenre.name : (routeSlug || "genre");
+    const genreRoute = getGenreDetailRoute(genreId,routeLabel,media);
     const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : genreRoute);
-    const isSameGenre = activePage === "genre-detail" && String(selectedGenreSlug || "") === cleanSlug && String(selectedGenreMedia || "tv") === media;
+    const isSameGenre = activePage === "genre-detail" && String(genrePageState && genrePageState.genreId || "") === genreId && String(selectedGenreMedia || "tv") === media;
 
-    selectedGenreSlug = cleanSlug;
+    selectedGenreSlug = buildRouteKey(genreId,routeLabel) || genreId;
     selectedGenreMedia = media;
     selectedShowId = null;
     selectedEpisodeContext = null;
@@ -6280,10 +6381,11 @@ async function openGenrePage(slug,options={}){
     if(!isSameGenre){
         const routeBrowseState = getBrowseQueryStateFromOptions(options,media);
         genrePageState = {
-            media:media,
-            slug:cleanSlug,
-            name:"",
-            genreId:null,
+            media,
+            slug:routeSlug,
+            routeKey:rawKey,
+            name:knownGenre && knownGenre.name || "",
+            genreId,
             year:routeBrowseState.year || "",
             sort:browseSortToLegacySort(routeBrowseState.sort),
             browse:routeBrowseState,
@@ -6297,26 +6399,34 @@ async function openGenrePage(slug,options={}){
         };
     }else{
         genrePageState.media = media;
-        genrePageState.slug = cleanSlug;
-        if(options && options.browseState){
-            genrePageState.browse = getBrowseQueryStateFromOptions(options,media);
-        }
+        genrePageState.genreId = genreId;
+        if(options && options.browseState){ genrePageState.browse = getBrowseQueryStateFromOptions(options,media); }
     }
 
     showGenreDetailPageShell(navigationContext);
-
-    ensureBrowseReferenceData(media).then(async()=>{
-        const labels = await resolveBrowseLabels(getGenreBrowseState(),genrePageState.browseLabels);
-        if(activePage === "genre-detail" && String(selectedGenreSlug || "") === cleanSlug && String(selectedGenreMedia || "tv") === media){
-            genrePageState.browseLabels = labels;
-            renderActiveGenrePage();
-        }
-    }).catch(()=>{});
-
     if(!fromRoute){
         setAppHashRoute(genreRoute,replaceRoute);
         rememberRouteNavContext(genreRoute,navigationContext);
     }
+
+    await ensureBrowseReferenceData(media);
+    if(activePage !== "genre-detail" || String(genrePageState && genrePageState.genreId || "") !== genreId || selectedGenreMedia !== media){ return; }
+    const resolved = await resolveGenreById(genreId,media);
+    if(!resolved){
+        renderAppRouteNotFoundPage();
+        return;
+    }
+    genrePageState.name = resolved.name || genrePageState.name || "Genre";
+    genrePageState.slug = normalizeGenreSlug(resolved.name);
+    genrePageState.routeKey = buildRouteKey(resolved.id,resolved.name);
+    selectedGenreSlug = genrePageState.routeKey;
+    const labels = await resolveBrowseLabels(getGenreBrowseState(),genrePageState.browseLabels);
+    genrePageState.browseLabels = labels;
+    const browseApi = getBrowseStateAPI();
+    const search = browseApi && typeof browseApi.serializeSearch === "function" ? browseApi.serializeSearch(genrePageState.browse || {media}) : "";
+    const canonicalRoute = getGenreDetailRoute(resolved.id,resolved.name,media) + search;
+    setAppHashRoute(canonicalRoute,true);
+    rememberRouteNavContext(canonicalRoute,navigationContext);
 
     if(!isSameGenre || !genrePageState.shows.length){
         await loadGenrePageResults({append:false});
@@ -7114,15 +7224,8 @@ function closeBrowseMenus(except=null){
     });
 }
 
-function resetBrowseYearDropdown(menu){
-    if(!menu){ return; }
-    const dropdown = menu.querySelector(".browse-dropdown-year");
-    if(!dropdown){ return; }
-    const decadeMenu = dropdown.querySelector("[data-browse-year-decade-menu]");
-    const stripWrap = dropdown.querySelector("[data-browse-year-strip-wrap]");
-    if(decadeMenu){ decadeMenu.hidden = false; }
-    if(stripWrap){ stripWrap.hidden = true; }
-    dropdown.classList.remove("showing-years");
+function resetBrowseYearDropdown(){
+    document.querySelectorAll("[data-browse-year-secondary-bar]").forEach(item=>item.remove());
 }
 
 function shiftBrowseYearDecade(button,delta){
@@ -7257,28 +7360,13 @@ function ensureBrowseGlobalInteractionEvents(){
         if(decadeOpenButton){
             event.preventDefault();
             event.stopPropagation();
-            const menu = decadeOpenButton.closest(".browse-dropdown-year");
-            const decadeMenu = menu ? menu.querySelector("[data-browse-year-decade-menu]") : null;
-            const stripWrap = menu ? menu.querySelector("[data-browse-year-strip-wrap]") : null;
-            const strip = stripWrap ? stripWrap.querySelector(".browse-year-strip") : null;
             const decade = Number(decadeOpenButton.dataset.browseYearOpenDecade || 0);
-            if(decadeMenu && stripWrap && strip && decade){
-                decadeMenu.hidden = true;
-                stripWrap.hidden = false;
-                menu.classList.add("showing-years");
-                strip.dataset.browseYearDecade = String(decade);
-                const heading = strip.querySelector("[data-browse-decade-current]");
-                const years = strip.querySelector("[data-browse-decade-years]");
-                if(heading){ heading.textContent = `${decade}s`; }
-                if(years && typeof renderBrowseDecadeYearsHTML === "function"){
-                    years.innerHTML = renderBrowseDecadeYearsHTML(decade,getCurrentBrowseState());
-                }
-                const minDecade = Number(strip.dataset.browseMinDecade || 1870);
-                const currentDecade = Number(strip.dataset.browseCurrentDecade || decade);
-                const previous = strip.querySelector('[data-browse-year-shift="-10"]');
-                const next = strip.querySelector('[data-browse-year-shift="10"]');
-                if(previous){ previous.disabled = decade <= minDecade; }
-                if(next){ next.disabled = decade >= currentDecade; }
+            const controls = decadeOpenButton.closest(".browse-controls");
+            const bar = controls ? controls.querySelector(".browse-bar") : null;
+            if(decade && controls && bar && typeof renderBrowseYearSecondaryBarHTML === "function"){
+                controls.querySelectorAll("[data-browse-year-secondary-bar]").forEach(item=>item.remove());
+                bar.insertAdjacentHTML("afterend",renderBrowseYearSecondaryBarHTML(decade,getCurrentBrowseState()));
+                closeBrowseMenus();
             }
             return;
         }
@@ -7287,13 +7375,11 @@ function ensureBrowseGlobalInteractionEvents(){
         if(showDecadesButton){
             event.preventDefault();
             event.stopPropagation();
-            const menu = showDecadesButton.closest(".browse-dropdown-year");
-            const decadeMenu = menu ? menu.querySelector("[data-browse-year-decade-menu]") : null;
-            const stripWrap = menu ? menu.querySelector("[data-browse-year-strip-wrap]") : null;
-            if(decadeMenu && stripWrap){
-                decadeMenu.hidden = false;
-                stripWrap.hidden = true;
-                menu.classList.remove("showing-years");
+            const controls = showDecadesButton.closest(".browse-controls");
+            if(controls){
+                controls.querySelectorAll("[data-browse-year-secondary-bar]").forEach(item=>item.remove());
+                const yearMenu = controls.querySelector(".browse-menu-year");
+                if(yearMenu){ yearMenu.open = true; }
             }
             return;
         }
@@ -7364,7 +7450,7 @@ function ensureBrowseGlobalInteractionEvents(){
             const label = String(multiButton.dataset.browseLabel || "");
             const labels = getCurrentBrowseLabels();
             const next = api.toggleMulti(getCurrentBrowseState(),group,value);
-            const labelGroup = group === "themes" ? "themes" : (group === "companies" ? "companies" : (group === "genres" ? "genres" : ""));
+            const labelGroup = group === "themes" ? "themes" : (group === "companies" ? "companies" : (group === "genres" ? "genres" : (group === "providers" ? "providers" : "")));
             if(labelGroup && label){
                 setBrowseLabel(labels,labelGroup,value,label);
             }
@@ -7596,7 +7682,7 @@ function normalizeMovieDetails(movie){
 async function tmdbGetMovieDetails(movieId){
     return await tmdbFetchJSON(
         "movie/" + encodeURIComponent(String(movieId)),
-        {append_to_response:"external_ids,videos,release_dates,watch/providers,credits,similar,keywords"}
+        {append_to_response:"external_ids,videos,release_dates,credits,similar,keywords"}
     );
 }
 
@@ -7683,6 +7769,52 @@ function renderMovieDetailError(){
     }
 }
 
+function getDetailWatchProviderState(media,titleId){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const id = String(titleId || "").trim();
+    const bucket = detailWatchProviderState[cleanMedia] || (detailWatchProviderState[cleanMedia] = {});
+    if(!bucket[id]){
+        bucket[id] = {loading:false,error:"",data:null,loadedAt:""};
+    }
+    return bucket[id];
+}
+
+async function loadDetailWatchProviders(media,titleId,{force=true}={}){
+    const cleanMedia = normalizeBrowseMediaType(media);
+    const id = String(titleId || "").trim();
+    if(!/^[1-9][0-9]{0,11}$/.test(id) || typeof tmdbGetTitleWatchProviders !== "function"){
+        return null;
+    }
+    const key = cleanMedia + ":" + id;
+    if(detailWatchProviderPending.has(key)){
+        return await detailWatchProviderPending.get(key);
+    }
+    const state = getDetailWatchProviderState(cleanMedia,id);
+    if(!force && state.data){ return state.data; }
+    if(force){
+        state.data = null;
+        state.loadedAt = "";
+    }
+    state.loading = true;
+    state.error = "";
+    const request = (async()=>{
+        try{
+            const payload = await tmdbGetTitleWatchProviders(cleanMedia,id);
+            state.data = payload || {results:{}};
+            state.loadedAt = new Date().toISOString();
+            return state.data;
+        }catch(error){
+            state.error = "Couldn’t load watch options.";
+            return null;
+        }finally{
+            state.loading = false;
+            detailWatchProviderPending.delete(key);
+        }
+    })();
+    detailWatchProviderPending.set(key,request);
+    return await request;
+}
+
 function renderActiveMoviePage(){
     if(typeof renderMovieDetailPage === "function"){
         renderMovieDetailPage(moviePageState);
@@ -7703,6 +7835,11 @@ function attachMovieDetailPageEvents(){
         button.addEventListener("click",function(){
             activeMovieDetailsTab = this.dataset.movieDetailTab || "Info";
             renderActiveMoviePage();
+            if(activeMovieDetailsTab === "Where to Watch" && moviePageState && moviePageState.movie){
+                loadDetailWatchProviders("movie",moviePageState.movie.id,{force:true}).then(()=>{
+                    if(activePage === "movie-detail" && activeMovieDetailsTab === "Where to Watch"){ renderActiveMoviePage(); }
+                });
+            }
         });
     });
 
@@ -7792,7 +7929,7 @@ function attachMovieDetailPageEvents(){
                 return;
             }
             event.preventDefault();
-            openGenrePage(this.dataset.genreName || this.textContent || "",{media:this.dataset.genreMedia || "movie"});
+            openGenrePage(this.dataset.genreKey || this.dataset.genreName || this.textContent || "",{media:this.dataset.genreMedia || "movie"});
         });
     });
 
@@ -7974,7 +8111,14 @@ async function openShowDetailsPage(showId,options={}){
             resetShowDetailScrollPosition();
         }
         restoreShowDetailScrollPositionIfNeeded();
-        refreshOpenShowV2Details(id);
+        if((!Array.isArray(trackedShow.genre_items) || !trackedShow.genre_items.length) && Array.isArray(trackedShow.genres) && trackedShow.genres.length && typeof ensureBrowseReferenceData === "function"){
+            ensureBrowseReferenceData("tv").then(()=>{
+                if(String(selectedShowId || "") === id && DATA.shows && DATA.shows[id] === trackedShow){
+                    renderShowDetailsPagePreservingScroll(trackedShow);
+                }
+            }).catch(()=>{});
+        }
+        refreshOpenTrackedShowMetadata(id).catch(()=>{});
         return;
     }
 

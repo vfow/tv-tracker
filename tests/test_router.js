@@ -53,6 +53,7 @@ function createRouter(route, options={}){
     closeShowModal(){ calls.push(['closeShowModal']); },
     getSearchRoute(query='',media='tv'){ return query ? '/app/search?q=' + encodeURIComponent(query) + '&type=' + encodeURIComponent(media || 'tv') : '/app/search'; },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
+    getGenreDetailRoute(id,name='',media='tv'){ const slug=String(name||'genre').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); return `/app/genre/${media === 'movie' ? 'movie' : 'tv'}/${id}-${slug}`; },
     getKnownShowRouteLabel(){ return ''; },
     getEpisodeDetailRoute(id,season,episode,name=''){ return name ? `/app/show/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}/season/${season}/episode/${episode}` : `/app/show/${id}/season/${season}/episode/${episode}`; },
     getDiscoveryFilterDetailRoute(type,value,label='',media='tv'){
@@ -253,21 +254,21 @@ function createRouter(route, options={}){
 }
 
 {
-  const {calls,router}=createRouter('/app/genre/tv/action-adventure');
-  assert.strictEqual(router.currentRoute(),'/app/genre/tv/action-adventure');
+  const {calls,router}=createRouter('/app/genre/tv/10759-action-adventure');
+  assert.strictEqual(router.currentRoute(),'/app/genre/tv/10759-action-adventure');
   const call=calls.find(item=>item[0]==='openGenrePage');
   assert(call,'TV genre route should open genre page');
-  assert.strictEqual(call[1],'action-adventure');
+  assert.strictEqual(call[1],'10759-action-adventure');
   assert.strictEqual(call[2].fromRoute,true);
   assert.strictEqual(call[2].media,'tv');
 }
 
 {
-  const {calls,router}=createRouter('/app/genre/movie/horror');
-  assert.strictEqual(router.currentRoute(),'/app/genre/movie/horror');
+  const {calls,router}=createRouter('/app/genre/movie/27-horror');
+  assert.strictEqual(router.currentRoute(),'/app/genre/movie/27-horror');
   const call=calls.find(item=>item[0]==='openGenrePage');
   assert(call,'movie genre route should open genre page');
-  assert.strictEqual(call[1],'horror');
+  assert.strictEqual(call[1],'27-horror');
   assert.strictEqual(call[2].fromRoute,true);
   assert.strictEqual(call[2].media,'movie');
 }
@@ -413,10 +414,11 @@ for (const route of [
   const {context,calls,router}=createRouter('/app/list/watching');
   calls.length=0;
   context.activePage='genre-detail';
-  context.selectedGenreSlug='horror';
+  context.selectedGenreSlug='27-horror';
   context.selectedGenreMedia='movie';
+  context.genrePageState={media:'movie',genreId:'27',name:'Horror',slug:'horror',browse:{media:'movie'}};
   router.updateRouteFromState(false);
-  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/genre/movie/horror'));
+  assert(calls.some(item=>item[0]==='pushState' && item[1]==='/app/genre/movie/27-horror'));
 }
 
 {
@@ -589,20 +591,21 @@ for (const route of [
 
 
 {
-  const {calls,router}=createRouter('/app/browse/movie/?genre=18,80&country=JP&year=2024&sort=rating-desc&network=213&x=1');
-  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18,80&country=jp&year=2024&sort=rating-desc');
+  const {calls,router}=createRouter('/app/browse/movie/?genre=18,80&provider=8,9&country=JP&year=2024&sort=rating-desc&network=213&x=1');
+  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18,80&provider=8,9&country=jp&year=2024&sort=rating-desc');
   const call=calls.find(item=>item[0]==='openBrowsePage');
   assert(call,'generic Browse route should open the unified browse page');
   assert.strictEqual(call[1].media,'movie');
   assert.deepStrictEqual(Array.from(call[1].genres),['18','80']);
   assert.strictEqual(call[1].country,'jp');
+  assert.deepStrictEqual(Array.from(call[1].providers),['8','9']);
   assert.strictEqual(call[1].year,'2024');
   assert.strictEqual(call[1].network,'');
 }
 
 {
-  const {calls,router}=createRouter('/app/genre/tv/drama?year=2024&sort=rating-desc&country=jp');
-  assert.strictEqual(router.currentRoute(),'/app/genre/tv/drama?country=jp&year=2024&sort=rating-desc');
+  const {calls,router}=createRouter('/app/genre/tv/18-drama?year=2024&sort=rating-desc&country=jp');
+  assert.strictEqual(router.currentRoute(),'/app/genre/tv/18-drama?country=jp&year=2024&sort=rating-desc');
   const call=calls.find(item=>item[0]==='openGenrePage');
   assert(call,'genre route should preserve canonical browse state');
   assert.strictEqual(call[2].browseState.year,'2024');

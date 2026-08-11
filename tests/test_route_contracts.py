@@ -101,8 +101,8 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertFalse(valid_app_path("/app/genre/action-adventure"))
         self.assertEqual(safe_next_url("/app/genre/action-adventure"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/genre/horror"), "/app/list/watching")
-        self.assertTrue(valid_app_path("/app/genre/tv/action-adventure"))
-        self.assertTrue(valid_app_path("/app/genre/movie/horror"))
+        self.assertTrue(valid_app_path("/app/genre/tv/10759-action-adventure"))
+        self.assertTrue(valid_app_path("/app/genre/movie/27-horror"))
         self.assertFalse(valid_app_path("/app/actor/123"))
         self.assertTrue(valid_app_path("/app/person/525"))
         self.assertTrue(valid_app_path("/app/person/525-christopher-nolan"))
@@ -178,16 +178,16 @@ class ProtectedRouteContractTests(unittest.TestCase):
 
     def test_browse_query_state_is_preserved_and_canonicalized(self):
         self.assertEqual(
-            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&country=JP&year=2024&sort=rating-desc&x=1"),
-            "/app/browse/movie?genre=18,80&country=jp&year=2024&sort=rating-desc",
+            safe_next_url("/app/browse/movie?network=213&status=ended&genre=18,80&provider=8,9&country=JP&year=2024&sort=rating-desc&x=1"),
+            "/app/browse/movie?genre=18,80&provider=8,9&country=jp&year=2024&sort=rating-desc",
         )
         self.assertEqual(
             safe_next_url("/app/browse/tv?certification=tv-ma&genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&year=2024&status=ended,canceled&sort=title-asc"),
             "/app/browse/tv?genre=18&theme=10,11&company=49&network=213&language=ja&upcoming=1&status=ended,canceled",
         )
         self.assertEqual(
-            safe_next_url("/app/genre/tv/drama?country=JP&year=2024&sort=rating-desc"),
-            "/app/genre/tv/drama?country=jp&year=2024&sort=rating-desc",
+            safe_next_url("/app/genre/tv/18-drama?country=JP&year=2024&sort=rating-desc"),
+            "/app/genre/tv/18-drama?country=jp&year=2024&sort=rating-desc",
         )
         self.assertEqual(
             safe_next_url("/app/company/movie/49-hbo?genre=18&certification=pg-13&status=ended"),
@@ -280,7 +280,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/show/1399-game-of-thrones/season/1/episode/3",
         )
         self.assertEqual(safe_next_url("/app/genre/action-adventure/"), "/app/list/watching")
-        self.assertEqual(safe_next_url("/app/genre/movie/horror/"), "/app/genre/movie/horror")
+        self.assertEqual(safe_next_url("/app/genre/movie/27-horror/"), "/app/genre/movie/27-horror")
         self.assertEqual(safe_next_url("/app/person/525-christopher-nolan/"), "/app/person/525-christopher-nolan")
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio/"), "/app/list/watching")
         self.assertEqual(safe_next_url("/app/network/213-netflix/"), "/app/network/213-netflix")

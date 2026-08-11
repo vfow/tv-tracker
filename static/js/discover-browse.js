@@ -16,7 +16,7 @@
         "ended":"3",
         "canceled":"4"
     });
-    const MULTI_KEYS = Object.freeze(["genres","themes","companies","statuses"]);
+    const MULTI_KEYS = Object.freeze(["genres","themes","companies","providers","statuses"]);
 
     function normalizeMedia(media){
         return String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
@@ -87,7 +87,7 @@
             themes:[],
             companies:[],
             network:"",
-            provider:"",
+            providers:[],
             statuses:[],
             certification:"",
             sort:DEFAULT_SORT
@@ -108,7 +108,7 @@
             themes:parseList(source.themes || source.theme,normalizeId),
             companies:parseList(source.companies || source.company,normalizeId),
             network:normalizeId(source.network),
-            provider:normalizeId(source.provider),
+            providers:parseList(source.providers || source.provider,normalizeId),
             statuses:parseList(source.statuses || source.status,normalizeStatus),
             certification:normalizeCertification(source.certification),
             sort:normalizeSort(source.sort)
@@ -143,7 +143,7 @@
             themes:params.get("theme") || "",
             companies:params.get("company") || "",
             network:params.get("network") || "",
-            provider:params.get("provider") || "",
+            providers:params.get("provider") || "",
             statuses:params.get("status") || "",
             certification:params.get("certification") || "",
             sort:params.get("sort") || DEFAULT_SORT
@@ -162,7 +162,7 @@
         if(state.themes.length){ parts.push("theme=" + encodeList(state.themes)); }
         if(state.companies.length){ parts.push("company=" + encodeList(state.companies)); }
         if(state.network){ parts.push("network=" + encodeURIComponent(state.network)); }
-        if(state.provider){ parts.push("provider=" + encodeURIComponent(state.provider)); }
+        if(state.providers.length){ parts.push("provider=" + encodeList(state.providers)); }
         if(state.country){ parts.push("country=" + encodeURIComponent(state.country)); }
         if(state.language){ parts.push("language=" + encodeURIComponent(state.language)); }
         if(state.upcoming){
@@ -187,6 +187,7 @@
             genres:state.genres.slice(),
             themes:state.themes.slice(),
             companies:state.companies.slice(),
+            providers:state.providers.slice(),
             statuses:state.statuses.slice()
         });
     }
@@ -226,8 +227,6 @@
             state.language = normalizeLanguage(value);
         }else if(key === "network"){
             state.network = normalizeId(value);
-        }else if(key === "provider"){
-            state.provider = normalizeId(value);
         }else if(key === "certification"){
             state.certification = normalizeCertification(value);
         }else if(key === "sort"){
@@ -278,7 +277,7 @@
         const state = normalizeState(input,input && input.media);
         return !!(
             state.year || state.upcoming || state.genres.length || state.country || state.language ||
-            state.themes.length || state.companies.length || state.network || state.provider ||
+            state.themes.length || state.companies.length || state.network || state.providers.length ||
             state.statuses.length || state.certification
         );
     }
@@ -314,9 +313,10 @@
         if(state.themes.length){ params.with_keywords = state.themes.join("|"); }
         if(state.companies.length){ params.with_companies = state.companies.join("|"); }
         if(media === "tv" && state.network){ params.with_networks = state.network; }
-        if(state.provider){
-            params.with_watch_providers = state.provider;
+        if(state.providers.length){
+            params.with_watch_providers = state.providers.join("|");
             params.watch_region = String(options.watchRegion || "US").toUpperCase();
+            params.with_watch_monetization_types = "flatrate";
         }
         if(state.country){ params.with_origin_country = state.country.toUpperCase(); }
         if(state.language){ params.with_original_language = state.language; }

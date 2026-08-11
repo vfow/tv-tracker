@@ -50,46 +50,7 @@ APP_SHOW_PATH_RE = re.compile(rf"^/app/show/({APP_ROUTE_ID_SLUG})$")
 APP_EPISODE_PATH_RE = re.compile(
     rf"^/app/show/({APP_EPISODE_ROUTE_ID_SLUG})/season/([0-9]{{1,5}})/episode/([1-9][0-9]{{0,5}})$"
 )
-APP_GENRE_PATH_RE = re.compile(r"^/app/genre/(tv|movie)/[a-z0-9]+(?:-[a-z0-9]+)*$")
-APP_TV_GENRE_SLUGS = {
-    "action-adventure",
-    "animation",
-    "comedy",
-    "crime",
-    "documentary",
-    "drama",
-    "family",
-    "kids",
-    "mystery",
-    "news",
-    "reality",
-    "sci-fi-fantasy",
-    "soap",
-    "talk",
-    "war-politics",
-    "western",
-}
-APP_MOVIE_GENRE_SLUGS = {
-    "action",
-    "adventure",
-    "animation",
-    "comedy",
-    "crime",
-    "documentary",
-    "drama",
-    "family",
-    "fantasy",
-    "history",
-    "horror",
-    "music",
-    "mystery",
-    "romance",
-    "science-fiction",
-    "tv-movie",
-    "thriller",
-    "war",
-    "western",
-}
+APP_GENRE_PATH_RE = re.compile(rf"^/app/genre/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_NETWORK_PATH_RE = re.compile(rf"^/app/network/({APP_ROUTE_ID_SLUG})$")
 APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/(tv|movie)/[a-z]{2,3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
 APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/(tv|movie)/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
@@ -1690,8 +1651,8 @@ def canonical_browse_query(raw_query: str, media_type: str) -> str:
         if re.fullmatch(r"[1-9][0-9]{0,11}", network):
             params["network"] = network
 
-    provider = raw_values.get("provider", "")
-    if re.fullmatch(r"[1-9][0-9]{0,11}", provider):
+    provider = clean_id_list("provider")
+    if provider:
         params["provider"] = provider
 
     country = raw_values.get("country", "").lower()

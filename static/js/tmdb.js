@@ -1,12 +1,11 @@
 const TMDB_SEARCH_CACHE_PREFIX = "tv-tracker-tmdb-search:";
-const TMDB_SEARCH_CACHE_TTL = 1000 * 60 * 60 * 24;
+const TMDB_SEARCH_CACHE_TTL = 1000 * 60 * 60;
 const TMDB_CONFIGURATION_CACHE_KEY = "tv-tracker-tmdb-configuration:v2";
 const TMDB_CONFIGURATION_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
 const TMDB_SHOW_APPEND_TO_RESPONSE = [
     "external_ids",
     "videos",
     "content_ratings",
-    "watch/providers",
     "similar",
     "aggregate_credits",
     "alternative_titles",
@@ -20,6 +19,102 @@ const TMDB_EPISODE_APPEND_TO_RESPONSE = [
 
 const tmdbSearchMemoryCache = new Map();
 let tmdbConfigurationMemoryCache = null;
+
+const TMDB_PROVIDER_CATALOG_CACHE_PREFIX = "tv-tracker-tmdb-provider-catalog:v1:";
+const TMDB_PROVIDER_CATALOG_CACHE_TTL = 1000 * 60 * 60 * 24;
+const tmdbProviderCatalogMemoryCache = new Map();
+
+function normalizeTMDBProviderCatalogItem(provider){
+    if(!provider){
+        return null;
+    }
+    const id = Number(provider.provider_id || provider.id || 0);
+    const name = String(provider.provider_name || provider.name || "").trim();
+    if(!id || !name){
+        return null;
+    }
+    return {
+        id,
+        provider_id:id,
+        name,
+        provider_name:name,
+        logo_path:String(provider.logo_path || "").trim(),
+        display_priority:Number(provider.display_priority || 0)
+    };
+}
+
+function getTMDBProviderCatalogCacheKey(media,watchRegion){
+    const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
+    const region = String(watchRegion || "US").trim().toUpperCase() || "US";
+    return cleanMedia + ":" + region;
+}
+
+function readCachedTMDBProviderCatalog(media,watchRegion="US"){
+    const key = getTMDBProviderCatalogCacheKey(media,watchRegion);
+    if(tmdbProviderCatalogMemoryCache.has(key)){
+        const cached = tmdbProviderCatalogMemoryCache.get(key);
+        if(cached && Date.now() - Number(cached.savedAt || 0) <= TMDB_PROVIDER_CATALOG_CACHE_TTL){
+            return cached.results;
+        }
+        tmdbProviderCatalogMemoryCache.delete(key);
+    }
+    try{
+        const raw = localStorage.getItem(TMDB_PROVIDER_CATALOG_CACHE_PREFIX + key);
+        if(!raw){ return null; }
+        const cached = JSON.parse(raw);
+        if(!cached || !Array.isArray(cached.results) || Date.now() - Number(cached.savedAt || 0) > TMDB_PROVIDER_CATALOG_CACHE_TTL){
+            localStorage.removeItem(TMDB_PROVIDER_CATALOG_CACHE_PREFIX + key);
+            return null;
+        }
+        tmdbProviderCatalogMemoryCache.set(key,cached);
+        return cached.results;
+    }catch(error){
+        return null;
+    }
+}
+
+function writeCachedTMDBProviderCatalog(media,watchRegion,results){
+    if(!Array.isArray(results)){ return; }
+    const key = getTMDBProviderCatalogCacheKey(media,watchRegion);
+    const cached = {savedAt:Date.now(),results};
+    tmdbProviderCatalogMemoryCache.set(key,cached);
+    try{
+        localStorage.setItem(TMDB_PROVIDER_CATALOG_CACHE_PREFIX + key,JSON.stringify(cached));
+    }catch(error){}
+}
+
+async function tmdbGetWatchProviderCatalog(media,watchRegion="US"){
+    const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
+    const region = String(watchRegion || "US").trim().toUpperCase() || "US";
+    const cached = readCachedTMDBProviderCatalog(cleanMedia,region);
+    if(cached){
+        return cached;
+    }
+    const payload = await tmdbFetchJSON("watch/providers/" + cleanMedia,{language:"en-US",watch_region:region});
+    const seen = new Set();
+    const results = (Array.isArray(payload && payload.results) ? payload.results : [])
+    .map(normalizeTMDBProviderCatalogItem)
+    .filter(item=>{
+        if(!item || seen.has(String(item.id))){ return false; }
+        seen.add(String(item.id));
+        return true;
+    })
+    .sort((a,b)=>{
+        const priority = Number(a.display_priority || 0) - Number(b.display_priority || 0);
+        return priority || String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    writeCachedTMDBProviderCatalog(cleanMedia,region,results);
+    return results;
+}
+
+async function tmdbGetTitleWatchProviders(media,titleId,options={}){
+    const cleanMedia = String(media || "tv").trim().toLowerCase() === "movie" ? "movie" : "tv";
+    const id = String(titleId || "").trim();
+    if(!/^[1-9][0-9]{0,11}$/.test(id)){
+        throw new Error("Invalid TMDB title ID");
+    }
+    return await tmdbFetchJSON(cleanMedia + "/" + encodeURIComponent(id) + "/watch/providers",{},options);
+}
 
 function normalizeTMDBSearchQuery(query){
     return String(query || "").trim().toLowerCase();

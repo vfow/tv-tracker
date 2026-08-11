@@ -506,8 +506,8 @@ function renderDiscoverGenreCards(genres,media){
             return null;
         }
 
-        const route = name && typeof getGenreRouteFromName === "function" ? getGenreRouteFromName(name,media) : "";
-        return name && route ? {name,route} : null;
+        const route = name && genre && genre.id && typeof getGenreDetailRoute === "function" ? getGenreDetailRoute(genre.id,name,media) : "";
+        return name && route && route !== "/app/list/watching" ? {name,route} : null;
     })
     .filter(Boolean)
     .map(item=>{
@@ -1059,7 +1059,7 @@ function getBrowseControlState(state,media="tv"){
     if(typeof createBrowseFilterState === "function"){
         return createBrowseFilterState(media,state || {});
     }
-    return Object.assign({media,year:"",upcoming:false,genres:[],country:"",language:"",themes:[],companies:[],network:"",provider:"",statuses:[],certification:"",sort:"popularity-desc"},state || {});
+    return Object.assign({media,year:"",upcoming:false,genres:[],country:"",language:"",themes:[],companies:[],network:"",providers:[],statuses:[],certification:"",sort:"popularity-desc"},state || {});
 }
 
 function getBrowseControlLabels(labels){
@@ -1088,7 +1088,7 @@ function renderBrowseDecadeYearsHTML(decade,state){
     const currentYear = new Date().getFullYear();
     const currentDecade = Math.floor(currentYear / 10) * 10;
     const cleanDecade = Math.max(1870,Math.min(currentDecade,Number(decade || currentDecade)));
-    const topYear = cleanDecade === currentDecade ? currentYear : cleanDecade + 9;
+    const topYear = cleanDecade + 9;
     const years = [];
     for(let year=cleanDecade;year<=topYear;year+=1){
         const selected = String(state && state.year || "") === String(year);
@@ -1116,15 +1116,7 @@ function renderBrowseDecadeListHTML(state){
 }
 
 function renderBrowseYearMenu(state){
-    const currentYear = new Date().getFullYear();
-    const currentDecade = Math.floor(currentYear / 10) * 10;
-    const selectedYear = Number(state.year || 0);
-    const selectedDecade = selectedYear ? Math.floor(selectedYear / 10) * 10 : currentDecade;
-    const visibleDecade = Math.max(1870,Math.min(currentDecade,selectedDecade));
-    const atFirstDecade = visibleDecade <= 1870;
-    const atCurrentDecade = visibleDecade >= currentDecade;
     const anySelected = !state.year && !state.upcoming;
-
     return `
         <div class="browse-year-decade-menu" data-browse-year-decade-menu>
             <div class="browse-option-list">
@@ -1134,7 +1126,17 @@ function renderBrowseYearMenu(state){
             <div class="browse-dropdown-divider"></div>
             <div class="browse-option-list browse-year-decade-list">${renderBrowseDecadeListHTML(state)}</div>
         </div>
-        <div class="browse-year-strip-wrap" data-browse-year-strip-wrap hidden>
+    `;
+}
+
+function renderBrowseYearSecondaryBarHTML(decade,state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const visibleDecade = Math.max(1870,Math.min(currentDecade,Number(decade || currentDecade)));
+    const atFirstDecade = visibleDecade <= 1870;
+    const atCurrentDecade = visibleDecade >= currentDecade;
+    return `
+        <div class="browse-year-secondary-bar" data-browse-year-secondary-bar>
             <div class="browse-year-strip" data-browse-year-decade="${visibleDecade}" data-browse-current-decade="${currentDecade}" data-browse-min-decade="1870">
                 <button type="button" class="browse-decade-nav browse-decade-nav-prev" data-browse-year-shift="-10" aria-label="Previous decade" ${atFirstDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("left")}</button>
                 <button type="button" class="browse-decade-current" data-browse-decade-current data-browse-year-show-decades aria-label="Back to decades">${visibleDecade}s</button>
@@ -1217,13 +1219,35 @@ function renderBrowseSelectedPickerValues(state,labels,group,heading){
     `;
 }
 
-function renderBrowseContextSelectionHTML(state,labels){
-    const sections = [];
-    if(state.provider){
-        const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider";
-        sections.push(`<div class="browse-other-section"><span class="browse-other-heading">Provider</span><div class="browse-option-list"><button type="button" class="browse-dropdown-option selected" data-browse-set-single="provider" data-browse-value="">${renderBrowseOptionLabel(label,true)}</button></div></div>`);
-    }
-    return sections.length ? `${sections.join('<div class="browse-dropdown-divider"></div>')}<div class="browse-dropdown-divider"></div>` : "";
+function renderBrowseContextSelectionHTML(){
+    return "";
+}
+
+function getBrowseServiceOptions(media){
+    const cleanMedia = String(media || "tv") === "movie" ? "movie" : "tv";
+    const source = typeof browseOptionState !== "undefined" && browseOptionState && browseOptionState.providers
+    ? browseOptionState.providers[cleanMedia]
+    : [];
+    return Array.isArray(source) ? source : [];
+}
+
+function renderBrowseServiceMenu(state,labels={}){
+    const providers = getBrowseServiceOptions(state.media);
+    return `
+        <input class="browse-dropdown-search" type="search" placeholder="Search streaming services" aria-label="Search streaming services" data-browse-list-search="service">
+        <div class="browse-option-list browse-service-option-list" data-browse-list="service">
+            ${providers.map(provider=>{
+                const id = String(provider && (provider.id || provider.provider_id) || "");
+                const name = String(provider && (provider.name || provider.provider_name) || "").trim();
+                if(!id || !name){ return ""; }
+                const selected = Array.isArray(state.providers) && state.providers.includes(id);
+                const logoPath = String(provider && provider.logo_path || "").trim();
+                const logo = logoPath ? `<span class="browse-service-logo-tile"><img class="browse-service-logo" src="${escapeHTML(trackerImageURL(logoPath,"w92"))}" alt=""></span>` : `<span class="browse-service-logo-tile browse-service-logo-fallback" aria-hidden="true">TV</span>`;
+                const label = typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",id,name) : name;
+                return `<button type="button" class="browse-dropdown-option browse-service-option ${selected ? "selected" : ""}" data-browse-toggle-multi="providers" data-browse-value="${escapeHTML(id)}" data-browse-label="${escapeHTML(label)}" data-browse-option-label="${escapeHTML(name)}" data-browse-option-search="${escapeHTML(name)}"><span class="browse-service-option-main">${logo}<span>${escapeHTML(name)}</span></span>${selected ? renderBrowseCheckIcon() : ""}</button>`;
+            }).join("") || `<div class="browse-dropdown-empty">Streaming services are loading…</div>`}
+        </div>
+    `;
 }
 
 function renderBrowseOtherMenu(state,labels={}){
@@ -1319,7 +1343,7 @@ function renderBrowseActiveChipsHTML(state,labels){
     state.themes.forEach(id=>push("themes",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"themes",id,"Theme") : "Theme"));
     state.companies.forEach(id=>push("companies",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"companies",id,"Production Company") : "Production Company"));
     if(state.network){ push("network",state.network,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"networks",state.network,"Network") : "Network"); }
-    if(state.provider){ push("provider",state.provider,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",state.provider,"Provider") : "Provider"); }
+    state.providers.forEach(id=>push("providers",id,typeof getBrowseLabel === "function" ? getBrowseLabel(labels,"providers",id,"Streaming Service") : "Streaming Service"));
     state.statuses.forEach(value=>push("statuses",value,typeof getStatusRouteLabel === "function" ? getStatusRouteLabel(value) : value));
     if(state.certification){ push("certification",state.certification,`US ${state.certification.toUpperCase()}`); }
     const showClear = chips.length > 0 || state.sort !== "popularity-desc";
@@ -1335,7 +1359,7 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
         <div class="browse-controls">
             <div class="browse-bar" aria-label="Browse filters">
                 <span class="browse-bar-kicker">BROWSE BY</span>
-                <details class="browse-menu">
+                <details class="browse-menu browse-menu-year">
                     <summary class="browse-bar-button">YEAR ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-year">${renderBrowseYearMenu(state)}</div>
                 </details>
@@ -1350,6 +1374,10 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
                 <details class="browse-menu">
                     <summary class="browse-bar-button">LANGUAGE ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown">${renderBrowseLanguageMenu(state)}</div>
+                </details>
+                <details class="browse-menu browse-menu-service">
+                    <summary class="browse-bar-button">SERVICE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown browse-dropdown-service">${renderBrowseServiceMenu(state,labels)}</div>
                 </details>
                 <details class="browse-menu browse-menu-other">
                     <summary class="browse-bar-button">OTHER ${renderBrowseChevronIcon()}</summary>
@@ -3459,35 +3487,29 @@ function getShowNetworkInlineHTML(show){
 
 
 function getShowGenreRoute(genre,media="tv"){
-    if(typeof getGenreRouteFromName === "function"){
-        return getGenreRouteFromName(genre,media);
+    const item = genre && typeof genre === "object" ? genre : null;
+    const name = String(item ? item.name : genre || "").trim();
+    const id = item ? Number(item.id || 0) : 0;
+    if(id > 0 && typeof getGenreDetailRoute === "function"){
+        return getGenreDetailRoute(id,name,media);
     }
-
-    const cleanMedia = media === "movie" ? "movie" : "tv";
-    const slug = String(genre || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g," ")
-    .replace(/[^a-z0-9]+/g,"-")
-    .replace(/^-+|-+$/g,"");
-
-    return slug ? "/app/genre/" + encodeURIComponent(cleanMedia) + "/" + encodeURIComponent(slug) : "";
+    if(typeof getGenreRouteFromName === "function"){
+        return getGenreRouteFromName(name,media);
+    }
+    return "";
 }
 
 function renderShowGenreLinksHTML(genres,media="tv"){
     const list = (Array.isArray(genres) ? genres : [])
-    .map(genre=>String(genre || "").trim())
-    .filter(Boolean);
-
-    if(!list.length){
-        return "";
-    }
-
+    .map(genre=>genre && typeof genre === "object" ? {id:Number(genre.id || 0),name:String(genre.name || "").trim()} : {id:0,name:String(genre || "").trim()})
+    .filter(genre=>genre.name);
+    if(!list.length){ return ""; }
     return `<span class="show-genre-link-list">${list.map((genre,index)=>{
         const route = getShowGenreRoute(genre,media);
-        const link = route
-        ? `<a class="show-genre-link" href="${escapeHTML(route)}" data-genre-name="${escapeHTML(genre)}" data-genre-media="${escapeHTML(media === "movie" ? "movie" : "tv")}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
-        : `<span class="show-genre-link-disabled">${escapeHTML(genre)}</span>`;
+        const key = genre.id > 0 && typeof buildRouteKey === "function" ? buildRouteKey(genre.id,genre.name) : "";
+        const link = route && route !== "/app/list/watching"
+        ? `<a class="show-genre-link" href="${escapeHTML(route)}" data-genre-key="${escapeHTML(key)}" data-genre-name="${escapeHTML(genre.name)}" data-genre-media="${escapeHTML(media === "movie" ? "movie" : "tv")}" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre.name)}</a>`
+        : `<span class="show-genre-link-disabled">${escapeHTML(genre.name)}</span>`;
         return `${index > 0 ? `<span class="show-genre-separator">•</span>` : ""}${link}`;
     }).join("")}</span>`;
 }
@@ -3632,14 +3654,16 @@ function renderMovieThemesDetailsHTML(movie){
 }
 
 function renderMovieGenresTabHTML(movie){
-    const genres = Array.isArray(movie && movie.genres) ? movie.genres : [];
+    const genres = Array.isArray(movie && movie.genre_items) && movie.genre_items.length ? movie.genre_items : (Array.isArray(movie && movie.genres) ? movie.genres : []);
     const themesHTML = renderMovieThemesDetailsHTML(movie);
     const genreHTML = genres.length
     ? `<div class="show-detail-genre-chips">${genres.map(genre=>{
+        const name = String(genre && typeof genre === "object" ? genre.name : genre || "").trim();
         const route = getShowGenreRoute(genre,"movie");
-        return route
-        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-media="movie" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
-        : `<span>${escapeHTML(genre)}</span>`;
+        const key = genre && typeof genre === "object" && genre.id && typeof buildRouteKey === "function" ? buildRouteKey(genre.id,name) : "";
+        return route && route !== "/app/list/watching"
+        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-key="${escapeHTML(key)}" data-genre-name="${escapeHTML(name)}" data-genre-media="movie" data-genre-route="${escapeHTML(route)}">${escapeHTML(name)}</a>`
+        : `<span>${escapeHTML(name)}</span>`;
     }).join("")}</div>`
     : `<div class="v2-api-empty">No genres available.</div>`;
 
@@ -3685,17 +3709,29 @@ function renderMovieExternalLinksHTML(movie){
 
 function getMovieActiveTab(){
     const tab = String(activeMovieDetailsTab || "Info");
-    return ["Info","Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Info";
+    return ["Info","Cast","Crew","Details","Genres","Releases","Where to Watch"].includes(tab) ? tab : "Info";
 }
 
 function renderMovieTabsHTML(){
     const activeTab = getMovieActiveTab();
     return `
         <div class="show-detail-tabs movie-detail-tabs" role="tablist" aria-label="Movie details sections">
-            ${["Info","Cast","Crew","Details","Genres","Releases"].map(tab=>`
+            ${["Info","Cast","Crew","Details","Genres","Releases","Where to Watch"].map(tab=>`
                 <button type="button" class="show-detail-tab ${activeTab === tab ? "active" : ""}" data-movie-detail-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
             `).join("")}
         </div>
+    `;
+}
+
+function renderFavoriteHeartButtonHTML(active,attributes=""){
+    const isActive = !!active;
+    const label = isActive ? "Remove from favorites" : "Add to favorites";
+    return `
+        <button class="favorite-heart-button ${isActive ? "active" : ""}" type="button" ${attributes} aria-pressed="${isActive ? "true" : "false"}" aria-label="${label}" title="${label}">
+            <svg class="favorite-heart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 20.4 4.35 13.2A5.25 5.25 0 0 1 11.7 5.7L12 6l.3-.3a5.25 5.25 0 0 1 7.35 7.5Z" fill="${isActive ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        </button>
     `;
 }
 
@@ -3719,7 +3755,7 @@ function renderMovieActionButtonsHTML(movie){
         <div class="modal-status-buttons show-page-status-buttons movie-page-status-buttons" aria-label="Movie tracking actions">
             ${renderMovieTrackingButtonHTML(state,"watched","Watched")}
             ${renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")}
-            ${renderMovieTrackingButtonHTML(state,"favorite","Favorite")}
+            ${renderFavoriteHeartButtonHTML(state.favorite,`data-movie-tracking-action="favorite"`)}
             ${hasAnyState ? `<button class="remove-show-button remove-movie-button" type="button" data-movie-tracking-action="remove">Remove</button>` : ""}
         </div>
     `;
@@ -4054,6 +4090,69 @@ function groupMovieReleasesByDate(releases){
     });
 }
 
+function normalizeWatchProviderRows(items){
+    const seen = new Set();
+    return (Array.isArray(items) ? items : []).map(item=>{
+        const id = Number(item && (item.provider_id || item.id) || 0);
+        const name = String(item && (item.provider_name || item.name) || "").trim();
+        if(!id || !name || seen.has(String(id))){ return null; }
+        seen.add(String(id));
+        return {id,name,logo_path:String(item && item.logo_path || "").trim()};
+    }).filter(Boolean);
+}
+
+function renderWhereToWatchProviderRows(items){
+    const providers = normalizeWatchProviderRows(items);
+    if(!providers.length){ return ""; }
+    return `<div class="watch-provider-list">${providers.map(provider=>`
+        <div class="watch-provider-row">
+            <span class="watch-provider-logo-tile">${provider.logo_path ? `<img src="${escapeHTML(trackerImageURL(provider.logo_path,"w92"))}" alt="" loading="lazy">` : ""}</span>
+            <span class="watch-provider-name">${escapeHTML(provider.name)}</span>
+        </div>
+    `).join("")}</div>`;
+}
+
+function renderWhereToWatchHTML(media,titleId){
+    const state = typeof getDetailWatchProviderState === "function" ? getDetailWatchProviderState(media,titleId) : {loading:false,error:"",data:null};
+    if(state.loading && !state.data){
+        return `<div class="v2-api-empty">Loading watch options…</div>`;
+    }
+    if(state.error && !state.data){
+        return `<div class="v2-api-empty">${escapeHTML(state.error)}</div>`;
+    }
+    const region = typeof getAppWatchRegion === "function" ? getAppWatchRegion() : "US";
+    const results = state.data && state.data.results ? state.data.results : {};
+    const country = results && results[region] ? results[region] : null;
+    if(!country){
+        return `<div class="where-to-watch-empty">No watch options available in your region.</div>`;
+    }
+    const freeAds = [];
+    const seenFreeAds = new Set();
+    [country.free,country.ads].forEach(list=>normalizeWatchProviderRows(list).forEach(item=>{
+        if(!seenFreeAds.has(String(item.id))){ seenFreeAds.add(String(item.id)); freeAds.push(item); }
+    }));
+    const groups = [
+        ["Subscription Streaming",country.flatrate],
+        ["Free / Ads",freeAds],
+        ["Rent",country.rent],
+        ["Buy",country.buy]
+    ].map(([label,items])=>{
+        const rows = renderWhereToWatchProviderRows(items);
+        return rows ? `<section class="watch-provider-group"><h3 class="modal-section-heading watch-provider-group-title">${escapeHTML(label)}</h3>${rows}</section>` : "";
+    }).filter(Boolean).join("");
+    if(!groups){
+        return `<div class="where-to-watch-empty">No watch options available in your region.</div>`;
+    }
+    const watchLink = safeExternalURL(country.link || "");
+    return `
+        <div class="where-to-watch-stack">
+            ${groups}
+            <div class="watch-provider-attribution">Powered by JustWatch</div>
+            ${watchLink ? `<a class="view-more-button watch-provider-options-button" href="${escapeHTML(watchLink)}" target="_blank" rel="noopener noreferrer">VIEW WATCH OPTIONS</a>` : ""}
+        </div>
+    `;
+}
+
 function renderMovieReleasesHTML(movie){
     const releases = collectMovieReleaseRows(movie);
     if(!releases.length){
@@ -4211,6 +4310,9 @@ function renderMovieActiveTabContentHTML(movie){
     if(tab === "Releases"){
         return `<section class="show-detail-section v2-show-info-section">${renderMovieReleasesHTML(movie)}</section>`;
     }
+    if(tab === "Where to Watch"){
+        return `<section class="show-detail-section v2-show-info-section">${renderWhereToWatchHTML("movie",movie && movie.id)}</section>`;
+    }
     return renderMovieInfoTabHTML(movie);
 }
 
@@ -4332,7 +4434,7 @@ function getShowMetaHTML(show,year,genres,ratingHTML){
     }
 
     if(genres){
-        const genreLinksHTML = renderShowGenreLinksHTML(show && show.genres ? show.genres : []);
+        const genreLinksHTML = renderShowGenreLinksHTML(show && Array.isArray(show.genre_items) && show.genre_items.length ? show.genre_items : (show && show.genres ? show.genres : []));
         items.push(genreLinksHTML || `<span>${escapeHTML(genres)}</span>`);
     }
 
@@ -4570,7 +4672,7 @@ function renderV2ShowInfoMetaLineHTML(show){
     }
 
     if(genres){
-        const genreLinksHTML = renderShowGenreLinksHTML(show && show.genres ? show.genres : []);
+        const genreLinksHTML = renderShowGenreLinksHTML(show && Array.isArray(show.genre_items) && show.genre_items.length ? show.genre_items : (show && show.genres ? show.genres : []));
         items.push(genreLinksHTML || `<span>${escapeHTML(genres)}</span>`);
     }
 
@@ -4764,8 +4866,8 @@ function renderV2RailSectionHTML(title,cardsHTML,extraClass=""){
             <div class="v2-section-title-row v2-rail-heading-row">
                 <h3 class="modal-section-heading">${escapeHTML(title)}</h3>
                 <div class="v2-rail-controls" aria-hidden="false">
-                    <button type="button" class="v2-rail-button" data-v2-rail-scroll="left" aria-label="Scroll ${escapeHTML(title)} left">←</button>
-                    <button type="button" class="v2-rail-button" data-v2-rail-scroll="right" aria-label="Scroll ${escapeHTML(title)} right">→</button>
+                    <button type="button" class="v2-rail-button" data-v2-rail-scroll="left" aria-label="Scroll ${escapeHTML(title)} left"><svg class="v2-rail-button-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 2 3.5 6l4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+                    <button type="button" class="v2-rail-button" data-v2-rail-scroll="right" aria-label="Scroll ${escapeHTML(title)} right"><svg class="v2-rail-button-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
                 </div>
             </div>
             <div class="v2-horizontal-rail">${cards}</div>
@@ -5560,7 +5662,7 @@ function renderShowDetailActionControlsHTML(show,isTracked){
             ${statusButtonHTML(show,"paused","Paused")}
             ${statusButtonHTML(show,"finished","Completed")}
             ${statusButtonHTML(show,"dropped","Dropped")}
-            <button class="modal-status-button show-page-favorite-button ${typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id) ? "active" : ""}" type="button" data-show-favorite-button="true" aria-pressed="${typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id) ? "true" : "false"}">Favorite</button>
+            ${renderFavoriteHeartButtonHTML(typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id),`data-show-favorite-button="true"`)}
             <button class="remove-show-button" id="remove-show-button">Remove</button>
         </div>
     `;
@@ -5709,14 +5811,16 @@ function renderShowDetailsTabHTML(show){
 }
 
 function renderShowGenresTabHTML(show){
-    const genres = Array.isArray(show && show.genres) ? show.genres : [];
+    const genres = Array.isArray(show && show.genre_items) && show.genre_items.length ? show.genre_items : (Array.isArray(show && show.genres) ? show.genres : []);
     const themesHTML = renderShowThemesDetailsHTML(show);
     const genreHTML = genres.length
     ? `<div class="show-detail-genre-chips">${genres.map(genre=>{
+        const name = String(genre && typeof genre === "object" ? genre.name : genre || "").trim();
         const route = getShowGenreRoute(genre,"tv");
-        return route
-        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-name="${escapeHTML(genre)}" data-genre-media="tv" data-genre-route="${escapeHTML(route)}">${escapeHTML(genre)}</a>`
-        : `<span>${escapeHTML(genre)}</span>`;
+        const key = genre && typeof genre === "object" && genre.id && typeof buildRouteKey === "function" ? buildRouteKey(genre.id,name) : "";
+        return route && route !== "/app/list/watching"
+        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-key="${escapeHTML(key)}" data-genre-name="${escapeHTML(name)}" data-genre-media="tv" data-genre-route="${escapeHTML(route)}">${escapeHTML(name)}</a>`
+        : `<span>${escapeHTML(name)}</span>`;
     }).join("")}</div>`
     : `<div class="v2-api-empty">No genres available.</div>`;
 
@@ -5752,35 +5856,33 @@ function renderProviderNamesForCountry(providerInfo){
 }
 
 function renderShowReleasesTabHTML(show){
-    const region = v2GetWatchRegion();
-    const providers = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
-    ? show._tmdb_watch_providers.results[region]
-    : null;
-
-    if(!providers){
-        return `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
+    const rows = [];
+    const firstAirDate = String(show && show.first_air_date || "").trim();
+    const lastAirDate = String(show && show.last_air_date || "").trim();
+    if(firstAirDate){ rows.push({label:"First Air Date",value:firstAirDate}); }
+    if(lastAirDate){ rows.push({label:"Last Air Date",value:lastAirDate}); }
+    if(!rows.length){
+        return `<div class="v2-api-empty">No release dates available.</div>`;
     }
-
-    const groups = [
-        renderV2ProvidersGroup("Streaming",providers.flatrate,providers),
-        renderV2ProvidersGroup("Rent",providers.rent,providers),
-        renderV2ProvidersGroup("Buy",providers.buy,providers)
-    ].filter(Boolean).join("");
-
-    return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
+    return `<div class="show-detail-fact-list">${rows.map(row=>`
+        <div class="show-detail-fact-row">
+            <div class="episode-detail-label">${escapeHTML(row.label)}</div>
+            <div class="episode-detail-value">${escapeHTML(row.value)}</div>
+        </div>
+    `).join("")}</div>`;
 }
 
 function getShowInfoActiveTab(show){
     const id = String(show && show.tmdb_id ? show.tmdb_id : selectedShowId || "");
     const tab = activeShowInfoTabs && activeShowInfoTabs[id] ? activeShowInfoTabs[id] : "Cast";
-    return ["Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Cast";
+    return ["Cast","Crew","Details","Genres","Releases","Where to Watch"].includes(tab) ? tab : "Cast";
 }
 
 function renderShowInfoSubTabsHTML(show){
     const activeTab = getShowInfoActiveTab(show);
     return `
         <div class="show-info-subtabs" role="tablist" aria-label="Show info sections">
-            ${["Cast","Crew","Details","Genres","Releases"].map(tab=>`
+            ${["Cast","Crew","Details","Genres","Releases","Where to Watch"].map(tab=>`
                 <button type="button" class="show-info-subtab ${activeTab === tab ? "active" : ""}" data-show-info-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
             `).join("")}
         </div>
@@ -5808,6 +5910,9 @@ function renderShowInfoSubTabContentHTML(show){
     }
     if(activeTab === "Releases"){
         return renderShowReleasesTabHTML(show);
+    }
+    if(activeTab === "Where to Watch"){
+        return renderWhereToWatchHTML("tv",show && show.tmdb_id);
     }
 
     return renderShowCastTabHTML(show);
@@ -5978,8 +6083,17 @@ function attachShowDetailsPageEvents(show,isTracked){
 
     document.querySelectorAll(".show-info-subtab").forEach(button=>{
         button.addEventListener("click",function(){
-            activeShowInfoTabs[String(show.tmdb_id)] = this.dataset.showInfoTab || "Cast";
+            const showId = String(show.tmdb_id || "");
+            activeShowInfoTabs[showId] = this.dataset.showInfoTab || "Cast";
             renderShowDetailsPagePreservingScroll(show);
+            if(activeShowInfoTabs[showId] === "Where to Watch" && typeof loadDetailWatchProviders === "function"){
+                loadDetailWatchProviders("tv",showId,{force:true}).then(()=>{
+                    if(String(selectedShowId || "") === showId && activeShowInfoTabs[showId] === "Where to Watch"){
+                        const currentShow = DATA && DATA.shows && DATA.shows[showId] ? DATA.shows[showId] : show;
+                        renderShowDetailsPagePreservingScroll(currentShow);
+                    }
+                });
+            }
         });
     });
 
@@ -5989,7 +6103,7 @@ function attachShowDetailsPageEvents(show,isTracked){
                 return;
             }
             event.preventDefault();
-            openGenrePage(this.dataset.genreName || this.textContent || "",{media:this.dataset.genreMedia || "tv"});
+            openGenrePage(this.dataset.genreKey || this.dataset.genreName || this.textContent || "",{media:this.dataset.genreMedia || "tv"});
         });
     });
 

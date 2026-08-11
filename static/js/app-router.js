@@ -280,11 +280,12 @@
             });
         }
 
-        const genreMatch = path.match(/^\/app\/genre\/(tv|movie)\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+        const genreMatch = path.match(/^\/app\/genre\/(tv|movie)\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(genreMatch){
             const media = genreMatch[1];
+            const genre = parseRouteIdSlug(genreMatch[2]);
             const browse = canonicalBrowseSearch(search,media);
-            return buildParsedRoute("genre",path,browse.search,{media,slug:genreMatch[2],browseState:browse.state});
+            return buildParsedRoute("genre",path,browse.search,{media,id:genre.id,slug:genre.slug,key:genreMatch[2],browseState:browse.state});
         }
 
         const showMatch = path.match(/^\/app\/show\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -379,7 +380,9 @@
         }
         if(activePage === "genre-detail" && typeof selectedGenreSlug !== "undefined" && selectedGenreSlug){
             const genreMedia = typeof selectedGenreMedia !== "undefined" && selectedGenreMedia === "movie" ? "movie" : "tv";
-            const baseRoute = "/app/genre/" + encodeURIComponent(genreMedia) + "/" + encodeURIComponent(String(selectedGenreSlug));
+            const baseRoute = typeof getGenreDetailRoute === "function" && typeof genrePageState !== "undefined" && genrePageState && genrePageState.genreId
+            ? getGenreDetailRoute(genrePageState.genreId,genrePageState.name || genrePageState.slug || "",genreMedia)
+            : "/app/list/watching";
             const api = typeof window !== "undefined" ? window.TVTrackerBrowse : null;
             const browseSearch = api && typeof api.serializeSearch === "function" && typeof genrePageState !== "undefined" && genrePageState
             ? api.serializeSearch(genrePageState.browse || {media:genreMedia})
@@ -541,13 +544,14 @@
     function primeDiscoveryGridRoute(parsed){
         const params = parsed.params || {};
         if(parsed.type === "genre"){
-            selectedGenreSlug = params.slug;
+            selectedGenreSlug = params.key || (params.id + (params.slug ? "-" + params.slug : ""));
             selectedGenreMedia = params.media;
             genrePageState = Object.assign({},genrePageState,{
                 media:params.media,
                 slug:params.slug,
+                routeKey:params.key || "",
                 name:"",
-                genreId:null,
+                genreId:params.id,
                 year:params.browseState && params.browseState.year || "",
                 sort:params.browseState && params.browseState.sort === "rating-desc" ? "vote_average.desc" : (params.browseState && params.browseState.sort === "date-desc" ? "first_air_date.desc" : "popularity.desc"),
                 browse:params.browseState || null,
@@ -895,7 +899,7 @@
         }
         if(parsed.type === "genre"){
             if(typeof openGenrePage === "function"){
-                openGenrePage(params.slug,{fromRoute:true,media:params.media,browseState:params.browseState});
+                openGenrePage(params.key || params.id,{fromRoute:true,media:params.media,browseState:params.browseState,routeSlug:params.slug});
             }
             return;
         }

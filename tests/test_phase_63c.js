@@ -75,13 +75,15 @@ assert(browse,'browse module should load');
 }
 
 {
-  const movie = browse.normalizeState({media:'movie',upcoming:true,certification:'pg-13',provider:'8',sort:'rating-asc'});
+  const movie = browse.normalizeState({media:'movie',upcoming:true,certification:'pg-13',providers:['8','9'],sort:'rating-asc'});
   const params = browse.buildTMDBParams(movie,1,{today:'2026-08-10',watchRegion:'MY'});
   assert.strictEqual(params['primary_release_date.gte'],'2026-08-10');
   assert.strictEqual(params.certification_country,'US');
   assert.strictEqual(params.certification,'PG-13');
-  assert.strictEqual(params.with_watch_providers,'8');
+  assert.strictEqual(params.with_watch_providers,'8|9');
+  assert.strictEqual(params.with_watch_monetization_types,'flatrate');
   assert.strictEqual(params.watch_region,'MY');
+  assert.deepStrictEqual(Array.from(movie.providers),['8','9']);
   assert.strictEqual(params.sort_by,'vote_average.asc');
   assert.strictEqual(params['vote_count.gte'],50);
 }
