@@ -597,24 +597,6 @@ function combineHistoryDeleteIds(){
 }
 
 
-
-
-
-
-
-
-
-function canUseTMDBShow(show){
-    if(!show){
-        return false;
-    }
-
-    const id = Number(show.tmdb_id);
-    return Number.isFinite(id) && id > 0;
-}
-
-
-
 function getAdminAccountUsername(){
     return String(adminAccountState.username || "");
 }

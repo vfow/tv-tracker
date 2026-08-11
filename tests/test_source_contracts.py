@@ -895,5 +895,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('watch-provider-logo-tile', built_css)
 
 
+    def test_trailing_slash_redirects_preserve_query_strings(self):
+        backend = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+
+        self.assertIn('def redirect_app_path_preserving_query(path: str):', backend)
+        self.assertIn('request.query_string.decode("utf-8", errors="ignore")', backend)
+        self.assertNotIn('return redirect(requested_path)', backend)
+        self.assertGreaterEqual(
+            backend.count('return redirect_app_path_preserving_query(requested_path)'),
+            10,
+        )
+        self.assertEqual(app_js.count('function canUseTMDBShow(show)'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

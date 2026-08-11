@@ -2233,7 +2233,7 @@ def create_app() -> Flask:
         if requested_path not in APP_SECTION_PATHS:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
 
@@ -2244,7 +2244,7 @@ def create_app() -> Flask:
         if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/browse/<media_type>", strict_slashes=False)
@@ -2264,7 +2264,7 @@ def create_app() -> Flask:
         if APP_LIST_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
 
@@ -2325,7 +2325,7 @@ def create_app() -> Flask:
         if APP_MOVIE_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/company/<media_type>/<company_key>", strict_slashes=False)
@@ -2395,7 +2395,7 @@ def create_app() -> Flask:
         if APP_SHOW_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get(
@@ -2416,7 +2416,7 @@ def create_app() -> Flask:
         ):
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/app/<path:app_path>", strict_slashes=False)
@@ -2426,7 +2426,7 @@ def create_app() -> Flask:
         if not valid_app_path(requested_path):
             abort(404)
         if request.path != requested_path:
-            return redirect(requested_path)
+            return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
     @app.get("/robots.txt")
