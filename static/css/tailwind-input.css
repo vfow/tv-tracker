@@ -1122,6 +1122,11 @@
         filter:brightness(1.06);
     }
 
+    .discover-collection-card:hover .collection-poster-stack,
+    .discover-collection-card:focus-visible .collection-poster-stack{
+        transform:none;
+    }
+
     .collection-stack-poster{
         @apply tw-absolute tw-top-0 tw-h-full tw-w-[112px] tw-overflow-hidden tw-rounded-[4px] tw-border tw-border-solid tw-border-black tw-bg-tt-control;
         aspect-ratio:2 / 3;
@@ -5592,13 +5597,13 @@
     right:0;
     z-index:30;
     display:grid;
-    min-width:132px;
+    min-width:126px;
     overflow:hidden;
-    border:1px solid #424242;
+    border:1px solid #2d2d2d;
     border-radius:0;
-    background:#202124;
-    box-shadow:0 16px 40px rgba(0,0,0,.55);
-    padding:8px;
+    background:#050505;
+    box-shadow:0 14px 32px rgba(0,0,0,.5);
+    padding:4px 0;
     text-transform:none;
     letter-spacing:0;
 }
@@ -5611,8 +5616,8 @@
     border:0;
     background:transparent;
     border-radius:0;
-    padding:9px 10px;
-    color:#c8c8c8;
+    padding:9px 12px;
+    color:#8f8f8f;
     font:600 13px/1.2 Graphik,Arial,Helvetica,sans-serif;
     text-align:left;
     cursor:pointer;
@@ -5620,12 +5625,18 @@
 }
 
 .movie-release-sort-menu-option:hover,
-.movie-release-sort-menu-option:focus-visible,
-.movie-release-sort-menu-option.active{
-    background:#323438;
+.movie-release-sort-menu-option:focus-visible{
+    background:#111111;
     color:#ffffff;
     outline:0;
 }
+
+.movie-release-sort-menu-option.active{
+    background:transparent;
+    color:#ffffff;
+    font-weight:800;
+}
+
 
 .movie-release-country-row,
 .movie-release-date-row{

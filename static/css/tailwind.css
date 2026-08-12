@@ -658,7 +658,7 @@
     text-align:left;
 }
 
-.movie-release-sort-chevron{display:inline-flex;align-items:center;justify-content:center;width:12px;color:currentColor}.movie-release-sort-chevron .browse-chevron{width:10px;height:7px}.movie-release-sort-menu-wrap.open .movie-release-sort-chevron-icon{transform:rotate(180deg)}.movie-release-sort-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:30;display:grid;min-width:132px;overflow:hidden;border:1px solid #424242;border-radius:0;background:#202124;box-shadow:0 16px 40px rgba(0,0,0,.55);padding:8px;text-transform:none;letter-spacing:0}.movie-release-sort-menu[hidden]{display:none}.movie-release-sort-menu-option{border:0;background:transparent;border-radius:0;padding:9px 10px;color:#c8c8c8;font:600 13px/1.2 Graphik,Arial,Helvetica,sans-serif;text-align:left;cursor:pointer;transition:background-color .14s ease,color .14s ease}.movie-release-sort-menu-option:hover,.movie-release-sort-menu-option:focus-visible,.movie-release-sort-menu-option.active{background:#323438;color:#fff;outline:0}.movie-release-country-row,
+.movie-release-sort-chevron{display:inline-flex;align-items:center;justify-content:center;width:12px;color:currentColor}.movie-release-sort-chevron .browse-chevron{width:10px;height:7px}.movie-release-sort-menu-wrap.open .movie-release-sort-chevron-icon{transform:rotate(180deg)}.movie-release-sort-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:30;display:grid;min-width:126px;overflow:hidden;border:1px solid #2d2d2d;border-radius:0;background:#050505;box-shadow:0 14px 32px rgba(0,0,0,.5);padding:4px 0;text-transform:none;letter-spacing:0}.movie-release-sort-menu[hidden]{display:none}.movie-release-sort-menu-option{border:0;background:transparent;border-radius:0;padding:9px 12px;color:#8f8f8f;font:600 13px/1.2 Graphik,Arial,Helvetica,sans-serif;text-align:left;cursor:pointer;transition:background-color .14s ease,color .14s ease}.movie-release-sort-menu-option:hover,.movie-release-sort-menu-option:focus-visible{background:#111;color:#fff;outline:0}.movie-release-sort-menu-option.active{background:transparent;color:#fff;font-weight:800}.movie-release-country-row,
 .movie-release-date-row{
     display:grid;
     grid-template-columns:minmax(150px,220px) minmax(0,1fr);
@@ -1676,6 +1676,10 @@
 .collection-card:focus-visible .collection-poster-stack{
     transform:translateY(-2px);
     filter:brightness(1.06);
+}
+.discover-collection-card:hover .collection-poster-stack,
+.discover-collection-card:focus-visible .collection-poster-stack{
+    transform:none;
 }
 .collection-stack-poster{
     position:absolute;
