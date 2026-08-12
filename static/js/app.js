@@ -141,7 +141,8 @@ var discoverHubState = {
     genres:{tv:[],movie:[]},
     collections:[]
 };
-var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
+var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],query:"",genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
+var collectionSearchTimer = null;
 var collectionIndexPollTimer = null;
 var collectionIndexHydrationRun = 0;
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
@@ -228,7 +229,7 @@ const DISCOVER_COLLECTION_IDS = Object.freeze([
     558216
 ]);
 const TMDB_COLLECTION_INDEX_POLL_DELAY = 4000;
-const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person"]);
+const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person","collection"]);
 const SEARCH_RESULT_BATCH_SIZE = 21;
 const SEARCH_TYPING_DELAY_MS = 360;
 const APP_ROUTE_NAV_CONTEXT_KEY = "tv-tracker-route-nav-context:v1";
@@ -2176,7 +2177,8 @@ function normalizeTMDBSimilarMovies(similar,limit=10){
         overview:movie.overview || "",
         release_date:movie.release_date || "",
         vote_average:Number(movie.vote_average || 0),
-        popularity:Number(movie.popularity || 0)
+        popularity:Number(movie.popularity || 0),
+        adult:movie.adult === true
     }));
 }
 
@@ -3533,6 +3535,7 @@ function normalizeSearchResultItem(item,forcedMediaType=""){
         date:date,
         vote_average:Number(item.vote_average || 0),
         popularity:Number(item.popularity || 0),
+        adult:mediaType === "movie" && item.adult === true,
         known_for_department:item.known_for_department || ""
     };
 }
@@ -3545,19 +3548,74 @@ function getSearchEndpointForMedia(media){
     if(cleanMedia === "person"){
         return "search/person";
     }
+    if(cleanMedia === "collection"){
+        return "search/collection";
+    }
     return "search/tv";
+}
+
+function normalizeSearchCollectionSummary(raw){
+    const collection = normalizeTMDBCollectionSummary(raw);
+    if(collection){
+        collection.media_type = "collection";
+        return collection;
+    }
+    const id = normalizeCollectionId(raw && raw.id);
+    const name = String(raw && (raw.name || raw.title || raw.original_name) || "").trim();
+    if(!id || !name){
+        return null;
+    }
+    return {
+        id:Number(id),
+        media_type:"collection",
+        name,
+        title:name,
+        poster_path:String(raw && raw.poster_path || ""),
+        backdrop_path:String(raw && raw.backdrop_path || ""),
+        poster_paths:raw && raw.poster_path ? [String(raw.poster_path)] : [],
+        poster_slots:raw && raw.poster_path ? [{poster_path:String(raw.poster_path),title:name,name,release_date:"",date:""}] : [],
+        movie_count:Number(raw && raw.movie_count || 0),
+        route:getCollectionDetailRoute(id,name)
+    };
+}
+
+async function tmdbSearchCollectionsPage(query,page=1,options={}){
+    const cleanQuery = String(query || "").trim();
+    const pageNumber = Math.max(1,Number(page || 1));
+    if(!cleanQuery){
+        return {results:[],page:1,total_pages:1,total_results:0};
+    }
+    const data = await tmdbFetchJSON("search/collection",{
+        query:cleanQuery,
+        page:pageNumber
+    },options);
+    const rawResults = Array.isArray(data && data.results) ? data.results : [];
+    const summaryResults = rawResults.map(normalizeSearchCollectionSummary).filter(Boolean);
+    const detailResults = await loadCollectionSummaries(summaryResults.map(item=>item.id),{limit:summaryResults.length});
+    const results = mergeCollectionLists(detailResults,summaryResults)
+    .filter(collection=>typeof isPromotableCollection === "function" ? isPromotableCollection(collection) : collection && collection.id && collection.name)
+    .map(collection=>Object.assign({},collection,{media_type:"collection"}));
+    return {
+        results:results,
+        page:Number(data.page || pageNumber),
+        total_pages:Number(data.total_pages || pageNumber || 1),
+        total_results:Number(data.total_results || results.length || 0)
+    };
 }
 
 async function tmdbSearchMediaPage(query,media,page=1,options={}){
     const cleanQuery = String(query || "").trim();
     const cleanMedia = normalizeSearchMediaType(media);
     const pageNumber = Math.max(1,Number(page || 1));
+    if(cleanMedia === "collection"){
+        return tmdbSearchCollectionsPage(cleanQuery,pageNumber,options);
+    }
     if(!cleanQuery){
         return {results:[],page:1,total_pages:1,total_results:0};
     }
     const data = await tmdbFetchJSON(getSearchEndpointForMedia(cleanMedia),{
         query:cleanQuery,
-        include_adult:"false",
+        include_adult:cleanMedia === "movie" ? "true" : "false",
         page:pageNumber
     },options);
     const results = (Array.isArray(data && data.results) ? data.results : [])
@@ -3652,7 +3710,7 @@ function openSearchPage(query="",options={}){
     const input = document.getElementById("search");
     if(input){
         input.value = cleanQuery;
-        input.setAttribute("placeholder","Search shows, movies, people");
+        input.setAttribute("placeholder","Search shows, movies, people, collections");
     }
     if(!fromRoute){
         setAppHashRoute(getSearchRoute(cleanQuery,media,searchRouteState),replaceRoute);
@@ -3684,7 +3742,7 @@ function openDiscoverHomePage(options={}){
     const input = document.getElementById("search");
     if(input){
         input.value = "";
-        input.setAttribute("placeholder","Search shows, movies, people");
+        input.setAttribute("placeholder","Search shows, movies, people, collections");
     }
     showPage("discover");
     if(!fromRoute){
@@ -4381,6 +4439,7 @@ function createCollectionsIndexState(input={}){
     const source = input && typeof input === "object" ? input : {};
     const pageNumber = Math.max(1,Math.floor(Number(source.page || 1)));
     return {
+        query:String(source.query || source.q || "").trim().slice(0,120),
         genre:normalizeCollectionId(source.genre),
         decade:normalizeCollectionsIndexDecade(source.decade),
         sort:normalizeCollectionsIndexSort(source.sort),
@@ -4391,6 +4450,7 @@ function createCollectionsIndexState(input={}){
 function serializeCollectionsIndexSearch(input={}){
     const state = createCollectionsIndexState(input);
     const parts = [];
+    if(state.query){ parts.push("q=" + encodeURIComponent(state.query)); }
     if(state.genre){ parts.push("genre=" + encodeURIComponent(state.genre)); }
     if(state.decade){ parts.push("decade=" + encodeURIComponent(state.decade)); }
     if(state.sort !== COLLECTIONS_DEFAULT_SORT){ parts.push("sort=" + encodeURIComponent(state.sort)); }
@@ -4478,7 +4538,11 @@ function buildCollectionsIndexOptions(collections){
 
 function getFilteredCollectionsForIndex(collections,state){
     const filters = createCollectionsIndexState(state);
+    const query = String(filters.query || "").trim().toLowerCase();
     return (Array.isArray(collections) ? collections : []).filter(collection=>{
+        if(query && !String(collection && (collection.name || collection.title) || "").toLowerCase().includes(query)){
+            return false;
+        }
         if(filters.genre && !getCollectionGenreIds(collection).includes(filters.genre)){
             return false;
         }
@@ -4828,7 +4892,8 @@ function normalizeDiscoverMediaResultItem(raw,media){
         release_date:cleanMedia === "movie" ? date : "",
         date:date,
         vote_average:Number(raw.vote_average || 0),
-        popularity:Number(raw.popularity || 0)
+        popularity:Number(raw.popularity || 0),
+        adult:cleanMedia === "movie" && raw.adult === true
     };
 }
 
@@ -5319,6 +5384,28 @@ function attachCollectionsPageEvents(){
         });
     }
 
+    const collectionSearchInput = document.querySelector("[data-collection-search]");
+    if(collectionSearchInput){
+        collectionSearchInput.addEventListener("input",function(){
+            const value = String(this.value || "").trim();
+            if(collectionSearchTimer && typeof window.clearTimeout === "function"){
+                window.clearTimeout(collectionSearchTimer);
+            }
+            collectionSearchTimer = window.setTimeout(function(){
+                applyCollectionsIndexState({query:value,page:1},{replaceRoute:true});
+            },180);
+        });
+        collectionSearchInput.addEventListener("keydown",function(event){
+            if(event && event.key === "Enter"){
+                event.preventDefault();
+                if(collectionSearchTimer && typeof window.clearTimeout === "function"){
+                    window.clearTimeout(collectionSearchTimer);
+                }
+                applyCollectionsIndexState({query:String(collectionSearchInput.value || "").trim(),page:1},{replaceRoute:true});
+            }
+        });
+    }
+
     document.querySelectorAll("[data-collection-filter]").forEach(button=>{
         button.addEventListener("click",function(){
             const filter = String(button.dataset.collectionFilter || "");
@@ -5337,12 +5424,14 @@ function attachCollectionsPageEvents(){
     document.querySelectorAll("[data-collection-clear]").forEach(button=>{
         button.addEventListener("click",function(){
             const filter = String(button.dataset.collectionClear || "");
-            if(filter === "genre"){
+            if(filter === "query"){
+                applyCollectionsIndexState({query:"",page:1});
+            }else if(filter === "genre"){
                 applyCollectionsIndexState({genre:"",page:1});
             }else if(filter === "decade"){
                 applyCollectionsIndexState({decade:"",page:1});
             }else if(filter === "all"){
-                applyCollectionsIndexState({genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
+                applyCollectionsIndexState({query:"",genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
             }
             if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
         });
@@ -5516,7 +5605,7 @@ async function searchShows(query,options={}){
         let searchPage = Number(payload.page || 1);
         let searchTotalPages = Number(payload.total_pages || 1);
 
-        if(cleanMedia !== "person" && hasEyeHideOptions(searchRouteState)){
+        if(cleanMedia !== "person" && cleanMedia !== "collection" && hasEyeHideOptions(searchRouteState)){
             const existing = new Set(searchResults.map(item=>item ? `${item.media_type}:${item.id}` : ""));
             let extraPages = 0;
             let nextPage = searchPage + 1;
@@ -6257,7 +6346,7 @@ function getSearchRoute(query="",media="tv"){
     if(!clean){
         return "/app/search";
     }
-    const eyeParts = cleanMedia !== "person"
+    const eyeParts = cleanMedia !== "person" && cleanMedia !== "collection"
     ? getEyeFilterQueryParts(eyeOptions || searchRouteState || {})
     : [];
     const eyeSuffix = eyeParts.length ? `&${eyeParts.join("&")}` : "";
@@ -8289,7 +8378,8 @@ function normalizeBrowseResultItem(raw,media){
         release_date:cleanMedia === "movie" ? date : "",
         date:date,
         vote_average:Number(raw.vote_average || 0),
-        popularity:Number(raw.popularity || 0)
+        popularity:Number(raw.popularity || 0),
+        adult:cleanMedia === "movie" && raw.adult === true
     };
 }
 
@@ -9472,6 +9562,7 @@ function normalizeMovieDetails(movie){
         homepage:movie.homepage || "",
         vote_average:Number(movie.vote_average || 0),
         vote_count:Number(movie.vote_count || 0),
+        adult:movie.adult === true,
         genres:Array.isArray(movie.genres) ? movie.genres.map(genre=>genre && genre.name).filter(Boolean) : [],
         genre_items:Array.isArray(movie.genres) ? movie.genres : [],
         production_companies:Array.isArray(movie.production_companies) ? movie.production_companies : [],

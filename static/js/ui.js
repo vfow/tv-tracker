@@ -756,7 +756,7 @@ function renderDiscoverHubCard(item){
             <div class="discover-card-poster">
                 ${posterHTML}
             </div>
-            <div class="discover-card-title">${escapeHTML(title)}</div>
+            <div class="discover-card-title">${renderMovieTitleWithAdultBadgeHTML(title,item,mediaType)}</div>
             <div class="discover-card-meta">${escapeHTML(year)}</div>
         </a>
     `;
@@ -847,6 +847,16 @@ function renderDiscoverPosterPlaceholderHTML(item,media="movie"){
     return `<div class="discover-card-placeholder media-title-placeholder" title="${escapeHTML(label)}"><span>${escapeHTML(label)}</span></div>`;
 }
 
+function renderAdultMovieBadgeHTML(item,media="movie"){
+    const cleanMedia = media === "movie" || item && item.media_type === "movie" ? "movie" : "tv";
+    return cleanMedia === "movie" && item && item.adult === true ? '<span class="adult-movie-badge">ADULT</span>' : "";
+}
+
+function renderMovieTitleWithAdultBadgeHTML(title,item,media="movie"){
+    const badge = renderAdultMovieBadgeHTML(item,media);
+    return `${escapeHTML(title)}${badge ? ` ${badge}` : ""}`;
+}
+
 function renderSearchResultPosterCard(result){
     const mediaType = result && result.media_type === "movie" ? "movie" : "tv";
     const title = result && (result.title || result.name) ? String(result.title || result.name) : "Untitled";
@@ -875,7 +885,7 @@ function renderSearchResultPosterCard(result){
         data-first-air-date="${escapeHTML(result && result.first_air_date || "")}" 
         data-release-date="${escapeHTML(result && result.release_date || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${escapeHTML(title)}</div>
+            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(title,result,mediaType)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
         </a>
     `;
@@ -941,22 +951,25 @@ function renderSearchResults(resultsList){
     const mediaItems = allItems.filter(item=>String(item && item.media_type || "tv") === media);
     const batchSize = typeof SEARCH_RESULT_BATCH_SIZE !== "undefined" ? SEARCH_RESULT_BATCH_SIZE : 21;
     const visibleLimit = Math.max(batchSize,Number(state.visibleLimit || batchSize));
-    const filteredItems = media === "person" ? mediaItems : getEyeFilteredRenderItems(mediaItems,media,state);
+    const filteredItems = media === "person" || media === "collection" ? mediaItems : getEyeFilteredRenderItems(mediaItems,media,state);
     const visibleItems = filteredItems.slice(0,visibleLimit);
-    const labels = {tv:"TV Shows",movie:"Movies",person:"People"};
+    const labels = {tv:"TV Shows",movie:"Movies",person:"People",collection:"Collections"};
 
-    const searchEyeControlHTML = media !== "person" && query ? renderEyeFilterControlHTML(state,"search-eye-filter-menu") : "";
+    const searchEyeControlHTML = media !== "person" && media !== "collection" && query ? renderEyeFilterControlHTML(state,"search-eye-filter-menu") : "";
     const tabsHTML = `
         <div class="search-tab-row" role="tablist" aria-label="Search result type">
             ${renderSearchTabButtonHTML("tv","TV Shows",media === "tv")}
             ${renderSearchTabButtonHTML("movie","Movies",media === "movie")}
             ${renderSearchTabButtonHTML("person","People",media === "person")}
+            ${renderSearchTabButtonHTML("collection","Collections",media === "collection")}
             ${searchEyeControlHTML}
         </div>
     `;
 
     const skeletonHTML = media === "person"
     ? `<div class="search-person-grid search-person-grid-loading">${renderTrackerPersonSkeletonCards(12)}</div>`
+    : media === "collection"
+    ? `<div class="collection-grid collection-search-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>`
     : `<div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">${renderTrackerPosterSkeletonCards(12)}</div>`;
 
     const bodyHTML = !query
@@ -970,6 +983,8 @@ function renderSearchResults(resultsList){
     : visibleItems.length
     ? media === "person"
         ? `<div class="search-person-grid">${visibleItems.map(renderSearchPersonCard).join("")}</div>`
+        : media === "collection"
+        ? `<div class="collection-grid collection-search-grid">${visibleItems.map(collection=>renderCollectionCard(collection,"collection-search-card")).join("")}</div>`
         : `<div class="genre-tight-grid search-tight-grid">${visibleItems.map(renderSearchResultPosterCard).join("")}</div>`
     : `
         <div class="empty-state search-empty-state">
@@ -1140,7 +1155,7 @@ function renderGenrePosterGridCard(show){
         data-overview="${escapeHTML(show && show.overview || "")}" 
         data-first-air-date="${escapeHTML(show && (show.first_air_date || show.date) || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${escapeHTML(title)}</div>
+            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(title,show,mediaType)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
         </a>
     `;
@@ -1214,7 +1229,7 @@ function renderPersonResultCard(item){
         data-overview="${escapeHTML(item && item.overview || "")}"
         data-first-air-date="${escapeHTML(item && item.first_air_date || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${escapeHTML(item && item.title || "Untitled")}</div>
+            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(item && item.title || "Untitled",item,mediaType)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
             ${roleMeta ? `<div class="person-result-role">${escapeHTML(roleMeta)}</div>` : ""}
         </a>
@@ -2033,6 +2048,10 @@ function renderCollectionIndexActiveChipsHTML(state){
     const chips = [];
     const genre = String(state && state.genre || "");
     const decade = String(state && state.decade || "");
+    const query = String(state && state.query || "").trim();
+    if(query){
+        chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="query">Search: ${escapeHTML(query)}<span aria-hidden="true">×</span></button>`);
+    }
     if(genre){
         chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="genre">Genre: ${escapeHTML(getCollectionIndexGenreLabel(state,genre))}<span aria-hidden="true">×</span></button>`);
     }
@@ -2048,6 +2067,9 @@ function renderCollectionIndexActiveChipsHTML(state){
 function renderCollectionIndexControlsHTML(state){
     return `
         <div class="browse-controls collections-controls">
+            <div class="collections-search-box">
+                <input type="search" class="library-search-input collections-search-input" data-collection-search value="${escapeHTML(state && state.query || "")}" placeholder="Search collections" autocomplete="off">
+            </div>
             <div class="browse-bar collections-browse-bar" aria-label="Collection filters">
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu">
@@ -2094,7 +2116,7 @@ function renderCollectionsIndexPage(state){
     const loading = pageState.loading === true;
     const building = pageState.building === true;
     const error = String(pageState.error || "").trim();
-    const hasFilters = !!(pageState.genre || pageState.decade || String(pageState.sort || "popularity.desc") !== "popularity.desc");
+    const hasFilters = !!(pageState.query || pageState.genre || pageState.decade || String(pageState.sort || "popularity.desc") !== "popularity.desc");
 
     const bodyHTML = error
     ? `
@@ -2113,7 +2135,7 @@ function renderCollectionsIndexPage(state){
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No collections found</h2>
-            <p>${hasFilters ? "Remove or change one or more filters." : "Try again later."}</p>
+            <p>${hasFilters ? "Try another search or change one or more filters." : "Try again later."}</p>
         </div>
     `;
 
@@ -5125,7 +5147,7 @@ function renderMovieMoreLikeThisHTML(movie){
         return `
             <a href="${escapeHTML(route)}" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}">
                 <div class="v2-similar-poster">${poster}</div>
-                <div class="v2-similar-title">${escapeHTML(item.title || "Untitled")}</div>
+                <div class="v2-similar-title">${renderMovieTitleWithAdultBadgeHTML(item.title || "Untitled",item,"movie")}</div>
             </a>
         `;
     }).join("");

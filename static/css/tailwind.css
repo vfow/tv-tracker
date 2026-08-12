@@ -1789,3 +1789,9 @@
     -webkit-line-clamp:4;
     -webkit-box-orient:vertical;
 }
+
+.collections-search-box{margin-bottom:.75rem;width:100%;}
+@media (min-width:640px){.collections-search-box{width:300px;}}
+.collections-search-input{max-width:100%;}
+.adult-movie-badge{margin-left:.25rem;display:inline-flex;vertical-align:middle;border-radius:2px;background:#b91c1c;padding:1px 4px;font-family:Graphik,Arial,Helvetica,sans-serif;font-size:9px;font-weight:800;line-height:1;letter-spacing:.08em;color:#fff;}
+.search-tab-row .eye-filter-menu{border-left:0;}

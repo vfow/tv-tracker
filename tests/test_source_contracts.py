@@ -308,6 +308,23 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', app_js)
         self.assertIn('src="/static/assets/icons/arrow-narrow-left.svg"', ui)
 
+
+    def test_phase_66j_adult_badge_and_collection_search_exist(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        router = self.read('static/js/app-router.js')
+        app_py = self.read('app.py')
+        css = self.read('static/css/tailwind-input.css')
+        self.assertIn('"collection"', app_js)
+        self.assertIn('search/collection', app_js)
+        self.assertIn('tmdbSearchCollectionsPage', app_js)
+        self.assertIn('data-collection-search', ui)
+        self.assertIn('renderMovieTitleWithAdultBadgeHTML', ui)
+        self.assertIn('adult-movie-badge', css)
+        self.assertIn('"person","collection"', app_js)
+        self.assertIn('"person", "collection"', app_py)
+        self.assertIn('rawQuery', router)
+
     def test_deploy_workflow_tests_and_checks_healthz(self):
         app_py = self.read('app.py')
         workflow = self.read('.github/workflows/deploy.yml')

@@ -91,6 +91,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
             safe_next_url("/app/search?q=nolan&type=person&hideWatched=1"),
             "/app/search?q=nolan&type=person",
         )
+        self.assertEqual(
+            safe_next_url("/app/search?q=batman&type=collection&hideWatched=1"),
+            "/app/search?q=batman&type=collection",
+        )
         self.assertTrue(valid_app_path("/app/list/watching"))
         self.assertTrue(valid_app_path("/app/list/completed"))
         self.assertEqual(safe_next_url("/app/list"), "/app/list/watching")
@@ -136,6 +140,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/collections?page=2&sort=popularity.desc&genre=28&decade=2000&junk=1"),
             "/app/collections?genre=28&decade=2000&page=2",
+        )
+        self.assertEqual(
+            safe_next_url("/app/collections?junk=1&q=batman&genre=28"),
+            "/app/collections?q=batman&genre=28",
         )
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
 

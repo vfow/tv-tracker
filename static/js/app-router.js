@@ -90,10 +90,10 @@
         const params = readSearchParams(search);
         const query = String(params.get("q") || "").trim();
         const rawMedia = String(params.get("type") || "tv").trim().toLowerCase();
-        const media = ["tv","movie","person"].includes(rawMedia) ? rawMedia : "tv";
+        const media = ["tv","movie","person","collection"].includes(rawMedia) ? rawMedia : "tv";
         const eye = canonicalEyeParams(params);
         const parts = query ? ["q=" + encodeURIComponent(query),"type=" + encodeURIComponent(media)] : [];
-        if(query && media !== "person"){
+        if(query && media !== "person" && media !== "collection"){
             eye.parts.forEach(part=>parts.push(part));
         }
         return {
@@ -153,6 +153,7 @@
 
     function canonicalCollectionsSearch(search){
         const params = readSearchParams(search);
+        const rawQuery = String(params.get("q") || "").trim().slice(0,120);
         const rawGenre = String(params.get("genre") || "").trim();
         const genre = /^[1-9][0-9]{0,11}$/.test(rawGenre) ? rawGenre : "";
         const rawDecade = String(params.get("decade") || "").trim();
@@ -164,11 +165,12 @@
         const rawPage = String(params.get("page") || "").trim();
         const page = /^[1-9][0-9]{0,5}$/.test(rawPage) ? Math.max(1,Number(rawPage)) : 1;
         const parts = [];
+        if(rawQuery){ parts.push("q=" + encodeURIComponent(rawQuery)); }
         if(genre){ parts.push("genre=" + encodeURIComponent(genre)); }
         if(decade){ parts.push("decade=" + encodeURIComponent(decade)); }
         if(sort !== "popularity.desc"){ parts.push("sort=" + encodeURIComponent(sort)); }
         if(page > 1){ parts.push("page=" + encodeURIComponent(String(page))); }
-        return {state:{genre,decade,sort,page},search:parts.length ? "?" + parts.join("&") : ""};
+        return {state:{query:rawQuery,genre,decade,sort,page},search:parts.length ? "?" + parts.join("&") : ""};
     }
     function canonicalCollectionDetailSearch(search){
         const params = readSearchParams(search);

@@ -1795,10 +1795,10 @@ def safe_next_url(value: str | None) -> str:
                     raw_values[key] = clean_value
                 if key == "q" and clean_value and not query:
                     query = clean_value[:120]
-                elif key == "type" and clean_value.lower() in {"tv", "movie", "person"}:
+                elif key == "type" and clean_value.lower() in {"tv", "movie", "person", "collection"}:
                     media_type = clean_value.lower()
         params = {"q": query, "type": media_type} if query else {}
-        if query and media_type != "person":
+        if query and media_type not in {"person", "collection"}:
             params.update(canonical_eye_query_params(raw_values))
         return "/app/search" + (("?" + urlencode(params)) if params else "")
     if APP_LIST_PATH_RE.fullmatch(candidate):
@@ -1889,6 +1889,7 @@ def safe_next_url(value: str | None) -> str:
     if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_COLLECTIONS_PATH_RE.fullmatch(candidate):
+        query = ""
         genre = ""
         decade = ""
         sort_mode = "popularity.desc"
@@ -1897,7 +1898,9 @@ def safe_next_url(value: str | None) -> str:
             current_decade = 2100
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
                 clean_value = value.strip()
-                if key == "genre" and re.fullmatch(r"[1-9][0-9]{0,11}", clean_value) and not genre:
+                if key == "q" and clean_value and not query:
+                    query = clean_value[:120]
+                elif key == "genre" and re.fullmatch(r"[1-9][0-9]{0,11}", clean_value) and not genre:
                     genre = clean_value
                 elif key == "decade" and re.fullmatch(r"(?:18|19|20|21)[0-9]0", clean_value):
                     decade_value = int(clean_value)
@@ -1908,6 +1911,8 @@ def safe_next_url(value: str | None) -> str:
                 elif key == "page" and re.fullmatch(r"[1-9][0-9]{0,5}", clean_value) and not page_number:
                     page_number = clean_value
         params = {}
+        if query:
+            params["q"] = query
         if genre:
             params["genre"] = genre
         if decade:
@@ -2327,6 +2332,7 @@ def normalize_tmdb_collection_movie_part(raw: Any) -> dict[str, Any] | None:
         "original_language": str(raw.get("original_language") or "").strip().lower(),
         "vote_average": float(raw.get("vote_average") or 0.0),
         "popularity": float(raw.get("popularity") or 0.0),
+        "adult": raw.get("adult") is True,
     }
 
 
