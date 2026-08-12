@@ -165,7 +165,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v8";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v9";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const DISCOVER_COLLECTION_ROW_LIMIT = 12;
@@ -176,7 +176,7 @@ const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
 const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v5:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
-const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v5";
+const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v6";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
 const COLLECTION_RETURN_POSITION_KEY = "tv-tracker-collection-return-position:v1";
 const DISCOVER_COLLECTION_IDS = Object.freeze([
@@ -4555,7 +4555,12 @@ function getFilteredCollectionsForIndex(collections,state){
 
 function buildCollectionsIndexState(collections,state){
     const filters = createCollectionsIndexState(state);
-    const promotableCollections = (Array.isArray(collections) ? collections : []).filter(isPromotableCollection);
+    const liveQuery = String(state && state.liveSearchQuery || "").trim();
+    const liveResults = filters.query && liveQuery.toLowerCase() === filters.query.toLowerCase() && Array.isArray(state && state.liveSearchResults)
+    ? state.liveSearchResults
+    : [];
+    const sourceCollections = liveResults.length ? mergeCollectionLists(collections,liveResults) : collections;
+    const promotableCollections = (Array.isArray(sourceCollections) ? sourceCollections : []).filter(isPromotableCollection);
     const options = buildCollectionsIndexOptions(promotableCollections);
     const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(promotableCollections,filters),filters.sort);
     const totalPages = Math.max(1,Math.ceil(filtered.length / COLLECTIONS_PAGE_SIZE));
@@ -4568,19 +4573,109 @@ function buildCollectionsIndexState(collections,state){
         filteredCollections:filtered,
         visibleCollections:filtered.slice(0,visibleLimit),
         availableGenres:options.genres,
-        availableDecades:options.decades
+        availableDecades:options.decades,
+        liveSearchQuery:state && state.liveSearchQuery || "",
+        liveSearchResults:Array.isArray(state && state.liveSearchResults) ? state.liveSearchResults : [],
+        liveSearchLoading:state && state.liveSearchLoading === true,
+        liveSearchComplete:state && state.liveSearchComplete === true,
+        liveSearchError:String(state && state.liveSearchError || "")
     });
 }
 
+function shouldRunCollectionsLiveSearch(state){
+    const query = String(state && state.query || "").trim();
+    if(query.length < 2 || Number(state && state.totalResults || 0) > 0 || state && state.liveSearchLoading === true){
+        return false;
+    }
+    const liveQuery = String(state && state.liveSearchQuery || "").trim();
+    if(liveQuery.toLowerCase() === query.toLowerCase() && state && state.liveSearchComplete === true){
+        return false;
+    }
+    return true;
+}
+
+async function runCollectionsLiveFallbackSearch(query){
+    const cleanQuery = String(query || "").trim();
+    if(cleanQuery.length < 2 || activePage !== "collections-index"){
+        return;
+    }
+    collectionsPageState = Object.assign({},collectionsPageState,{
+        liveSearchQuery:cleanQuery,
+        liveSearchResults:[],
+        liveSearchLoading:true,
+        liveSearchComplete:false,
+        liveSearchError:""
+    });
+    renderActiveCollectionsPage();
+    try{
+        const payload = await tmdbSearchCollectionsPage(cleanQuery,1);
+        if(activePage !== "collections-index" || String(collectionsPageState && collectionsPageState.query || "").trim().toLowerCase() !== cleanQuery.toLowerCase()){
+            return;
+        }
+        const results = Array.isArray(payload && payload.results) ? payload.results : [];
+        const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{
+            liveSearchQuery:cleanQuery,
+            liveSearchResults:results,
+            liveSearchLoading:false,
+            liveSearchComplete:true,
+            liveSearchError:""
+        }));
+        collectionsPageState = Object.assign({},collectionsPageState,built,{
+            liveSearchQuery:cleanQuery,
+            liveSearchResults:results,
+            liveSearchLoading:false,
+            liveSearchComplete:true,
+            liveSearchError:""
+        });
+    }catch(error){
+        if(activePage !== "collections-index" || String(collectionsPageState && collectionsPageState.query || "").trim().toLowerCase() !== cleanQuery.toLowerCase()){
+            return;
+        }
+        const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{
+            liveSearchQuery:cleanQuery,
+            liveSearchResults:[],
+            liveSearchLoading:false,
+            liveSearchComplete:true,
+            liveSearchError:error && error.message ? error.message : ""
+        }));
+        collectionsPageState = Object.assign({},collectionsPageState,built,{
+            liveSearchQuery:cleanQuery,
+            liveSearchResults:[],
+            liveSearchLoading:false,
+            liveSearchComplete:true,
+            liveSearchError:error && error.message ? error.message : ""
+        });
+    }
+    renderActiveCollectionsPage();
+}
+
+function maybeRunCollectionsLiveFallbackSearch(){
+    if(shouldRunCollectionsLiveSearch(collectionsPageState)){
+        runCollectionsLiveFallbackSearch(collectionsPageState.query).catch(()=>{});
+    }
+}
+
 function applyCollectionsIndexState(nextState={},options={}){
+    const currentQuery = String(collectionsPageState && collectionsPageState.query || "").trim();
     const merged = createCollectionsIndexState(Object.assign({},collectionsPageState,nextState));
-    const built = buildCollectionsIndexState(collectionsPageState.collections || [],merged);
-    collectionsPageState = Object.assign({},collectionsPageState,built);
+    const queryChanged = String(merged.query || "").trim().toLowerCase() !== currentQuery.toLowerCase();
+    const liveState = queryChanged
+    ? {liveSearchQuery:"",liveSearchResults:[],liveSearchLoading:false,liveSearchComplete:false,liveSearchError:""}
+    : {
+        liveSearchQuery:collectionsPageState.liveSearchQuery || "",
+        liveSearchResults:Array.isArray(collectionsPageState.liveSearchResults) ? collectionsPageState.liveSearchResults : [],
+        liveSearchLoading:collectionsPageState.liveSearchLoading === true,
+        liveSearchComplete:collectionsPageState.liveSearchComplete === true,
+        liveSearchError:collectionsPageState.liveSearchError || ""
+    };
+    const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},merged,liveState));
+    collectionsPageState = Object.assign({},collectionsPageState,built,liveState);
     if(options && options.updateRoute !== false && activePage === "collections-index"){
         setAppHashRoute(getCollectionsRoute(collectionsPageState),options.replaceRoute === true);
     }
     renderActiveCollectionsPage();
     hydrateVisibleCollectionsForIndex().catch(()=>{});
+    maybeRunCollectionsLiveFallbackSearch();
 }
 
 function normalizeCollectionDetailSort(value){
@@ -5225,7 +5320,12 @@ async function loadCollectionsIndexResults(options={}){
             indexedCount:Number(payload.indexedCount || collections.length || 0),
             totalIds:Number(payload.totalIds || 0),
             cursor:Number(payload.cursor || 0),
-            usingFallback:payload.usingFallback === true
+            usingFallback:payload.usingFallback === true,
+            liveSearchQuery:collectionsPageState.liveSearchQuery || "",
+            liveSearchResults:Array.isArray(collectionsPageState.liveSearchResults) ? collectionsPageState.liveSearchResults : [],
+            liveSearchLoading:collectionsPageState.liveSearchLoading === true,
+            liveSearchComplete:collectionsPageState.liveSearchComplete === true,
+            liveSearchError:collectionsPageState.liveSearchError || ""
         });
         if(activePage === "collections-index"){
             setAppHashRoute(getCollectionsRoute(collectionsPageState),true);
@@ -5234,6 +5334,7 @@ async function loadCollectionsIndexResults(options={}){
             }
         }
         renderActiveCollectionsPage();
+        maybeRunCollectionsLiveFallbackSearch();
     }catch(error){
         collectionsPageState = Object.assign({},collectionsPageState,{
             loaded:false,
@@ -5267,7 +5368,13 @@ async function openCollectionsPage(options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
 
-    collectionsPageState = Object.assign({},collectionsPageState,requestedFilters);
+    collectionsPageState = Object.assign({},collectionsPageState,requestedFilters,{
+        liveSearchQuery:"",
+        liveSearchResults:[],
+        liveSearchLoading:false,
+        liveSearchComplete:false,
+        liveSearchError:""
+    });
     if(collectionsPageState.collections && collectionsPageState.collections.length){
         collectionsPageState = Object.assign({},collectionsPageState,buildCollectionsIndexState(collectionsPageState.collections,collectionsPageState));
     }
@@ -5327,6 +5434,10 @@ async function openCollectionDetailPage(collectionId,options={}){
         availableGenres:[],
         availableLanguages:[]
     };
+
+    if(!fromRoute && options && options.backRoute){
+        pushExplicitDetailBackRoute(options.backRoute);
+    }
 
     showCollectionDetailPageShell(navigationContext);
     renderActiveCollectionDetailPage();

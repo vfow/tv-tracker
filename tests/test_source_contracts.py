@@ -324,6 +324,11 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('"person","collection"', app_js)
         self.assertIn('"person", "collection"', app_py)
         self.assertIn('rawQuery', router)
+        self.assertIn('renderInactiveEyeFilterControlHTML', ui)
+        self.assertIn('runCollectionsLiveFallbackSearch', app_js)
+        self.assertIn('tmdbSearchCollectionsPage(cleanQuery,1)', app_js)
+        self.assertIn('collection-search-card', ui)
+        self.assertIn('movie-title-with-adult-badge', css)
 
     def test_deploy_workflow_tests_and_checks_healthz(self):
         app_py = self.read('app.py')
@@ -1042,7 +1047,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT * 4});', app_js)
         self.assertIn('sortCollectionsForIndex(mergeCollectionLists(promotableIndexedCollections,fallbackCollections).filter(isPromotableCollection),"popularity.desc")', app_js)
         self.assertIn('payload.building === true', app_js)
-        self.assertIn('Collections are loading. Please refresh in a moment.', ui)
+        self.assertNotIn('Collections are loading. Please refresh in a moment.', ui)
+        self.assertIn('No matching collections found.', ui)
 
 
     def test_phase66g_collection_and_global_title_placeholders_exist(self):
@@ -1079,7 +1085,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
         self.assertIn('target_count = min(3, max(movie_count, 1))', app_py)
         self.assertIn('return len(usable_slots) >= target_count', app_py)
-        self.assertIn('tv-tracker-tmdb-collection-index:v5', app_js)
+        self.assertIn('tv-tracker-tmdb-collection-index:v6', app_js)
         self.assertIn('tv-tracker-tmdb-collection-detail:v5', app_js)
         self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
         self.assertIn('if(!chips.length){ return ""; }', ui)

@@ -854,7 +854,20 @@ function renderAdultMovieBadgeHTML(item,media="movie"){
 
 function renderMovieTitleWithAdultBadgeHTML(title,item,media="movie"){
     const badge = renderAdultMovieBadgeHTML(item,media);
-    return `${escapeHTML(title)}${badge ? ` ${badge}` : ""}`;
+    if(!badge){
+        return escapeHTML(title);
+    }
+    return `<span class="movie-title-with-adult-badge"><span class="movie-title-text">${escapeHTML(title)}</span>${badge}</span>`;
+}
+
+function renderInactiveEyeFilterControlHTML(extraClass=""){
+    return `
+        <div class="browse-menu eye-filter-menu eye-filter-menu-inactive ${escapeHTML(extraClass)}" aria-hidden="true">
+            <span class="browse-bar-button eye-filter-button" aria-label="Tracked filters inactive">
+                <img src="/static/assets/icons/eye-open.png" alt="" aria-hidden="true" class="eye-filter-icon">
+            </span>
+        </div>
+    `;
 }
 
 function renderSearchResultPosterCard(result){
@@ -955,7 +968,9 @@ function renderSearchResults(resultsList){
     const visibleItems = filteredItems.slice(0,visibleLimit);
     const labels = {tv:"TV Shows",movie:"Movies",person:"People",collection:"Collections"};
 
-    const searchEyeControlHTML = media !== "person" && media !== "collection" && query ? renderEyeFilterControlHTML(state,"search-eye-filter-menu") : "";
+    const searchEyeControlHTML = query
+    ? (media === "tv" || media === "movie" ? renderEyeFilterControlHTML(state,"search-eye-filter-menu") : renderInactiveEyeFilterControlHTML("search-eye-filter-menu"))
+    : "";
     const tabsHTML = `
         <div class="search-tab-row" role="tablist" aria-label="Search result type">
             ${renderSearchTabButtonHTML("tv","TV Shows",media === "tv")}
@@ -1047,6 +1062,19 @@ function renderSearchResults(resultsList){
             }
             const backRoute = lockSearchRouteBeforeResultOpen();
             await openPersonPage(this.dataset.personRole || "person",mediaId,{personName:this.dataset.mediaName || "",navigationContext:"discover",backRoute:backRoute});
+        });
+    });
+
+    document.querySelectorAll(".collection-search-card[data-collection-id]").forEach(card=>{
+        card.addEventListener("click",async function(event){
+            if(!isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
+            const collectionId = Number(this.dataset.collectionId || 0);
+            if(!collectionId || typeof openCollectionDetailPage !== "function"){
+                return;
+            }
+            const backRoute = lockSearchRouteBeforeResultOpen();
+            await openCollectionDetailPage(collectionId,{collectionName:this.dataset.collectionName || "",navigationContext:"discover",backRoute:backRoute});
         });
     });
 
@@ -2067,10 +2095,10 @@ function renderCollectionIndexActiveChipsHTML(state){
 function renderCollectionIndexControlsHTML(state){
     return `
         <div class="browse-controls collections-controls">
-            <div class="collections-search-box">
-                <input type="search" class="library-search-input collections-search-input" data-collection-search value="${escapeHTML(state && state.query || "")}" placeholder="Search collections" autocomplete="off">
-            </div>
             <div class="browse-bar collections-browse-bar" aria-label="Collection filters">
+                <div class="collections-search-box">
+                    <input type="search" class="library-search-input collections-search-input" data-collection-search value="${escapeHTML(state && state.query || "")}" placeholder="Search collections" autocomplete="off">
+                </div>
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu">
                     <summary class="browse-bar-button">DECADE ${renderBrowseChevronIcon()}</summary>
@@ -2113,9 +2141,10 @@ function renderCollectionsIndexPage(state){
     const hasPagedCollections = Array.isArray(pageState.visibleCollections) && (pageState.loaded === true || Number(pageState.totalResults || 0) >= 0);
     const renderCollections = hasPagedCollections ? pageState.visibleCollections : pageState.collections;
     const collections = Array.isArray(renderCollections) ? renderCollections.filter(collection=>typeof isPromotableCollection === "function" ? isPromotableCollection(collection) : collection && collection.id && collection.name) : [];
-    const loading = pageState.loading === true;
+    const loading = pageState.loading === true || pageState.liveSearchLoading === true;
     const building = pageState.building === true;
     const error = String(pageState.error || "").trim();
+    const hasSearch = !!String(pageState.query || "").trim();
     const hasFilters = !!(pageState.query || pageState.genre || pageState.decade || String(pageState.sort || "popularity.desc") !== "popularity.desc");
 
     const bodyHTML = error
@@ -2130,11 +2159,10 @@ function renderCollectionsIndexPage(state){
     : loading || building
     ? `
         <div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>
-        <div class="v2-api-empty genre-loading-note">Collections are loading. Please refresh in a moment.</div>
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No collections found</h2>
+            <h2>${hasSearch ? "No matching collections found." : "No collections found"}</h2>
             <p>${hasFilters ? "Try another search or change one or more filters." : "Try again later."}</p>
         </div>
     `;
