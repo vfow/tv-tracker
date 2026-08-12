@@ -143,6 +143,8 @@ var discoverHubState = {
 };
 var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],query:"",genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
 var collectionSearchTimer = null;
+var collectionSearchController = null;
+var collectionSearchRequestId = 0;
 var collectionIndexPollTimer = null;
 var collectionIndexHydrationRun = 0;
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
@@ -3558,6 +3560,7 @@ function normalizeSearchCollectionSummary(raw){
     const collection = normalizeTMDBCollectionSummary(raw);
     if(collection){
         collection.media_type = "collection";
+        collection.original_name = String(raw && (raw.original_name || raw.original_title) || "").trim();
         return collection;
     }
     const id = normalizeCollectionId(raw && raw.id);
@@ -3570,12 +3573,42 @@ function normalizeSearchCollectionSummary(raw){
         media_type:"collection",
         name,
         title:name,
+        original_name:String(raw && (raw.original_name || raw.original_title) || "").trim(),
+        overview:String(raw && raw.overview || ""),
         poster_path:String(raw && raw.poster_path || ""),
         backdrop_path:String(raw && raw.backdrop_path || ""),
         poster_paths:raw && raw.poster_path ? [String(raw.poster_path)] : [],
         poster_slots:raw && raw.poster_path ? [{poster_path:String(raw.poster_path),title:name,name,release_date:"",date:""}] : [],
         movie_count:Number(raw && raw.movie_count || 0),
         route:getCollectionDetailRoute(id,name)
+    };
+}
+
+async function tmdbSearchCollectionSummariesPage(query,page=1,options={}){
+    const cleanQuery = String(query || "").trim();
+    const pageNumber = Math.max(1,Number(page || 1));
+    if(!cleanQuery){
+        return {results:[],page:1,total_pages:1,total_results:0};
+    }
+    const data = await tmdbFetchJSON("search/collection",{
+        query:cleanQuery,
+        page:pageNumber
+    },options);
+    const results = (Array.isArray(data && data.results) ? data.results : [])
+    .map((raw,index)=>{
+        const summary = normalizeSearchCollectionSummary(raw);
+        if(!summary){ return null; }
+        return Object.assign({},summary,{
+            live_search_summary:true,
+            tmdb_search_index:index
+        });
+    })
+    .filter(Boolean);
+    return {
+        results,
+        page:Number(data && data.page || pageNumber),
+        total_pages:Number(data && data.total_pages || pageNumber || 1),
+        total_results:Number(data && data.total_results || results.length || 0)
     };
 }
 
@@ -4361,7 +4394,7 @@ async function loadCollectionIndexWithFallback(options={}){
     };
 }
 
-async function tmdbGetCollectionDetails(collectionId){
+async function tmdbGetCollectionDetails(collectionId,options={}){
     const id = normalizeCollectionId(collectionId);
     if(!id){
         throw new Error("Collection not found.");
@@ -4370,7 +4403,10 @@ async function tmdbGetCollectionDetails(collectionId){
     if(cached && Array.isArray(cached.parts) && cached.parts.length){
         return cached;
     }
-    const response = await fetch("/api/tmdb/collections/" + encodeURIComponent(id),{credentials:"same-origin"});
+    const response = await fetch("/api/tmdb/collections/" + encodeURIComponent(id),{
+        credentials:"same-origin",
+        signal:options && options.signal ? options.signal : undefined
+    });
     if(!response.ok){
         const requestError = new Error(response.status === 404 ? "Collection not found." : "Collection is temporarily unavailable.");
         requestError.status = response.status;
@@ -4536,11 +4572,104 @@ function buildCollectionsIndexOptions(collections){
     };
 }
 
+function normalizeCollectionSearchText(value){
+    return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g," ")
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function collectionMatchesSearchQuery(collection,query){
+    const cleanQuery = normalizeCollectionSearchText(query);
+    if(!cleanQuery){ return true; }
+    const names = [
+        collection && collection.name,
+        collection && collection.title,
+        collection && collection.original_name,
+        collection && collection.original_title
+    ].map(normalizeCollectionSearchText).filter(Boolean);
+    const terms = cleanQuery.split(" ").filter(Boolean);
+    if(names.some(name=>name.includes(cleanQuery))){
+        return true;
+    }
+    if(terms.length && names.some(name=>terms.every(term=>name.includes(term)))){
+        return true;
+    }
+    return collection && collection.live_search_summary === true;
+}
+
+function getCollectionSearchRelevance(collection,query){
+    const cleanQuery = normalizeCollectionSearchText(query);
+    if(!cleanQuery){ return 999; }
+    const names = [
+        collection && collection.name,
+        collection && collection.title,
+        collection && collection.original_name,
+        collection && collection.original_title
+    ].map(normalizeCollectionSearchText).filter(Boolean);
+    const terms = cleanQuery.split(" ").filter(Boolean);
+    let best = 900;
+
+    names.forEach(name=>{
+        let score = 800;
+        if(name === cleanQuery){
+            score = 0;
+        }else if(name.startsWith(cleanQuery)){
+            score = 100;
+        }else if(name.includes(cleanQuery)){
+            score = 200;
+        }else if(terms.length && terms.every(term=>name.split(" ").some(word=>word.startsWith(term)))){
+            score = 300;
+        }else if(terms.length && terms.every(term=>name.includes(term))){
+            score = 400;
+        }else if(terms.length){
+            const matched = terms.filter(term=>name.includes(term)).length;
+            score = 600 - Math.round((matched / terms.length) * 100);
+        }
+        best = Math.min(best,score);
+    });
+
+    return best;
+}
+
+function sortCollectionsForSearchRelevance(collections,query){
+    const cleanQuery = String(query || "").trim();
+    const list = (Array.isArray(collections) ? collections : []).slice();
+    list.sort((a,b)=>{
+        const relevance = getCollectionSearchRelevance(a,cleanQuery) - getCollectionSearchRelevance(b,cleanQuery);
+        if(relevance){ return relevance; }
+        const popularity = Number(getCollectionSortValue(b,"popularity.desc") || 0) - Number(getCollectionSortValue(a,"popularity.desc") || 0);
+        if(popularity){ return popularity; }
+        const searchOrder = Number(a && a.tmdb_search_index !== undefined ? a.tmdb_search_index : Number.MAX_SAFE_INTEGER)
+        - Number(b && b.tmdb_search_index !== undefined ? b.tmdb_search_index : Number.MAX_SAFE_INTEGER);
+        if(searchOrder){ return searchOrder; }
+        const aName = String(a && (a.name || a.title) || "");
+        const bName = String(b && (b.name || b.title) || "");
+        return aName.localeCompare(bName,undefined,{sensitivity:"base"});
+    });
+    return list;
+}
+
+function isCollectionIndexCandidate(collection,filters){
+    if(isPromotableCollection(collection)){
+        return true;
+    }
+    return !!(
+        filters && filters.query &&
+        collection && collection.live_search_summary === true &&
+        collection.id && collection.name &&
+        getCollectionPosterSlots(collection).length >= 1
+    );
+}
+
 function getFilteredCollectionsForIndex(collections,state){
     const filters = createCollectionsIndexState(state);
-    const query = String(filters.query || "").trim().toLowerCase();
+    const query = String(filters.query || "").trim();
     return (Array.isArray(collections) ? collections : []).filter(collection=>{
-        if(query && !String(collection && (collection.name || collection.title) || "").toLowerCase().includes(query)){
+        if(query && !collectionMatchesSearchQuery(collection,query)){
             return false;
         }
         if(filters.genre && !getCollectionGenreIds(collection).includes(filters.genre)){
@@ -4560,9 +4689,12 @@ function buildCollectionsIndexState(collections,state){
     ? state.liveSearchResults
     : [];
     const sourceCollections = liveResults.length ? mergeCollectionLists(collections,liveResults) : collections;
-    const promotableCollections = (Array.isArray(sourceCollections) ? sourceCollections : []).filter(isPromotableCollection);
-    const options = buildCollectionsIndexOptions(promotableCollections);
-    const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(promotableCollections,filters),filters.sort);
+    const candidateCollections = (Array.isArray(sourceCollections) ? sourceCollections : []).filter(collection=>isCollectionIndexCandidate(collection,filters));
+    const options = buildCollectionsIndexOptions(candidateCollections.filter(isPromotableCollection));
+    const matchedCollections = getFilteredCollectionsForIndex(candidateCollections,filters);
+    const filtered = filters.query
+    ? sortCollectionsForSearchRelevance(matchedCollections,filters.query)
+    : sortCollectionsForIndex(matchedCollections,filters.sort);
     const totalPages = Math.max(1,Math.ceil(filtered.length / COLLECTIONS_PAGE_SIZE));
     const page = Math.min(filters.page,totalPages);
     const visibleLimit = page * COLLECTIONS_PAGE_SIZE;
@@ -4574,6 +4706,7 @@ function buildCollectionsIndexState(collections,state){
         visibleCollections:filtered.slice(0,visibleLimit),
         availableGenres:options.genres,
         availableDecades:options.decades,
+        searchDraft:state && typeof state.searchDraft === "string" ? state.searchDraft : filters.query,
         liveSearchQuery:state && state.liveSearchQuery || "",
         liveSearchResults:Array.isArray(state && state.liveSearchResults) ? state.liveSearchResults : [],
         liveSearchLoading:state && state.liveSearchLoading === true,
@@ -4584,7 +4717,7 @@ function buildCollectionsIndexState(collections,state){
 
 function shouldRunCollectionsLiveSearch(state){
     const query = String(state && state.query || "").trim();
-    if(query.length < 2 || Number(state && state.totalResults || 0) > 0 || state && state.liveSearchLoading === true){
+    if(query.length < 2 || state && state.liveSearchLoading === true){
         return false;
     }
     const liveQuery = String(state && state.liveSearchQuery || "").trim();
@@ -4594,11 +4727,66 @@ function shouldRunCollectionsLiveSearch(state){
     return true;
 }
 
-async function runCollectionsLiveFallbackSearch(query){
+function cancelCollectionsLiveSearchRequest(){
+    if(collectionSearchController){
+        try{ collectionSearchController.abort(); }catch(error){}
+        if(collectionsPageState && collectionsPageState.liveSearchLoading === true){
+            collectionsPageState.liveSearchLoading = false;
+            collectionsPageState.liveSearchComplete = false;
+        }
+    }
+    collectionSearchController = null;
+    collectionSearchRequestId += 1;
+}
+
+function isCurrentCollectionsSearchRequest(requestId,query){
+    return requestId === collectionSearchRequestId &&
+    activePage === "collections-index" &&
+    String(collectionsPageState && collectionsPageState.query || "").trim().toLowerCase() === String(query || "").trim().toLowerCase();
+}
+
+async function hydrateCollectionsLiveSearchResults(query,summaryResults,requestId,controller){
+    const results = Array.isArray(summaryResults) ? summaryResults.slice() : [];
+    if(!results.length){ return; }
+    let cursor = 0;
+    const concurrency = Math.min(4,results.length);
+
+    async function worker(){
+        while(cursor < results.length){
+            const index = cursor;
+            cursor += 1;
+            if(!isCurrentCollectionsSearchRequest(requestId,query)){ return; }
+            const summary = results[index];
+            try{
+                const details = await tmdbGetCollectionDetails(summary.id,{signal:controller ? controller.signal : undefined});
+                if(!isCurrentCollectionsSearchRequest(requestId,query)){ return; }
+                const hydrated = Object.assign({},summary,details,{
+                    live_search_summary:false,
+                    tmdb_search_index:Number(summary.tmdb_search_index || index)
+                });
+                const currentResults = Array.isArray(collectionsPageState.liveSearchResults) ? collectionsPageState.liveSearchResults : [];
+                const nextResults = currentResults.map(item=>String(item && item.id || "") === String(summary.id) ? hydrated : item);
+                const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{liveSearchResults:nextResults}));
+                collectionsPageState = Object.assign({},collectionsPageState,built,{liveSearchResults:nextResults});
+                renderActiveCollectionsPage();
+            }catch(error){
+                if(error && error.name === "AbortError"){ return; }
+            }
+        }
+    }
+
+    await Promise.all(Array.from({length:concurrency},worker));
+}
+
+async function runCollectionsLiveSearch(query){
     const cleanQuery = String(query || "").trim();
     if(cleanQuery.length < 2 || activePage !== "collections-index"){
         return;
     }
+    cancelCollectionsLiveSearchRequest();
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    collectionSearchController = controller;
+    const requestId = ++collectionSearchRequestId;
     collectionsPageState = Object.assign({},collectionsPageState,{
         liveSearchQuery:cleanQuery,
         liveSearchResults:[],
@@ -4608,27 +4796,46 @@ async function runCollectionsLiveFallbackSearch(query){
     });
     renderActiveCollectionsPage();
     try{
-        const payload = await tmdbSearchCollectionsPage(cleanQuery,1);
-        if(activePage !== "collections-index" || String(collectionsPageState && collectionsPageState.query || "").trim().toLowerCase() !== cleanQuery.toLowerCase()){
+        const payload = await tmdbSearchCollectionSummariesPage(cleanQuery,1,{signal:controller ? controller.signal : undefined});
+        if(!isCurrentCollectionsSearchRequest(requestId,cleanQuery)){
             return;
         }
         const results = Array.isArray(payload && payload.results) ? payload.results : [];
         const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{
             liveSearchQuery:cleanQuery,
             liveSearchResults:results,
-            liveSearchLoading:false,
-            liveSearchComplete:true,
+            liveSearchLoading:results.length > 0,
+            liveSearchComplete:results.length === 0,
             liveSearchError:""
         }));
         collectionsPageState = Object.assign({},collectionsPageState,built,{
             liveSearchQuery:cleanQuery,
             liveSearchResults:results,
-            liveSearchLoading:false,
-            liveSearchComplete:true,
+            liveSearchLoading:results.length > 0,
+            liveSearchComplete:results.length === 0,
             liveSearchError:""
         });
+        renderActiveCollectionsPage();
+
+        if(results.length){
+            await hydrateCollectionsLiveSearchResults(cleanQuery,results,requestId,controller);
+            if(!isCurrentCollectionsSearchRequest(requestId,cleanQuery)){
+                return;
+            }
+            const finalBuilt = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{
+                liveSearchLoading:false,
+                liveSearchComplete:true
+            }));
+            collectionsPageState = Object.assign({},collectionsPageState,finalBuilt,{
+                liveSearchLoading:false,
+                liveSearchComplete:true
+            });
+        }
     }catch(error){
-        if(activePage !== "collections-index" || String(collectionsPageState && collectionsPageState.query || "").trim().toLowerCase() !== cleanQuery.toLowerCase()){
+        if(error && error.name === "AbortError"){
+            return;
+        }
+        if(!isCurrentCollectionsSearchRequest(requestId,cleanQuery)){
             return;
         }
         const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},collectionsPageState,{
@@ -4646,12 +4853,23 @@ async function runCollectionsLiveFallbackSearch(query){
             liveSearchError:error && error.message ? error.message : ""
         });
     }
+    if(requestId === collectionSearchRequestId){
+        collectionSearchController = null;
+    }
     renderActiveCollectionsPage();
 }
 
-function maybeRunCollectionsLiveFallbackSearch(){
+function runCollectionsLiveFallbackSearch(query){
+    const cleanQuery = String(query || "").trim();
+    if(cleanQuery.length < 2){
+        return Promise.resolve({results:[],page:1,total_pages:1,total_results:0});
+    }
+    return tmdbSearchCollectionsPage(cleanQuery,1);
+}
+
+function maybeRunCollectionsLiveSearch(){
     if(shouldRunCollectionsLiveSearch(collectionsPageState)){
-        runCollectionsLiveFallbackSearch(collectionsPageState.query).catch(()=>{});
+        runCollectionsLiveSearch(collectionsPageState.query).catch(()=>{});
     }
 }
 
@@ -4659,6 +4877,15 @@ function applyCollectionsIndexState(nextState={},options={}){
     const currentQuery = String(collectionsPageState && collectionsPageState.query || "").trim();
     const merged = createCollectionsIndexState(Object.assign({},collectionsPageState,nextState));
     const queryChanged = String(merged.query || "").trim().toLowerCase() !== currentQuery.toLowerCase();
+    if(queryChanged){
+        cancelCollectionsLiveSearchRequest();
+    }
+    const hasDraft = Object.prototype.hasOwnProperty.call(nextState,"searchDraft");
+    const searchDraft = hasDraft
+    ? String(nextState.searchDraft || "")
+    : queryChanged
+    ? String(merged.query || "")
+    : String(collectionsPageState && collectionsPageState.searchDraft !== undefined ? collectionsPageState.searchDraft : merged.query || "");
     const liveState = queryChanged
     ? {liveSearchQuery:"",liveSearchResults:[],liveSearchLoading:false,liveSearchComplete:false,liveSearchError:""}
     : {
@@ -4668,14 +4895,14 @@ function applyCollectionsIndexState(nextState={},options={}){
         liveSearchComplete:collectionsPageState.liveSearchComplete === true,
         liveSearchError:collectionsPageState.liveSearchError || ""
     };
-    const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},merged,liveState));
-    collectionsPageState = Object.assign({},collectionsPageState,built,liveState);
+    const built = buildCollectionsIndexState(collectionsPageState.collections || [],Object.assign({},merged,liveState,{searchDraft}));
+    collectionsPageState = Object.assign({},collectionsPageState,built,liveState,{searchDraft});
     if(options && options.updateRoute !== false && activePage === "collections-index"){
         setAppHashRoute(getCollectionsRoute(collectionsPageState),options.replaceRoute === true);
     }
     renderActiveCollectionsPage();
     hydrateVisibleCollectionsForIndex().catch(()=>{});
-    maybeRunCollectionsLiveFallbackSearch();
+    maybeRunCollectionsLiveSearch();
 }
 
 function normalizeCollectionDetailSort(value){
@@ -5284,8 +5511,31 @@ function showCollectionDetailPageShell(navigationContext="discover"){
 
 function renderActiveCollectionsPage(){
     if(typeof renderCollectionsIndexPage === "function"){
+        const activeInput = typeof document !== "undefined" ? document.querySelector("[data-collection-search]") : null;
+        const shouldRestoreSearchFocus = !!(activeInput && document.activeElement === activeInput);
+        const searchFocusState = shouldRestoreSearchFocus ? {
+            value:String(activeInput.value || ""),
+            start:typeof activeInput.selectionStart === "number" ? activeInput.selectionStart : null,
+            end:typeof activeInput.selectionEnd === "number" ? activeInput.selectionEnd : null
+        } : null;
+        if(searchFocusState){
+            collectionsPageState.searchDraft = searchFocusState.value;
+        }
         renderCollectionsIndexPage(collectionsPageState);
         attachCollectionsPageEvents();
+        if(searchFocusState){
+            const nextInput = document.querySelector("[data-collection-search]");
+            if(nextInput){
+                nextInput.value = searchFocusState.value;
+                if(typeof nextInput.focus === "function"){
+                    try{ nextInput.focus({preventScroll:true}); }catch(error){ nextInput.focus(); }
+                }
+                if(searchFocusState.start !== null && typeof nextInput.setSelectionRange === "function"){
+                    const max = nextInput.value.length;
+                    nextInput.setSelectionRange(Math.min(searchFocusState.start,max),Math.min(searchFocusState.end === null ? searchFocusState.start : searchFocusState.end,max));
+                }
+            }
+        }
         restoreCollectionReturnPositionSoon(getCollectionsRoute(collectionsPageState));
     }
 }
@@ -5334,7 +5584,7 @@ async function loadCollectionsIndexResults(options={}){
             }
         }
         renderActiveCollectionsPage();
-        maybeRunCollectionsLiveFallbackSearch();
+        maybeRunCollectionsLiveSearch();
     }catch(error){
         collectionsPageState = Object.assign({},collectionsPageState,{
             loaded:false,
@@ -5369,6 +5619,7 @@ async function openCollectionsPage(options={}){
     discoverPreviewShow = null;
 
     collectionsPageState = Object.assign({},collectionsPageState,requestedFilters,{
+        searchDraft:requestedFilters.query || "",
         liveSearchQuery:"",
         liveSearchResults:[],
         liveSearchLoading:false,
@@ -5389,6 +5640,7 @@ async function openCollectionsPage(options={}){
 
     if(collectionsPageState.loaded && collectionsPageState.collections.length){
         renderActiveCollectionsPage();
+        maybeRunCollectionsLiveSearch();
         return;
     }
 
@@ -5498,13 +5750,15 @@ function attachCollectionsPageEvents(){
     const collectionSearchInput = document.querySelector("[data-collection-search]");
     if(collectionSearchInput){
         collectionSearchInput.addEventListener("input",function(){
-            const value = String(this.value || "").trim();
+            const value = String(this.value || "");
+            collectionsPageState.searchDraft = value;
+            cancelCollectionsLiveSearchRequest();
             if(collectionSearchTimer && typeof window.clearTimeout === "function"){
                 window.clearTimeout(collectionSearchTimer);
             }
             collectionSearchTimer = window.setTimeout(function(){
-                applyCollectionsIndexState({query:value,page:1},{replaceRoute:true});
-            },180);
+                applyCollectionsIndexState({query:value,searchDraft:value,page:1},{replaceRoute:true});
+            },360);
         });
         collectionSearchInput.addEventListener("keydown",function(event){
             if(event && event.key === "Enter"){
@@ -5512,7 +5766,9 @@ function attachCollectionsPageEvents(){
                 if(collectionSearchTimer && typeof window.clearTimeout === "function"){
                     window.clearTimeout(collectionSearchTimer);
                 }
-                applyCollectionsIndexState({query:String(collectionSearchInput.value || "").trim(),page:1},{replaceRoute:true});
+                const value = String(collectionSearchInput.value || "");
+                collectionsPageState.searchDraft = value;
+                applyCollectionsIndexState({query:value,searchDraft:value,page:1},{replaceRoute:true});
             }
         });
     }
@@ -5542,7 +5798,7 @@ function attachCollectionsPageEvents(){
             }else if(filter === "decade"){
                 applyCollectionsIndexState({decade:"",page:1});
             }else if(filter === "all"){
-                applyCollectionsIndexState({query:"",genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
+                applyCollectionsIndexState({genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
             }
             if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
         });

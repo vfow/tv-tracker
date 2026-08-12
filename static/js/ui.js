@@ -610,7 +610,9 @@ function renderCollectionCard(collection,extraClass=""){
     const name = String(collection && (collection.name || collection.title) || "Collection").trim();
     const route = typeof getCollectionDetailRoute === "function" ? getCollectionDetailRoute(id,name) : "";
     const count = typeof getCollectionMovieCount === "function" ? getCollectionMovieCount(collection) : Number(collection && collection.movie_count || (Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
-    const countLabel = count === 1 ? "1 movie" : `${count || 0} movies`;
+    const countLabel = collection && collection.live_search_summary === true && !count
+    ? "Loading details…"
+    : count === 1 ? "1 movie" : `${count || 0} movies`;
     return `
         <a href="${escapeHTML(route)}" class="collection-card ${escapeHTML(extraClass)}" data-collection-id="${escapeHTML(id)}" data-collection-name="${escapeHTML(name)}">
             ${renderCollectionPosterStackHTML(collection)}
@@ -2080,10 +2082,6 @@ function renderCollectionIndexActiveChipsHTML(state){
     const chips = [];
     const genre = String(state && state.genre || "");
     const decade = String(state && state.decade || "");
-    const query = String(state && state.query || "").trim();
-    if(query){
-        chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="query">Search: ${escapeHTML(query)}<span aria-hidden="true">×</span></button>`);
-    }
     if(genre){
         chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="genre">Genre: ${escapeHTML(getCollectionIndexGenreLabel(state,genre))}<span aria-hidden="true">×</span></button>`);
     }
@@ -2097,11 +2095,12 @@ function renderCollectionIndexActiveChipsHTML(state){
 }
 
 function renderCollectionIndexControlsHTML(state){
+    const searchValue = state && typeof state.searchDraft === "string" ? state.searchDraft : state && state.query || "";
     return `
         <div class="browse-controls collections-controls">
             <div class="browse-bar collections-browse-bar" aria-label="Collection filters">
                 <div class="collections-search-box">
-                    <input type="search" class="library-search-input collections-search-input" data-collection-search value="${escapeHTML(state && state.query || "")}" placeholder="Search collections" autocomplete="off">
+                    <input type="search" class="library-search-input collections-search-input" data-collection-search value="${escapeHTML(searchValue)}" placeholder="Search collections" autocomplete="off">
                 </div>
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu">
@@ -2485,7 +2484,7 @@ function getLibrarySearchQuery(){
         librarySearchQuery = "";
     }
 
-    return librarySearchQuery.trim();
+    return librarySearchQuery;
 
 }
 
@@ -2955,7 +2954,10 @@ function renderLibrarySearchControl(){
 
     if(input){
         input.placeholder = "Search " + getActiveFilterSearchLabel();
-        input.value = getLibrarySearchQuery();
+        const nextValue = getLibrarySearchQuery();
+        if(document.activeElement !== input || input.value !== nextValue){
+            input.value = nextValue;
+        }
     }
 
     const baseStatusShows = getLibraryBaseStatusShows();
