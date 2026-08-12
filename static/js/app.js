@@ -172,9 +172,9 @@ const COLLECTIONS_DEFAULT_SORT = "popularity.desc";
 const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
 const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
-const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v2:";
+const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v3:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
-const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v2";
+const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v3";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
 const DISCOVER_COLLECTION_IDS = Object.freeze([
     10,
@@ -3948,6 +3948,40 @@ function computeCollectionMetadata(parts){
     };
 }
 
+function normalizeCollectionPosterSlot(raw){
+    if(!raw || typeof raw !== "object"){
+        const posterPath = String(raw || "").trim();
+        return posterPath ? {poster_path:posterPath,title:"",name:"",release_date:"",date:""} : null;
+    }
+    const title = String(raw.title || raw.name || raw.original_title || raw.original_name || "").trim();
+    const date = String(raw.release_date || raw.date || raw.first_air_date || "").trim();
+    return {
+        poster_path:String(raw.poster_path || raw.path || "").trim(),
+        title,
+        name:title,
+        release_date:date,
+        date
+    };
+}
+
+function getCollectionPosterSlots(collection){
+    const slots = [];
+    const push = raw=>{
+        const slot = normalizeCollectionPosterSlot(raw);
+        if(slot){ slots.push(slot); }
+    };
+    if(Array.isArray(collection && collection.poster_slots) && collection.poster_slots.length){
+        collection.poster_slots.slice(0,3).forEach(push);
+    }else if(Array.isArray(collection && collection.parts) && collection.parts.length){
+        collection.parts.slice(0,3).forEach(push);
+    }else if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
+        collection.poster_paths.slice(0,3).forEach(path=>push({poster_path:path,title:collection && (collection.name || collection.title) || ""}));
+    }else if(collection && collection.poster_path){
+        push({poster_path:collection.poster_path,title:collection.name || collection.title || ""});
+    }
+    return slots.slice(0,3);
+}
+
 function normalizeTMDBCollectionSummary(raw){
     const id = normalizeCollectionId(raw && raw.id);
     const name = String(raw && (raw.name || raw.title) || "").trim();
@@ -3957,6 +3991,8 @@ function normalizeTMDBCollectionSummary(raw){
     const parts = (Array.isArray(raw && raw.parts) ? raw.parts : [])
     .map(normalizeCollectionMoviePart)
     .filter(Boolean);
+    const rawSlots = Array.isArray(raw && raw.poster_slots) ? raw.poster_slots.map(normalizeCollectionPosterSlot).filter(Boolean) : [];
+    const partSlots = parts.map(normalizeCollectionPosterSlot).filter(Boolean);
     const posterPaths = Array.isArray(raw && raw.poster_paths)
     ? raw.poster_paths.map(path=>String(path || "").trim()).filter(Boolean).slice(0,3)
     : [];
@@ -3966,6 +4002,8 @@ function normalizeTMDBCollectionSummary(raw){
     if(!posterPaths.length && raw && raw.poster_path){
         posterPaths.push(String(raw.poster_path));
     }
+    const fallbackSlots = posterPaths.map(path=>normalizeCollectionPosterSlot({poster_path:path,title:name})).filter(Boolean);
+    const posterSlots = (rawSlots.length ? rawSlots : (partSlots.length ? partSlots : fallbackSlots)).slice(0,3);
     const computed = computeCollectionMetadata(parts);
     const collection = {
         id:Number(id),
@@ -3975,6 +4013,7 @@ function normalizeTMDBCollectionSummary(raw){
         poster_path:String(raw && raw.poster_path || ""),
         backdrop_path:String(raw && raw.backdrop_path || ""),
         poster_paths:posterPaths,
+        poster_slots:posterSlots,
         movie_count:Number(raw && raw.movie_count || parts.length || 0),
         genre_ids:Array.isArray(raw && raw.genre_ids) ? normalizeCollectionGenreIds(raw.genre_ids) : computed.genre_ids,
         decades:Array.isArray(raw && raw.decades) ? raw.decades.map(normalizeCollectionsIndexDecade).filter(Boolean) : computed.decades,
@@ -4003,7 +4042,7 @@ function getCollectionPosterPaths(collection){
 }
 
 function isPromotableCollection(collection){
-    return !!(collection && collection.id && collection.name && getCollectionMovieCount(collection) >= 2 && getCollectionPosterPaths(collection).length >= 1);
+    return !!(collection && collection.id && collection.name && getCollectionMovieCount(collection) >= 2 && getCollectionPosterSlots(collection).length >= 1);
 }
 
 function normalizeTMDBCollectionDetails(raw){
@@ -8782,6 +8821,13 @@ async function handleEyeFilterToggle(key){
             rememberRouteNavContext(route,"discover");
         }
         renderActivePersonPage();
+        return;
+    }
+
+    if(activePage === "collection-detail"){
+        const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+        const nextEye = toggleEyeFilterOption(current,cleanKey);
+        applyCollectionDetailFilterState(Object.assign({},current,nextEye));
         return;
     }
 

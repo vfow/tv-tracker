@@ -1028,6 +1028,32 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('Collections are loading. Please refresh in a moment.', ui)
 
 
+    def test_phase66g_collection_and_global_title_placeholders_exist(self):
+        app_py = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('"poster_slots": poster_slots,', app_py)
+        self.assertIn('def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:', app_py)
+        self.assertIn('needs_poster_slot_backfill', app_py)
+        self.assertIn('function getCollectionPosterSlots(collection)', app_js)
+        self.assertIn('poster_slots:posterSlots', app_js)
+        self.assertIn('getCollectionPosterSlots(collection).length >= 1', app_js)
+        self.assertIn('if(activePage === "collection-detail")', app_js)
+        self.assertIn('applyCollectionDetailFilterState(Object.assign({},current,nextEye));', app_js)
+        self.assertIn('function renderMediaPosterPlaceholderHTML(item,media="movie",extraClass="")', ui)
+        self.assertIn('function renderPosterTitlePlaceholderHTML(item,media="movie",extraClass="")', ui)
+        self.assertIn('function getCollectionPosterSlotsForRender(collection)', ui)
+        self.assertIn('collection-stack-placeholder', ui)
+        self.assertNotIn('`<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`', ui)
+        self.assertIn('media-title-placeholder', source_css)
+        self.assertIn('media-title-placeholder', built_css)
+        self.assertIn('collection-stack-placeholder', source_css)
+        self.assertIn('collection-stack-placeholder', built_css)
+
+
 
 
     def test_trailing_slash_redirects_preserve_query_strings(self):

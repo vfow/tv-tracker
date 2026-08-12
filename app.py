@@ -2399,6 +2399,17 @@ def normalize_tmdb_collection_detail(raw: Any, *, include_parts: bool = False) -
     poster_paths = [str(movie.get("poster_path") or "") for movie in parts if movie.get("poster_path")][:3]
     if not poster_paths and raw.get("poster_path"):
         poster_paths.append(str(raw.get("poster_path")))
+    poster_slots = [
+        {
+            "id": int(movie.get("id") or 0),
+            "title": str(movie.get("title") or movie.get("name") or ""),
+            "name": str(movie.get("title") or movie.get("name") or ""),
+            "poster_path": str(movie.get("poster_path") or ""),
+            "release_date": str(movie.get("release_date") or movie.get("date") or ""),
+            "date": str(movie.get("release_date") or movie.get("date") or ""),
+        }
+        for movie in parts[:3]
+    ]
     metadata = compute_tmdb_collection_metadata(parts)
     summary: dict[str, Any] = {
         "id": collection_id,
@@ -2408,6 +2419,7 @@ def normalize_tmdb_collection_detail(raw: Any, *, include_parts: bool = False) -
         "poster_path": str(raw.get("poster_path") or ""),
         "backdrop_path": str(raw.get("backdrop_path") or ""),
         "poster_paths": poster_paths,
+        "poster_slots": poster_slots,
         "movie_count": len(parts),
         "route": f"/app/collection/{collection_id}-{slugify_tmdb_collection_label(name)}",
         **metadata,
@@ -2444,6 +2456,11 @@ def update_collection_cache_from_export(cache: dict[str, Any]) -> dict[str, Any]
     return cache
 
 
+def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:
+    slots = summary.get("poster_slots") if isinstance(summary, dict) else None
+    return isinstance(slots, list) and len(slots) > 0
+
+
 def build_tmdb_collection_index_batch() -> None:
     try:
         cache = update_collection_cache_from_export(read_tmdb_collection_index_cache())
@@ -2461,7 +2478,7 @@ def build_tmdb_collection_index_batch() -> None:
         while cursor < len(collection_ids) and processed < TMDB_COLLECTION_INDEX_BATCH_SIZE:
             collection_id = int(collection_ids[cursor])
             cursor += 1
-            if collection_id in collection_map:
+            if collection_id in collection_map and tmdb_collection_summary_has_poster_slots(collection_map[collection_id]):
                 continue
             try:
                 raw_detail = fetch_tmdb_collection_detail(collection_id)
@@ -2519,7 +2536,16 @@ def get_tmdb_collection_index_response() -> dict[str, Any]:
     total_ids = int(cache.get("total_ids") or 0)
     cursor = int(cache.get("cursor") or 0)
     collections = [item for item in cache.get("collections") or [] if isinstance(item, dict) and item.get("id")]
-    should_build = (not collections) or tmdb_collection_cache_is_stale(cache) or (total_ids and cursor < total_ids)
+    needs_poster_slot_backfill = any(
+        not tmdb_collection_summary_has_poster_slots(item)
+        for item in collections
+        if isinstance(item, dict) and int(item.get("movie_count") or 0) >= 2
+    )
+    should_build = (not collections) or tmdb_collection_cache_is_stale(cache) or needs_poster_slot_backfill or (total_ids and cursor < total_ids)
+    if needs_poster_slot_backfill and not collection_index_building():
+        cache["cursor"] = 0
+        cache["updated_at"] = time.time()
+        write_tmdb_collection_index_cache(cache)
     if should_build:
         start_tmdb_collection_index_build()
     return {

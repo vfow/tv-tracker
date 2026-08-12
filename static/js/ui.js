@@ -473,21 +473,68 @@ function renderDiscoverHubSection(section){
     `;
 }
 
-function renderCollectionPosterStackHTML(collection,placeholderLabel="COLLECTION"){
-    const title = String(collection && (collection.name || collection.title) || "Collection");
-    const posters = typeof getCollectionPosterPaths === "function"
-    ? getCollectionPosterPaths(collection).slice(0,3)
-    : (Array.isArray(collection && collection.poster_paths) ? collection.poster_paths.filter(Boolean).slice(0,3) : []);
-    if(!posters.length && collection && collection.poster_path){
-        posters.push(collection.poster_path);
+function getCollectionPosterSlotTitle(slot,collection){
+    const title = slot && (slot.title || slot.name || slot.original_title)
+    ? String(slot.title || slot.name || slot.original_title).trim()
+    : String(collection && (collection.name || collection.title) || "Collection").trim();
+    return title || "Untitled Movie";
+}
+
+function getCollectionPosterSlotYear(slot){
+    const date = String(slot && (slot.release_date || slot.date || slot.first_air_date) || "").trim();
+    const match = date.match(/^(18|19|20|21)[0-9]{2}/);
+    return match ? match[0] : "";
+}
+
+function normalizeCollectionPosterSlotForRender(raw,collection){
+    if(!raw || typeof raw !== "object"){
+        const path = String(raw || "").trim();
+        return path ? {poster_path:path,title:getCollectionPosterSlotTitle(null,collection),release_date:""} : null;
     }
-    const visiblePosters = posters.length ? posters : [""];
-    const slots = visiblePosters.slice(0,3).map((poster,index)=>`
-        <div class="collection-stack-poster collection-stack-poster-${index + 1}">
-            ${poster ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(poster,"w500"))}" alt="${escapeHTML(title + " poster")}">` : `<span>${escapeHTML(placeholderLabel)}</span>`}
-        </div>
-    `);
-    return `<div class="collection-poster-stack collection-poster-count-${visiblePosters.length}" aria-hidden="true">${slots.join("")}</div>`;
+    const title = getCollectionPosterSlotTitle(raw,collection);
+    const releaseDate = String(raw.release_date || raw.date || raw.first_air_date || "").trim();
+    return {
+        poster_path:String(raw.poster_path || raw.path || "").trim(),
+        title,
+        name:title,
+        release_date:releaseDate,
+        date:releaseDate
+    };
+}
+
+function getCollectionPosterSlotsForRender(collection){
+    const slots = [];
+    const pushSlot = raw=>{
+        const slot = normalizeCollectionPosterSlotForRender(raw,collection);
+        if(slot){ slots.push(slot); }
+    };
+    if(Array.isArray(collection && collection.poster_slots) && collection.poster_slots.length){
+        collection.poster_slots.slice(0,3).forEach(pushSlot);
+    }else if(Array.isArray(collection && collection.parts) && collection.parts.length){
+        collection.parts.slice(0,3).forEach(pushSlot);
+    }else if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
+        collection.poster_paths.slice(0,3).forEach(path=>pushSlot({poster_path:path,title:collection && (collection.name || collection.title) || "Collection"}));
+    }else if(collection && collection.poster_path){
+        pushSlot({poster_path:collection.poster_path,title:collection.name || collection.title || "Collection"});
+    }
+    return slots.slice(0,3);
+}
+
+function renderCollectionPosterStackHTML(collection){
+    const title = String(collection && (collection.name || collection.title) || "Collection");
+    const slots = getCollectionPosterSlotsForRender(collection);
+    if(!slots.length){ return ""; }
+    const html = slots.map((slot,index)=>{
+        const labelTitle = getCollectionPosterSlotTitle(slot,collection);
+        const year = getCollectionPosterSlotYear(slot);
+        const label = year ? `${labelTitle} (${year})` : labelTitle;
+        return `
+            <div class="collection-stack-poster collection-stack-poster-${index + 1} ${slot.poster_path ? "" : "collection-stack-placeholder"}" title="${escapeHTML(label)}">
+                ${slot.poster_path ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(slot.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">` : `<span>${escapeHTML(label)}</span>`}
+            </div>
+        `;
+    });
+    return `<div class="collection-poster-stack collection-poster-count-${slots.length}" aria-hidden="true">${html.join("")}</div>`;
 }
 
 function renderCollectionCard(collection,extraClass=""){
@@ -621,7 +668,7 @@ function renderDiscoverHubCard(item){
     const year = date ? date.slice(0,4) : "Unknown";
     const posterHTML = item && item.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
-    : `<div class="discover-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    : renderDiscoverPosterPlaceholderHTML(item,mediaType);
 
     const route = mediaType === "movie"
     ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item && item.id,title) : "")
@@ -694,13 +741,51 @@ function renderSearchTabButtonHTML(type,label,isActive){
     `;
 }
 
+
+function getMediaPosterTitle(item,media="movie"){
+    const cleanMedia = media === "tv" ? "tv" : "movie";
+    const title = item && (item.title || item.name || item.original_title || item.original_name)
+    ? String(item.title || item.name || item.original_title || item.original_name).trim()
+    : (cleanMedia === "movie" ? "Untitled Movie" : "Untitled Show");
+    return title || (cleanMedia === "movie" ? "Untitled Movie" : "Untitled Show");
+}
+
+function getMediaPosterYear(item,media="movie"){
+    const cleanMedia = media === "tv" ? "tv" : "movie";
+    const date = String(item && (item.date || (cleanMedia === "movie" ? item.release_date : item.first_air_date) || item.release_date || item.first_air_date) || "").trim();
+    const match = date.match(/^(18|19|20|21)[0-9]{2}/);
+    return match ? match[0] : "";
+}
+
+function getMediaPosterPlaceholderLabel(item,media="movie"){
+    const cleanMedia = media === "tv" ? "tv" : "movie";
+    const title = getMediaPosterTitle(item,cleanMedia);
+    const year = getMediaPosterYear(item,cleanMedia);
+    return year ? `${title} (${year})` : title;
+}
+
+function renderMediaPosterPlaceholderHTML(item,media="movie",extraClass=""){
+    const label = getMediaPosterPlaceholderLabel(item,media);
+    return `<div class="genre-card-placeholder media-title-placeholder ${escapeHTML(extraClass)}" title="${escapeHTML(label)}"><span>${escapeHTML(label)}</span></div>`;
+}
+
+function renderPosterTitlePlaceholderHTML(item,media="movie",extraClass=""){
+    const label = getMediaPosterPlaceholderLabel(item,media);
+    return `<div class="poster-placeholder media-title-placeholder ${escapeHTML(extraClass)}" title="${escapeHTML(label)}"><span>${escapeHTML(label)}</span></div>`;
+}
+
+function renderDiscoverPosterPlaceholderHTML(item,media="movie"){
+    const label = getMediaPosterPlaceholderLabel(item,media);
+    return `<div class="discover-card-placeholder media-title-placeholder" title="${escapeHTML(label)}"><span>${escapeHTML(label)}</span></div>`;
+}
+
 function renderSearchResultPosterCard(result){
     const mediaType = result && result.media_type === "movie" ? "movie" : "tv";
     const title = result && (result.title || result.name) ? String(result.title || result.name) : "Untitled";
     const date = result && (result.date || result.first_air_date || result.release_date) ? String(result.date || result.first_air_date || result.release_date) : "";
     const posterHTML = result && result.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(result.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
-    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    : renderMediaPosterPlaceholderHTML(result,mediaType);
     const year = date ? date.slice(0,4) : "Unknown";
     const rating = Number(result && result.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
@@ -964,7 +1049,7 @@ function renderGenrePosterGridCard(show){
     const date = show && (show.date || show.release_date || show.first_air_date) ? String(show.date || show.release_date || show.first_air_date) : "";
     const posterHTML = show && show.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
-    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    : renderMediaPosterPlaceholderHTML(show,mediaType);
 
     const year = date ? date.slice(0,4) : "Unknown";
     const rating = Number(show && show.vote_average || 0);
@@ -1039,7 +1124,7 @@ function renderPersonResultCard(item){
     const mediaType = item && item.media_type === "movie" ? "movie" : "tv";
     const posterHTML = item && item.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML((item.title || "Title") + " poster")}">`
-    : `<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`;
+    : renderMediaPosterPlaceholderHTML(item,mediaType);
     const year = item && item.date ? String(item.date).slice(0,4) : "Unknown";
     const rating = Number(item && item.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
@@ -4968,7 +5053,7 @@ function renderMovieMoreLikeThisHTML(movie){
     const cards = similar.slice(0,10).map(item=>{
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
-        : `<div class="poster-placeholder">MOVIE</div>`;
+        : renderPosterTitlePlaceholderHTML(item,"movie");
         const route = typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item.id,item.title || "") : "/app/discover";
         return `
             <a href="${escapeHTML(route)}" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}">
@@ -5041,7 +5126,7 @@ function renderMovieDetailPage(state){
     const title = movie.title || "Untitled";
     const posterHTML = movie.poster_path
     ? `<img src="${escapeHTML(trackerImageURL(movie.poster_path,"w500"))}" alt="${escapeHTML(title)} poster">`
-    : `<div class="poster-placeholder">MOVIE</div>`;
+    : renderPosterTitlePlaceholderHTML(movie,"movie");
     const backdrop = movie.backdrop_path
     ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), ${trackerBackgroundImage(movie.backdrop_path,"original")}`
     : `linear-gradient(to top, #080808 0%, #141414 100%)`;
@@ -5736,7 +5821,7 @@ function renderV2SimilarShowsHTML(show){
     const cards = similar.slice(0,10).map(item=>{
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
-        : `<div class="poster-placeholder">TV</div>`;
+        : renderPosterTitlePlaceholderHTML(item,"tv");
 
         const route = typeof getShowDetailRoute === "function" ? getShowDetailRoute(item.id,item.name || "") : "/app/list/watching";
         return `
@@ -6642,7 +6727,7 @@ function renderShowDetailsPage(show,options={}){
 
                 <div class="show-page-identity-row">
                     <div class="show-page-hero-poster">
-                        ${show.poster_path ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(show.title || "Show")} poster">` : `<div class="poster-placeholder">TV</div>`}
+                        ${show.poster_path ? `<img src="${escapeHTML(trackerImageURL(show.poster_path,"w500"))}" alt="${escapeHTML(show.title || "Show")} poster">` : renderPosterTitlePlaceholderHTML(show,"tv")}
                     </div>
                     <div class="show-page-hero-content">
                         <div class="modal-title show-page-title">${escapeHTML(show.title || "Untitled")}</div>

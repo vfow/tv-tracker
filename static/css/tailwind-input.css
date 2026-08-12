@@ -427,6 +427,17 @@
         @apply tw-flex tw-items-center tw-justify-center tw-text-tt-dim;
     }
 
+    .poster-placeholder.media-title-placeholder{
+        @apply tw-p-2 tw-text-center tw-font-sans tw-text-sm tw-font-extrabold tw-leading-tight tw-text-tt-muted;
+    }
+
+    .poster-placeholder.media-title-placeholder span{
+        @apply tw-block tw-max-w-full tw-overflow-hidden tw-text-ellipsis;
+        display:-webkit-box;
+        -webkit-line-clamp:4;
+        -webkit-box-orient:vertical;
+    }
+
     .info{
         @apply tw-min-w-0 tw-flex-1;
     }
@@ -1064,6 +1075,17 @@
         @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-font-league tw-text-[42px] tw-text-tt-dim;
     }
 
+    .discover-card-placeholder.media-title-placeholder{
+        @apply tw-p-3 tw-text-center tw-font-sans tw-text-sm tw-font-extrabold tw-leading-tight tw-text-tt-muted;
+    }
+
+    .discover-card-placeholder.media-title-placeholder span{
+        @apply tw-block tw-max-w-full tw-overflow-hidden tw-text-ellipsis;
+        display:-webkit-box;
+        -webkit-line-clamp:4;
+        -webkit-box-orient:vertical;
+    }
+
     .discover-card-title{
         @apply tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap tw-px-[10px] tw-pb-1 tw-pt-[10px] tw-text-sm tw-font-bold;
     }
@@ -1138,7 +1160,14 @@
     }
 
     .collection-stack-poster span{
-        @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-font-league tw-text-[30px] tw-text-tt-dim;
+        @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-p-2 tw-text-center tw-font-sans tw-text-[12px] tw-font-extrabold tw-leading-tight tw-text-tt-muted;
+        display:-webkit-box;
+        -webkit-line-clamp:4;
+        -webkit-box-orient:vertical;
+    }
+
+    .collection-stack-placeholder{
+        @apply tw-border-tt-muted/45 tw-bg-[#1b2429];
     }
 
     .collection-card-title{
@@ -4422,6 +4451,17 @@
     .genre-skeleton-card{
         @apply tw-flex tw-items-center tw-justify-center tw-rounded-[4px] tw-bg-tt-control tw-font-league tw-text-[42px] tw-text-tt-dim;
         aspect-ratio:2 / 3;
+    }
+
+    .genre-card-placeholder.media-title-placeholder{
+        @apply tw-p-3 tw-text-center tw-font-sans tw-text-sm tw-font-extrabold tw-leading-tight tw-text-tt-muted;
+    }
+
+    .genre-card-placeholder.media-title-placeholder span{
+        @apply tw-block tw-max-w-full tw-overflow-hidden tw-text-ellipsis;
+        display:-webkit-box;
+        -webkit-line-clamp:5;
+        -webkit-box-orient:vertical;
     }
 
     .genre-skeleton-card{
