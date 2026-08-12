@@ -734,6 +734,7 @@ function renderDiscoverHubCard(item){
     const title = item && (item.title || item.name) ? String(item.title || item.name) : "Untitled";
     const date = item && (item.date || item.release_date || item.first_air_date) ? String(item.date || item.release_date || item.first_air_date) : "";
     const year = date ? date.slice(0,4) : "Unknown";
+    const adultBadgeHTML = renderAdultMovieBadgeHTML(item,mediaType);
     const posterHTML = item && item.poster_path
     ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">`
     : renderDiscoverPosterPlaceholderHTML(item,mediaType);
@@ -756,8 +757,8 @@ function renderDiscoverHubCard(item){
             <div class="discover-card-poster">
                 ${posterHTML}
             </div>
-            <div class="discover-card-title">${renderMovieTitleWithAdultBadgeHTML(title,item,mediaType)}</div>
-            <div class="discover-card-meta">${escapeHTML(year)}</div>
+            <div class="discover-card-title">${escapeHTML(title)}</div>
+            <div class="discover-card-meta">${escapeHTML(year)}${adultBadgeHTML ? ` • ${adultBadgeHTML}` : ""}</div>
         </a>
     `;
 }
@@ -880,6 +881,7 @@ function renderSearchResultPosterCard(result){
     const year = date ? date.slice(0,4) : "Unknown";
     const rating = Number(result && result.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+    const adultBadgeHTML = renderAdultMovieBadgeHTML(result,mediaType);
 
     const route = mediaType === "movie"
     ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(result && result.id,title) : "")
@@ -898,8 +900,8 @@ function renderSearchResultPosterCard(result){
         data-first-air-date="${escapeHTML(result && result.first_air_date || "")}" 
         data-release-date="${escapeHTML(result && result.release_date || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(title,result,mediaType)}</div>
-            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+            <div class="genre-result-title">${escapeHTML(title)}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}${adultBadgeHTML ? ` • ${adultBadgeHTML}` : ""}</div>
         </a>
     `;
 }
@@ -1165,6 +1167,7 @@ function renderGenrePosterGridCard(show){
     const year = date ? date.slice(0,4) : "Unknown";
     const rating = Number(show && show.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+    const adultBadgeHTML = renderAdultMovieBadgeHTML(show,mediaType);
 
     const route = mediaType === "movie"
     ? (typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(show && show.id,title) : "")
@@ -1183,8 +1186,8 @@ function renderGenrePosterGridCard(show){
         data-overview="${escapeHTML(show && show.overview || "")}" 
         data-first-air-date="${escapeHTML(show && (show.first_air_date || show.date) || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(title,show,mediaType)}</div>
-            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+            <div class="genre-result-title">${escapeHTML(title)}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}${adultBadgeHTML ? ` • ${adultBadgeHTML}` : ""}</div>
         </a>
     `;
 }
@@ -1239,6 +1242,7 @@ function renderPersonResultCard(item){
     const year = item && item.date ? String(item.date).slice(0,4) : "Unknown";
     const rating = Number(item && item.vote_average || 0);
     const ratingHTML = rating > 0 ? ` • ${rating.toFixed(1)}` : "";
+    const adultBadgeHTML = renderAdultMovieBadgeHTML(item,mediaType);
     const roleMeta = item && item.person_role_label ? item.person_role_label : (item && item.character ? `Actor: ${item.character}` : (item && item.job ? item.job : ""));
 
     const route = mediaType === "movie"
@@ -1257,8 +1261,8 @@ function renderPersonResultCard(item){
         data-overview="${escapeHTML(item && item.overview || "")}"
         data-first-air-date="${escapeHTML(item && item.first_air_date || "")}">
             <div class="genre-result-poster">${posterHTML}</div>
-            <div class="genre-result-title">${renderMovieTitleWithAdultBadgeHTML(item && item.title || "Untitled",item,mediaType)}</div>
-            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
+            <div class="genre-result-title">${escapeHTML(item && item.title || "Untitled")}</div>
+            <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}${adultBadgeHTML ? ` • ${adultBadgeHTML}` : ""}</div>
             ${roleMeta ? `<div class="person-result-role">${escapeHTML(roleMeta)}</div>` : ""}
         </a>
     `;
@@ -5168,14 +5172,25 @@ function renderMovieMoreLikeThisHTML(movie){
         return "";
     }
     const cards = similar.slice(0,10).map(item=>{
+        const title = item.title || "Untitled";
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
         : renderPosterTitlePlaceholderHTML(item,"movie");
         const route = typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item.id,item.title || "") : "/app/discover";
+        const adultBadgeHTML = renderAdultMovieBadgeHTML(item,"movie");
+        const adultMetaParts = [];
+        if(adultBadgeHTML){
+            const year = getMediaPosterYear(item,"movie");
+            const rating = Number(item && item.vote_average || 0);
+            if(year){ adultMetaParts.push(escapeHTML(year)); }
+            if(rating > 0){ adultMetaParts.push(escapeHTML(rating.toFixed(1))); }
+            adultMetaParts.push(adultBadgeHTML);
+        }
         return `
             <a href="${escapeHTML(route)}" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}">
                 <div class="v2-similar-poster">${poster}</div>
-                <div class="v2-similar-title">${renderMovieTitleWithAdultBadgeHTML(item.title || "Untitled",item,"movie")}</div>
+                <div class="v2-similar-title">${escapeHTML(title)}</div>
+                ${adultBadgeHTML ? `<div class="v2-similar-meta">${adultMetaParts.join(" • ")}</div>` : ""}
             </a>
         `;
     }).join("");
@@ -5264,6 +5279,10 @@ function renderMovieDetailPage(state){
     const genresHTML = renderMovieGenresHTML(movie);
     if(genresHTML && genresHTML !== "Unknown"){
         metaItems.push(genresHTML);
+    }
+    const adultBadgeHTML = renderAdultMovieBadgeHTML(movie,"movie");
+    if(adultBadgeHTML){
+        metaItems.push(adultBadgeHTML);
     }
     if(rating > 0){
         metaItems.push(`<span class="tmdb-rating-group"><span class="tmdb-rating-inline">${rating.toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`);

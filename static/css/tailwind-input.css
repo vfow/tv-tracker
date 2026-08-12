@@ -767,11 +767,11 @@
     }
 
     .watchlist-new-badge-row .watchlist-new-badge{
-        @apply tw-mt-1 tw-inline-block;
+        @apply tw-mt-1 tw-inline-flex;
     }
 
     .watchlist-new-badge{
-        @apply tw-shrink-0 tw-self-start tw-rounded-[3px] tw-px-1.5 tw-py-0.5 tw-text-[9px] tw-leading-[1.3] tw-shadow-none;
+        @apply tw-shrink-0 tw-self-start;
     }
 
     .watchlist-action{
@@ -792,8 +792,12 @@
     }
 
     .new-badge{
-        @apply tw-mt-2 tw-inline-block tw-rounded tw-bg-tt-gold tw-px-[7px] tw-py-[3px] tw-text-[11px] tw-font-bold tw-tracking-[.5px] tw-text-black;
-        box-shadow:0 0 10px rgba(255,212,0,.45);
+        @apply tw-inline-flex tw-shrink-0 tw-align-middle tw-rounded-[2px] tw-bg-tt-gold tw-px-[4px] tw-py-[1px] tw-font-sans tw-text-[9px] tw-font-extrabold tw-leading-none tw-tracking-[.08em] tw-text-black;
+        box-shadow:none;
+    }
+
+    .upcoming-entry-card .new-badge{
+        @apply tw-mt-1;
     }
 
     .upcoming-group,
@@ -1036,7 +1040,7 @@
     }
 
     .discover-card-row{
-        @apply tw-flex tw-w-full tw-min-w-0 tw-max-w-full tw-gap-4 tw-overflow-x-auto tw-overflow-y-hidden tw-pb-1 tw-scroll-smooth tw-snap-x tw-snap-proximity;
+        @apply tw-relative tw-z-30 tw-flex tw-w-full tw-min-w-0 tw-max-w-full tw-gap-4 tw-overflow-x-auto tw-overflow-y-hidden tw-pb-1 tw-scroll-smooth tw-snap-x tw-snap-proximity;
         scrollbar-width:none;
     }
 
@@ -1198,7 +1202,14 @@
     }
 
     .collections-browse-bar{
-        width:100%;
+        width:max-content;
+        max-width:100%;
+    }
+
+    @media (max-width:760px){
+        .collections-browse-bar{
+            width:100%;
+        }
     }
 
     .collections-search-box{
