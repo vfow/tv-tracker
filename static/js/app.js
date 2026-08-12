@@ -163,7 +163,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v6";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v7";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const DISCOVER_COLLECTION_ROW_LIMIT = 12;
@@ -174,8 +174,57 @@ const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
 const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v2:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
-const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v1";
+const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v2";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
+const DISCOVER_COLLECTION_IDS = Object.freeze([
+    10,
+    1241,
+    119,
+    121938,
+    726871,
+    573436,
+    722971,
+    86311,
+    404609,
+    263,
+    556,
+    531241,
+    131635,
+    230,
+    2344,
+    264,
+    10194,
+    295,
+    328,
+    2150,
+    8091,
+    9485,
+    87359,
+    131292,
+    131295,
+    131296,
+    284433,
+    422834,
+    529892,
+    448150,
+    87096,
+    87118,
+    386382,
+    86066,
+    14740,
+    77816,
+    748,
+    8945,
+    84,
+    304,
+    86119,
+    9888,
+    2602,
+    521226,
+    295130,
+    313086,
+    558216
+]);
 const TMDB_COLLECTION_INDEX_POLL_DELAY = 4000;
 const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person"]);
 const SEARCH_RESULT_BATCH_SIZE = 21;
@@ -3994,15 +4043,90 @@ async function tmdbGetCollectionIndex(options={}){
     if(cached){
         return cached;
     }
-    const response = await fetch("/api/tmdb/collections",{credentials:"same-origin"});
+    const response = await fetch("/api/tmdb/collections",{credentials:"same-origin",cache:"no-store"});
     if(!response.ok){
         const requestError = new Error("Collections are temporarily unavailable.");
         requestError.status = response.status;
         throw requestError;
     }
     const payload = normalizeTMDBCollectionIndexPayload(await response.json());
-    writeCachedTMDBCollectionIndex(payload);
+    if(Array.isArray(payload.collections) && payload.collections.length){
+        writeCachedTMDBCollectionIndex(payload);
+    }else{
+        tmdbCollectionIndexMemoryCache = null;
+        try{ sessionStorage.removeItem(TMDB_COLLECTION_INDEX_CACHE_KEY); }catch(error){}
+    }
     return payload;
+}
+
+async function loadCollectionSummaries(collectionIds,options={}){
+    const ids = (Array.isArray(collectionIds) ? collectionIds : [])
+    .map(normalizeCollectionId)
+    .filter(Boolean);
+    const limit = Math.max(0,Number(options && options.limit || 0));
+    const sourceIds = limit ? ids.slice(0,limit) : ids;
+    const output = [];
+    const concurrency = Math.min(6,sourceIds.length || 1);
+    let cursor = 0;
+
+    async function worker(){
+        while(cursor < sourceIds.length){
+            const index = cursor;
+            cursor += 1;
+            try{
+                const collection = await tmdbGetCollectionDetails(sourceIds[index]);
+                if(collection){
+                    output[index] = collection;
+                }
+            }catch(error){
+                output[index] = null;
+            }
+        }
+    }
+
+    await Promise.all(Array.from({length:concurrency},worker));
+    return output.filter(Boolean);
+}
+
+async function loadCuratedCollectionFallback(options={}){
+    return loadCollectionSummaries(DISCOVER_COLLECTION_IDS,options);
+}
+
+function mergeCollectionLists(primary,secondary){
+    const output = [];
+    const seen = new Set();
+    [primary,secondary].forEach(list=>{
+        (Array.isArray(list) ? list : []).forEach(collection=>{
+            const id = normalizeCollectionId(collection && collection.id);
+            if(!id || seen.has(id)){
+                return;
+            }
+            seen.add(id);
+            output.push(collection);
+        });
+    });
+    return output;
+}
+
+async function loadCollectionIndexWithFallback(options={}){
+    let payload = null;
+    try{
+        payload = await tmdbGetCollectionIndex(options);
+    }catch(error){
+        payload = null;
+    }
+    const indexedCollections = Array.isArray(payload && payload.collections) ? payload.collections : [];
+    const needsFallback = !indexedCollections.length || payload && payload.building === true || indexedCollections.length < DISCOVER_COLLECTION_IDS.length;
+    const fallbackCollections = needsFallback ? await loadCuratedCollectionFallback() : [];
+    return {
+        collections:mergeCollectionLists(indexedCollections,fallbackCollections),
+        building:payload && payload.building === true,
+        sourceDate:payload && payload.sourceDate || "",
+        indexedCount:Number(payload && payload.indexedCount || indexedCollections.length || 0),
+        totalIds:Number(payload && payload.totalIds || 0),
+        cursor:Number(payload && payload.cursor || 0),
+        usingFallback:needsFallback && fallbackCollections.length > 0
+    };
 }
 
 async function tmdbGetCollectionDetails(collectionId){
@@ -4031,8 +4155,16 @@ async function tmdbGetCollectionDetails(collectionId){
 }
 
 async function loadDiscoverCollectionRow(){
-    const payload = await tmdbGetCollectionIndex();
-    return sortCollectionsForIndex(payload.collections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    let indexedCollections = [];
+    try{
+        const payload = await tmdbGetCollectionIndex();
+        indexedCollections = Array.isArray(payload.collections) ? payload.collections : [];
+    }catch(error){}
+    if(indexedCollections.length >= DISCOVER_COLLECTION_ROW_LIMIT){
+        return sortCollectionsForIndex(indexedCollections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    }
+    const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT});
+    return sortCollectionsForIndex(mergeCollectionLists(indexedCollections,fallbackCollections),"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
 }
 
 function scheduleCollectionIndexPoll(){
@@ -4710,7 +4842,7 @@ async function loadCollectionsIndexResults(options={}){
     renderActiveCollectionsPage();
     try{
         await ensureBrowseReferenceData("movie").catch(()=>{});
-        const payload = await tmdbGetCollectionIndex({force:options && options.force === true});
+        const payload = await loadCollectionIndexWithFallback({force:options && options.force === true});
         const collections = Array.isArray(payload.collections) ? payload.collections : [];
         const built = buildCollectionsIndexState(collections,collectionsPageState);
         collectionsPageState = Object.assign({},collectionsPageState,built,{
@@ -4722,7 +4854,8 @@ async function loadCollectionsIndexResults(options={}){
             sourceDate:payload.sourceDate || "",
             indexedCount:Number(payload.indexedCount || collections.length || 0),
             totalIds:Number(payload.totalIds || 0),
-            cursor:Number(payload.cursor || 0)
+            cursor:Number(payload.cursor || 0),
+            usingFallback:payload.usingFallback === true
         });
         if(activePage === "collections-index"){
             setAppHashRoute(getCollectionsRoute(collectionsPageState),true);
