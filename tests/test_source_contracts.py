@@ -978,6 +978,27 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('watch-provider-logo-tile', built_css)
 
 
+    def test_phase66c_collection_detail_filters_and_eye_exist(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        router = self.read('static/js/app-router.js')
+
+        self.assertIn('const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";', app_js)
+        self.assertIn('function createCollectionDetailFilterState(input={})', app_js)
+        self.assertIn('function buildCollectionDetailState(collection,movies,filters,labels={})', app_js)
+        self.assertIn('function applyCollectionDetailFilterState(nextState={},options={})', app_js)
+        self.assertIn('There are no movies in this collection released in ${filters.year}', app_js)
+        self.assertIn('if(activePage === "collection-detail")', app_js)
+        self.assertIn('renderEyeFilterControlHTML(filters,"collection-detail-eye-filter-menu")', ui)
+        self.assertIn('data-collection-detail-set="genre"', ui)
+        self.assertIn('data-collection-detail-set="language"', ui)
+        self.assertIn('Release Date — Newest', ui)
+        self.assertIn('Title — A to Z', ui)
+        self.assertIn('function canonicalCollectionDetailSearch(search)', router)
+        self.assertIn('filters:filters.state', router)
+
+
+
     def test_trailing_slash_redirects_preserve_query_strings(self):
         backend = self.read('app.py')
         app_js = self.read('static/js/app.js')

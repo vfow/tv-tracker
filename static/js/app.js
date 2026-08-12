@@ -142,7 +142,7 @@ var discoverHubState = {
     collections:[]
 };
 var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"name.asc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[]};
-var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[]};
+var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
 var selectedCollectionId = null;
 var discoverGenreMedia = "tv";
 var librarySearchQuery = "";
@@ -169,6 +169,8 @@ const DISCOVER_COLLECTION_ROW_LIMIT = 12;
 const COLLECTIONS_PAGE_SIZE = 64;
 const COLLECTIONS_DEFAULT_SORT = "name.asc";
 const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
+const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
+const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
 const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v1:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
 const DISCOVER_COLLECTION_IDS = Object.freeze([
@@ -3884,7 +3886,8 @@ function normalizeCollectionMoviePart(raw){
     }
     return Object.assign({},item,{
         media_type:"movie",
-        genre_ids:normalizeCollectionGenreIds(raw && raw.genre_ids)
+        genre_ids:normalizeCollectionGenreIds(raw && raw.genre_ids),
+        original_language:normalizeLanguageCode(raw && raw.original_language || "")
     });
 }
 
@@ -4183,6 +4186,202 @@ function applyCollectionsIndexState(nextState={},options={}){
         setAppHashRoute(getCollectionsRoute(collectionsPageState),options.replaceRoute === true);
     }
     renderActiveCollectionsPage();
+}
+
+function normalizeCollectionDetailSort(value){
+    const clean = String(value || "").trim().toLowerCase();
+    return COLLECTION_DETAIL_SORT_VALUES.has(clean) ? clean : COLLECTION_DETAIL_DEFAULT_SORT;
+}
+
+function normalizeCollectionDetailYear(value){
+    const clean = String(value || "").trim();
+    return /^(18|19|20|21)[0-9]{2}$/.test(clean) ? clean : "";
+}
+
+function normalizeCollectionDetailDecade(value){
+    return normalizeCollectionsIndexDecade(value);
+}
+
+function normalizeCollectionDetailGenres(value){
+    return normalizeCollectionGenreIds(Array.isArray(value) ? value : String(value || "").split(","));
+}
+
+function createCollectionDetailFilterState(input={}){
+    const source = input && typeof input === "object" ? input : {};
+    const year = normalizeCollectionDetailYear(source.year);
+    return {
+        media:"movie",
+        year,
+        decade:year ? "" : normalizeCollectionDetailDecade(source.decade),
+        upcoming:false,
+        genres:normalizeCollectionDetailGenres(source.genres || source.genre),
+        country:"",
+        language:normalizeLanguageCode(source.language),
+        themes:[],
+        companies:[],
+        network:"",
+        providers:[],
+        runtime:"",
+        statuses:[],
+        certification:"",
+        fadeWatched:source.fadeWatched === true || String(source.fadeWatched || "") === "1",
+        hideWatched:source.hideWatched === true || String(source.hideWatched || "") === "1",
+        hidePlan:source.hidePlan === true || String(source.hidePlan || "") === "1",
+        hideFavorites:source.hideFavorites === true || String(source.hideFavorites || "") === "1",
+        sort:normalizeCollectionDetailSort(source.sort)
+    };
+}
+
+function serializeCollectionDetailSearch(input={}){
+    const state = createCollectionDetailFilterState(input);
+    const parts = [];
+    if(state.genres.length){ parts.push("genre=" + state.genres.map(value=>encodeURIComponent(String(value))).join(",")); }
+    if(state.language){ parts.push("language=" + encodeURIComponent(state.language)); }
+    if(state.year){ parts.push("year=" + encodeURIComponent(state.year)); }
+    else if(state.decade){ parts.push("decade=" + encodeURIComponent(state.decade)); }
+    if(state.fadeWatched){ parts.push("fadeWatched=1"); }
+    if(state.hideWatched){ parts.push("hideWatched=1"); }
+    if(state.hidePlan){ parts.push("hidePlan=1"); }
+    if(state.hideFavorites){ parts.push("hideFavorites=1"); }
+    if(state.sort !== COLLECTION_DETAIL_DEFAULT_SORT){ parts.push("sort=" + encodeURIComponent(state.sort)); }
+    return parts.length ? "?" + parts.join("&") : "";
+}
+
+function getCollectionDetailRouteWithFilters(collectionId,label="",filters={}){
+    const base = getCollectionDetailRoute(collectionId,label);
+    if(base === "/app/list/watching"){
+        return base;
+    }
+    return base + serializeCollectionDetailSearch(filters);
+}
+
+function getCollectionMovieReleaseYear(movie){
+    return getCollectionPartReleaseYear(movie);
+}
+
+function getCollectionMovieLanguage(movie){
+    return normalizeLanguageCode(movie && movie.original_language || "");
+}
+
+function sortCollectionDetailMovies(movies,sort){
+    const cleanSort = normalizeCollectionDetailSort(sort);
+    const list = (Array.isArray(movies) ? movies : []).slice();
+    if(cleanSort === "collection-order"){
+        return list;
+    }
+    list.sort((a,b)=>{
+        const aTitle = String(a && (a.title || a.name) || "").trim().toLowerCase();
+        const bTitle = String(b && (b.title || b.name) || "").trim().toLowerCase();
+        if(cleanSort === "title-asc"){
+            return aTitle.localeCompare(bTitle) || Number(a && a.id || 0) - Number(b && b.id || 0);
+        }
+        if(cleanSort === "title-desc"){
+            return bTitle.localeCompare(aTitle) || Number(a && a.id || 0) - Number(b && b.id || 0);
+        }
+        let av = 0;
+        let bv = 0;
+        if(cleanSort === "date-desc" || cleanSort === "date-asc"){
+            av = getCollectionMovieReleaseYear(a);
+            bv = getCollectionMovieReleaseYear(b);
+        }else if(cleanSort === "rating-desc" || cleanSort === "rating-asc"){
+            av = Number(a && a.vote_average || 0);
+            bv = Number(b && b.vote_average || 0);
+        }else if(cleanSort === "popularity-desc" || cleanSort === "popularity-asc"){
+            av = Number(a && a.popularity || 0);
+            bv = Number(b && b.popularity || 0);
+        }
+        const direction = cleanSort.endsWith("asc") ? 1 : -1;
+        const compare = (av - bv) * direction;
+        if(compare){ return compare; }
+        return aTitle.localeCompare(bTitle) || Number(a && a.id || 0) - Number(b && b.id || 0);
+    });
+    return list;
+}
+
+function filterCollectionDetailMovies(movies,filters){
+    const state = createCollectionDetailFilterState(filters);
+    return (Array.isArray(movies) ? movies : []).filter(movie=>{
+        const year = getCollectionMovieReleaseYear(movie);
+        if(state.year && String(year) !== state.year){
+            return false;
+        }
+        if(!state.year && state.decade){
+            const decade = year ? String(Math.floor(year / 10) * 10) : "";
+            if(decade !== state.decade){ return false; }
+        }
+        if(state.genres.length){
+            const genres = normalizeCollectionGenreIds(movie && movie.genre_ids);
+            if(!state.genres.every(id=>genres.includes(id))){ return false; }
+        }
+        if(state.language && getCollectionMovieLanguage(movie) !== state.language){
+            return false;
+        }
+        return true;
+    });
+}
+
+function buildCollectionDetailOptions(movies){
+    const genreIds = new Set();
+    const languageIds = new Set();
+    (Array.isArray(movies) ? movies : []).forEach(movie=>{
+        normalizeCollectionGenreIds(movie && movie.genre_ids).forEach(id=>genreIds.add(id));
+        const language = getCollectionMovieLanguage(movie);
+        if(language){ languageIds.add(language); }
+    });
+    return {
+        genres:Array.from(genreIds).map(id=>({id,name:getCollectionGenreLabel(id)})).sort((a,b)=>a.name.localeCompare(b.name)),
+        languages:Array.from(languageIds).map(code=>({code,name:getLanguageName(code)})).sort((a,b)=>a.name.localeCompare(b.name))
+    };
+}
+
+function buildCollectionDetailState(collection,movies,filters,labels={}){
+    const cleanMovies = Array.isArray(movies) ? movies : [];
+    const filterState = createCollectionDetailFilterState(filters || {});
+    const filtered = filterCollectionDetailMovies(cleanMovies,filterState);
+    const sorted = sortCollectionDetailMovies(filtered,filterState.sort);
+    const options = buildCollectionDetailOptions(cleanMovies);
+    return {
+        filters:filterState,
+        labels:createBrowseLabelState(labels || {}),
+        visibleMovies:applyEyeFiltersToItems(sorted,"movie",filterState),
+        totalResults:sorted.length,
+        availableGenres:options.genres,
+        availableLanguages:options.languages
+    };
+}
+
+function applyCollectionDetailFilterState(nextState={},options={}){
+    const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+    const merged = createCollectionDetailFilterState(Object.assign({},current,nextState));
+    const built = buildCollectionDetailState(collectionDetailPageState.collection,collectionDetailPageState.movies,merged,collectionDetailPageState.labels);
+    collectionDetailPageState = Object.assign({},collectionDetailPageState,built);
+    if(options && options.updateRoute !== false && activePage === "collection-detail"){
+        const collection = collectionDetailPageState.collection || {};
+        setAppHashRoute(getCollectionDetailRouteWithFilters(collectionDetailPageState.collectionId,collection.name || collectionDetailPageState.routeSlug || "collection",collectionDetailPageState.filters),options.replaceRoute === true);
+    }
+    renderActiveCollectionDetailPage();
+}
+
+function getCollectionDetailEmptyMessage(state){
+    const filters = createCollectionDetailFilterState(state && state.filters || {});
+    const normalFilteredCount = Number(state && state.totalResults || 0);
+    if(hasEyeHideOptions(filters) && normalFilteredCount > 0){
+        return "There are no movies visible with the current eye filters.";
+    }
+    if(filters.year){
+        return `There are no movies in this collection released in ${filters.year}`;
+    }
+    if(filters.decade){
+        return `There are no movies in this collection released in the ${filters.decade}s`;
+    }
+    if(filters.genres.length){
+        const label = filters.genres.map(id=>getCollectionGenreLabel(id)).join(", ");
+        return `There are no movies in this collection matching ${label}`;
+    }
+    if(filters.language){
+        return `There are no movies in this collection in ${getLanguageName(filters.language)}`;
+    }
+    return "This collection has no movies available right now.";
 }
 
 function getDiscoverCategoryKey(media,category){
@@ -4578,13 +4777,20 @@ async function openCollectionDetailPage(collectionId,options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
 
+    const requestedFilters = createCollectionDetailFilterState(options && options.filters ? options.filters : options || {});
     collectionDetailPageState = {
         collectionId:id,
         routeSlug:routeSlug,
         loading:true,
         error:"",
         collection:null,
-        movies:[]
+        movies:[],
+        filters:requestedFilters,
+        labels:createBrowseLabelState(),
+        visibleMovies:[],
+        totalResults:0,
+        availableGenres:[],
+        availableLanguages:[]
     };
 
     showCollectionDetailPageShell(navigationContext);
@@ -4601,17 +4807,21 @@ async function openCollectionDetailPage(collectionId,options={}){
             return;
         }
         const canonicalRoute = getCollectionDetailRoute(id,collection.name);
-        collectionDetailPageState = {
+        await ensureBrowseReferenceData("movie").catch(()=>{});
+        const movies = Array.isArray(collection.parts) ? collection.parts : [];
+        const detailBuilt = buildCollectionDetailState(collection,movies,requestedFilters,collectionDetailPageState.labels);
+        collectionDetailPageState = Object.assign({
             collectionId:id,
             routeSlug:buildRouteSlug(collection.name),
             loading:false,
             error:"",
             collection,
-            movies:Array.isArray(collection.parts) ? collection.parts : []
-        };
-        if(canonicalRoute && canonicalRoute !== "/app/list/watching"){
-            setAppHashRoute(canonicalRoute,true);
-            rememberRouteNavContext(canonicalRoute,navigationContext);
+            movies
+        },detailBuilt);
+        const filteredRoute = getCollectionDetailRouteWithFilters(id,collection.name,collectionDetailPageState.filters);
+        if(filteredRoute && filteredRoute !== "/app/list/watching"){
+            setAppHashRoute(filteredRoute,true);
+            rememberRouteNavContext(filteredRoute,navigationContext);
         }
         renderActiveCollectionDetailPage();
         if(typeof updateShellTitle === "function"){
@@ -4680,6 +4890,64 @@ function attachCollectionDetailPageEvents(){
             navigateBackOrRouteFallback("/app/collections");
         });
     }
+
+    document.querySelectorAll("[data-collection-detail-set]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const key = String(button.dataset.collectionDetailSet || "");
+            const value = String(button.dataset.collectionDetailValue || "");
+            const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+            if(key === "year"){
+                applyCollectionDetailFilterState({year:normalizeCollectionDetailYear(value),decade:""});
+            }else if(key === "decade"){
+                applyCollectionDetailFilterState({year:"",decade:normalizeCollectionDetailDecade(value)});
+            }else if(key === "language"){
+                applyCollectionDetailFilterState({language:normalizeLanguageCode(value)});
+            }else if(key === "sort"){
+                applyCollectionDetailFilterState({sort:normalizeCollectionDetailSort(value)});
+            }else if(key === "genre"){
+                const genre = normalizeCollectionId(value);
+                const genres = genre && current.genres.includes(genre) ? current.genres.filter(id=>id !== genre) : (genre ? current.genres.concat(genre) : []);
+                applyCollectionDetailFilterState({genres});
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-collection-detail-remove]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const key = String(button.dataset.collectionDetailRemove || "");
+            const value = String(button.dataset.collectionDetailValue || "");
+            const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+            if(key === "year"){
+                applyCollectionDetailFilterState({year:""});
+            }else if(key === "decade"){
+                applyCollectionDetailFilterState({decade:""});
+            }else if(key === "language"){
+                applyCollectionDetailFilterState({language:""});
+            }else if(key === "genres"){
+                applyCollectionDetailFilterState({genres:current.genres.filter(id=>id !== normalizeCollectionId(value))});
+            }else if(key === "sort"){
+                applyCollectionDetailFilterState({sort:COLLECTION_DETAIL_DEFAULT_SORT});
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-collection-detail-clear]").forEach(button=>{
+        button.addEventListener("click",function(){
+            applyCollectionDetailFilterState(createCollectionDetailFilterState());
+        });
+    });
+
+    document.querySelectorAll(".collection-movie-card[data-media-id]").forEach(card=>{
+        card.addEventListener("click",async function(event){
+            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
+            event.preventDefault();
+            const movieId = Number(this.dataset.mediaId || 0);
+            if(!movieId){ return; }
+            const collection = collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection : {};
+            const backRoute = getCollectionDetailRouteWithFilters(collectionDetailPageState.collectionId,collection.name || collectionDetailPageState.routeSlug || "collection",collectionDetailPageState.filters);
+            await openMoviePage(movieId,{movieName:this.dataset.mediaName || "",navigationContext:"discover",backRoute});
+        });
+    });
 }
 
 function isTMDBNotFoundError(error){
@@ -6010,6 +6278,9 @@ function getCurrentBrowseState(){
     if(activePage === "browse-detail"){
         return createBrowseFilterState(browsePageState && browsePageState.media,browsePageState && browsePageState.filters || {});
     }
+    if(activePage === "collection-detail"){
+        return createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+    }
     if(activePage === "genre-detail"){
         return getGenreBrowseState();
     }
@@ -6031,6 +6302,9 @@ function getCurrentBrowseLabels(){
     }
     if(activePage === "discovery-detail"){
         return createBrowseLabelState(discoveryPageState && discoveryPageState.browseLabels);
+    }
+    if(activePage === "collection-detail"){
+        return createBrowseLabelState(collectionDetailPageState && collectionDetailPageState.labels);
     }
     return createBrowseLabelState();
 }
@@ -8145,6 +8419,12 @@ async function openBrowsePage(state,options={}){
 }
 
 async function navigateToBrowseState(nextState,labels={},options={}){
+    if(activePage === "collection-detail"){
+        const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
+        const next = createCollectionDetailFilterState(Object.assign({},current,nextState || {}));
+        applyCollectionDetailFilterState(next,{replaceRoute:options && options.replaceRoute === true});
+        return;
+    }
     let cleanState = createBrowseFilterState(nextState && nextState.media,nextState || {});
     const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,discoveryPageState && discoveryPageState.value);

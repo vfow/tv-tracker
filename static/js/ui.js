@@ -1996,6 +1996,175 @@ function renderCollectionSkeletonCardHTML(){
     `;
 }
 
+const COLLECTION_DETAIL_SORT_OPTIONS = Object.freeze([
+    {value:"collection-order",label:"Collection Order"},
+    {value:"date-desc",label:"Release Date — Newest"},
+    {value:"date-asc",label:"Release Date — Oldest"},
+    {value:"popularity-desc",label:"Popularity — High to Low"},
+    {value:"popularity-asc",label:"Popularity — Low to High"},
+    {value:"rating-desc",label:"Rating — High to Low"},
+    {value:"rating-asc",label:"Rating — Low to High"},
+    {value:"title-asc",label:"Title — A to Z"},
+    {value:"title-desc",label:"Title — Z to A"}
+]);
+
+function getCollectionDetailFilterStateForRender(state){
+    if(typeof createCollectionDetailFilterState === "function"){
+        return createCollectionDetailFilterState(state && state.filters || {});
+    }
+    return getBrowseControlState(Object.assign({sort:"collection-order"},state && state.filters || {}),"movie");
+}
+
+function getCollectionDetailSortLabel(sort){
+    const clean = String(sort || "collection-order").trim().toLowerCase();
+    const match = COLLECTION_DETAIL_SORT_OPTIONS.find(item=>item.value === clean);
+    return match ? match.label : "Collection Order";
+}
+
+function renderCollectionDetailYearMenu(state){
+    const anySelected = !state.year && !state.decade;
+    return `
+        <div class="browse-year-decade-menu" data-collection-detail-year-menu>
+            <div class="browse-option-list">
+                <button type="button" class="browse-dropdown-option ${anySelected ? "selected" : ""}" data-collection-detail-set="year" data-collection-detail-value="">${renderBrowseOptionLabel("Any",anySelected)}</button>
+            </div>
+            <div class="browse-dropdown-divider"></div>
+            <div class="browse-option-list browse-year-decade-list">${renderCollectionDetailDecadeListHTML(state)}</div>
+        </div>
+    `;
+}
+
+function renderCollectionDetailDecadeListHTML(state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const selectedYear = Number(state && state.year || 0);
+    const selectedDecadeValue = Number(state && state.decade || 0);
+    const selectedDecade = selectedDecadeValue || (selectedYear ? Math.floor(selectedYear / 10) * 10 : 0);
+    const rows = [];
+    for(let decade=currentDecade;decade>=1870;decade-=10){
+        const selected = selectedDecade === decade;
+        rows.push(`
+            <button type="button" class="browse-dropdown-option browse-decade-list-option ${selected ? "selected" : ""}" data-collection-detail-set="decade" data-collection-detail-value="${decade}" aria-pressed="${selected ? "true" : "false"}">
+                <span>${decade}s</span>
+                <span class="browse-decade-list-icons">${selected ? renderBrowseCheckIcon() : ""}${renderBrowseDirectionalChevronIcon("right")}</span>
+            </button>
+        `);
+    }
+    return rows.join("");
+}
+
+function renderCollectionDetailYearSecondaryBarHTML(decade,state){
+    const currentYear = new Date().getFullYear();
+    const currentDecade = Math.floor(currentYear / 10) * 10;
+    const visibleDecade = Math.max(1870,Math.min(currentDecade,Number(decade || currentDecade)));
+    const selectedYear = String(state && state.year || "");
+    const years = [];
+    for(let year=visibleDecade;year<=visibleDecade + 9;year+=1){
+        const selected = selectedYear === String(year);
+        years.push(`<button type="button" class="browse-year-strip-year ${selected ? "selected" : ""}" data-collection-detail-set="year" data-collection-detail-value="${year}" aria-pressed="${selected ? "true" : "false"}">${renderBrowseOptionLabel(String(year),selected)}</button>`);
+    }
+    return `
+        <div class="browse-year-secondary-bar" data-collection-detail-year-secondary-bar>
+            <div class="browse-year-strip" data-collection-detail-visible-decade="${visibleDecade}">
+                <button type="button" class="browse-decade-nav browse-decade-nav-prev" data-collection-detail-set="decade" data-collection-detail-value="${Math.max(1870,visibleDecade - 10)}" aria-label="Previous decade" ${visibleDecade <= 1870 ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("left")}</button>
+                <button type="button" class="browse-decade-current" data-collection-detail-set="decade" data-collection-detail-value="${visibleDecade}" aria-label="Current decade">${visibleDecade}s</button>
+                <div class="browse-year-strip-years">${years.join("")}</div>
+                <button type="button" class="browse-decade-nav browse-decade-nav-next" data-collection-detail-set="decade" data-collection-detail-value="${Math.min(currentDecade,visibleDecade + 10)}" aria-label="Next decade" ${visibleDecade >= currentDecade ? "disabled" : ""}>${renderBrowseDirectionalChevronIcon("right")}</button>
+            </div>
+        </div>
+    `;
+}
+
+function getCollectionDetailGenreLabel(state,genreId){
+    const id = String(genreId || "");
+    const genres = Array.isArray(state && state.availableGenres) ? state.availableGenres : [];
+    const match = genres.find(genre=>String(genre && genre.id || "") === id);
+    return match ? String(match.name || "").trim() : (typeof getCollectionGenreLabel === "function" ? getCollectionGenreLabel(id) : "Genre " + id);
+}
+
+function renderCollectionDetailGenreMenu(pageState,filters){
+    const genres = Array.isArray(pageState && pageState.availableGenres) ? pageState.availableGenres : [];
+    if(!genres.length){
+        return `<div class="browse-dropdown-empty">Genres are loading…</div>`;
+    }
+    return `<div class="browse-option-list browse-option-list-genre">${genres.map(genre=>{
+        const id = String(genre && genre.id || "");
+        const name = String(genre && genre.name || "").trim() || "Genre " + id;
+        const selected = filters.genres.includes(id);
+        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-detail-set="genre" data-collection-detail-value="${escapeHTML(id)}">${renderBrowseOptionLabel(name,selected)}</button>`;
+    }).join("")}</div>`;
+}
+
+function renderCollectionDetailLanguageMenu(pageState,filters){
+    const languages = Array.isArray(pageState && pageState.availableLanguages) ? pageState.availableLanguages : [];
+    if(!languages.length){
+        return `<div class="browse-dropdown-empty">Languages are loading…</div>`;
+    }
+    return `
+        <div class="browse-option-list">
+            <button type="button" class="browse-dropdown-option ${!filters.language ? "selected" : ""}" data-collection-detail-set="language" data-collection-detail-value="">${renderBrowseOptionLabel("Any",!filters.language)}</button>
+            ${languages.map(language=>{
+                const code = String(language && language.code || "");
+                const name = String(language && language.name || "").trim() || code.toUpperCase();
+                const selected = filters.language === code;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-detail-set="language" data-collection-detail-value="${escapeHTML(code)}">${renderBrowseOptionLabel(name,selected)}</button>`;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderCollectionDetailSortMenu(filters){
+    return `<div class="browse-option-list">${COLLECTION_DETAIL_SORT_OPTIONS.map(item=>{
+        const selected = filters.sort === item.value;
+        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-detail-set="sort" data-collection-detail-value="${escapeHTML(item.value)}">${renderBrowseOptionLabel(item.label,selected)}</button>`;
+    }).join("")}</div>`;
+}
+
+function renderCollectionDetailActiveChipsHTML(pageState,filters){
+    const chips = [];
+    const push = (key,value,label)=>{
+        if(label){ chips.push(`<button type="button" class="browse-active-chip" data-collection-detail-remove="${escapeHTML(key)}" data-collection-detail-value="${escapeHTML(value || "")}">${escapeHTML(label)} <span aria-hidden="true">×</span></button>`); }
+    };
+    if(filters.year){ push("year",filters.year,filters.year); }
+    if(!filters.year && filters.decade){ push("decade",filters.decade,`${filters.decade}s`); }
+    filters.genres.forEach(id=>push("genres",id,getCollectionDetailGenreLabel(pageState,id)));
+    if(filters.language){ push("language",filters.language,typeof getLanguageName === "function" ? getLanguageName(filters.language) : filters.language.toUpperCase()); }
+    if(filters.sort !== "collection-order"){ push("sort",filters.sort,getCollectionDetailSortLabel(filters.sort)); }
+    const eyeActive = !!(filters.fadeWatched || filters.hideWatched || filters.hidePlan || filters.hideFavorites);
+    if(!chips.length && !eyeActive){ return ""; }
+    return `<div class="browse-active-row collection-detail-active-row" aria-label="Active collection movie filters">${chips.join("")}<button type="button" class="browse-clear-button" data-collection-detail-clear>CLEAR ALL</button></div>`;
+}
+
+function renderCollectionDetailControlsHTML(pageState){
+    const filters = getCollectionDetailFilterStateForRender(pageState);
+    return `
+        <div class="browse-controls collection-detail-controls">
+            <div class="browse-bar" aria-label="Collection movie filters">
+                <span class="browse-bar-kicker">BROWSE BY</span>
+                <details class="browse-menu browse-menu-year">
+                    <summary class="browse-bar-button">${escapeHTML(getBrowseYearControlLabel(filters))} ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown browse-dropdown-year">${renderCollectionDetailYearMenu(filters)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown">${renderCollectionDetailGenreMenu(pageState,filters)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">LANGUAGE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown">${renderCollectionDetailLanguageMenu(pageState,filters)}</div>
+                </details>
+                <details class="browse-menu browse-menu-sort">
+                    <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown browse-dropdown-sort">${renderCollectionDetailSortMenu(filters)}</div>
+                </details>
+                ${renderEyeFilterControlHTML(filters,"collection-detail-eye-filter-menu")}
+            </div>
+            ${getBrowseSelectedDecade(filters) ? renderCollectionDetailYearSecondaryBarHTML(getBrowseSelectedDecade(filters),filters) : ""}
+            ${renderCollectionDetailActiveChipsHTML(pageState,filters)}
+        </div>
+    `;
+}
+
 function renderCollectionDetailPage(state){
     const content = document.getElementById("genre-detail-content");
     if(!content){
@@ -2005,11 +2174,13 @@ function renderCollectionDetailPage(state){
     const pageState = state || {};
     const collection = pageState.collection || null;
     const title = String(collection && collection.name || "Collection").trim() || "Collection";
-    const movies = Array.isArray(pageState.movies) ? pageState.movies : [];
+    const sourceMovies = Array.isArray(pageState.movies) ? pageState.movies : [];
+    const visibleMovies = Array.isArray(pageState.visibleMovies) ? pageState.visibleMovies : sourceMovies;
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
-    const movieCount = Number(collection && collection.movie_count || movies.length || 0);
-    const movieCountLabel = movieCount === 1 ? "1 movie" : `${movieCount || 0} movies`;
+    const visibleCount = visibleMovies.length;
+    const countLabel = visibleCount === 1 ? "1 movie" : `${visibleCount || 0} movies`;
+    const filtersHTML = !loading && !error && collection ? renderCollectionDetailControlsHTML(pageState) : "";
 
     const bodyHTML = error
     ? `
@@ -2018,11 +2189,11 @@ function renderCollectionDetailPage(state){
             <p>${escapeHTML(error)}</p>
         </div>
     `
-    : movies.length
+    : visibleMovies.length
     ? `
-        <div class="genre-result-summary">${escapeHTML(movieCountLabel)}</div>
+        <div class="genre-result-summary">${escapeHTML(countLabel)}</div>
         <div class="genre-tight-grid collection-movie-grid">
-            ${movies.map(movie=>renderGenrePosterGridCard(movie).replace('class="genre-result-card','class="genre-result-card collection-movie-card')).join("")}
+            ${visibleMovies.map(movie=>renderGenrePosterGridCard(movie).replace('class="genre-result-card','class="genre-result-card collection-movie-card').replace('class="genre-result-card collection-movie-card','class="genre-result-card collection-movie-card')).join("")}
         </div>
     `
     : loading
@@ -2034,7 +2205,7 @@ function renderCollectionDetailPage(state){
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No movies found</h2>
-            <p>This collection has no movies available right now.</p>
+            <p>${escapeHTML(typeof getCollectionDetailEmptyMessage === "function" ? getCollectionDetailEmptyMessage(pageState) : "This collection has no movies available right now.")}</p>
         </div>
     `;
 
@@ -2048,6 +2219,7 @@ function renderCollectionDetailPage(state){
                     <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
                 </div>
             </div>
+            ${filtersHTML}
             <div class="genre-result-content">
                 ${bodyHTML}
             </div>

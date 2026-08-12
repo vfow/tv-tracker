@@ -36,6 +36,17 @@
         "popularity.desc",
         "popularity.asc"
     ]);
+    const COLLECTION_DETAIL_SORT_MODES = new Set([
+        "collection-order",
+        "date-desc",
+        "date-asc",
+        "popularity-desc",
+        "popularity-asc",
+        "rating-desc",
+        "rating-asc",
+        "title-asc",
+        "title-desc"
+    ]);
     let applyingRoute = false;
     let initialRoutePrepared = false;
 
@@ -159,6 +170,40 @@
         if(page > 1){ parts.push("page=" + encodeURIComponent(String(page))); }
         return {state:{genre,decade,sort,page},search:parts.length ? "?" + parts.join("&") : ""};
     }
+    function canonicalCollectionDetailSearch(search){
+        const params = readSearchParams(search);
+        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+        const normalizeIdList = value=>{
+            const seen = new Set();
+            return String(value || "").split(",").map(item=>String(item || "").trim()).filter(item=>{
+                if(!/^[1-9][0-9]{0,11}$/.test(item) || seen.has(item)){ return false; }
+                seen.add(item);
+                return true;
+            }).slice(0,12);
+        };
+        const rawYear = String(params.get("year") || "").trim();
+        const year = /^(18|19|20|21)[0-9]{2}$/.test(rawYear) ? rawYear : "";
+        const rawDecade = String(params.get("decade") || "").trim();
+        const decadeNumber = /^(18|19|20|21)[0-9]0$/.test(rawDecade) ? Number(rawDecade) : 0;
+        const decade = !year && decadeNumber >= 1870 && decadeNumber <= currentDecade ? String(decadeNumber) : "";
+        const rawLanguage = String(params.get("language") || "").trim().toLowerCase();
+        const language = /^[a-z]{2,3}$/.test(rawLanguage) ? rawLanguage : "";
+        const rawSort = String(params.get("sort") || "").trim().toLowerCase();
+        const sort = COLLECTION_DETAIL_SORT_MODES.has(rawSort) ? rawSort : "collection-order";
+        const eye = canonicalEyeParams(params);
+        const genres = normalizeIdList(params.get("genre") || "");
+        const parts = [];
+        if(genres.length){ parts.push("genre=" + genres.map(value=>encodeURIComponent(value)).join(",")); }
+        if(language){ parts.push("language=" + encodeURIComponent(language)); }
+        if(year){ parts.push("year=" + encodeURIComponent(year)); }
+        else if(decade){ parts.push("decade=" + encodeURIComponent(decade)); }
+        eye.parts.forEach(part=>parts.push(part));
+        if(sort !== "collection-order"){ parts.push("sort=" + encodeURIComponent(sort)); }
+        return {
+            state:Object.assign({media:"movie",genres,language,year,decade,sort},eye.eye),
+            search:parts.length ? "?" + parts.join("&") : ""
+        };
+    }
 
     function buildParsedRoute(type,path,search="",params={}){
         const canonicalRoute = path + search;
@@ -261,7 +306,8 @@
         const collectionMatch = path.match(/^\/app\/collection\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
         if(collectionMatch){
             const collection = parseRouteIdSlug(collectionMatch[1]);
-            return buildParsedRoute("collection",path,"",{id:collection.id,slug:collection.slug});
+            const filters = canonicalCollectionDetailSearch(search);
+            return buildParsedRoute("collection",path,filters.search,{id:collection.id,slug:collection.slug,filters:filters.state});
         }
 
         const personMatch = path.match(/^\/app\/person\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -427,8 +473,11 @@
             return "/app/list/watching";
         }
         if(activePage === "collection-detail" && typeof selectedCollectionId !== "undefined" && selectedCollectionId){
+            const collectionName = typeof collectionDetailPageState !== "undefined" && collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection.name : "";
+            if(typeof getCollectionDetailRouteWithFilters === "function"){
+                return getCollectionDetailRouteWithFilters(selectedCollectionId,collectionName,collectionDetailPageState && collectionDetailPageState.filters || {});
+            }
             if(typeof getCollectionDetailRoute === "function"){
-                const collectionName = typeof collectionDetailPageState !== "undefined" && collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection.name : "";
                 return getCollectionDetailRoute(selectedCollectionId,collectionName);
             }
             return "/app/collections";
@@ -756,7 +805,7 @@
         }
         if(parsed.type === "collection"){
             selectedCollectionId = params.id;
-            collectionDetailPageState = Object.assign({},collectionDetailPageState,{collectionId:params.id,routeSlug:params.slug,loading:true,error:"",collection:null,movies:[]});
+            collectionDetailPageState = Object.assign({},collectionDetailPageState,{collectionId:params.id,routeSlug:params.slug,loading:true,error:"",collection:null,movies:[],filters:params.filters || {}});
             if(typeof showCollectionDetailPageShell === "function"){
                 showCollectionDetailPageShell("discover");
             }
@@ -997,7 +1046,7 @@
         }
         if(parsed.type === "collection"){
             if(typeof openCollectionDetailPage === "function"){
-                openCollectionDetailPage(params.id,{fromRoute:true,routeSlug:params.slug});
+                openCollectionDetailPage(params.id,{fromRoute:true,routeSlug:params.slug,filters:params.filters || {}});
             }
             return;
         }
