@@ -1076,6 +1076,97 @@
         @apply tw-font-bold tw-text-tt-gold;
     }
 
+    .collection-card{
+        @apply tw-block tw-no-underline tw-text-left tw-font-sans tw-text-white tw-transition;
+    }
+
+    .collection-card:hover,
+    .collection-card:focus-visible{
+        @apply tw-translate-y-[-2px] tw-outline-none;
+    }
+
+    .discover-collection-card{
+        @apply tw-w-[210px] tw-flex-[0_0_210px] tw-snap-start tw-overflow-hidden tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-3;
+    }
+
+    .discover-collection-card:hover,
+    .discover-collection-card:focus-visible{
+        @apply tw-border-[#444] tw-bg-tt-control;
+    }
+
+    .collection-poster-stack{
+        @apply tw-relative tw-h-[168px] tw-w-full;
+    }
+
+    .collection-stack-poster{
+        @apply tw-absolute tw-top-0 tw-h-full tw-w-[112px] tw-overflow-hidden tw-rounded-[4px] tw-border tw-border-solid tw-border-black tw-bg-tt-control;
+        aspect-ratio:2 / 3;
+        box-shadow:0 12px 24px rgba(0,0,0,.45);
+    }
+
+    .collection-stack-poster-1{
+        @apply tw-left-0 tw-z-[3];
+    }
+
+    .collection-stack-poster-2{
+        @apply tw-left-[48px] tw-z-[2];
+    }
+
+    .collection-stack-poster-3{
+        @apply tw-left-[96px] tw-z-[1];
+    }
+
+    .collection-poster-count-1 .collection-stack-poster-1{
+        @apply tw-left-1/2 tw-translate-x-[-50%];
+    }
+
+    .collection-poster-count-2 .collection-stack-poster-1{
+        @apply tw-left-[24px];
+    }
+
+    .collection-poster-count-2 .collection-stack-poster-2{
+        @apply tw-left-[72px];
+    }
+
+    .collection-stack-poster img{
+        @apply tw-block tw-h-full tw-w-full tw-object-cover;
+        pointer-events:none;
+        user-select:none;
+        -webkit-user-drag:none;
+    }
+
+    .collection-stack-poster span{
+        @apply tw-flex tw-h-full tw-w-full tw-items-center tw-justify-center tw-font-league tw-text-[30px] tw-text-tt-dim;
+    }
+
+    .collection-card-title{
+        @apply tw-mt-3 tw-overflow-hidden tw-text-ellipsis tw-whitespace-nowrap tw-text-sm tw-font-bold tw-leading-tight;
+    }
+
+    .collection-card-meta{
+        @apply tw-mt-1 tw-text-xs tw-text-tt-controlText;
+    }
+
+    .collection-grid{
+        @apply tw-grid tw-grid-cols-1 tw-gap-x-5 tw-gap-y-8 sm:tw-grid-cols-2 lg:tw-grid-cols-3 xl:tw-grid-cols-4;
+    }
+
+    .collection-index-card{
+        @apply tw-border tw-border-solid tw-border-tt-line tw-bg-tt-surface tw-p-3;
+    }
+
+    .collection-index-card:hover,
+    .collection-index-card:focus-visible{
+        @apply tw-border-[#444] tw-bg-tt-control;
+    }
+
+    .collection-skeleton-card .collection-stack-poster,
+    .collection-skeleton-card .tt-skeleton-line{
+        background:linear-gradient(90deg,#080808,#141414,#080808);
+        background-size:200% 100%;
+        animation:discoverSkeleton 1.2s ease-in-out infinite;
+    }
+
     .skeleton-card{
         @apply tw-h-[260px];
         background:linear-gradient(90deg,#080808,#141414,#080808);

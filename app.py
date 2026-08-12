@@ -61,6 +61,8 @@ APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/(tv|movie)/({APP_ROUTE_ID_SL
 APP_YEAR_PATH_RE = re.compile(r"^/app/year/(tv|movie)/((?:18|19|20|21)[0-9]{2})$")
 APP_STATUS_PATH_RE = re.compile(r"^/app/status/(returning-series|ended|canceled|in-production)$")
 APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/movie/[a-z0-9]+(?:-[a-z0-9]+)*$")
+APP_COLLECTIONS_PATH_RE = re.compile(r"^/app/collections$")
+APP_COLLECTION_PATH_RE = re.compile(rf"^/app/collection/({APP_ROUTE_ID_SLUG})$")
 APP_BROWSE_PATH_RE = re.compile(r"^/app/browse/(tv|movie)$")
 APP_BROWSE_SORT_MODES = {
     "popularity-desc",
@@ -1864,6 +1866,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
         return candidate
+    if APP_COLLECTIONS_PATH_RE.fullmatch(candidate) or APP_COLLECTION_PATH_RE.fullmatch(candidate):
+        return candidate
     return "/app/list/watching"
 
 
@@ -1887,6 +1891,8 @@ def valid_app_path(value: str | None) -> bool:
         or APP_YEAR_PATH_RE.fullmatch(candidate) is not None
         or APP_STATUS_PATH_RE.fullmatch(candidate) is not None
         or APP_CERTIFICATION_PATH_RE.fullmatch(candidate) is not None
+        or APP_COLLECTIONS_PATH_RE.fullmatch(candidate) is not None
+        or APP_COLLECTION_PATH_RE.fullmatch(candidate) is not None
         or APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate) is not None
     )
 
@@ -2398,6 +2404,26 @@ def create_app() -> Flask:
     def app_certification_page(media_type: str, certification_slug: str):
         requested_path = request.path.rstrip("/")
         if APP_CERTIFICATION_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect_app_path_preserving_query(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/collections", strict_slashes=False)
+    @login_required
+    def app_collections_page():
+        requested_path = request.path.rstrip("/")
+        if APP_COLLECTIONS_PATH_RE.fullmatch(requested_path) is None:
+            abort(404)
+        if request.path != requested_path:
+            return redirect_app_path_preserving_query(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/collection/<collection_key>", strict_slashes=False)
+    @login_required
+    def app_collection_page(collection_key: str):
+        requested_path = request.path.rstrip("/")
+        if APP_COLLECTION_PATH_RE.fullmatch(requested_path) is None:
             abort(404)
         if request.path != requested_path:
             return redirect_app_path_preserving_query(requested_path)

@@ -143,6 +143,8 @@ function getTrackerDocumentTitleLabel(){
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
         "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
         "browse-detail":typeof browsePageState !== "undefined" && browsePageState && browsePageState.media === "movie" ? "Browse Movies" : "Browse TV Shows",
+        "collections-index":"Collections",
+        "collection-detail":typeof collectionDetailPageState !== "undefined" && collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection.name : "Collection",
         "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person",
         "movie-detail":moviePageState && moviePageState.movie && moviePageState.movie.title ? moviePageState.movie.title : "Movie",
         "route-error":"Page Not Found"
@@ -259,6 +261,14 @@ function renderAll(){
         renderActiveMoviePage();
     }
 
+    if(activePage === "collections-index" && typeof renderActiveCollectionsPage === "function"){
+        renderActiveCollectionsPage();
+    }
+
+    if(activePage === "collection-detail" && typeof renderActiveCollectionDetailPage === "function"){
+        renderActiveCollectionDetailPage();
+    }
+
 }
 
 
@@ -314,6 +324,7 @@ function renderDiscoverHub(){
             <div class="discover-page-shell">
                 ${renderDiscoverHubSkeleton("TV Shows")}
                 ${renderDiscoverHubSkeleton("Movies")}
+                ${renderDiscoverHubSkeleton("Collections")}
             </div>
         `;
         return;
@@ -345,6 +356,7 @@ function renderDiscoverHub(){
         <div class="discover-page-shell">
             ${renderDiscoverSectionGroup("TV Shows",tvRows)}
             ${renderDiscoverSectionGroup("Movies",movieRows)}
+            ${renderDiscoverCollectionsSection(state.collections || [])}
             ${renderDiscoverGenreSection(state.genres || [])}
         </div>
     `;
@@ -457,6 +469,61 @@ function renderDiscoverHubSection(section){
                     ${items.map(renderDiscoverHubCard).join("")}
                 </div>
             </div>
+        </section>
+    `;
+}
+
+function renderCollectionPosterStackHTML(collection,placeholderLabel="COLLECTION"){
+    const title = String(collection && (collection.name || collection.title) || "Collection");
+    const posters = Array.isArray(collection && collection.poster_paths) ? collection.poster_paths.filter(Boolean).slice(0,3) : [];
+    if(!posters.length && collection && collection.poster_path){
+        posters.push(collection.poster_path);
+    }
+    const visiblePosters = posters.length ? posters : [""];
+    const slots = visiblePosters.slice(0,3).map((poster,index)=>`
+        <div class="collection-stack-poster collection-stack-poster-${index + 1}">
+            ${poster ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(poster,"w500"))}" alt="${escapeHTML(title + " poster")}">` : `<span>${escapeHTML(placeholderLabel)}</span>`}
+        </div>
+    `);
+    return `<div class="collection-poster-stack collection-poster-count-${visiblePosters.length}" aria-hidden="true">${slots.join("")}</div>`;
+}
+
+function renderCollectionCard(collection,extraClass=""){
+    const id = collection && collection.id ? String(collection.id) : "";
+    const name = String(collection && (collection.name || collection.title) || "Collection").trim();
+    const route = typeof getCollectionDetailRoute === "function" ? getCollectionDetailRoute(id,name) : "";
+    const count = Number(collection && collection.movie_count || (Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
+    const countLabel = count === 1 ? "1 movie" : `${count || 0} movies`;
+    return `
+        <a href="${escapeHTML(route)}" class="collection-card ${escapeHTML(extraClass)}" data-collection-id="${escapeHTML(id)}" data-collection-name="${escapeHTML(name)}">
+            ${renderCollectionPosterStackHTML(collection)}
+            <div class="collection-card-title">${escapeHTML(name)}</div>
+            <div class="collection-card-meta">${escapeHTML(countLabel)}</div>
+        </a>
+    `;
+}
+
+function renderDiscoverCollectionsSection(collections){
+    const cleanCollections = (Array.isArray(collections) ? collections : [])
+    .filter(collection=>collection && collection.id && collection.name)
+    .slice(0,12);
+    if(!cleanCollections.length){
+        return "";
+    }
+    return `
+        <section class="discover-section-group discover-collections-section">
+            <h2 class="discover-group-title">Collections</h2>
+            <section class="discover-section">
+                <div class="discover-section-heading">
+                    <h3>Movie Collections</h3>
+                    <a class="view-more-button discover-view-more-link" href="/app/collections">VIEW MORE</a>
+                </div>
+                <div class="discover-carousel-shell">
+                    <div class="discover-card-row discover-collection-row" data-discover-row="collections">
+                        ${cleanCollections.map(collection=>renderCollectionCard(collection,"discover-collection-card")).join("")}
+                    </div>
+                </div>
+            </section>
         </section>
     `;
 }
@@ -1729,6 +1796,125 @@ function renderDiscoveryFilterDetailPage(state){
 
             ${isBrowseCompatible ? renderBrowseControlsHTML(browseState,browseLabels,{hideSort:hideBrowseSort}) : ""}
 
+            <div class="genre-result-content">
+                ${bodyHTML}
+            </div>
+        </div>
+    `;
+}
+
+function renderCollectionsIndexPage(state){
+    const content = document.getElementById("genre-detail-content");
+    if(!content){
+        return;
+    }
+
+    const pageState = state || {};
+    const collections = Array.isArray(pageState.collections) ? pageState.collections.filter(collection=>collection && collection.id && collection.name) : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+
+    const bodyHTML = error
+    ? `
+        <div class="empty-state genre-detail-empty">
+            <h2>Collections could not load</h2>
+            <p>${escapeHTML(error)}</p>
+        </div>
+    `
+    : collections.length
+    ? `<div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>`
+    : loading
+    ? `<div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>`
+    : `
+        <div class="empty-state genre-detail-empty">
+            <h2>No collections found</h2>
+            <p>Try again later.</p>
+        </div>
+    `;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner collections-page-inner">
+            <div class="genre-detail-header collections-page-header">
+                <button type="button" class="show-page-back-button genre-page-back-button" id="collections-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div>
+                    <h1 class="genre-detail-title">Collections</h1>
+                </div>
+            </div>
+            <div class="genre-result-content">
+                ${bodyHTML}
+            </div>
+        </div>
+    `;
+}
+
+function renderCollectionSkeletonCardHTML(){
+    return `
+        <div class="collection-card collection-skeleton-card" aria-hidden="true">
+            <div class="collection-poster-stack">
+                <div class="collection-stack-poster collection-stack-poster-1"></div>
+                <div class="collection-stack-poster collection-stack-poster-2"></div>
+                <div class="collection-stack-poster collection-stack-poster-3"></div>
+            </div>
+            <div class="tt-skeleton-line tt-skeleton-line-title"></div>
+            <div class="tt-skeleton-line tt-skeleton-line-meta"></div>
+        </div>
+    `;
+}
+
+function renderCollectionDetailPage(state){
+    const content = document.getElementById("genre-detail-content");
+    if(!content){
+        return;
+    }
+
+    const pageState = state || {};
+    const collection = pageState.collection || null;
+    const title = String(collection && collection.name || "Collection").trim() || "Collection";
+    const movies = Array.isArray(pageState.movies) ? pageState.movies : [];
+    const loading = pageState.loading === true;
+    const error = String(pageState.error || "").trim();
+    const movieCount = Number(collection && collection.movie_count || movies.length || 0);
+    const movieCountLabel = movieCount === 1 ? "1 movie" : `${movieCount || 0} movies`;
+
+    const bodyHTML = error
+    ? `
+        <div class="empty-state genre-detail-empty">
+            <h2>Collection could not load</h2>
+            <p>${escapeHTML(error)}</p>
+        </div>
+    `
+    : movies.length
+    ? `
+        <div class="genre-result-summary">${escapeHTML(movieCountLabel)}</div>
+        <div class="genre-tight-grid collection-movie-grid">
+            ${movies.map(movie=>renderGenrePosterGridCard(movie).replace('class="genre-result-card','class="genre-result-card collection-movie-card')).join("")}
+        </div>
+    `
+    : loading
+    ? `
+        <div class="genre-tight-grid genre-tight-grid-loading">
+            ${renderTrackerPosterSkeletonCards(12)}
+        </div>
+    `
+    : `
+        <div class="empty-state genre-detail-empty">
+            <h2>No movies found</h2>
+            <p>This collection has no movies available right now.</p>
+        </div>
+    `;
+
+    content.innerHTML = `
+        <div class="genre-detail-page-inner collection-detail-page-inner">
+            <div class="genre-detail-header collection-detail-header">
+                <button type="button" class="show-page-back-button genre-page-back-button" id="collection-detail-page-back-button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div>
+                    <h1 class="genre-detail-title">${escapeHTML(title)}</h1>
+                </div>
+            </div>
             <div class="genre-result-content">
                 ${bodyHTML}
             </div>

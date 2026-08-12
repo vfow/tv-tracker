@@ -35,8 +35,11 @@ function createRouter(route, options={}){
     selectedDiscoveryContext:null,
     selectedPersonContext:null,
     selectedMovieId:null,
+    selectedCollectionId:null,
     searchRouteState:{query:'',media:'tv'},
     moviePageState:{movieId:'',routeSlug:'',loading:false,error:'',movie:null},
+    collectionDetailPageState:{collectionId:'',routeSlug:'',loading:false,error:'',collection:null,movies:[]},
+    collectionsPageState:{loaded:false,loading:false,error:'',collections:[]},
     personPageState:{role:'',personId:'',media:'tv',loading:false,error:'',person:null,credits:[]},
     genrePageState:{media:'tv',slug:'',name:'',genreId:null,year:'',sort:'popularity.desc',page:1,totalPages:1,loading:false,error:'',shows:[]},
     discoveryPageState:{type:'',value:'',name:'',media:'tv',routeSlug:'',year:'',sort:'popularity.desc',browse:null,browseLabels:null,page:1,totalPages:1,loading:false,error:'',shows:[]},
@@ -63,6 +66,7 @@ function createRouter(route, options={}){
       return '/app/search?' + parts.join('&');
     },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
+    getCollectionDetailRoute(id,name=''){ return name ? `/app/collection/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/collection/${id}`; },
     getGenreDetailRoute(id,name='',media='tv'){ const slug=String(name||'genre').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); return `/app/genre/${media === 'movie' ? 'movie' : 'tv'}/${id}-${slug}`; },
     getKnownShowRouteLabel(){ return ''; },
     getEpisodeDetailRoute(id,season,episode,name=''){ return name ? `/app/show/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}/season/${season}/episode/${episode}` : `/app/show/${id}/season/${season}/episode/${episode}`; },
@@ -87,6 +91,8 @@ function createRouter(route, options={}){
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
     openShowDetailsPage(id,options){ calls.push(['openShowDetailsPage',id,options]); },
     openMoviePage(id,options){ calls.push(['openMoviePage',id,options]); },
+    openCollectionsPage(options){ calls.push(['openCollectionsPage',options]); },
+    openCollectionDetailPage(id,options){ calls.push(['openCollectionDetailPage',id,options]); },
     openEpisodeModal(id,season,episode,options){ calls.push(['openEpisodeModal',id,season,episode,options]); },
     openGenrePage(slug,options){ calls.push(['openGenrePage',slug,options]); },
     openDiscoveryFilterPage(type,value,options){ calls.push(['openDiscoveryFilterPage',type,value,options]); },
@@ -98,6 +104,10 @@ function createRouter(route, options={}){
     renderShowDetailLoading(id){ calls.push(['renderShowDetailLoading',id]); },
     showMovieDetailPageShell(ctx){ context.activePage='movie-detail'; calls.push(['showMovieDetailPageShell',ctx]); },
     renderMovieDetailLoading(){ calls.push(['renderMovieDetailLoading']); },
+    showCollectionsPageShell(ctx){ context.activePage='collections-index'; calls.push(['showCollectionsPageShell',ctx]); },
+    renderActiveCollectionsPage(){ calls.push(['renderActiveCollectionsPage']); },
+    showCollectionDetailPageShell(ctx){ context.activePage='collection-detail'; calls.push(['showCollectionDetailPageShell',ctx]); },
+    renderActiveCollectionDetailPage(){ calls.push(['renderActiveCollectionDetailPage']); },
     showEpisodeDetailPageShell(ctx){ context.activePage='episode-detail'; calls.push(['showEpisodeDetailPageShell',ctx]); },
     renderEpisodeDetailLoading(id,season,episode){ calls.push(['renderEpisodeDetailLoading',id,season,episode]); },
     showPersonDetailPageShell(ctx){ context.activePage='person-detail'; calls.push(['showPersonDetailPageShell',ctx]); },
@@ -713,6 +723,24 @@ for (const route of [
   assert.strictEqual(context.activePage,'browse-detail');
   assert(calls.some(item=>item[0]==='showBrowsePageShell'),'startup should immediately render the correct Browse shell');
   assert.strictEqual(context.browsePageState.filters.sort,'rating-desc');
+}
+
+{
+  const {calls,router}=createRouter('/app/collections');
+  assert.strictEqual(router.currentRoute(),'/app/collections');
+  const call=calls.find(item=>item[0]==='openCollectionsPage');
+  assert(call,'collections route should open collections page');
+  assert.strictEqual(call[1].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/collection/1241-harry-potter-collection');
+  assert.strictEqual(router.currentRoute(),'/app/collection/1241-harry-potter-collection');
+  const call=calls.find(item=>item[0]==='openCollectionDetailPage');
+  assert(call,'collection detail route should open collection detail page');
+  assert.strictEqual(call[1],'1241');
+  assert.strictEqual(call[2].fromRoute,true);
+  assert.strictEqual(call[2].routeSlug,'harry-potter-collection');
 }
 
 console.log('Real-path router runtime checks passed');

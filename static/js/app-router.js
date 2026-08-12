@@ -182,6 +182,9 @@
         if(path === "/app/discover"){
             return buildParsedRoute("discover",path,"",{});
         }
+        if(path === "/app/collections"){
+            return buildParsedRoute("collections",path,"",{});
+        }
         const browseMatch = path.match(/^\/app\/browse\/(tv|movie)$/);
         if(browseMatch){
             const browse = canonicalBrowseSearch(search,browseMatch[1]);
@@ -222,6 +225,12 @@
         if(movieMatch){
             const movie = parseRouteIdSlug(movieMatch[1]);
             return buildParsedRoute("movie",path,"",{id:movie.id,slug:movie.slug});
+        }
+
+        const collectionMatch = path.match(/^\/app\/collection\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+        if(collectionMatch){
+            const collection = parseRouteIdSlug(collectionMatch[1]);
+            return buildParsedRoute("collection",path,"",{id:collection.id,slug:collection.slug});
         }
 
         const personMatch = path.match(/^\/app\/person\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -385,6 +394,16 @@
                 return getMovieDetailRoute(selectedMovieId,movieName);
             }
             return "/app/list/watching";
+        }
+        if(activePage === "collection-detail" && typeof selectedCollectionId !== "undefined" && selectedCollectionId){
+            if(typeof getCollectionDetailRoute === "function"){
+                const collectionName = typeof collectionDetailPageState !== "undefined" && collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection.name : "";
+                return getCollectionDetailRoute(selectedCollectionId,collectionName);
+            }
+            return "/app/collections";
+        }
+        if(activePage === "collections-index"){
+            return "/app/collections";
         }
         if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.personId){
             if(typeof getPersonDetailRoute === "function"){
@@ -704,6 +723,17 @@
             }
             return;
         }
+        if(parsed.type === "collection"){
+            selectedCollectionId = params.id;
+            collectionDetailPageState = Object.assign({},collectionDetailPageState,{collectionId:params.id,routeSlug:params.slug,loading:true,error:"",collection:null,movies:[]});
+            if(typeof showCollectionDetailPageShell === "function"){
+                showCollectionDetailPageShell("discover");
+            }
+            if(typeof renderActiveCollectionDetailPage === "function"){
+                renderActiveCollectionDetailPage();
+            }
+            return;
+        }
         if(parsed.type === "episode"){
             selectedShowId = params.showId;
             selectedEpisodeContext = {showId:params.showId,season:params.season,episode:params.episode,backToShow:true,discoverPreview:false};
@@ -793,6 +823,18 @@
                 updateShellTitle();
             }
         }
+        if(parsed.type === "collections"){
+            activePage = "collections-index";
+            if(typeof showCollectionsPageShell === "function"){
+                showCollectionsPageShell("discover");
+            }
+            if(typeof renderActiveCollectionsPage === "function"){
+                renderActiveCollectionsPage();
+            }
+            if(typeof updateShellTitle === "function"){
+                updateShellTitle();
+            }
+        }
     }
 
     function activateListRoute(listSlug,options={}){
@@ -854,6 +896,9 @@
         if(typeof selectedMovieId !== "undefined"){
             selectedMovieId = null;
         }
+        if(typeof selectedCollectionId !== "undefined"){
+            selectedCollectionId = null;
+        }
         if(typeof selectedGenreSlug !== "undefined"){
             selectedGenreSlug = null;
         }
@@ -913,6 +958,21 @@
         if(parsed.type === "movie"){
             if(typeof openMoviePage === "function"){
                 openMoviePage(params.id,{fromRoute:true,routeSlug:params.slug});
+            }
+            return;
+        }
+        if(parsed.type === "collection"){
+            if(typeof openCollectionDetailPage === "function"){
+                openCollectionDetailPage(params.id,{fromRoute:true,routeSlug:params.slug});
+            }
+            return;
+        }
+        if(parsed.type === "collections"){
+            clearDetailState();
+            if(typeof openCollectionsPage === "function"){
+                openCollectionsPage({fromRoute:true});
+            }else{
+                showPage("discover");
             }
             return;
         }
