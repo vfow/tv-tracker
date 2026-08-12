@@ -514,11 +514,11 @@ function renderDiscoverCollectionsSection(collections){
     }
     return `
         <section class="discover-section-group discover-collections-section">
-            <h2 class="discover-group-title">Collections</h2>
+            <div class="discover-section-heading discover-collections-heading">
+                <h2 class="discover-group-title">Collections</h2>
+                <a class="view-more-button discover-view-more-link" href="/app/collections">VIEW MORE</a>
+            </div>
             <section class="discover-section">
-                <div class="discover-section-heading discover-collections-heading">
-                    <a class="view-more-button discover-view-more-link" href="/app/collections">VIEW MORE</a>
-                </div>
                 <div class="discover-carousel-shell">
                     <div class="discover-card-row discover-collection-row" data-discover-row="collections">
                         ${cleanCollections.map(collection=>renderCollectionCard(collection,"discover-collection-card")).join("")}
@@ -792,11 +792,13 @@ function renderSearchResults(resultsList){
     const visibleItems = filteredItems.slice(0,visibleLimit);
     const labels = {tv:"TV Shows",movie:"Movies",person:"People"};
 
+    const searchEyeControlHTML = media !== "person" && query ? renderEyeFilterControlHTML(state,"search-eye-filter-menu") : "";
     const tabsHTML = `
         <div class="search-tab-row" role="tablist" aria-label="Search result type">
             ${renderSearchTabButtonHTML("tv","TV Shows",media === "tv")}
             ${renderSearchTabButtonHTML("movie","Movies",media === "movie")}
             ${renderSearchTabButtonHTML("person","People",media === "person")}
+            ${searchEyeControlHTML}
         </div>
     `;
 
@@ -824,12 +826,9 @@ function renderSearchResults(resultsList){
     `;
 
     const canLoadMore = query && (visibleItems.length < filteredItems.length || Number(state.page || 1) < Number(state.totalPages || 1));
-    const searchEyeHTML = media !== "person" && query ? `<div class="search-eye-row">${renderEyeFilterControlHTML(state,"search-eye-filter-menu")}</div>` : "";
-
     results.innerHTML = `
         <div class="search-page-shell ${activePage === "discover" ? "discover-live-search-shell" : ""}">
             ${tabsHTML}
-            ${searchEyeHTML}
             <div class="search-results-body">
                 ${bodyHTML}
             </div>
@@ -1899,12 +1898,12 @@ function renderCollectionIndexControlsHTML(state){
             <div class="browse-bar collections-browse-bar" aria-label="Collection filters">
                 <span class="browse-bar-kicker">BROWSE BY</span>
                 <details class="browse-menu">
-                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown">${renderCollectionIndexGenreMenu(state)}</div>
-                </details>
-                <details class="browse-menu">
                     <summary class="browse-bar-button">DECADE ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown">${renderCollectionIndexDecadeMenu(state)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown">${renderCollectionIndexGenreMenu(state)}</div>
                 </details>
                 <details class="browse-menu browse-menu-sort">
                     <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
@@ -1916,17 +1915,15 @@ function renderCollectionIndexControlsHTML(state){
     `;
 }
 
-function renderCollectionsPaginationHTML(state){
-    const page = Number(state && state.page || 1);
-    const totalPages = Number(state && state.totalPages || 1);
-    if(totalPages <= 1){
+function renderCollectionsViewMoreHTML(state){
+    const visibleCount = Array.isArray(state && state.visibleCollections) ? state.visibleCollections.length : 0;
+    const totalResults = Number(state && state.totalResults || visibleCount || 0);
+    if(!totalResults || visibleCount >= totalResults){
         return "";
     }
     return `
-        <div class="collections-pagination" aria-label="Collections pagination">
-            <button type="button" class="view-more-button collections-pagination-button" data-collection-page="${Math.max(1,page - 1)}" ${page <= 1 ? "disabled" : ""}>PREVIOUS</button>
-            <span class="collections-pagination-status">Page ${escapeHTML(String(page))} of ${escapeHTML(String(totalPages))}</span>
-            <button type="button" class="view-more-button collections-pagination-button" data-collection-page="${Math.min(totalPages,page + 1)}" ${page >= totalPages ? "disabled" : ""}>NEXT</button>
+        <div class="collections-view-more-row">
+            <button type="button" class="view-more-button collections-view-more-button" data-collection-view-more>VIEW MORE</button>
         </div>
     `;
 }
@@ -1954,7 +1951,7 @@ function renderCollectionsIndexPage(state){
         </div>
     `
     : collections.length
-    ? `<div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsPaginationHTML(pageState)}`
+    ? `<div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsViewMoreHTML(pageState)}`
     : loading || building
     ? `
         <div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>

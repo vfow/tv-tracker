@@ -4336,13 +4336,13 @@ function buildCollectionsIndexState(collections,state){
     const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(promotableCollections,filters),filters.sort);
     const totalPages = Math.max(1,Math.ceil(filtered.length / COLLECTIONS_PAGE_SIZE));
     const page = Math.min(filters.page,totalPages);
-    const start = (page - 1) * COLLECTIONS_PAGE_SIZE;
+    const visibleLimit = page * COLLECTIONS_PAGE_SIZE;
     return Object.assign({},filters,{
         page,
         totalPages,
         totalResults:filtered.length,
         filteredCollections:filtered,
-        visibleCollections:filtered.slice(start,start + COLLECTIONS_PAGE_SIZE),
+        visibleCollections:filtered.slice(0,visibleLimit),
         availableGenres:options.genres,
         availableDecades:options.decades
     });
@@ -5061,12 +5061,10 @@ function attachCollectionsPageEvents(){
         });
     });
 
-    document.querySelectorAll("[data-collection-page]").forEach(button=>{
+    document.querySelectorAll("[data-collection-view-more]").forEach(button=>{
         button.addEventListener("click",function(){
-            const page = Math.max(1,Math.floor(Number(button.dataset.collectionPage || 1)));
-            applyCollectionsIndexState({page});
-            const pageElement = document.getElementById("genre-detail-page");
-            if(pageElement){ pageElement.scrollTop = 0; }
+            const currentPage = Math.max(1,Math.floor(Number(collectionsPageState && collectionsPageState.page || 1)));
+            applyCollectionsIndexState({page:currentPage + 1});
         });
     });
 }

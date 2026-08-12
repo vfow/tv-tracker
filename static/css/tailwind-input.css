@@ -1160,20 +1160,12 @@
         animation:discoverSkeleton 1.2s ease-in-out infinite;
     }
 
-    .collections-pagination{
-        @apply tw-mt-8 tw-flex tw-items-center tw-justify-center tw-gap-4;
+    .collections-view-more-row{
+        @apply tw-mt-8 tw-flex tw-justify-center;
     }
 
-    .collections-pagination-button{
+    .collections-view-more-button{
         @apply tw-m-0;
-    }
-
-    .collections-pagination-button:disabled{
-        @apply tw-cursor-not-allowed tw-opacity-40;
-    }
-
-    .collections-pagination-status{
-        @apply tw-text-xs tw-font-semibold tw-uppercase tw-tracking-[.12em] tw-text-tt-controlText;
     }
 
     .skeleton-card{
@@ -4833,6 +4825,11 @@
         @apply tw-m-0 tw-inline-flex tw-shrink-0 tw-items-center tw-px-4 tw-py-2 tw-text-[22px] tw-no-underline;
     }
 
+    .discover-collections-heading .discover-group-title{
+        @apply tw-mb-0;
+    }
+
+
     .discover-card-row{
         @apply tw-flex tw-w-full tw-min-w-0 tw-max-w-full tw-gap-4 tw-overflow-x-auto tw-overflow-y-hidden tw-pb-2 tw-scroll-smooth tw-snap-x tw-snap-proximity;
         scrollbar-width:none;
@@ -4945,6 +4942,14 @@
     .search-tab-button:focus-visible,
     .search-tab-button.active{
         @apply tw-border-white tw-bg-white tw-text-black;
+    }
+
+    .search-tab-row .eye-filter-menu{
+        @apply tw-shrink-0;
+    }
+
+    .search-tab-row .eye-filter-menu .browse-bar-button{
+        @apply tw-min-h-[42px];
     }
 
     .search-tight-grid{
