@@ -1624,42 +1624,64 @@
 }
 .person-progress-card{
     margin-top:14px;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:14px;
-    background:linear-gradient(135deg,rgba(255,255,255,.045),rgba(0,0,0,.66)),#0c0c0c;
-    padding:14px 12px 12px;
-    box-shadow:0 14px 28px rgba(0,0,0,.34);
+    width:100%;
+    border:1px solid #333;
+    border-radius:0;
+    background:#111;
+    padding:10px 12px 0;
 }
-.person-progress-line{
+.person-progress-content{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    gap:14px;
-    color:#f2f2f2;
-    font:800 13px/1.15 Graphik,Arial,Helvetica,sans-serif;
+    gap:18px;
+    min-height:38px;
 }
-.person-progress-line span{
+.person-progress-copy{
     min-width:0;
+    color:#aeb9c9;
+    font:400 13px/1.25 Graphik,Arial,Helvetica,sans-serif;
 }
-.person-progress-line strong{
+.person-progress-copy span,
+.person-progress-copy strong{
+    display:block;
+}
+.person-progress-copy strong{
+    margin-top:1px;
+    color:#aeb9c9;
+    font-weight:400;
+}
+.person-progress-percent{
     flex:0 0 auto;
-    color:#fff;
-    font-size:20px;
+    display:flex;
+    align-items:flex-start;
+    gap:2px;
+    color:#aeb9c9;
     line-height:1;
-    letter-spacing:-.03em;
+}
+.person-progress-percent strong{
+    font-weight:300;
+    font-size:36px;
+    letter-spacing:-.04em;
+    line-height:.95;
+}
+.person-progress-percent span{
+    padding-top:3px;
+    font-size:13px;
+    line-height:1;
 }
 .person-progress-track{
     height:4px;
-    margin-top:10px;
+    margin:9px -12px 0;
     overflow:hidden;
-    border-radius:999px;
-    background:rgba(255,255,255,.15);
+    border-radius:0;
+    background:#2f3840;
 }
 .person-progress-fill{
     height:100%;
     min-width:7px;
-    border-radius:inherit;
-    background:rgba(255,255,255,.82);
+    border-radius:0;
+    background:#38bdf8;
 }
 .person-progress-fill[style*="width:0%"]{
     min-width:0;
@@ -1668,9 +1690,6 @@
     .eye-filter-dropdown{
         right:auto;
         left:-1px;
-    }
-    .person-progress-card{
-        max-width:280px;
     }
 }
 .search-eye-row .eye-filter-menu{

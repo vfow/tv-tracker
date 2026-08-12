@@ -933,9 +933,14 @@ function renderPersonProgressCardHTML(){
     const percent = Math.max(0,Math.min(100,Number(progress && progress.percent || 0)));
     return `
         <div class="person-progress-card" aria-label="Watched progress">
-            <div class="person-progress-line">
-                <span>You've watched ${escapeHTML(String(watched))} of ${escapeHTML(String(total))} —</span>
-                <strong>${escapeHTML(String(percent))}%</strong>
+            <div class="person-progress-content">
+                <div class="person-progress-copy">
+                    <span>You've watched</span>
+                    <strong>${escapeHTML(String(watched))} of ${escapeHTML(String(total))}</strong>
+                </div>
+                <div class="person-progress-percent" aria-label="${escapeHTML(String(percent))} percent watched">
+                    <strong>${escapeHTML(String(percent))}</strong><span>%</span>
+                </div>
             </div>
             <div class="person-progress-track" aria-hidden="true">
                 <div class="person-progress-fill" style="width:${escapeHTML(String(percent))}%"></div>
