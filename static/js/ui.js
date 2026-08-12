@@ -1941,6 +1941,7 @@ function renderCollectionsIndexPage(state){
     const renderCollections = hasPagedCollections ? pageState.visibleCollections : pageState.collections;
     const collections = Array.isArray(renderCollections) ? renderCollections.filter(collection=>collection && collection.id && collection.name) : [];
     const loading = pageState.loading === true;
+    const building = pageState.building === true;
     const error = String(pageState.error || "").trim();
     const hasFilters = !!(pageState.genre || pageState.decade || String(pageState.sort || "name.asc") !== "name.asc");
     const totalResults = Number(pageState.totalResults || collections.length || 0);
@@ -1955,8 +1956,11 @@ function renderCollectionsIndexPage(state){
     `
     : collections.length
     ? `<div class="genre-result-summary collections-result-summary">${escapeHTML(countLabel)}</div><div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsPaginationHTML(pageState)}`
-    : loading
-    ? `<div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>`
+    : loading || building
+    ? `
+        <div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>
+        <div class="v2-api-empty genre-loading-note">Collections are loading. Please refresh in a moment.</div>
+    `
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No collections found</h2>

@@ -997,6 +997,30 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function canonicalCollectionDetailSearch(search)', router)
         self.assertIn('filters:filters.state', router)
 
+    def test_phase66d_tmdb_collection_export_cache_exists(self):
+        app_py = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+
+        self.assertIn('TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60', app_py)
+        self.assertIn('TMDB_COLLECTION_INDEX_CACHE_FILE = "tmdb_collection_index.json"', app_py)
+        self.assertIn('def fetch_tmdb_collection_export(export_date: date)', app_py)
+        self.assertIn('collection_ids_{export_date:%m_%d_%Y}.json.gz', app_py)
+        self.assertIn('def build_tmdb_collection_index_batch()', app_py)
+        self.assertIn('@app.get("/api/tmdb/collections")', app_py)
+        self.assertIn('@app.get("/api/tmdb/collections/<int:collection_id>")', app_py)
+        self.assertIn('if collections:', app_py)
+
+        self.assertNotIn('DISCOVER_COLLECTION_IDS = Object.freeze', app_js)
+        self.assertIn('async function tmdbGetCollectionIndex(options={})', app_js)
+        self.assertIn('fetch("/api/tmdb/collections"', app_js)
+        self.assertIn('fetch("/api/tmdb/collections/" + encodeURIComponent(id)', app_js)
+        self.assertIn('scheduleCollectionIndexPoll()', app_js)
+        self.assertIn('sortCollectionsForIndex(payload.collections,"popularity.desc")', app_js)
+        self.assertIn('payload.building === true', app_js)
+        self.assertIn('Collections are loading. Please refresh in a moment.', ui)
+
+
 
 
     def test_trailing_slash_redirects_preserve_query_strings(self):
