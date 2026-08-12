@@ -362,6 +362,9 @@ function renderDiscoverHub(){
     `;
 
     attachDiscoverHubEvents();
+    if(typeof restoreCollectionReturnPositionSoon === "function"){
+        restoreCollectionReturnPositionSoon("/app/discover");
+    }
 }
 
 function renderTrackerPosterSkeletonCards(count=12){
@@ -502,6 +505,50 @@ function normalizeCollectionPosterSlotForRender(raw,collection){
     };
 }
 
+function getCollectionStackSlotSortYear(slot){
+    const year = Number(getCollectionPosterSlotYear(slot) || 0);
+    return year > 0 ? year : 9999;
+}
+
+function collectionStackSlotHasPoster(slot){
+    return !!String(slot && slot.poster_path || "").trim();
+}
+
+function orderCollectionPosterSlotsForStack(slots){
+    const cleanSlots = (Array.isArray(slots) ? slots : []).slice(0,3);
+    if(cleanSlots.length <= 1){
+        return cleanSlots;
+    }
+
+    const ranked = cleanSlots.map((slot,index)=>({slot,index,year:getCollectionStackSlotSortYear(slot),hasPoster:collectionStackSlotHasPoster(slot)}));
+    const posterCandidates = ranked.filter(item=>item.hasPoster);
+    const frontItem = (posterCandidates.length ? posterCandidates : ranked)
+    .slice()
+    .sort((a,b)=>{
+        if(a.year !== b.year){ return a.year - b.year; }
+        return a.index - b.index;
+    })[0];
+
+    if(!frontItem){
+        return cleanSlots;
+    }
+
+    const front = frontItem.slot;
+    const behind = ranked
+    .filter(item=>item.index !== frontItem.index)
+    .sort((a,b)=>{
+        if(a.hasPoster !== b.hasPoster){ return a.hasPoster ? -1 : 1; }
+        return a.index - b.index;
+    })
+    .map(item=>item.slot);
+
+    if(cleanSlots.length === 2){
+        return [front,behind[0]].filter(Boolean);
+    }
+
+    return [behind[0],front,behind[1]].filter(Boolean);
+}
+
 function getCollectionPosterSlotsForRender(collection){
     const buildSlots = source=>{
         const output = [];
@@ -516,30 +563,29 @@ function getCollectionPosterSlotsForRender(collection){
     const partSlots = buildSlots(collection && collection.parts);
     const posterSlots = buildSlots(collection && collection.poster_slots);
     const targetCount = Math.min(3,Math.max(0,Number(collection && collection.movie_count || 0),Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
+    let slots = [];
 
     if(partSlots.length && partSlots.length >= Math.min(targetCount || partSlots.length,3)){
-        return partSlots.slice(0,3);
-    }
-
-    if(posterSlots.length && (!partSlots.length || posterSlots.length >= partSlots.length)){
-        return posterSlots.slice(0,3);
-    }
-
-    if(partSlots.length){
-        return partSlots.slice(0,3);
-    }
-
-    const pathSlots = [];
-    if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
-        collection.poster_paths.slice(0,3).forEach(path=>{
-            const slot = normalizeCollectionPosterSlotForRender({poster_path:path,title:collection && (collection.name || collection.title) || "Collection"},collection);
+        slots = partSlots.slice(0,3);
+    }else if(posterSlots.length && (!partSlots.length || posterSlots.length >= partSlots.length)){
+        slots = posterSlots.slice(0,3);
+    }else if(partSlots.length){
+        slots = partSlots.slice(0,3);
+    }else{
+        const pathSlots = [];
+        if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
+            collection.poster_paths.slice(0,3).forEach(path=>{
+                const slot = normalizeCollectionPosterSlotForRender({poster_path:path,title:collection && (collection.name || collection.title) || "Collection"},collection);
+                if(slot){ pathSlots.push(slot); }
+            });
+        }else if(collection && collection.poster_path){
+            const slot = normalizeCollectionPosterSlotForRender({poster_path:collection.poster_path,title:collection.name || collection.title || "Collection"},collection);
             if(slot){ pathSlots.push(slot); }
-        });
-    }else if(collection && collection.poster_path){
-        const slot = normalizeCollectionPosterSlotForRender({poster_path:collection.poster_path,title:collection.name || collection.title || "Collection"},collection);
-        if(slot){ pathSlots.push(slot); }
+        }
+        slots = pathSlots.slice(0,3);
     }
-    return pathSlots.slice(0,3);
+
+    return orderCollectionPosterSlotsForStack(slots);
 }
 
 function renderCollectionPosterStackHTML(collection){
@@ -552,7 +598,7 @@ function renderCollectionPosterStackHTML(collection){
         const label = year ? `${labelTitle} (${year})` : labelTitle;
         return `
             <div class="collection-stack-poster collection-stack-poster-${index + 1} ${slot.poster_path ? "" : "collection-stack-placeholder"}" title="${escapeHTML(label)}">
-                ${slot.poster_path ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(slot.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">` : `<span>${escapeHTML(label)}</span>`}
+                ${slot.poster_path ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(slot.poster_path,"w500"))}" alt="${escapeHTML(title + " poster")}">` : ""}
             </div>
         `;
     });

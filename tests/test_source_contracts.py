@@ -1067,8 +1067,22 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
         self.assertIn('if(!chips.length){ return ""; }', ui)
         self.assertNotIn('if(!chips.length && !eyeActive){ return ""; }', ui)
-        self.assertIn('.collection-detail-controls .browse-menu > .browse-bar-button', source_css)
-        self.assertIn('.collection-detail-controls .browse-menu > .browse-bar-button', built_css)
+        self.assertNotIn('.collection-detail-controls .browse-menu > .browse-bar-button', source_css)
+        self.assertNotIn('.collection-detail-controls .browse-menu > .browse-bar-button', built_css)
+
+    def test_phase66h_collection_stack_order_and_back_position_exists(self):
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+
+        self.assertIn('function orderCollectionPosterSlotsForStack(slots)', ui)
+        self.assertIn('return [behind[0],front,behind[1]].filter(Boolean);', ui)
+        self.assertIn('collection-stack-placeholder', ui)
+        self.assertIn('slot.poster_path ? `<img loading="lazy"', ui)
+        self.assertIn('const COLLECTION_RETURN_POSITION_KEY', app_js)
+        self.assertIn('function saveCollectionReturnPosition()', app_js)
+        self.assertIn('function restoreCollectionReturnPositionSoon(route="",attempt=0)', app_js)
+        self.assertIn('document.addEventListener("click",handleCollectionReturnPositionClick,true);', app_js)
+        self.assertIn('restoreCollectionReturnPositionSoon(getCollectionsRoute(collectionsPageState));', app_js)
 
 
 

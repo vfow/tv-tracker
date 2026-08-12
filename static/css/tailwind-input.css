@@ -5903,30 +5903,6 @@
 .browse-menu[open] > summary .browse-chevron-down{
     transform:rotate(180deg);
 }
-.collection-detail-controls .browse-menu > .browse-bar-button,
-.collections-controls .browse-menu > .browse-bar-button{
-    justify-content:space-between;
-    gap:10px;
-}
-
-.collection-detail-controls .browse-bar-button .browse-chevron,
-.collections-controls .browse-bar-button .browse-chevron{
-    margin-left:4px;
-}
-
-.collection-detail-controls .browse-menu > .browse-bar-button{
-    min-width:86px;
-}
-
-.collection-detail-controls .browse-menu-year > .browse-bar-button,
-.collection-detail-controls .browse-menu-sort > .browse-bar-button{
-    min-width:92px;
-}
-
-.collections-controls .browse-menu > .browse-bar-button{
-    min-width:94px;
-}
-
 .browse-chevron-right{
     width:8px;
     height:6px;

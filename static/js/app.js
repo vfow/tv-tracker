@@ -177,6 +177,7 @@ const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
 const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v5";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
+const COLLECTION_RETURN_POSITION_KEY = "tv-tracker-collection-return-position:v1";
 const DISCOVER_COLLECTION_IDS = Object.freeze([
     10,
     1241,
@@ -4969,6 +4970,126 @@ async function loadDiscoverHub(force=false){
     }
 }
 
+
+function readCollectionReturnPositionMap(){
+    try{
+        const raw = sessionStorage.getItem(COLLECTION_RETURN_POSITION_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }catch(error){
+        return {};
+    }
+}
+
+function writeCollectionReturnPositionMap(map){
+    try{
+        sessionStorage.setItem(COLLECTION_RETURN_POSITION_KEY,JSON.stringify(map || {}));
+    }catch(error){}
+}
+
+function getCollectionReturnPageElement(source){
+    const cleanSource = String(source || activePage || "");
+    if(cleanSource === "discover"){
+        return document.getElementById("discover-page");
+    }
+    if(cleanSource === "collections-index"){
+        return document.getElementById("genre-detail-page");
+    }
+    return null;
+}
+
+function saveCollectionReturnPosition(){
+    if(activePage !== "collections-index" && activePage !== "discover"){
+        return;
+    }
+    const route = normalizeContextRouteKey(getCurrentAppRoute());
+    if(!route){
+        return;
+    }
+    const pageElement = getCollectionReturnPageElement(activePage);
+    const row = activePage === "discover" ? document.querySelector(".discover-collection-row") : null;
+    const map = readCollectionReturnPositionMap();
+    map[route] = {
+        source:activePage,
+        scrollTop:pageElement ? Number(pageElement.scrollTop || 0) : 0,
+        rowScrollLeft:row ? Number(row.scrollLeft || 0) : 0,
+        savedAt:Date.now()
+    };
+    Object.keys(map).forEach(key=>{
+        if(Date.now() - Number(map[key] && map[key].savedAt || 0) > 1000 * 60 * 60){
+            delete map[key];
+        }
+    });
+    writeCollectionReturnPositionMap(map);
+}
+
+function restoreCollectionReturnPositionSoon(route="",attempt=0){
+    const routeKey = normalizeContextRouteKey(route || getCurrentAppRoute());
+    if(!routeKey){
+        return;
+    }
+    const map = readCollectionReturnPositionMap();
+    const saved = map[routeKey];
+    if(!saved){
+        return;
+    }
+    const source = String(saved.source || "");
+    const expectedSource = routeKey.startsWith("/app/collections") ? "collections-index" : routeKey === "/app/discover" ? "discover" : source;
+    const pageElement = getCollectionReturnPageElement(expectedSource);
+    if(!pageElement){
+        return;
+    }
+    const targetTop = Math.max(0,Number(saved.scrollTop || 0));
+    const targetRowLeft = Math.max(0,Number(saved.rowScrollLeft || 0));
+    const apply = ()=>{
+        const row = expectedSource === "discover" ? document.querySelector(".discover-collection-row") : null;
+        if(row){
+            row.scrollLeft = targetRowLeft;
+        }
+        pageElement.scrollTop = targetTop;
+        const topRestored = targetTop === 0 || Math.abs(Number(pageElement.scrollTop || 0) - targetTop) <= 6;
+        const rowRestored = !row || targetRowLeft === 0 || Math.abs(Number(row.scrollLeft || 0) - targetRowLeft) <= 6;
+        if(topRestored && rowRestored){
+            const latest = readCollectionReturnPositionMap();
+            delete latest[routeKey];
+            writeCollectionReturnPositionMap(latest);
+            return;
+        }
+        if(attempt < 10){
+            window.setTimeout(()=>restoreCollectionReturnPositionSoon(routeKey,attempt + 1),80);
+        }
+    };
+    if(typeof window.requestAnimationFrame === "function"){
+        window.requestAnimationFrame(apply);
+    }else{
+        window.setTimeout(apply,0);
+    }
+}
+
+function handleCollectionReturnPositionClick(event){
+    const target = event && event.target;
+    const anchor = target && target.closest ? target.closest('a.collection-card[href^="/app/collection/"]') : null;
+    if(!anchor){
+        return;
+    }
+    if(
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+    ){
+        return;
+    }
+    saveCollectionReturnPosition();
+}
+
+if(typeof document !== "undefined" && document && !document.__tvTrackerCollectionReturnPositionBound){
+    document.__tvTrackerCollectionReturnPositionBound = true;
+    document.addEventListener("click",handleCollectionReturnPositionClick,true);
+}
+
 function showCollectionsPageShell(navigationContext="discover"){
     activePage = "collections-index";
     document.querySelectorAll(".page").forEach(section=>{
@@ -5005,6 +5126,7 @@ function renderActiveCollectionsPage(){
     if(typeof renderCollectionsIndexPage === "function"){
         renderCollectionsIndexPage(collectionsPageState);
         attachCollectionsPageEvents();
+        restoreCollectionReturnPositionSoon(getCollectionsRoute(collectionsPageState));
     }
 }
 
