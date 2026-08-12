@@ -934,7 +934,7 @@ function renderPersonProgressCardHTML(){
     return `
         <div class="person-progress-card" aria-label="Watched progress">
             <div class="person-progress-line">
-                <span>${escapeHTML(String(watched))} of ${escapeHTML(String(total))} watched</span>
+                <span>You've watched ${escapeHTML(String(watched))} of ${escapeHTML(String(total))} —</span>
                 <strong>${escapeHTML(String(percent))}%</strong>
             </div>
             <div class="person-progress-track" aria-hidden="true">
@@ -1524,13 +1524,13 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
                     <summary class="browse-bar-button">OTHER ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state,labels)}</div>
                 </details>
-                ${renderEyeFilterControlHTML(state,"browse-eye-filter-menu")}
                 ${hideSort ? "" : `
                     <details class="browse-menu browse-menu-sort">
                         <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
                         <div class="browse-dropdown browse-dropdown-sort">${renderBrowseSortMenu(state)}</div>
                     </details>
                 `}
+                ${renderEyeFilterControlHTML(state,"browse-eye-filter-menu")}
             </div>
             ${getBrowseSelectedDecade(state) ? renderBrowseYearSecondaryBarHTML(getBrowseSelectedDecade(state),state) : ""}
             ${renderBrowseActiveChipsHTML(state,labels)}
