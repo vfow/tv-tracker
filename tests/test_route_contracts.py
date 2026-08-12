@@ -22,7 +22,6 @@ def load_route_helpers():
         "APP_COUNTRY_PATH_RE",
         "APP_THEME_PATH_RE",
         "APP_MOVIE_PATH_RE",
-        "APP_COLLECTION_PATH_RE",
         "APP_COMPANY_PATH_RE",
         "APP_PROVIDER_PATH_RE",
         "APP_YEAR_PATH_RE",
@@ -52,9 +51,6 @@ def load_route_helpers():
         elif isinstance(node, ast.FunctionDef) and node.name in {
             "canonical_eye_query_params",
             "canonical_browse_query",
-            "canonical_collections_index_query",
-            "canonical_collection_detail_query",
-            "canonical_id_list",
             "app_browse_media_for_path",
             "safe_next_url",
             "valid_app_path",
@@ -168,8 +164,6 @@ class ProtectedRouteContractTests(unittest.TestCase):
             "/app/theme/tv/1234-war",
             "/app/theme/movie/1234-war",
             "/app/movie/603-the-matrix",
-            "/app/collections",
-            "/app/collection/263-batman-collection",
             "/app/company/tv/49-hbo",
             "/app/company/movie/49-hbo",
             "/app/provider/tv/8-netflix",
@@ -230,14 +224,6 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/person/525-christopher-nolan?media=tv&role=executive-producer"),
             "/app/person/525-christopher-nolan?role=executive-producer",
-        )
-        self.assertEqual(
-            safe_next_url("/app/collections?genre=28&decade=1990&sort=popularity-desc&page=2&x=1"),
-            "/app/collections?genre=28&decade=1990&sort=popularity-desc&page=2",
-        )
-        self.assertEqual(
-            safe_next_url("/app/collection/263-batman-collection?year=2021&genre=28,80&language=EN&hideWatched=1&sort=title-asc&runtime=120-149"),
-            "/app/collection/263-batman-collection?genre=28,80&language=en&year=2021&hideWatched=1&sort=title-asc",
         )
 
     def test_sensitive_or_external_destinations_are_rejected(self):

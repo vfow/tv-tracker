@@ -42,9 +42,7 @@ function createRouter(route, options={}){
     discoveryPageState:{type:'',value:'',name:'',media:'tv',routeSlug:'',year:'',sort:'popularity.desc',browse:null,browseLabels:null,page:1,totalPages:1,loading:false,error:'',shows:[]},
     browsePageState:{media:'tv',filters:null,labels:null,page:1,totalPages:1,loading:false,error:'',shows:[]},
     discoverSearchState:{query:'',media:'tv',loading:false},
-    discoverHubState:{loaded:false,loading:false,error:'',sections:[],genres:{tv:[],movie:[]},collections:[]},
-    collectionsPageState:{page:1,totalPages:1,totalResults:0,pageSize:64,genre:'',decade:'',sort:'name-asc',collections:[]},
-    collectionDetailState:{collectionId:'',routeSlug:'',collection:null,filters:null,labels:null,loading:false,error:'',movies:[]},
+    discoverHubState:{loaded:false,loading:false,error:'',sections:[],genres:{tv:[],movie:[]}},
     appDataReady:options.appDataReady !== false,
     showDetailBackStack:[],
     showDetailPreview:null,
@@ -95,14 +93,6 @@ function createRouter(route, options={}){
     openDiscoverCategoryPage(media,category,options){ calls.push(['openDiscoverCategoryPage',media,category,options]); },
     openDiscoverHomePage(options){ calls.push(['openDiscoverHomePage',options]); },
     openBrowsePage(state,options){ calls.push(['openBrowsePage',state,options]); },
-    openCollectionsPage(state,options){ calls.push(['openCollectionsPage',state,options]); },
-    openCollectionDetailPage(key,options){ calls.push(['openCollectionDetailPage',key,options]); },
-    getCollectionsRoute(state){ const parts=[]; if(state.genre){ parts.push('genre='+encodeURIComponent(state.genre)); } if(state.decade){ parts.push('decade='+encodeURIComponent(state.decade)); } if(state.sort && state.sort !== 'name-asc'){ parts.push('sort='+encodeURIComponent(state.sort)); } if(Number(state.page || 1) > 1){ parts.push('page='+encodeURIComponent(String(state.page))); } return '/app/collections' + (parts.length ? '?' + parts.join('&') : ''); },
-    getCollectionDetailRoute(id,name=''){ return `/app/collection/${id}${String(name || '').includes('-') ? '-' + String(name).split('-').slice(1).join('-') : ''}`; },
-    parseCollectionIndexSearch(search){ const params=new URLSearchParams(search || ''); return {page:Number(params.get('page') || 1),genre:params.get('genre') || '',decade:params.get('decade') || '',sort:params.get('sort') || 'name-asc'}; },
-    serializeCollectionIndexSearch(state){ return context.getCollectionsRoute(state).replace('/app/collections',''); },
-    parseCollectionDetailSearch(search){ const params=new URLSearchParams(search || ''); return {media:'movie',year:params.get('year') || '',decade:params.get('decade') || '',genres:(params.get('genre') || '').split(',').filter(Boolean),language:params.get('language') || '',hideWatched:params.get('hideWatched') === '1',sort:params.get('sort') || 'collection-order'}; },
-    getCollectionDetailBrowseSearch(state){ const parts=[]; if(state.genres && state.genres.length){ parts.push('genre='+state.genres.join(',')); } if(state.language){ parts.push('language='+state.language); } if(state.year){ parts.push('year='+state.year); } else if(state.decade){ parts.push('decade='+state.decade); } if(state.hideWatched){ parts.push('hideWatched=1'); } if(state.sort && state.sort !== 'collection-order'){ parts.push('sort='+state.sort); } return parts.length ? '?' + parts.join('&') : ''; },
     openPersonPage(role,id,options){ calls.push(['openPersonPage',role,id,options]); },
     showShowDetailPageShell(ctx){ context.activePage='show-detail'; calls.push(['showShowDetailPageShell',ctx]); },
     renderShowDetailLoading(id){ calls.push(['renderShowDetailLoading',id]); },
@@ -723,29 +713,6 @@ for (const route of [
   assert.strictEqual(context.activePage,'browse-detail');
   assert(calls.some(item=>item[0]==='showBrowsePageShell'),'startup should immediately render the correct Browse shell');
   assert.strictEqual(context.browsePageState.filters.sort,'rating-desc');
-}
-
-
-{
-  const {calls,router}=createRouter('/app/collections?genre=28&decade=1990&sort=popularity-desc&page=2&x=1');
-  assert.strictEqual(router.currentRoute(),'/app/collections?genre=28&decade=1990&sort=popularity-desc&page=2');
-  const call=calls.find(item=>item[0]==='openCollectionsPage');
-  assert(call,'collections route should open the collections index');
-  assert.strictEqual(call[1].genre,'28');
-  assert.strictEqual(call[1].decade,'1990');
-  assert.strictEqual(call[1].sort,'popularity-desc');
-}
-
-{
-  const {calls,router}=createRouter('/app/collection/263-batman-collection?year=2021&genre=28,80&language=en&hideWatched=1&sort=title-asc&runtime=120');
-  assert.strictEqual(router.currentRoute(),'/app/collection/263-batman-collection?genre=28,80&language=en&year=2021&hideWatched=1&sort=title-asc');
-  const call=calls.find(item=>item[0]==='openCollectionDetailPage');
-  assert(call,'collection detail route should open the collection page');
-  assert.strictEqual(call[1],'263-batman-collection');
-  assert.strictEqual(call[2].browseState.year,'2021');
-  assert.deepStrictEqual(Array.from(call[2].browseState.genres),['28','80']);
-  assert.strictEqual(call[2].browseState.hideWatched,true);
-  assert.strictEqual(call[2].browseState.sort,'title-asc');
 }
 
 console.log('Real-path router runtime checks passed');

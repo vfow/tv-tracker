@@ -12,11 +12,9 @@ import time
 import math
 import unicodedata
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Any
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode
 from urllib.request import Request, urlopen
@@ -58,7 +56,6 @@ APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/(tv|movie)/[a-z]{2,3}(?:-[a-z
 APP_COUNTRY_PATH_RE = re.compile(r"^/app/country/(tv|movie)/[a-z]{2}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?$")
 APP_THEME_PATH_RE = re.compile(rf"^/app/theme/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_MOVIE_PATH_RE = re.compile(rf"^/app/movie/({APP_ROUTE_ID_SLUG})$")
-APP_COLLECTION_PATH_RE = re.compile(rf"^/app/collection/({APP_ROUTE_ID_SLUG})$")
 APP_COMPANY_PATH_RE = re.compile(rf"^/app/company/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_PROVIDER_PATH_RE = re.compile(rf"^/app/provider/(tv|movie)/({APP_ROUTE_ID_SLUG})$")
 APP_YEAR_PATH_RE = re.compile(r"^/app/year/(tv|movie)/((?:18|19|20|21)[0-9]{2})$")
@@ -98,7 +95,6 @@ APP_SECTION_PATHS = {
     "/app/history",
     "/app/discover",
     "/app/search",
-    "/app/collections",
     "/app/profile",
     "/app/settings",
 }
@@ -138,13 +134,6 @@ TMDB_NETWORK_EXPORT_CACHE: dict[str, Any] = {
     "records": [],
 }
 TMDB_NETWORK_EXPORT_LOCK = threading.Lock()
-TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60
-TMDB_COLLECTION_EXPORT_LOOKBACK_DAYS = 7
-TMDB_COLLECTION_INDEX_PAGE_SIZE = 64
-TMDB_COLLECTION_INDEX_BATCH_SIZE = 60
-TMDB_COLLECTION_CACHE_VERSION = 1
-TMDB_COLLECTION_EXPORT_PREFIX = "collection_ids"
-TMDB_COLLECTION_CACHE_LOCK = threading.Lock()
 CHANGE_LOG_RETENTION_REVISIONS = 5000
 CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
@@ -1642,20 +1631,6 @@ def canonical_eye_query_params(raw_values: dict[str, str]) -> dict[str, str]:
     return {key: "1" for key in APP_EYE_QUERY_FLAGS if raw_values.get(key) == "1"}
 
 
-
-def canonical_id_list(value: str) -> str:
-    values: list[str] = []
-    seen: set[str] = set()
-    for item in str(value or "").split(","):
-        clean = item.strip()
-        if not re.fullmatch(r"[1-9][0-9]{0,11}", clean) or clean in seen:
-            continue
-        seen.add(clean)
-        values.append(clean)
-        if len(values) >= 12:
-            break
-    return ",".join(values)
-
 def canonical_browse_query(raw_query: str, media_type: str) -> str:
     """Return a small canonical query string for Discover browse state."""
     media = "movie" if str(media_type or "").strip().lower() == "movie" else "tv"
@@ -1740,52 +1715,6 @@ def canonical_browse_query(raw_query: str, media_type: str) -> str:
     return urlencode(params, safe=",") if params else ""
 
 
-
-def canonical_collections_index_query(query: str) -> str:
-    raw_values: dict[str, str] = {}
-    for key, value in parse_qsl(query or "", keep_blank_values=False):
-        if key not in raw_values:
-            raw_values[key] = value.strip()
-    params: dict[str, str] = {}
-    genre = raw_values.get("genre", "")
-    if re.fullmatch(r"[1-9][0-9]{0,11}", genre):
-        params["genre"] = genre
-    decade = raw_values.get("decade", "")
-    if re.fullmatch(r"(?:18|19|20|21)[0-9]0", decade):
-        params["decade"] = decade
-    sort_mode = raw_values.get("sort", "").lower()
-    if sort_mode in {"name-asc", "name-desc", "size-desc", "size-asc", "date-desc", "date-asc", "rating-desc", "rating-asc", "popularity-desc", "popularity-asc"} and sort_mode != "name-asc":
-        params["sort"] = sort_mode
-    page = raw_values.get("page", "")
-    if re.fullmatch(r"[1-9][0-9]{0,4}", page) and page != "1":
-        params["page"] = page
-    return urlencode(params, safe=",") if params else ""
-
-
-def canonical_collection_detail_query(query: str) -> str:
-    raw_values: dict[str, str] = {}
-    for key, value in parse_qsl(query or "", keep_blank_values=False):
-        if key not in raw_values:
-            raw_values[key] = value.strip()
-    params: dict[str, str] = {}
-    genre = canonical_id_list(raw_values.get("genre", ""))
-    if genre:
-        params["genre"] = genre
-    language = raw_values.get("language", "").lower()
-    if re.fullmatch(r"[a-z]{2,3}", language):
-        params["language"] = language
-    year = raw_values.get("year", "")
-    decade = raw_values.get("decade", "")
-    if re.fullmatch(r"(?:18|19|20|21)[0-9]{2}", year):
-        params["year"] = year
-    elif re.fullmatch(r"(?:18|19|20|21)[0-9]0", decade):
-        params["decade"] = decade
-    params.update(canonical_eye_query_params(raw_values))
-    sort_mode = raw_values.get("sort", "").lower()
-    if sort_mode in {"collection-order", "date-desc", "date-asc", "popularity-desc", "popularity-asc", "rating-desc", "rating-asc", "title-asc", "title-desc"} and sort_mode != "collection-order":
-        params["sort"] = sort_mode
-    return urlencode(params, safe=",") if params else ""
-
 def app_browse_media_for_path(candidate: str) -> str | None:
     match = APP_BROWSE_PATH_RE.fullmatch(candidate)
     if match:
@@ -1796,8 +1725,6 @@ def app_browse_media_for_path(candidate: str) -> str | None:
     match = APP_GENRE_PATH_RE.fullmatch(candidate)
     if match:
         return match.group(1)
-    if APP_COLLECTION_PATH_RE.fullmatch(candidate):
-        return "movie"
     match = APP_LANGUAGE_PATH_RE.fullmatch(candidate)
     if match:
         return match.group(1)
@@ -1882,12 +1809,6 @@ def safe_next_url(value: str | None) -> str:
         if sort_mode != "default":
             params["sort"] = sort_mode
         return candidate + (("?" + urlencode(params)) if params else "")
-    if candidate == "/app/collections":
-        collection_query = canonical_collections_index_query(raw_query if separator else "")
-        return candidate + (("?" + collection_query) if collection_query else "")
-    if APP_COLLECTION_PATH_RE.fullmatch(candidate):
-        collection_query = canonical_collection_detail_query(raw_query if separator else "")
-        return candidate + (("?" + collection_query) if collection_query else "")
     browse_media = app_browse_media_for_path(candidate)
     if browse_media:
         browse_query = canonical_browse_query(raw_query if separator else "", browse_media)
@@ -1961,7 +1882,6 @@ def valid_app_path(value: str | None) -> bool:
         or APP_COUNTRY_PATH_RE.fullmatch(candidate) is not None
         or APP_THEME_PATH_RE.fullmatch(candidate) is not None
         or APP_MOVIE_PATH_RE.fullmatch(candidate) is not None
-        or APP_COLLECTION_PATH_RE.fullmatch(candidate) is not None
         or APP_COMPANY_PATH_RE.fullmatch(candidate) is not None
         or APP_PROVIDER_PATH_RE.fullmatch(candidate) is not None
         or APP_YEAR_PATH_RE.fullmatch(candidate) is not None
@@ -2058,7 +1978,7 @@ def fetch_tmdb_network_export(export_date: date) -> list[dict[str, Any]]:
             "User-Agent": "TVTracker/1.0",
         },
     )
-    with urlopen(upstream_request, timeout=12) as upstream:
+    with urlopen(upstream_request, timeout=20) as upstream:
         compressed = upstream.read()
     return parse_tmdb_network_export_payload(compressed)
 
@@ -2131,385 +2051,6 @@ def search_tmdb_network_export(query: str, *, limit: int = TMDB_NETWORK_SEARCH_M
     matches.sort(key=lambda item: item[0])
     safe_limit = max(1, min(int(limit or TMDB_NETWORK_SEARCH_MAX_RESULTS), TMDB_NETWORK_SEARCH_MAX_RESULTS))
     return [item for _, item in matches[:safe_limit]], source_date
-
-
-
-def app_data_directory() -> Path:
-    configured = os.environ.get("APP_DATA_DIR", "").strip()
-    directory = Path(configured) if configured else Path(__file__).resolve().parent / "data"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
-
-def tmdb_collection_cache_path() -> Path:
-    return app_data_directory() / "tmdb_collection_index.json"
-
-
-def normalize_tmdb_slug(value: Any) -> str:
-    normalized = unicodedata.normalize("NFKD", str(value or ""))
-    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"[^a-z0-9]+", "-", ascii_value.casefold()).strip("-")
-
-
-def tmdb_export_candidate_dates(now: datetime | None = None, *, lookback_days: int = TMDB_COLLECTION_EXPORT_LOOKBACK_DAYS) -> list[date]:
-    current = now or datetime.utcnow()
-    first_date = current.date()
-    if current.hour < 8:
-        first_date -= timedelta(days=1)
-    return [first_date - timedelta(days=offset) for offset in range(max(1, lookback_days))]
-
-
-def fetch_tmdb_collection_export_ids(export_date: date) -> list[int]:
-    filename = f"{TMDB_COLLECTION_EXPORT_PREFIX}_{export_date:%m_%d_%Y}.json.gz"
-    target = f"https://files.tmdb.org/p/exports/{filename}"
-    upstream_request = Request(
-        target,
-        headers={
-            "Accept": "application/gzip, application/octet-stream",
-            "User-Agent": "TVTracker/1.0",
-        },
-    )
-    with urlopen(upstream_request, timeout=30) as upstream:
-        compressed = upstream.read()
-    payload = gzip.decompress(compressed).decode("utf-8", errors="replace")
-    ids: list[int] = []
-    seen: set[int] = set()
-    for raw_line in payload.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            item = json.loads(line)
-            collection_id = int(item.get("id") or 0)
-        except (TypeError, ValueError):
-            continue
-        if collection_id > 0 and collection_id not in seen:
-            seen.add(collection_id)
-            ids.append(collection_id)
-    return ids
-
-
-def load_tmdb_collection_cache() -> dict[str, Any]:
-    path = tmdb_collection_cache_path()
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if isinstance(data, dict) and int(data.get("version") or 0) == TMDB_COLLECTION_CACHE_VERSION:
-            if not isinstance(data.get("records"), dict):
-                data["records"] = {}
-            if not isinstance(data.get("export_ids"), list):
-                data["export_ids"] = []
-            if not isinstance(data.get("failed_ids"), list):
-                data["failed_ids"] = []
-            data["next_offset"] = int(data.get("next_offset") or 0)
-            return data
-    except (OSError, ValueError, TypeError):
-        pass
-    return {
-        "version": TMDB_COLLECTION_CACHE_VERSION,
-        "source_date": "",
-        "loaded_at": 0.0,
-        "export_ids": [],
-        "next_offset": 0,
-        "records": {},
-        "failed_ids": [],
-    }
-
-
-def write_tmdb_collection_cache(cache: dict[str, Any]) -> None:
-    path = tmdb_collection_cache_path()
-    temporary = path.with_suffix(".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(cache, handle, ensure_ascii=False, separators=(",", ":"))
-    temporary.replace(path)
-
-
-def tmdb_fetch_json(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    api_key = required_env("TMDB_API_KEY")
-    query_items = [(key, str(value)) for key, value in (params or {}).items() if value not in (None, "")]
-    query_items.append(("api_key", api_key))
-    target = "https://api.themoviedb.org/3/" + str(path).lstrip("/") + "?" + urlencode(query_items)
-    upstream_request = Request(
-        target,
-        headers={"Accept": "application/json", "User-Agent": "TVTracker/1.0"},
-    )
-    with urlopen(upstream_request, timeout=12) as upstream:
-        return json.loads(upstream.read().decode("utf-8"))
-
-
-def normalize_tmdb_collection_part(raw_part: Any) -> dict[str, Any] | None:
-    if not isinstance(raw_part, dict):
-        return None
-    try:
-        movie_id = int(raw_part.get("id") or 0)
-    except (TypeError, ValueError):
-        return None
-    title = str(raw_part.get("title") or raw_part.get("name") or raw_part.get("original_title") or "").strip()
-    if movie_id <= 0 or not title:
-        return None
-    genre_ids: list[int] = []
-    for raw_genre in raw_part.get("genre_ids") or []:
-        try:
-            genre_id = int(raw_genre)
-        except (TypeError, ValueError):
-            continue
-        if genre_id > 0 and genre_id not in genre_ids:
-            genre_ids.append(genre_id)
-    release_date = str(raw_part.get("release_date") or "").strip()[:40]
-    year = 0
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_date):
-        year = int(release_date[:4])
-    return {
-        "id": movie_id,
-        "media_type": "movie",
-        "title": title[:240],
-        "name": title[:240],
-        "poster_path": str(raw_part.get("poster_path") or "").strip()[:500],
-        "backdrop_path": str(raw_part.get("backdrop_path") or "").strip()[:500],
-        "overview": str(raw_part.get("overview") or "").strip()[:2000],
-        "release_date": release_date,
-        "date": release_date,
-        "genre_ids": genre_ids,
-        "original_language": str(raw_part.get("original_language") or "").strip().lower()[:8],
-        "vote_average": float(raw_part.get("vote_average") or 0.0),
-        "vote_count": int(raw_part.get("vote_count") or 0),
-        "popularity": float(raw_part.get("popularity") or 0.0),
-        "_collection_order": int(raw_part.get("order") or 0),
-        "year": year,
-    }
-
-
-def normalize_tmdb_collection_details(raw_details: Any) -> dict[str, Any] | None:
-    if not isinstance(raw_details, dict):
-        return None
-    try:
-        collection_id = int(raw_details.get("id") or 0)
-    except (TypeError, ValueError):
-        return None
-    name = str(raw_details.get("name") or "").strip()
-    if collection_id <= 0 or not name:
-        return None
-    parts = [part for part in (normalize_tmdb_collection_part(item) for item in (raw_details.get("parts") or [])) if part]
-    if not parts:
-        return None
-    poster_paths = []
-    for part in parts:
-        poster = str(part.get("poster_path") or "").strip()
-        if poster and poster not in poster_paths:
-            poster_paths.append(poster)
-        if len(poster_paths) >= 3:
-            break
-    years = [int(part.get("year") or 0) for part in parts if int(part.get("year") or 0) > 0]
-    decades = sorted({(year // 10) * 10 for year in years})
-    genre_ids = sorted({int(genre_id) for part in parts for genre_id in (part.get("genre_ids") or []) if int(genre_id) > 0})
-    popularity_values = [float(part.get("popularity") or 0.0) for part in parts if float(part.get("popularity") or 0.0) > 0]
-    rating_values = [float(part.get("vote_average") or 0.0) for part in parts if float(part.get("vote_average") or 0.0) > 0]
-    return {
-        "id": collection_id,
-        "name": name[:240],
-        "slug": normalize_tmdb_slug(name) or str(collection_id),
-        "overview": str(raw_details.get("overview") or "").strip()[:2000],
-        "poster_path": str(raw_details.get("poster_path") or "").strip()[:500],
-        "backdrop_path": str(raw_details.get("backdrop_path") or "").strip()[:500],
-        "poster_paths": poster_paths,
-        "film_count": len(parts),
-        "genres": genre_ids,
-        "decades": decades,
-        "oldest_year": min(years) if years else 0,
-        "newest_year": max(years) if years else 0,
-        "average_popularity": round(sum(popularity_values) / len(popularity_values), 4) if popularity_values else 0.0,
-        "average_rating": round(sum(rating_values) / len(rating_values), 4) if rating_values else 0.0,
-        "parts": parts,
-    }
-
-
-def fetch_tmdb_collection_details(collection_id: int) -> dict[str, Any] | None:
-    try:
-        data = tmdb_fetch_json(f"collection/{int(collection_id)}", {"language": "en-US"})
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
-        return None
-    return normalize_tmdb_collection_details(data)
-
-
-def refresh_tmdb_collection_export_if_needed(cache: dict[str, Any]) -> dict[str, Any]:
-    now = time.time()
-    records = cache.get("records") if isinstance(cache.get("records"), dict) else {}
-    loaded_at = float(cache.get("loaded_at") or 0.0)
-    export_ids = cache.get("export_ids") if isinstance(cache.get("export_ids"), list) else []
-    if export_ids and records and now - loaded_at < TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS:
-        return cache
-
-    last_error: Exception | None = None
-    for export_date in tmdb_export_candidate_dates():
-        try:
-            ids = fetch_tmdb_collection_export_ids(export_date)
-        except (HTTPError, URLError, TimeoutError, OSError, EOFError) as error:
-            last_error = error
-            continue
-        if not ids:
-            continue
-        old_records = records or {}
-        valid_id_strings = {str(item) for item in ids}
-        cache.update({
-            "version": TMDB_COLLECTION_CACHE_VERSION,
-            "source_date": export_date.isoformat(),
-            "loaded_at": now,
-            "export_ids": ids,
-            "records": {key: value for key, value in old_records.items() if key in valid_id_strings},
-            "failed_ids": [item for item in cache.get("failed_ids", []) if str(item) in valid_id_strings],
-        })
-        cache["next_offset"] = next((idx for idx, cid in enumerate(ids) if str(cid) not in cache["records"] and cid not in cache.get("failed_ids", [])), len(ids))
-        return cache
-
-    if export_ids:
-        return cache
-    raise RuntimeError("TMDB collection export is unavailable") from last_error
-
-
-def build_tmdb_collection_cache_batch(cache: dict[str, Any]) -> dict[str, Any]:
-    ids = [int(item) for item in (cache.get("export_ids") or []) if str(item).isdigit()]
-    if not ids:
-        return cache
-    records = cache.get("records") if isinstance(cache.get("records"), dict) else {}
-    failed_ids = set(int(item) for item in (cache.get("failed_ids") or []) if str(item).isdigit())
-    start = max(0, min(int(cache.get("next_offset") or 0), len(ids)))
-    batch_size = max(1, min(int(os.environ.get("TMDB_COLLECTION_BATCH_SIZE", TMDB_COLLECTION_INDEX_BATCH_SIZE)), 100))
-    index = start
-    batch_ids: list[int] = []
-    while index < len(ids) and len(batch_ids) < batch_size:
-        collection_id = ids[index]
-        key = str(collection_id)
-        if key not in records and collection_id not in failed_ids:
-            batch_ids.append(collection_id)
-        index += 1
-
-    if batch_ids:
-        max_workers = max(1, min(int(os.environ.get("TMDB_COLLECTION_BATCH_WORKERS", "8") or 8), 12))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(fetch_tmdb_collection_details, collection_id): collection_id for collection_id in batch_ids}
-            for future in as_completed(futures):
-                collection_id = futures[future]
-                try:
-                    details = future.result()
-                except Exception:
-                    details = None
-                if details:
-                    records[str(collection_id)] = details
-                else:
-                    failed_ids.add(collection_id)
-
-    cache["records"] = records
-    cache["failed_ids"] = sorted(failed_ids)
-    cache["next_offset"] = next((idx for idx in range(index, len(ids)) if str(ids[idx]) not in records and ids[idx] not in failed_ids), len(ids))
-    cache["updated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    return cache
-
-
-def ensure_tmdb_collection_cache(*, build_batch: bool = True) -> dict[str, Any]:
-    with TMDB_COLLECTION_CACHE_LOCK:
-        cache = load_tmdb_collection_cache()
-        cache = refresh_tmdb_collection_export_if_needed(cache)
-        if build_batch:
-            cache = build_tmdb_collection_cache_batch(cache)
-        write_tmdb_collection_cache(cache)
-        return cache
-
-
-def public_collection_summary(record: dict[str, Any]) -> dict[str, Any]:
-    return {key: record.get(key) for key in (
-        "id", "name", "slug", "overview", "poster_path", "backdrop_path", "poster_paths",
-        "film_count", "genres", "decades", "oldest_year", "newest_year", "average_popularity", "average_rating"
-    )}
-
-
-def sort_tmdb_collection_records(records: list[dict[str, Any]], sort_mode: str) -> list[dict[str, Any]]:
-    mode = str(sort_mode or "name-asc").lower()
-    def name_key(item: dict[str, Any]):
-        return (str(item.get("name") or "").casefold(), int(item.get("id") or 0))
-    if mode == "name-desc":
-        return sorted(records, key=name_key, reverse=True)
-    if mode == "size-desc":
-        return sorted(records, key=lambda item: (-int(item.get("film_count") or 0), str(item.get("name") or "").casefold()))
-    if mode == "size-asc":
-        return sorted(records, key=lambda item: (int(item.get("film_count") or 0), str(item.get("name") or "").casefold()))
-    if mode == "date-desc":
-        return sorted(records, key=lambda item: (-int(item.get("newest_year") or 0), str(item.get("name") or "").casefold()))
-    if mode == "date-asc":
-        return sorted(records, key=lambda item: (int(item.get("oldest_year") or 9999) or 9999, str(item.get("name") or "").casefold()))
-    if mode == "rating-desc":
-        return sorted(records, key=lambda item: (-float(item.get("average_rating") or 0), str(item.get("name") or "").casefold()))
-    if mode == "rating-asc":
-        return sorted(records, key=lambda item: (float(item.get("average_rating") or 0), str(item.get("name") or "").casefold()))
-    if mode == "popularity-desc":
-        return sorted(records, key=lambda item: (-float(item.get("average_popularity") or 0), str(item.get("name") or "").casefold()))
-    if mode == "popularity-asc":
-        return sorted(records, key=lambda item: (float(item.get("average_popularity") or 0), str(item.get("name") or "").casefold()))
-    return sorted(records, key=name_key)
-
-
-def get_tmdb_collection_index_payload(args: dict[str, Any]) -> dict[str, Any]:
-    try:
-        cache = ensure_tmdb_collection_cache(build_batch=True)
-    except RuntimeError:
-        cache = load_tmdb_collection_cache()
-        if not cache.get("records"):
-            raise
-    records = list((cache.get("records") or {}).values())
-    genre = str(args.get("genre") or "").strip()
-    decade = str(args.get("decade") or "").strip()
-    sort_mode = str(args.get("sort") or "name-asc").strip().lower()
-    if genre and re.fullmatch(r"[1-9][0-9]{0,11}", genre):
-        records = [item for item in records if int(genre) in [int(value) for value in (item.get("genres") or [])]]
-    else:
-        genre = ""
-    if decade and re.fullmatch(r"(?:18|19|20|21)[0-9]0", decade):
-        decade_number = int(decade)
-        records = [item for item in records if decade_number in [int(value) for value in (item.get("decades") or [])]]
-    else:
-        decade = ""
-    records = sort_tmdb_collection_records(records, sort_mode)
-    page_size = max(1, min(int(args.get("page_size") or TMDB_COLLECTION_INDEX_PAGE_SIZE), 100))
-    page = max(1, int(args.get("page") or 1))
-    total_results = len(records)
-    total_pages = max(1, math.ceil(total_results / page_size))
-    if page > total_pages:
-        page = total_pages
-    start = (page - 1) * page_size
-    end = start + page_size
-    all_genres = sorted({int(value) for item in (cache.get("records") or {}).values() for value in (item.get("genres") or []) if int(value) > 0})
-    all_decades = sorted({int(value) for item in (cache.get("records") or {}).values() for value in (item.get("decades") or []) if int(value) > 0}, reverse=True)
-    export_ids = cache.get("export_ids") or []
-    next_offset = int(cache.get("next_offset") or 0)
-    return {
-        "results": [public_collection_summary(item) for item in records[start:end]],
-        "page": page,
-        "total_pages": total_pages,
-        "total_results": total_results,
-        "page_size": page_size,
-        "genre": genre,
-        "decade": decade,
-        "sort": sort_mode,
-        "genres": all_genres,
-        "decades": all_decades,
-        "source_date": str(cache.get("source_date") or ""),
-        "indexed": len(cache.get("records") or {}),
-        "total_source": len(export_ids),
-        "building": next_offset < len(export_ids),
-        "updated_at": str(cache.get("updated_at") or ""),
-    }
-
-
-def get_tmdb_collection_detail_payload(collection_id: int) -> dict[str, Any] | None:
-    with TMDB_COLLECTION_CACHE_LOCK:
-        cache = load_tmdb_collection_cache()
-        record = (cache.get("records") or {}).get(str(collection_id))
-        if not record:
-            record = fetch_tmdb_collection_details(collection_id)
-            if record:
-                cache.setdefault("records", {})[str(collection_id)] = record
-                cache["updated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-                write_tmdb_collection_cache(cache)
-        return record
 
 
 def create_app() -> Flask:
@@ -2709,7 +2250,6 @@ def create_app() -> Flask:
     @app.get("/app/history", strict_slashes=False)
     @app.get("/app/discover", strict_slashes=False)
     @app.get("/app/search", strict_slashes=False)
-    @app.get("/app/collections", strict_slashes=False)
     @app.get("/app/profile", strict_slashes=False)
     @app.get("/app/settings", strict_slashes=False)
     @login_required
@@ -2752,16 +2292,6 @@ def create_app() -> Flask:
             return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
 
-
-    @app.get("/app/collection/<collection_key>", strict_slashes=False)
-    @login_required
-    def app_collection_page(collection_key: str):
-        requested_path = request.path.rstrip("/")
-        if APP_COLLECTION_PATH_RE.fullmatch(requested_path) is None:
-            abort(404)
-        if request.path != requested_path:
-            return redirect_app_path_preserving_query(requested_path)
-        return render_app_shell(requested_path)
 
     @app.get("/app/genre/<genre_media>/<genre_slug>", strict_slashes=False)
     @login_required
@@ -3524,28 +3054,6 @@ def create_app() -> Flask:
             "source_date": source_date,
         })
 
-    @app.get("/api/tmdb/collections")
-    @login_required
-    def tmdb_collections_index():
-        try:
-            payload = get_tmdb_collection_index_payload(request.args)
-        except RuntimeError:
-            app.logger.exception("TMDB collection index failed")
-            return jsonify({
-                "ok": False,
-                "error": "Collections are temporarily unavailable",
-                "code": "collection_index_unavailable",
-            }), 502
-        return jsonify(payload)
-
-    @app.get("/api/tmdb/collections/<int:collection_id>")
-    @login_required
-    def tmdb_collection_details(collection_id: int):
-        record = get_tmdb_collection_detail_payload(collection_id)
-        if not record:
-            abort(404)
-        return jsonify(record)
-
     @app.get("/api/tmdb/<path:tmdb_path>")
     @login_required
     def tmdb_proxy(tmdb_path: str):
@@ -3575,7 +3083,7 @@ def create_app() -> Flask:
         )
 
         try:
-            with urlopen(upstream_request, timeout=12) as upstream:
+            with urlopen(upstream_request, timeout=20) as upstream:
                 content = upstream.read()
                 response = Response(
                     content,

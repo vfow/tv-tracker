@@ -143,8 +143,6 @@ function getTrackerDocumentTitleLabel(){
         "genre-detail":genrePageState && genrePageState.name ? genrePageState.name : "Genre",
         "discovery-detail":discoveryPageState && discoveryPageState.name ? discoveryPageState.name : "TV Shows",
         "browse-detail":typeof browsePageState !== "undefined" && browsePageState && browsePageState.media === "movie" ? "Browse Movies" : "Browse TV Shows",
-        "collections-index":"Collections",
-        "collection-detail":typeof collectionDetailState !== "undefined" && collectionDetailState && collectionDetailState.collection && collectionDetailState.collection.name ? collectionDetailState.collection.name : "Collection",
         "person-detail":personPageState && personPageState.person && personPageState.person.name ? personPageState.person.name : "Person",
         "movie-detail":moviePageState && moviePageState.movie && moviePageState.movie.title ? moviePageState.movie.title : "Movie",
         "route-error":"Page Not Found"
@@ -309,7 +307,7 @@ function renderDiscoverHub(){
 
     const state = typeof discoverHubState === "object" && discoverHubState
     ? discoverHubState
-    : {loaded:false,loading:false,error:"",sections:[],genres:[],collections:[]};
+    : {loaded:false,loading:false,error:"",sections:[],genres:[]};
 
     if(state.loading && (!state.sections || state.sections.length === 0)){
         results.innerHTML = `
@@ -347,7 +345,6 @@ function renderDiscoverHub(){
         <div class="discover-page-shell">
             ${renderDiscoverSectionGroup("TV Shows",tvRows)}
             ${renderDiscoverSectionGroup("Movies",movieRows)}
-            ${renderDiscoverCollectionsSection(state.collections || [])}
             ${renderDiscoverGenreSection(state.genres || [])}
         </div>
     `;
@@ -460,67 +457,6 @@ function renderDiscoverHubSection(section){
                     ${items.map(renderDiscoverHubCard).join("")}
                 </div>
             </div>
-        </section>
-    `;
-}
-
-
-function getCollectionCardPosters(collection){
-    const posters = Array.isArray(collection && collection.poster_paths) ? collection.poster_paths : [];
-    if(posters.length){ return posters.filter(Boolean).slice(0,3); }
-    const parts = Array.isArray(collection && collection.parts) ? collection.parts : [];
-    return parts.map(part=>part && part.poster_path).filter(Boolean).slice(0,3);
-}
-
-function getCollectionMovieCount(collection){
-    return Number(collection && (collection.movie_count || collection.part_count || collection.parts_count || collection.film_count || (Array.isArray(collection.parts) ? collection.parts.length : 0)) || 0);
-}
-
-function renderCollectionPosterStackHTML(collection){
-    const name = String(collection && collection.name || "Collection");
-    const posters = getCollectionCardPosters(collection);
-    const slots = [0,1,2];
-    return `
-        <div class="collection-poster-stack" aria-hidden="true">
-            ${slots.map(index=>{
-                const poster = posters[index] || "";
-                const extraClass = poster ? "" : " collection-poster-empty";
-                return `<div class="collection-poster-layer collection-poster-layer-${index + 1}${extraClass}">${poster ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(poster,"w342"))}" alt="">` : `<span>${escapeHTML(name.slice(0,1) || "C")}</span>`}</div>`;
-            }).join("")}
-        </div>
-    `;
-}
-
-function renderCollectionCardHTML(collection,extraClass=""){
-    const id = collection && collection.id ? String(collection.id) : "";
-    const name = String(collection && collection.name || "Collection").trim() || "Collection";
-    const count = getCollectionMovieCount(collection);
-    const route = typeof getCollectionDetailRoute === "function" ? getCollectionDetailRoute(id,name) : `/app/collection/${encodeURIComponent(id)}`;
-    return `
-        <a class="collection-card ${escapeHTML(extraClass)}" href="${escapeHTML(route)}" data-collection-id="${escapeHTML(id)}" data-collection-name="${escapeHTML(name)}">
-            ${renderCollectionPosterStackHTML(collection)}
-            <div class="collection-card-title">${escapeHTML(name)}</div>
-            <div class="collection-card-meta">${count === 1 ? "1 movie" : `${escapeHTML(String(count))} movies`}</div>
-        </a>
-    `;
-}
-
-function renderDiscoverCollectionsSection(collections){
-    const clean = (Array.isArray(collections) ? collections : []).filter(collection=>collection && collection.id && collection.name).slice(0,12);
-    if(!clean.length){ return ""; }
-    return `
-        <section class="discover-section-group discover-collections-section">
-            <section class="discover-section">
-                <div class="discover-section-heading">
-                    <h3>Collections</h3>
-                    <a class="view-more-button discover-view-more-link" href="/app/collections">VIEW MORE</a>
-                </div>
-                <div class="discover-carousel-shell">
-                    <div class="discover-card-row discover-collection-row" data-discover-row="collections">
-                        ${clean.map(collection=>renderCollectionCardHTML(collection,"discover-collection-card")).join("")}
-                    </div>
-                </div>
-            </section>
         </section>
     `;
 }
@@ -652,18 +588,6 @@ function attachDiscoverHubEvents(){
                 discoverGenreMedia = String(this.dataset.discoverGenreMedia || "tv") === "movie" ? "movie" : "tv";
             }
             renderDiscoverHub();
-        });
-    });
-
-    document.querySelectorAll(".discover-collection-card[data-collection-id]").forEach(card=>{
-        card.addEventListener("click",async function(event){
-            if(!isPlainAppLinkClick(event)){ return; }
-            event.preventDefault();
-            const id = this.dataset.collectionId || "";
-            const name = this.dataset.collectionName || "Collection";
-            if(id && typeof openCollectionDetailPage === "function"){
-                await openCollectionDetailPage(id + "-" + slugifyRoutePart(name),{fromRoute:false});
-            }
         });
     });
 
@@ -1615,266 +1539,6 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
             </div>
             ${getBrowseSelectedDecade(state) ? renderBrowseYearSecondaryBarHTML(getBrowseSelectedDecade(state),state) : ""}
             ${renderBrowseActiveChipsHTML(state,labels)}
-        </div>
-    `;
-}
-
-
-function getCollectionsSortOptions(){
-    return [
-        ["name-asc","Collection Name — A to Z"],
-        ["name-desc","Collection Name — Z to A"],
-        ["size-desc","Collection Size — Largest"],
-        ["size-asc","Collection Size — Smallest"],
-        ["release-desc","Newest First"],
-        ["release-asc","Oldest First"],
-        ["rating-desc","Highest Rated"],
-        ["rating-asc","Lowest Rated"],
-        ["popularity-desc","Most Popular"],
-        ["popularity-asc","Least Popular"]
-    ];
-}
-
-function renderCollectionsIndexMenuOptions(items,key,currentValue,labelKey="name"){
-    const clean = Array.isArray(items) ? items : [];
-    if(!clean.length){ return `<div class="browse-dropdown-empty">Options are loading…</div>`; }
-    return `<div class="browse-option-list">${clean.map(item=>{
-        const value = String(item && item.id || item && item.value || item || "");
-        let label = String(item && (item[labelKey] || item.label || item.name) || item || value);
-        if(key === "genre" && typeof getKnownGenreById === "function"){
-            const known = getKnownGenreById(value,"movie");
-            if(known && known.name){ label = known.name; }
-        }
-        const selected = String(currentValue || "") === value;
-        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collections-set="${escapeHTML(key)}" data-collections-value="${escapeHTML(value)}">${renderBrowseOptionLabel(label,selected)}</button>`;
-    }).join("")}</div>`;
-}
-
-function renderCollectionsIndexControlsHTML(state){
-    const pageState = state || {};
-    const genreLabel = (()=>{
-        if(!pageState.genre){ return "GENRE"; }
-        if(typeof getKnownGenreById === "function"){
-            const known = getKnownGenreById(pageState.genre,"movie");
-            if(known && known.name){ return known.name; }
-        }
-        const genre = (Array.isArray(pageState.genres) ? pageState.genres : []).find(item=>String(item && (item.id || item.value || item) || "") === String(pageState.genre));
-        return genre && genre.name ? genre.name : "GENRE";
-    })();
-    const decadeLabel = pageState.decade ? `${pageState.decade}s` : "DECADE";
-    const sortOptions = getCollectionsSortOptions();
-    const sortLabel = (sortOptions.find(([value])=>value === pageState.sort) || ["","SORT"])[1];
-    const decades = (Array.isArray(pageState.decades) ? pageState.decades : []).map(value=>({value:String(value),label:`${value}s`}));
-    const active = [];
-    if(pageState.genre){ active.push(`<button type="button" class="browse-active-chip" data-collections-remove="genre">${escapeHTML(genreLabel)} <span aria-hidden="true">×</span></button>`); }
-    if(pageState.decade){ active.push(`<button type="button" class="browse-active-chip" data-collections-remove="decade">${escapeHTML(decadeLabel)} <span aria-hidden="true">×</span></button>`); }
-    if(pageState.sort && pageState.sort !== "name-asc"){ active.push(`<button type="button" class="browse-active-chip" data-collections-remove="sort">${escapeHTML(sortLabel)} <span aria-hidden="true">×</span></button>`); }
-    return `
-        <div class="browse-controls collections-controls">
-            <div class="browse-bar" aria-label="Collection filters">
-                <span class="browse-bar-kicker">BROWSE BY</span>
-                <details class="browse-menu">
-                    <summary class="browse-bar-button">${escapeHTML(genreLabel)} ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown">${renderCollectionsIndexMenuOptions(pageState.genres,"genre",pageState.genre)}</div>
-                </details>
-                <details class="browse-menu">
-                    <summary class="browse-bar-button">${escapeHTML(decadeLabel)} ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown">${renderCollectionsIndexMenuOptions(decades,"decade",pageState.decade,"label")}</div>
-                </details>
-                <details class="browse-menu browse-menu-sort">
-                    <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown browse-dropdown-sort"><div class="browse-option-list">${sortOptions.map(([value,label])=>{
-                        const selected = pageState.sort === value;
-                        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collections-set="sort" data-collections-value="${escapeHTML(value)}">${renderBrowseOptionLabel(label,selected)}</button>`;
-                    }).join("")}</div></div>
-                </details>
-            </div>
-            ${active.length ? `<div class="browse-active-row" aria-label="Active collection filters">${active.join("")}<button type="button" class="browse-clear-button" data-collections-remove="all">CLEAR ALL</button></div>` : ""}
-        </div>
-    `;
-}
-
-function renderCollectionsPaginationHTML(state){
-    const page = Math.max(1,Number(state && state.page || 1));
-    const total = Math.max(1,Number(state && state.totalPages || 1));
-    if(total <= 1){ return ""; }
-    return `
-        <div class="collections-pagination">
-            <button type="button" class="view-more-button collections-page-button" data-collections-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>PREV</button>
-            <span class="collections-page-count">${escapeHTML(String(page))} / ${escapeHTML(String(total))}</span>
-            <button type="button" class="view-more-button collections-page-button" data-collections-page="${page + 1}" ${page >= total ? "disabled" : ""}>NEXT</button>
-        </div>
-    `;
-}
-
-function renderCollectionsIndexPage(state){
-    const content = document.getElementById("genre-detail-content");
-    if(!content){ return; }
-    const pageState = state || {};
-    const collections = Array.isArray(pageState.collections) ? pageState.collections : [];
-    const loading = pageState.loading === true;
-    const building = pageState.building === true;
-    const error = String(pageState.error || "").trim();
-    const grid = collections.length
-    ? `<div class="collections-index-grid">${collections.map(collection=>renderCollectionCardHTML(collection,"collections-index-card")).join("")}</div>`
-    : loading
-    ? `<div class="collections-index-grid collections-index-grid-loading">${renderTrackerPosterSkeletonCards(12)}</div>`
-    : `<div class="empty-state genre-detail-empty"><h2>${error ? "Collections could not load" : "No collections found"}</h2><p>${escapeHTML(error || (building ? "Collections are loading. Please refresh in a moment." : "Remove or change one or more filters."))}</p></div>`;
-    content.innerHTML = `
-        <div class="genre-detail-page-inner collections-index-page-inner">
-            <div class="genre-detail-header browse-detail-header collections-page-header">
-                <button type="button" class="show-page-back-button genre-page-back-button" id="collections-page-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button>
-                <div><h1 class="genre-detail-title">Collections</h1></div>
-            </div>
-            ${renderCollectionsIndexControlsHTML(pageState)}
-            ${building && collections.length ? `<div class="v2-api-empty collections-build-note">Collections are loading. Please refresh in a moment.</div>` : ""}
-            <div class="genre-result-content">${grid}</div>
-            ${renderCollectionsPaginationHTML(pageState)}
-        </div>
-    `;
-}
-
-function getCollectionDetailSortOptions(){
-    return [
-        ["collection-order","Collection Order"],
-        ["date-desc","Release Date — Newest"],
-        ["date-asc","Release Date — Oldest"],
-        ["popularity-desc","Popularity — High to Low"],
-        ["popularity-asc","Popularity — Low to High"],
-        ["rating-desc","Rating — High to Low"],
-        ["rating-asc","Rating — Low to High"],
-        ["title-asc","Title — A to Z"],
-        ["title-desc","Title — Z to A"]
-    ];
-}
-
-
-function getCollectionDetailMoviePartsForControls(){
-    const collection = typeof collectionDetailState !== "undefined" && collectionDetailState ? collectionDetailState.collection : null;
-    return Array.isArray(collection && collection.parts) ? collection.parts : [];
-}
-
-function renderCollectionDetailGenreMenu(state){
-    const ids = [];
-    getCollectionDetailMoviePartsForControls().forEach(movie=>{
-        (Array.isArray(movie && movie.genre_ids) ? movie.genre_ids : []).forEach(id=>{
-            const clean = String(id || "");
-            if(clean && !ids.includes(clean)){ ids.push(clean); }
-        });
-    });
-    if(!ids.length){ return `<div class="browse-dropdown-empty">No genres available.</div>`; }
-    const options = ids.map(id=>{
-        const known = typeof getKnownGenreById === "function" ? getKnownGenreById(id,"movie") : null;
-        return {id,name:known && known.name ? known.name : "Genre"};
-    }).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
-    return `<div class="browse-option-list browse-option-list-genre">${options.map(genre=>{
-        const selected = state.genres.includes(String(genre.id));
-        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-toggle-multi="genres" data-browse-value="${escapeHTML(genre.id)}">${renderBrowseOptionLabel(genre.name,selected)}</button>`;
-    }).join("")}</div>`;
-}
-
-function renderCollectionDetailLanguageMenu(state){
-    const codes = [];
-    getCollectionDetailMoviePartsForControls().forEach(movie=>{
-        const code = String(movie && movie.original_language || "").trim().toLowerCase();
-        if(code && !codes.includes(code)){ codes.push(code); }
-    });
-    if(!codes.length){ return `<div class="browse-dropdown-empty">No languages available.</div>`; }
-    const options = codes.map(code=>({code,label:typeof getLanguageName === "function" ? getLanguageName(code) : code.toUpperCase()})).sort((a,b)=>String(a.label).localeCompare(String(b.label)));
-    return `<div class="browse-option-list">${options.map(option=>{
-        const selected = state.language === option.code;
-        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-browse-set-single="language" data-browse-value="${escapeHTML(option.code)}">${renderBrowseOptionLabel(option.label,selected)}</button>`;
-    }).join("")}</div>`;
-}
-
-function renderCollectionDetailSortMenu(state){
-    return `<div class="browse-option-list">${getCollectionDetailSortOptions().map(([value,label])=>{
-        const selected = state.sort === value;
-        return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-detail-sort="${escapeHTML(value)}">${renderBrowseOptionLabel(label,selected)}</button>`;
-    }).join("")}</div>`;
-}
-
-function renderCollectionDetailActiveChipsHTML(state,labels){
-    const html = renderBrowseActiveChipsHTML(Object.assign({},state,{country:"",providers:[],runtime:"",companies:[],themes:[],certification:"",statuses:[],network:""}),labels || {});
-    if(state && state.sort && state.sort !== "collection-order"){
-        const option = getCollectionDetailSortOptions().find(([value])=>value === state.sort);
-        const label = option ? option[1] : "Sort";
-        const chip = `<button type="button" class="browse-active-chip" data-collection-detail-remove="sort">${escapeHTML(label)} <span aria-hidden="true">×</span></button>`;
-        if(html){ return html.replace('</div>', chip + '</div>'); }
-        return `<div class="browse-active-row" aria-label="Active collection filters">${chip}<button type="button" class="browse-clear-button" data-browse-clear>CLEAR ALL</button></div>`;
-    }
-    return html;
-}
-
-function renderCollectionDetailControlsHTML(inputState,inputLabels={}){
-    const state = getBrowseControlState(Object.assign({media:"movie"},inputState || {}),"movie");
-    state.sort = inputState && inputState.sort ? inputState.sort : "collection-order";
-    const labels = getBrowseControlLabels(inputLabels);
-    return `
-        <div class="browse-controls collection-detail-controls">
-            <div class="browse-bar" aria-label="Collection movie filters">
-                <span class="browse-bar-kicker">BROWSE BY</span>
-                <details class="browse-menu browse-menu-year">
-                    <summary class="browse-bar-button">${escapeHTML(getBrowseYearControlLabel(state))} ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown browse-dropdown-year">${renderBrowseYearMenu(state)}</div>
-                </details>
-                <details class="browse-menu">
-                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown">${renderCollectionDetailGenreMenu(state)}</div>
-                </details>
-                <details class="browse-menu">
-                    <summary class="browse-bar-button">LANGUAGE ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown">${renderCollectionDetailLanguageMenu(state)}</div>
-                </details>
-                <details class="browse-menu browse-menu-sort">
-                    <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
-                    <div class="browse-dropdown browse-dropdown-sort">${renderCollectionDetailSortMenu(state)}</div>
-                </details>
-                ${renderEyeFilterControlHTML(state,"collection-eye-filter-menu")}
-            </div>
-            ${getBrowseSelectedDecade(state) ? renderBrowseYearSecondaryBarHTML(getBrowseSelectedDecade(state),state) : ""}
-            ${renderCollectionDetailActiveChipsHTML(state,labels)}
-        </div>
-    `;
-}
-
-function getCollectionDetailEmptyMessage(filters){
-    const state = filters || {};
-    if(state.year){ return `There are no movies in this collection released in ${state.year}`; }
-    if(state.decade){ return `There are no movies in this collection released in the ${state.decade}s`; }
-    return "No movies found";
-}
-
-function renderCollectionDetailPage(state){
-    const content = document.getElementById("genre-detail-content");
-    if(!content){ return; }
-    const pageState = state || {};
-    const collection = pageState.collection || {};
-    const name = String(collection.name || "Collection");
-    const filters = typeof createCollectionDetailFilterState === "function" ? createCollectionDetailFilterState(pageState.filters || {}) : getBrowseControlState(pageState.filters,"movie");
-    const labels = getBrowseControlLabels(pageState.labels);
-    const results = typeof getCollectionFilteredMovies === "function" ? getCollectionFilteredMovies() : [];
-    const loading = pageState.loading === true;
-    const error = String(pageState.error || "").trim();
-    const count = getCollectionMovieCount(collection);
-    const bodyHTML = error
-    ? `<div class="empty-state genre-detail-empty"><h2>Collection could not load</h2><p>${escapeHTML(error)}</p></div>`
-    : results.length
-    ? `<div class="genre-tight-grid collection-detail-grid">${results.map(movie=>renderGenrePosterGridCard(movie).replace('class="genre-result-card','class="genre-result-card collection-detail-result-card')).join("")}</div>`
-    : loading
-    ? `<div class="genre-tight-grid genre-tight-grid-loading">${renderTrackerPosterSkeletonCards(12)}</div>`
-    : `<div class="empty-state genre-detail-empty"><h2>${escapeHTML(getCollectionDetailEmptyMessage(filters))}</h2><p>Remove or change one or more filters.</p></div>`;
-    content.innerHTML = `
-        <div class="genre-detail-page-inner collection-detail-page-inner">
-            <div class="genre-detail-header browse-detail-header collection-detail-header">
-                <button type="button" class="show-page-back-button genre-page-back-button" id="collection-detail-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button>
-                <div>
-                    <h1 class="genre-detail-title">${escapeHTML(name)}</h1>
-                    <p class="collection-detail-meta">${count === 1 ? "1 movie" : `${escapeHTML(String(count))} movies`}</p>
-                </div>
-            </div>
-            ${renderCollectionDetailControlsHTML(filters,labels)}
-            <div class="genre-result-content">${bodyHTML}</div>
         </div>
     `;
 }

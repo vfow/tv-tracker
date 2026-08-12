@@ -91,31 +91,6 @@ var browsePageState = {
     error:"",
     shows:[]
 };
-var collectionsPageState = {
-    page:1,
-    totalPages:1,
-    totalResults:0,
-    pageSize:64,
-    genre:"",
-    decade:"",
-    sort:"name-asc",
-    loading:false,
-    building:false,
-    error:"",
-    collections:[],
-    genres:[],
-    decades:[]
-};
-var collectionDetailState = {
-    collectionId:"",
-    routeSlug:"",
-    collection:null,
-    filters:null,
-    labels:null,
-    loading:false,
-    error:"",
-    movies:[]
-};
 var browseOptionState = {
     genres:{tv:[],movie:[]},
     countries:[],
@@ -163,8 +138,7 @@ var discoverHubState = {
     loading:false,
     error:"",
     sections:[],
-    genres:{tv:[],movie:[]},
-    collections:[]
+    genres:{tv:[],movie:[]}
 };
 var discoverGenreMedia = "tv";
 var librarySearchQuery = "";
@@ -187,8 +161,6 @@ var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v5";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
-const DISCOVER_COLLECTION_ROW_LIMIT = 12;
-const COLLECTIONS_PAGE_SIZE = 64;
 const SEARCH_MEDIA_TYPES = new Set(["tv","movie","person"]);
 const SEARCH_RESULT_BATCH_SIZE = 21;
 const SEARCH_TYPING_DELAY_MS = 360;
@@ -3700,8 +3672,7 @@ function readDiscoverHubCache(){
 
         return {
             sections:cached.sections,
-            genres:normalizeDiscoverGenreState(cached.genres),
-            collections:Array.isArray(cached.collections) ? cached.collections : []
+            genres:normalizeDiscoverGenreState(cached.genres)
         };
 
     }catch(error){
@@ -3722,8 +3693,7 @@ function writeDiscoverHubCache(state){
             JSON.stringify({
                 savedAt:Date.now(),
                 sections:state.sections,
-                genres:normalizeDiscoverGenreState(state.genres),
-                collections:Array.isArray(state.collections) ? state.collections : []
+                genres:normalizeDiscoverGenreState(state.genres)
             })
         );
     }catch(error){}
@@ -3959,8 +3929,7 @@ async function loadDiscoverHub(force=false){
                 loading:false,
                 error:"",
                 sections:cached.sections,
-                genres:normalizeDiscoverGenreState(cached.genres),
-                collections:Array.isArray(cached.collections) ? cached.collections : []
+                genres:normalizeDiscoverGenreState(cached.genres)
             };
             if(typeof renderDiscoverHub === "function"){
                 renderDiscoverHub();
@@ -3990,9 +3959,6 @@ async function loadDiscoverHub(force=false){
             return section.items.length ? section : null;
         }).filter(Boolean);
 
-        const collectionsResult = await Promise.allSettled([tmdbGetCollectionsIndex({page:1,page_size:DISCOVER_COLLECTION_ROW_LIMIT,sort:"popularity-desc"})]);
-        const collectionsRow = collectionsResult[0].status === "fulfilled" ? collectionsResult[0].value : null;
-
         const genreResults = await Promise.allSettled([tmdbGetTVGenreList(),tmdbGetMovieGenreList()]);
         const genres = {
             tv:genreResults[0].status === "fulfilled" && Array.isArray(genreResults[0].value) ? genreResults[0].value : [],
@@ -4004,8 +3970,7 @@ async function loadDiscoverHub(force=false){
             loading:false,
             error:sections.length ? "" : "Couldn’t load this page. Try again later.",
             sections:sections,
-            genres:genres,
-            collections:collectionsRow && Array.isArray(collectionsRow.results) ? collectionsRow.results : []
+            genres:genres
         };
 
         writeDiscoverHubCache(discoverHubState);
@@ -4020,8 +3985,7 @@ async function loadDiscoverHub(force=false){
             loading:false,
             error:"Couldn’t load this page. Try again later.",
             sections:[],
-            genres:{tv:[],movie:[]},
-            collections:[]
+            genres:{tv:[],movie:[]}
         };
 
         if(shouldShowDiscoverHub() && typeof renderDiscoverHub === "function"){
@@ -5358,9 +5322,6 @@ function getCurrentBrowseState(){
     if(activePage === "browse-detail"){
         return createBrowseFilterState(browsePageState && browsePageState.media,browsePageState && browsePageState.filters || {});
     }
-    if(activePage === "collection-detail"){
-        return createCollectionDetailFilterState(collectionDetailState && collectionDetailState.filters || {media:"movie"});
-    }
     if(activePage === "genre-detail"){
         return getGenreBrowseState();
     }
@@ -5376,9 +5337,6 @@ function getCurrentBrowseState(){
 function getCurrentBrowseLabels(){
     if(activePage === "browse-detail"){
         return createBrowseLabelState(browsePageState && browsePageState.labels);
-    }
-    if(activePage === "collection-detail"){
-        return createBrowseLabelState(collectionDetailState && collectionDetailState.labels);
     }
     if(activePage === "genre-detail"){
         return createBrowseLabelState(genrePageState && genrePageState.browseLabels);
@@ -7333,434 +7291,6 @@ function attachDiscoveryFilterPageEvents(){
 }
 
 
-function normalizeCollectionIndexSort(value){
-    const clean = String(value || "name-asc").trim().toLowerCase();
-    const allowed = new Set(["name-asc","name-desc","size-desc","size-asc","date-desc","date-asc","rating-desc","rating-asc","popularity-desc","popularity-asc"]);
-    return allowed.has(clean) ? clean : "name-asc";
-}
-
-function normalizeCollectionIndexState(input={}){
-    const source = input && typeof input === "object" ? input : {};
-    const genre = String(source.genre || "").trim();
-    const decade = String(source.decade || "").trim();
-    return {
-        page:Math.max(1,Number(source.page || 1)),
-        genre:/^[1-9][0-9]{0,11}$/.test(genre) ? genre : "",
-        decade:/^(18|19|20|21)[0-9]0$/.test(decade) ? decade : "",
-        sort:normalizeCollectionIndexSort(source.sort)
-    };
-}
-
-function parseCollectionIndexSearch(search=""){
-    let params;
-    try{ params = new URLSearchParams(String(search || "")); }catch(_error){ params = new URLSearchParams(); }
-    return normalizeCollectionIndexState({
-        page:params.get("page") || "1",
-        genre:params.get("genre") || "",
-        decade:params.get("decade") || "",
-        sort:params.get("sort") || "name-asc"
-    });
-}
-
-function serializeCollectionIndexSearch(input={}){
-    const state = normalizeCollectionIndexState(input);
-    const params = [];
-    if(state.genre){ params.push("genre=" + encodeURIComponent(state.genre)); }
-    if(state.decade){ params.push("decade=" + encodeURIComponent(state.decade)); }
-    if(state.sort !== "name-asc"){ params.push("sort=" + encodeURIComponent(state.sort)); }
-    if(state.page > 1){ params.push("page=" + encodeURIComponent(String(state.page))); }
-    return params.length ? "?" + params.join("&") : "";
-}
-
-function getCollectionsRoute(input={}){
-    return "/app/collections" + serializeCollectionIndexSearch(input);
-}
-
-function getCollectionDetailRoute(collectionId,collectionInfo=""){
-    const id = String(collectionId || "").trim();
-    if(!/^[1-9][0-9]{0,11}$/.test(id)){ return "/app/collections"; }
-    const label = collectionInfo && typeof collectionInfo === "object" ? collectionInfo.name : collectionInfo;
-    const key = buildRouteKey(id,label || "collection");
-    return key && key.includes("-") ? "/app/collection/" + encodeURIComponent(key) : "/app/collection/" + encodeURIComponent(id + "-collection");
-}
-
-function normalizeCollectionDetailSort(value){
-    const clean = String(value || COLLECTION_DETAIL_DEFAULT_SORT).trim().toLowerCase();
-    return COLLECTION_DETAIL_SORTS.includes(clean) ? clean : COLLECTION_DETAIL_DEFAULT_SORT;
-}
-
-function createCollectionDetailFilterState(input={}){
-    const base = createBrowseFilterState("movie",input || {});
-    return Object.assign({},base,{
-        media:"movie",
-        country:"",
-        providers:[],
-        runtime:"",
-        companies:[],
-        themes:[],
-        certification:"",
-        statuses:[],
-        network:"",
-        sort:normalizeCollectionDetailSort(input && input.sort)
-    });
-}
-
-function parseCollectionDetailSearch(search=""){
-    let params;
-    try{ params = new URLSearchParams(String(search || "")); }catch(_error){ params = new URLSearchParams(); }
-    return createCollectionDetailFilterState({
-        media:"movie",
-        year:params.get("year") || "",
-        decade:params.get("decade") || "",
-        genres:params.get("genre") || "",
-        language:params.get("language") || "",
-        fadeWatched:params.get("fadeWatched") || "",
-        hideWatched:params.get("hideWatched") || "",
-        hidePlan:params.get("hidePlan") || "",
-        hideFavorites:params.get("hideFavorites") || "",
-        sort:params.get("sort") || COLLECTION_DETAIL_DEFAULT_SORT
-    });
-}
-
-function getCollectionDetailBrowseSearch(input={}){
-    const state = createCollectionDetailFilterState(input || {});
-    const parts = [];
-    const encodeList = values=>values.map(value=>encodeURIComponent(String(value))).join(",");
-    if(state.genres && state.genres.length){ parts.push("genre=" + encodeList(state.genres)); }
-    if(state.language){ parts.push("language=" + encodeURIComponent(state.language)); }
-    if(state.year){
-        parts.push("year=" + encodeURIComponent(state.year));
-    }else if(state.decade){
-        parts.push("decade=" + encodeURIComponent(state.decade));
-    }
-    if(state.fadeWatched){ parts.push("fadeWatched=1"); }
-    if(state.hideWatched){ parts.push("hideWatched=1"); }
-    if(state.hidePlan){ parts.push("hidePlan=1"); }
-    if(state.hideFavorites){ parts.push("hideFavorites=1"); }
-    if(state.sort !== COLLECTION_DETAIL_DEFAULT_SORT){ parts.push("sort=" + encodeURIComponent(state.sort)); }
-    return parts.length ? "?" + parts.join("&") : "";
-}
-
-async function tmdbGetCollectionsIndex(options={}){
-    const state = normalizeCollectionIndexState(options);
-    const params = new URLSearchParams();
-    params.set("page",String(state.page));
-    params.set("page_size",String(Math.max(1,Math.min(Number(options.page_size || COLLECTIONS_PAGE_SIZE),100))));
-    if(state.genre){ params.set("genre",state.genre); }
-    if(state.decade){ params.set("decade",state.decade); }
-    params.set("sort",state.sort);
-    const response = await fetch("/api/tmdb/collections?" + params.toString(),{cache:"no-store"});
-    if(!response.ok){ throw new Error("Collections could not load"); }
-    return await response.json();
-}
-
-async function tmdbGetCollectionDetails(collectionId){
-    const id = String(collectionId || "").trim();
-    if(!/^[1-9][0-9]{0,11}$/.test(id)){ throw new Error("Collection not found"); }
-    const response = await fetch("/api/tmdb/collections/" + encodeURIComponent(id),{cache:"no-store"});
-    if(!response.ok){ throw new Error(response.status === 404 ? "Collection not found" : "Collection could not load"); }
-    return await response.json();
-}
-
-function normalizeCollectionMoviePart(part,index=0){
-    if(!part || !part.id){ return null; }
-    const title = String(part.title || part.name || "Untitled").trim() || "Untitled";
-    const date = String(part.release_date || part.date || "").trim();
-    return {
-        id:Number(part.id || 0),
-        media_type:"movie",
-        title:title,
-        name:title,
-        poster_path:part.poster_path || "",
-        backdrop_path:part.backdrop_path || "",
-        overview:part.overview || "",
-        release_date:date,
-        date:date,
-        genre_ids:Array.isArray(part.genre_ids) ? part.genre_ids.map(String) : [],
-        original_language:String(part.original_language || "").toLowerCase(),
-        vote_average:Number(part.vote_average || 0),
-        popularity:Number(part.popularity || 0),
-        _collection_order:Number(part._collection_order || index || 0)
-    };
-}
-
-function getCollectionFilteredMovies(){
-    const state = collectionDetailState || {};
-    const collection = state.collection || {};
-    const filters = createCollectionDetailFilterState(state.filters || {media:"movie"});
-    let movies = (Array.isArray(collection.parts) ? collection.parts : [])
-    .map((part,index)=>normalizeCollectionMoviePart(part,index))
-    .filter(Boolean);
-    if(filters.year){
-        movies = movies.filter(movie=>String(movie.release_date || "").slice(0,4) === String(filters.year));
-    }else if(filters.decade){
-        const start = Number(filters.decade || 0);
-        movies = movies.filter(movie=>{
-            const year = Number(String(movie.release_date || "").slice(0,4));
-            return year >= start && year <= start + 9;
-        });
-    }
-    if(filters.genres.length){
-        const wanted = new Set(filters.genres.map(String));
-        movies = movies.filter(movie=>(movie.genre_ids || []).some(id=>wanted.has(String(id))));
-    }
-    if(filters.language){
-        movies = movies.filter(movie=>String(movie.original_language || "").toLowerCase() === String(filters.language).toLowerCase());
-    }
-    movies = sortCollectionDetailMovies(movies,filters.sort);
-    return getEyeFilteredRenderItems(movies,"movie",filters);
-}
-
-function sortCollectionDetailMovies(movies,sort){
-    const clean = String(sort || "collection-order").toLowerCase();
-    const list = (Array.isArray(movies) ? movies : []).slice();
-    if(clean === "date-desc"){
-        return list.sort((a,b)=>String(b.release_date || "").localeCompare(String(a.release_date || "")) || String(a.title || "").localeCompare(String(b.title || "")));
-    }
-    if(clean === "date-asc"){
-        return list.sort((a,b)=>String(a.release_date || "").localeCompare(String(b.release_date || "")) || String(a.title || "").localeCompare(String(b.title || "")));
-    }
-    if(clean === "popularity-desc"){
-        return list.sort((a,b)=>Number(b.popularity || 0)-Number(a.popularity || 0));
-    }
-    if(clean === "popularity-asc"){
-        return list.sort((a,b)=>Number(a.popularity || 0)-Number(b.popularity || 0));
-    }
-    if(clean === "rating-desc"){
-        return list.sort((a,b)=>Number(b.vote_average || 0)-Number(a.vote_average || 0));
-    }
-    if(clean === "rating-asc"){
-        return list.sort((a,b)=>Number(a.vote_average || 0)-Number(b.vote_average || 0));
-    }
-    if(clean === "title-asc"){
-        return list.sort((a,b)=>String(a.title || "").localeCompare(String(b.title || "")));
-    }
-    if(clean === "title-desc"){
-        return list.sort((a,b)=>String(b.title || "").localeCompare(String(a.title || "")));
-    }
-    return list.sort((a,b)=>Number(a._collection_order || 0)-Number(b._collection_order || 0));
-}
-
-function showCollectionsPageShell(){
-    activePage = "collections-index";
-    document.querySelectorAll(".page").forEach(section=>section.classList.remove("active-page"));
-    activatePrimaryNavContext("discover");
-    const pageElement = document.getElementById("genre-detail-page");
-    if(pageElement){ pageElement.classList.add("active-page"); pageElement.scrollTop = 0; }
-    if(typeof updateShellTitle === "function"){ updateShellTitle(); }
-}
-
-function renderActiveCollectionsPage(){
-    if(typeof renderCollectionsIndexPage === "function"){
-        renderCollectionsIndexPage(collectionsPageState);
-        attachCollectionsPageEvents();
-    }
-    if(typeof updateShellTitle === "function"){ updateShellTitle(); }
-}
-
-async function openCollectionsPage(inputState={},options={}){
-    const fromRoute = options && options.fromRoute === true;
-    const state = normalizeCollectionIndexState(inputState || {});
-    collectionsPageState = Object.assign({},collectionsPageState,state,{loading:true,error:""});
-    showCollectionsPageShell();
-    const route = getCollectionsRoute(state);
-    if(!fromRoute && typeof setAppHashRoute === "function"){
-        setAppHashRoute(route,options && options.replaceRoute === true);
-        rememberRouteNavContext(route,"discover");
-    }
-    if(typeof ensureBrowseReferenceData === "function"){
-        ensureBrowseReferenceData("movie").then(renderActiveCollectionsPage).catch(()=>{});
-    }
-    await loadCollectionsIndexPage();
-}
-
-async function loadCollectionsIndexPage(){
-    const requestState = normalizeCollectionIndexState(collectionsPageState);
-    collectionsPageState.loading = true;
-    collectionsPageState.error = "";
-    renderActiveCollectionsPage();
-    try{
-        const payload = await tmdbGetCollectionsIndex(Object.assign({},requestState,{page_size:COLLECTIONS_PAGE_SIZE}));
-        collectionsPageState = Object.assign({},collectionsPageState,requestState,{
-            loading:false,
-            building:payload && payload.building === true,
-            page:Number(payload && payload.page || requestState.page || 1),
-            totalPages:Number(payload && payload.total_pages || 1),
-            totalResults:Number(payload && payload.total_results || 0),
-            pageSize:Number(payload && payload.page_size || COLLECTIONS_PAGE_SIZE),
-            collections:Array.isArray(payload && payload.results) ? payload.results : [],
-            genres:Array.isArray(payload && payload.genres) ? payload.genres : [],
-            decades:Array.isArray(payload && payload.decades) ? payload.decades : [],
-            error:""
-        });
-        const route = getCollectionsRoute(collectionsPageState);
-        if(typeof setAppHashRoute === "function"){ setAppHashRoute(route,true); }
-        renderActiveCollectionsPage();
-    }catch(error){
-        collectionsPageState.loading = false;
-        collectionsPageState.error = error && error.message ? error.message : "Collections could not load.";
-        renderActiveCollectionsPage();
-    }
-}
-
-function showCollectionDetailPageShell(){
-    activePage = "collection-detail";
-    document.querySelectorAll(".page").forEach(section=>section.classList.remove("active-page"));
-    activatePrimaryNavContext("discover");
-    const pageElement = document.getElementById("genre-detail-page");
-    if(pageElement){ pageElement.classList.add("active-page"); pageElement.scrollTop = 0; }
-    if(typeof updateShellTitle === "function"){ updateShellTitle(); }
-}
-
-function renderActiveCollectionDetailPage(){
-    if(typeof renderCollectionDetailPage === "function"){
-        renderCollectionDetailPage(collectionDetailState);
-        attachCollectionDetailPageEvents();
-    }
-    if(typeof updateShellTitle === "function"){ updateShellTitle(); }
-}
-
-async function openCollectionDetailPage(collectionKey,options={}){
-    const parsed = parseRouteKey(collectionKey);
-    if(!parsed.valid || !parsed.id){ renderAppRouteNotFoundPage(); return; }
-    const fromRoute = options && options.fromRoute === true;
-    const filters = createCollectionDetailFilterState(options && options.browseState || {});
-    collectionDetailState = Object.assign({},collectionDetailState,{
-        collectionId:parsed.id,
-        routeSlug:parsed.slug || "",
-        collection:null,
-        filters:filters,
-        labels:createBrowseLabelState(options && options.browseLabels),
-        loading:true,
-        error:"",
-        movies:[]
-    });
-    selectedShowId = null;
-    selectedEpisodeContext = null;
-    selectedPersonContext = null;
-    selectedDiscoveryContext = null;
-    selectedGenreSlug = null;
-    selectedMovieId = null;
-    showCollectionDetailPageShell();
-    if(typeof ensureBrowseReferenceData === "function"){
-        ensureBrowseReferenceData("movie").then(renderActiveCollectionDetailPage).catch(()=>{});
-    }
-    const initialRoute = getCollectionDetailRoute(parsed.id,parsed.slug || "collection") + getCollectionDetailBrowseSearch(filters);
-    if(!fromRoute && typeof setAppHashRoute === "function"){
-        setAppHashRoute(initialRoute,options && options.replaceRoute === true);
-        rememberRouteNavContext(initialRoute,"discover");
-    }
-    renderActiveCollectionDetailPage();
-    try{
-        const collection = await tmdbGetCollectionDetails(parsed.id);
-        collectionDetailState.collection = collection;
-        collectionDetailState.movies = Array.isArray(collection && collection.parts) ? collection.parts : [];
-        collectionDetailState.loading = false;
-        collectionDetailState.error = "";
-        const canonical = getCollectionDetailRoute(parsed.id,collection) + getCollectionDetailBrowseSearch(filters);
-        if(typeof setAppHashRoute === "function"){
-            setAppHashRoute(canonical,true);
-            rememberRouteNavContext(canonical,"discover");
-        }
-        renderActiveCollectionDetailPage();
-    }catch(error){
-        if(isTMDBNotFoundError(error)){
-            renderAppRouteNotFoundPage();
-            return;
-        }
-        collectionDetailState.loading = false;
-        collectionDetailState.error = error && error.message ? error.message : "Collection could not load.";
-        renderActiveCollectionDetailPage();
-    }
-}
-
-function attachCollectionsPageEvents(){
-    const backButton = document.getElementById("collections-page-back-button");
-    if(backButton){ backButton.addEventListener("click",()=>navigateBackOrRouteFallback("/app/discover")); }
-    document.querySelectorAll("[data-collections-set]").forEach(button=>{
-        button.addEventListener("click",async function(){
-            const key = this.dataset.collectionsSet || "";
-            const value = this.dataset.collectionsValue || "";
-            const next = normalizeCollectionIndexState(collectionsPageState);
-            if(key === "genre"){ next.genre = value; next.page = 1; }
-            if(key === "decade"){ next.decade = value; next.page = 1; }
-            if(key === "sort"){ next.sort = normalizeCollectionIndexSort(value); next.page = 1; }
-            await openCollectionsPage(next,{replaceRoute:false});
-        });
-    });
-    document.querySelectorAll("[data-collections-page]").forEach(button=>{
-        button.addEventListener("click",async function(){
-            const next = normalizeCollectionIndexState(collectionsPageState);
-            next.page = Math.max(1,Number(this.dataset.collectionsPage || 1));
-            await openCollectionsPage(next,{replaceRoute:false});
-        });
-    });
-    document.querySelectorAll("[data-collections-remove]").forEach(button=>{
-        button.addEventListener("click",async function(){
-            const next = normalizeCollectionIndexState(collectionsPageState);
-            const key = this.dataset.collectionsRemove || "";
-            if(key === "genre"){ next.genre = ""; }
-            if(key === "decade"){ next.decade = ""; }
-            if(key === "sort"){ next.sort = "name-asc"; }
-            if(key === "all"){ next.genre = ""; next.decade = ""; next.sort = "name-asc"; }
-            next.page = 1;
-            await openCollectionsPage(next,{replaceRoute:false});
-        });
-    });
-}
-
-function setCollectionDetailFilterState(nextState,labels={}){
-    const clean = createCollectionDetailFilterState(nextState || {});
-    collectionDetailState.filters = clean;
-    collectionDetailState.labels = createBrowseLabelState(labels || collectionDetailState.labels);
-    const route = getCollectionDetailRoute(collectionDetailState.collectionId,collectionDetailState.collection || collectionDetailState.routeSlug) + getCollectionDetailBrowseSearch(clean);
-    if(route && typeof setAppHashRoute === "function"){
-        setAppHashRoute(route,false);
-        rememberRouteNavContext(route,"discover");
-    }
-    renderActiveCollectionDetailPage();
-}
-
-function attachCollectionDetailPageEvents(){
-    const backButton = document.getElementById("collection-detail-back-button");
-    if(backButton){ backButton.addEventListener("click",()=>navigateBackOrRouteFallback("/app/collections")); }
-    const page = document.querySelector(".collection-detail-page-inner");
-    if(page){
-        page.addEventListener("click",function(event){
-            const target = event && event.target;
-            if(!target || typeof target.closest !== "function"){ return; }
-            const sortButton = target.closest("[data-collection-detail-sort]");
-            if(sortButton){
-                event.preventDefault();
-                event.stopPropagation();
-                const next = createCollectionDetailFilterState(collectionDetailState.filters || {});
-                next.sort = normalizeCollectionDetailSort(sortButton.dataset.collectionDetailSort || "");
-                setCollectionDetailFilterState(next,collectionDetailState.labels || {});
-                closeBrowseMenus();
-                return;
-            }
-            const removeSort = target.closest("[data-collection-detail-remove='sort']");
-            if(removeSort){
-                event.preventDefault();
-                event.stopPropagation();
-                const next = createCollectionDetailFilterState(collectionDetailState.filters || {});
-                next.sort = COLLECTION_DETAIL_DEFAULT_SORT;
-                setCollectionDetailFilterState(next,collectionDetailState.labels || {});
-                return;
-            }
-        });
-    }
-    attachBrowseControlsEvents({source:"collection"});
-    document.querySelectorAll(".collection-detail-result-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(event){
-            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
-            event.preventDefault();
-            const mediaId = Number(this.dataset.mediaId || 0);
-            if(mediaId){ await openMoviePage(mediaId,{movieName:this.dataset.mediaName || ""}); }
-        });
-    });
-}
-
 function showBrowsePageShell(navigationContext=""){
     activePage = "browse-detail";
     document.querySelectorAll(".page").forEach(section=>section.classList.remove("active-page"));
@@ -7923,19 +7453,6 @@ async function openBrowsePage(state,options={}){
 }
 
 async function navigateToBrowseState(nextState,labels={},options={}){
-    if(activePage === "collection-detail"){
-        const collectionState = createCollectionDetailFilterState(nextState || {});
-        collectionDetailState.filters = collectionState;
-        collectionDetailState.labels = createBrowseLabelState(labels);
-        const route = getCollectionDetailRoute(collectionDetailState.collectionId,collectionDetailState.collection || collectionDetailState.routeSlug) + getCollectionDetailBrowseSearch(collectionState);
-        if(route && typeof setAppHashRoute === "function"){
-            setAppHashRoute(route,options && options.replaceRoute === true);
-            rememberRouteNavContext(route,"discover");
-        }
-        renderActiveCollectionDetailPage();
-        return;
-    }
-
     let cleanState = createBrowseFilterState(nextState && nextState.media,nextState || {});
     const cleanType = normalizeDiscoveryFilterType(discoveryPageState && discoveryPageState.type);
     const cleanValue = normalizeDiscoveryFilterValue(cleanType,discoveryPageState && discoveryPageState.value);
@@ -8107,20 +7624,6 @@ async function handleEyeFilterToggle(key){
             rememberRouteNavContext(route,"discover");
         }
         renderActivePersonPage();
-        return;
-    }
-
-    if(activePage === "collection-detail"){
-        const current = createCollectionDetailFilterState(collectionDetailState && collectionDetailState.filters || {});
-        current[cleanKey] = !current[cleanKey];
-        const next = createCollectionDetailFilterState(current);
-        collectionDetailState.filters = next;
-        const route = getCollectionDetailRoute(collectionDetailState.collectionId,collectionDetailState.collection || collectionDetailState.routeSlug) + getCollectionDetailBrowseSearch(next);
-        if(route && typeof setAppHashRoute === "function"){
-            setAppHashRoute(route,false);
-            rememberRouteNavContext(route,"discover");
-        }
-        renderActiveCollectionDetailPage();
         return;
     }
 
