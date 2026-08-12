@@ -767,11 +767,11 @@
     }
 
     .watchlist-new-badge-row .watchlist-new-badge{
-        @apply tw-mt-1 tw-inline-flex;
+        @apply tw-mt-1 tw-inline-block;
     }
 
     .watchlist-new-badge{
-        @apply tw-shrink-0 tw-self-start;
+        @apply tw-shrink-0 tw-self-start tw-rounded-[3px] tw-px-1.5 tw-py-0.5 tw-text-[9px] tw-leading-[1.3] tw-shadow-none;
     }
 
     .watchlist-action{
@@ -792,12 +792,8 @@
     }
 
     .new-badge{
-        @apply tw-inline-flex tw-shrink-0 tw-align-middle tw-rounded-[2px] tw-bg-tt-gold tw-px-[4px] tw-py-[1px] tw-font-sans tw-text-[9px] tw-font-extrabold tw-leading-none tw-tracking-[.08em] tw-text-black;
-        box-shadow:none;
-    }
-
-    .upcoming-entry-card .new-badge{
-        @apply tw-mt-1;
+        @apply tw-mt-2 tw-inline-block tw-rounded tw-bg-tt-gold tw-px-[7px] tw-py-[3px] tw-text-[11px] tw-font-bold tw-tracking-[.5px] tw-text-black;
+        box-shadow:0 0 10px rgba(255,212,0,.45);
     }
 
     .upcoming-group,
@@ -1060,7 +1056,7 @@
     }
 
     .discover-hub-card:hover{
-        @apply tw-translate-y-[-2px] tw-border-[#444] tw-bg-tt-control;
+        @apply tw-border-[#444] tw-bg-tt-control;
     }
 
     .discover-card-poster{
@@ -1221,6 +1217,11 @@
         @apply tw-h-full tw-min-h-[38px] tw-w-full tw-max-w-full tw-border-0 tw-bg-transparent tw-px-3 tw-text-sm;
     }
 
+    .collections-search-input:focus-visible{
+        outline:none;
+        outline-offset:0;
+    }
+
     .movie-title-with-adult-badge{
         display:inline-flex;
         align-items:center;
@@ -1238,6 +1239,16 @@
 
     .adult-movie-badge{
         @apply tw-inline-flex tw-shrink-0 tw-align-middle tw-rounded-[2px] tw-bg-[#b91c1c] tw-px-[4px] tw-py-[1px] tw-font-sans tw-text-[9px] tw-font-extrabold tw-leading-none tw-tracking-[.08em] tw-text-white;
+    }
+
+    .discover-card-meta .adult-movie-badge,
+    .genre-result-meta .adult-movie-badge,
+    .v2-similar-meta .adult-movie-badge{
+        @apply tw-py-[2px];
+    }
+
+    .show-page-meta-line .adult-movie-badge{
+        @apply tw-px-[6px] tw-py-[3px] tw-text-[11px];
     }
 
     .search-tab-row .eye-filter-menu{

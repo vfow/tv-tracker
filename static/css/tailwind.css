@@ -1808,10 +1808,12 @@
 .eye-filter-menu-inactive .browse-bar-button{cursor:default;}
 
 /* Phase 6.6J.2 visual polish overrides */
-.watchlist-new-badge-row .watchlist-new-badge{display:inline-flex}
-.watchlist-new-badge{flex-shrink:0;align-self:flex-start}
-.new-badge{display:inline-flex;flex-shrink:0;vertical-align:middle;border-radius:2px;background:#ffd400;padding:1px 4px;font-family:Graphik,Arial,Helvetica,sans-serif;font-size:9px;font-weight:800;line-height:1;letter-spacing:.08em;color:#000;box-shadow:none}
-.upcoming-entry-card .new-badge{margin-top:.25rem}
 .discover-card-row{position:relative;z-index:30}
 .collections-browse-bar{width:max-content;max-width:100%}
 @media (max-width:760px){.collections-browse-bar{width:100%}}
+
+/* Phase 6.6J.3 interaction and badge polish */
+.discover-hub-card:hover{transform:none}
+.collections-search-input:focus-visible{outline:none;outline-offset:0}
+.discover-card-meta .adult-movie-badge,.genre-result-meta .adult-movie-badge,.v2-similar-meta .adult-movie-badge{padding-top:2px;padding-bottom:2px}
+.show-page-meta-line .adult-movie-badge{padding:3px 6px;font-size:11px}
