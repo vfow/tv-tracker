@@ -4074,7 +4074,7 @@ function renderMovieReleaseSortControlHTML(sortMode){
             <span class="movie-release-sort-menu-wrap">
                 <button class="movie-release-sort-button" type="button" data-movie-release-sort-toggle data-current-sort="${escapeHTML(mode)}" aria-haspopup="true" aria-expanded="false" aria-label="Choose movie release sort">
                     <span class="movie-release-sort-current">${escapeHTML(label)}</span>
-                    <span class="movie-release-sort-chevron" aria-hidden="true">⌄</span>
+                    <span class="movie-release-sort-chevron" aria-hidden="true">${renderBrowseChevronIcon("movie-release-sort-chevron-icon")}</span>
                 </button>
                 <span class="movie-release-sort-menu" data-movie-release-sort-menu role="menu" hidden>
                     ${options}

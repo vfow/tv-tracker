@@ -777,6 +777,20 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('.person-progress-card', built_css)
         self.assertIn('.person-progress-percent', built_css)
 
+    def test_phase65b_more_link_and_release_sort_visual_polish_exists(self):
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
+        releases_block = ui[releases_start:ui.index('function sortMovieReleaseRows', releases_start)]
+        self.assertIn('renderBrowseChevronIcon("movie-release-sort-chevron-icon")', releases_block)
+        self.assertNotIn('>⌄</span>', releases_block)
+        self.assertIn('color:rgba(255,255,255,.68);', source_css)
+        self.assertIn('background:#202124;', source_css)
+        self.assertIn('background:#323438;', source_css)
+        self.assertIn('movie-release-sort-chevron-icon', built_css)
+        self.assertIn('color:rgba(255,255,255,.68)', built_css)
+
     def test_main_list_initial_skeleton_and_hidden_soap_genre_exist(self):
         ui = self.read('static/js/ui.js')
         router = self.read('static/js/app-router.js')
