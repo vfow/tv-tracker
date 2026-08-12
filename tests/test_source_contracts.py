@@ -1062,8 +1062,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
         self.assertIn('target_count = min(3, max(movie_count, 1))', app_py)
         self.assertIn('return len(usable_slots) >= target_count', app_py)
-        self.assertIn('tv-tracker-tmdb-collection-index:v4', app_js)
-        self.assertIn('tv-tracker-tmdb-collection-detail:v4', app_js)
+        self.assertIn('tv-tracker-tmdb-collection-index:v5', app_js)
+        self.assertIn('tv-tracker-tmdb-collection-detail:v5', app_js)
         self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
         self.assertIn('if(!chips.length){ return ""; }', ui)
         self.assertNotIn('if(!chips.length && !eyeActive){ return ""; }', ui)
@@ -1089,3 +1089,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+    def test_phase66g2_collection_slot_hydration_and_spacing_exists(self):
+        app_js = self.read('static/js/app.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('function collectionNeedsPosterSlotHydration(collection)', app_js)
+        self.assertIn('async function hydrateIncompleteCollectionSlots(collections,options={})', app_js)
+        self.assertIn('hydrateVisibleCollectionsForIndex().catch(()=>{});', app_js)
+        self.assertIn('return hydrateIncompleteCollectionSlots(rowCollections,{limit:rowCollections.length});', app_js)
+        self.assertIn('gap:8px;', source_css)
+        self.assertIn('gap:8px;', built_css)
+        self.assertIn('.movie-release-sort-current', source_css)
+        self.assertIn('min-width:0;', source_css)
+
+

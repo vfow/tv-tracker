@@ -143,6 +143,7 @@ var discoverHubState = {
 };
 var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
 var collectionIndexPollTimer = null;
+var collectionIndexHydrationRun = 0;
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
 var selectedCollectionId = null;
 var discoverGenreMedia = "tv";
@@ -163,7 +164,7 @@ var networkMetadataSyncRunning = false;
 var adminAccountState = {loaded:false,loading:false,username:"",error:""};
 
 
-const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v7";
+const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v8";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const DISCOVER_COLLECTION_ROW_LIMIT = 12;
@@ -172,9 +173,9 @@ const COLLECTIONS_DEFAULT_SORT = "popularity.desc";
 const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
 const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
-const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v4:";
+const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v5:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
-const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v4";
+const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v5";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
 const DISCOVER_COLLECTION_IDS = Object.freeze([
     10,
@@ -4198,6 +4199,88 @@ function mergeCollectionLists(primary,secondary){
     return output;
 }
 
+function collectionNeedsPosterSlotHydration(collection){
+    const target = getCollectionSlotTargetCount(collection);
+    if(!target){
+        return false;
+    }
+    const slots = getCollectionPosterSlots(collection);
+    if(slots.length < target){
+        return true;
+    }
+    return slots.slice(0,target).some(slot=>!String(slot && (slot.title || slot.name || slot.poster_path) || "").trim());
+}
+
+async function hydrateIncompleteCollectionSlots(collections,options={}){
+    const list = (Array.isArray(collections) ? collections : []).slice();
+    const limit = Math.max(0,Number(options && options.limit || list.length || 0));
+    const candidates = list
+    .map((collection,index)=>({collection,index}))
+    .filter(item=>collectionNeedsPosterSlotHydration(item.collection))
+    .slice(0,limit || undefined);
+    if(!candidates.length){
+        return list;
+    }
+    const concurrency = Math.min(4,candidates.length);
+    let cursor = 0;
+
+    async function worker(){
+        while(cursor < candidates.length){
+            const item = candidates[cursor];
+            cursor += 1;
+            const id = normalizeCollectionId(item && item.collection && item.collection.id);
+            if(!id){
+                continue;
+            }
+            try{
+                const detail = await tmdbGetCollectionDetails(id);
+                if(detail){
+                    list[item.index] = chooseRicherCollectionSummary(item.collection,detail);
+                }
+            }catch(error){}
+        }
+    }
+
+    await Promise.all(Array.from({length:concurrency},worker));
+    return list;
+}
+
+function mergeHydratedCollectionsIntoList(collections,hydratedCollections){
+    const byId = new Map();
+    (Array.isArray(hydratedCollections) ? hydratedCollections : []).forEach(collection=>{
+        const id = normalizeCollectionId(collection && collection.id);
+        if(id){
+            byId.set(id,collection);
+        }
+    });
+    if(!byId.size){
+        return Array.isArray(collections) ? collections : [];
+    }
+    return (Array.isArray(collections) ? collections : []).map(collection=>{
+        const id = normalizeCollectionId(collection && collection.id);
+        return byId.has(id) ? chooseRicherCollectionSummary(collection,byId.get(id)) : collection;
+    });
+}
+
+async function hydrateVisibleCollectionsForIndex(){
+    if(activePage !== "collections-index" || !collectionsPageState || collectionsPageState.loading){
+        return;
+    }
+    const visible = Array.isArray(collectionsPageState.visibleCollections) ? collectionsPageState.visibleCollections : [];
+    if(!visible.some(collectionNeedsPosterSlotHydration)){
+        return;
+    }
+    const runId = ++collectionIndexHydrationRun;
+    const hydratedVisible = await hydrateIncompleteCollectionSlots(visible,{limit:visible.length});
+    if(runId !== collectionIndexHydrationRun || activePage !== "collections-index"){
+        return;
+    }
+    const collections = mergeHydratedCollectionsIntoList(collectionsPageState.collections || [],hydratedVisible);
+    const built = buildCollectionsIndexState(collections,collectionsPageState);
+    collectionsPageState = Object.assign({},collectionsPageState,built,{collections});
+    renderActiveCollectionsPage();
+}
+
 async function loadCollectionIndexWithFallback(options={}){
     let payload = null;
     try{
@@ -4252,10 +4335,12 @@ async function loadDiscoverCollectionRow(){
     }catch(error){}
     const promotableIndexedCollections = indexedCollections.filter(isPromotableCollection);
     if(promotableIndexedCollections.length >= DISCOVER_COLLECTION_ROW_LIMIT){
-        return sortCollectionsForIndex(promotableIndexedCollections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+        const rowCollections = sortCollectionsForIndex(promotableIndexedCollections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+        return hydrateIncompleteCollectionSlots(rowCollections,{limit:rowCollections.length});
     }
     const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT * 4});
-    return sortCollectionsForIndex(mergeCollectionLists(promotableIndexedCollections,fallbackCollections).filter(isPromotableCollection),"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    const rowCollections = sortCollectionsForIndex(mergeCollectionLists(promotableIndexedCollections,fallbackCollections).filter(isPromotableCollection),"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    return hydrateIncompleteCollectionSlots(rowCollections,{limit:rowCollections.length});
 }
 
 function scheduleCollectionIndexPoll(){
@@ -4430,6 +4515,7 @@ function applyCollectionsIndexState(nextState={},options={}){
         setAppHashRoute(getCollectionsRoute(collectionsPageState),options.replaceRoute === true);
     }
     renderActiveCollectionsPage();
+    hydrateVisibleCollectionsForIndex().catch(()=>{});
 }
 
 function normalizeCollectionDetailSort(value){
@@ -4935,8 +5021,13 @@ async function loadCollectionsIndexResults(options={}){
     try{
         await ensureBrowseReferenceData("movie").catch(()=>{});
         const payload = await loadCollectionIndexWithFallback({force:options && options.force === true});
-        const collections = Array.isArray(payload.collections) ? payload.collections : [];
-        const built = buildCollectionsIndexState(collections,collectionsPageState);
+        let collections = Array.isArray(payload.collections) ? payload.collections : [];
+        let built = buildCollectionsIndexState(collections,collectionsPageState);
+        if(Array.isArray(built.visibleCollections) && built.visibleCollections.some(collectionNeedsPosterSlotHydration)){
+            const hydratedVisible = await hydrateIncompleteCollectionSlots(built.visibleCollections,{limit:built.visibleCollections.length});
+            collections = mergeHydratedCollectionsIntoList(collections,hydratedVisible);
+            built = buildCollectionsIndexState(collections,collectionsPageState);
+        }
         collectionsPageState = Object.assign({},collectionsPageState,built,{
             loaded:collections.length > 0 || payload.building !== true,
             loading:payload.building === true && !collections.length,

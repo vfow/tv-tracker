@@ -5462,7 +5462,7 @@
     display:flex;
     justify-content:flex-end;
     align-items:center;
-    gap:4px;
+    gap:8px;
     border-bottom:1px solid rgba(255,255,255,.14);
     padding:0 0 8px;
     color:rgba(255,255,255,.42);
@@ -5484,7 +5484,7 @@
 .movie-release-sort-button{
     display:inline-flex;
     align-items:center;
-    gap:4px;
+    gap:8px;
     border:0;
     background:transparent;
     padding:0;
@@ -5504,7 +5504,7 @@
 
 .movie-release-sort-current{
     display:inline-block;
-    min-width:58px;
+    min-width:0;
     text-align:left;
 }
 
@@ -5906,6 +5906,12 @@
 .collection-detail-controls .browse-menu > .browse-bar-button,
 .collections-controls .browse-menu > .browse-bar-button{
     justify-content:space-between;
+    gap:10px;
+}
+
+.collection-detail-controls .browse-bar-button .browse-chevron,
+.collections-controls .browse-bar-button .browse-chevron{
+    margin-left:4px;
 }
 
 .collection-detail-controls .browse-menu > .browse-bar-button{
