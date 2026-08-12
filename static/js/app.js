@@ -172,9 +172,9 @@ const COLLECTIONS_DEFAULT_SORT = "popularity.desc";
 const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
 const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
-const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v3:";
+const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v4:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
-const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v3";
+const TMDB_COLLECTION_INDEX_CACHE_KEY = "tv-tracker-tmdb-collection-index:v4";
 const TMDB_COLLECTION_INDEX_CACHE_TTL = 1000 * 60 * 5;
 const DISCOVER_COLLECTION_IDS = Object.freeze([
     10,
@@ -4147,16 +4147,51 @@ async function loadCuratedCollectionFallback(options={}){
     return loadCollectionSummaries(DISCOVER_COLLECTION_IDS,options);
 }
 
+function getCollectionSlotTargetCount(collection){
+    return Math.min(3,Math.max(0,Number(collection && collection.movie_count || 0),Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
+}
+
+function getCollectionPosterSlotCoverage(collection){
+    const slots = getCollectionPosterSlots(collection);
+    const target = getCollectionSlotTargetCount(collection) || slots.length;
+    const titledSlots = slots.filter(slot=>String(slot && (slot.title || slot.name || slot.poster_path) || "").trim()).length;
+    return {slots:slots.length,target,titledSlots};
+}
+
+function chooseRicherCollectionSummary(current,next){
+    if(!current){ return next; }
+    if(!next){ return current; }
+    const currentCoverage = getCollectionPosterSlotCoverage(current);
+    const nextCoverage = getCollectionPosterSlotCoverage(next);
+    const currentParts = Array.isArray(current.parts) ? current.parts.length : 0;
+    const nextParts = Array.isArray(next.parts) ? next.parts.length : 0;
+    if(nextCoverage.slots > currentCoverage.slots){
+        return Object.assign({},current,next);
+    }
+    if(nextCoverage.slots === currentCoverage.slots && nextCoverage.titledSlots > currentCoverage.titledSlots){
+        return Object.assign({},current,next);
+    }
+    if(nextParts > currentParts){
+        return Object.assign({},current,next);
+    }
+    return current;
+}
+
 function mergeCollectionLists(primary,secondary){
     const output = [];
-    const seen = new Set();
+    const indexById = new Map();
     [primary,secondary].forEach(list=>{
         (Array.isArray(list) ? list : []).forEach(collection=>{
             const id = normalizeCollectionId(collection && collection.id);
-            if(!id || seen.has(id)){
+            if(!id){
                 return;
             }
-            seen.add(id);
+            if(indexById.has(id)){
+                const index = indexById.get(id);
+                output[index] = chooseRicherCollectionSummary(output[index],collection);
+                return;
+            }
+            indexById.set(id,output.length);
             output.push(collection);
         });
     });

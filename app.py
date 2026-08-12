@@ -2457,8 +2457,21 @@ def update_collection_cache_from_export(cache: dict[str, Any]) -> dict[str, Any]
 
 
 def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:
-    slots = summary.get("poster_slots") if isinstance(summary, dict) else None
-    return isinstance(slots, list) and len(slots) > 0
+    if not isinstance(summary, dict):
+        return False
+    slots = summary.get("poster_slots")
+    if not isinstance(slots, list) or not slots:
+        return False
+    try:
+        movie_count = int(summary.get("movie_count") or 0)
+    except (TypeError, ValueError):
+        movie_count = 0
+    target_count = min(3, max(movie_count, 1))
+    usable_slots = [
+        slot for slot in slots[:target_count]
+        if isinstance(slot, dict) and (str(slot.get("poster_path") or "").strip() or str(slot.get("title") or slot.get("name") or "").strip())
+    ]
+    return len(usable_slots) >= target_count
 
 
 def build_tmdb_collection_index_batch() -> None:

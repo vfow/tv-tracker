@@ -503,21 +503,43 @@ function normalizeCollectionPosterSlotForRender(raw,collection){
 }
 
 function getCollectionPosterSlotsForRender(collection){
-    const slots = [];
-    const pushSlot = raw=>{
-        const slot = normalizeCollectionPosterSlotForRender(raw,collection);
-        if(slot){ slots.push(slot); }
+    const buildSlots = source=>{
+        const output = [];
+        const pushSlot = raw=>{
+            const slot = normalizeCollectionPosterSlotForRender(raw,collection);
+            if(slot){ output.push(slot); }
+        };
+        (Array.isArray(source) ? source : []).slice(0,3).forEach(pushSlot);
+        return output;
     };
-    if(Array.isArray(collection && collection.poster_slots) && collection.poster_slots.length){
-        collection.poster_slots.slice(0,3).forEach(pushSlot);
-    }else if(Array.isArray(collection && collection.parts) && collection.parts.length){
-        collection.parts.slice(0,3).forEach(pushSlot);
-    }else if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
-        collection.poster_paths.slice(0,3).forEach(path=>pushSlot({poster_path:path,title:collection && (collection.name || collection.title) || "Collection"}));
-    }else if(collection && collection.poster_path){
-        pushSlot({poster_path:collection.poster_path,title:collection.name || collection.title || "Collection"});
+
+    const partSlots = buildSlots(collection && collection.parts);
+    const posterSlots = buildSlots(collection && collection.poster_slots);
+    const targetCount = Math.min(3,Math.max(0,Number(collection && collection.movie_count || 0),Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
+
+    if(partSlots.length && partSlots.length >= Math.min(targetCount || partSlots.length,3)){
+        return partSlots.slice(0,3);
     }
-    return slots.slice(0,3);
+
+    if(posterSlots.length && (!partSlots.length || posterSlots.length >= partSlots.length)){
+        return posterSlots.slice(0,3);
+    }
+
+    if(partSlots.length){
+        return partSlots.slice(0,3);
+    }
+
+    const pathSlots = [];
+    if(Array.isArray(collection && collection.poster_paths) && collection.poster_paths.length){
+        collection.poster_paths.slice(0,3).forEach(path=>{
+            const slot = normalizeCollectionPosterSlotForRender({poster_path:path,title:collection && (collection.name || collection.title) || "Collection"},collection);
+            if(slot){ pathSlots.push(slot); }
+        });
+    }else if(collection && collection.poster_path){
+        const slot = normalizeCollectionPosterSlotForRender({poster_path:collection.poster_path,title:collection.name || collection.title || "Collection"},collection);
+        if(slot){ pathSlots.push(slot); }
+    }
+    return pathSlots.slice(0,3);
 }
 
 function renderCollectionPosterStackHTML(collection){
@@ -2215,8 +2237,7 @@ function renderCollectionDetailActiveChipsHTML(pageState,filters){
     filters.genres.forEach(id=>push("genres",id,getCollectionDetailGenreLabel(pageState,id)));
     if(filters.language){ push("language",filters.language,typeof getLanguageName === "function" ? getLanguageName(filters.language) : filters.language.toUpperCase()); }
     if(filters.sort !== "collection-order"){ push("sort",filters.sort,getCollectionDetailSortLabel(filters.sort)); }
-    const eyeActive = !!(filters.fadeWatched || filters.hideWatched || filters.hidePlan || filters.hideFavorites);
-    if(!chips.length && !eyeActive){ return ""; }
+    if(!chips.length){ return ""; }
     return `<div class="browse-active-row collection-detail-active-row" aria-label="Active collection movie filters">${chips.join("")}<button type="button" class="browse-clear-button" data-collection-detail-clear>CLEAR ALL</button></div>`;
 }
 

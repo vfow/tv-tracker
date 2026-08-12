@@ -1053,6 +1053,23 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('collection-stack-placeholder', source_css)
         self.assertIn('collection-stack-placeholder', built_css)
 
+    def test_phase66g1_collection_detail_ui_cleanup_exists(self):
+        app_py = self.read('app.py')
+        app_js = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        source_css = self.read('static/css/tailwind-input.css')
+        built_css = self.read('static/css/tailwind.css')
+
+        self.assertIn('target_count = min(3, max(movie_count, 1))', app_py)
+        self.assertIn('return len(usable_slots) >= target_count', app_py)
+        self.assertIn('tv-tracker-tmdb-collection-index:v4', app_js)
+        self.assertIn('tv-tracker-tmdb-collection-detail:v4', app_js)
+        self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
+        self.assertIn('if(!chips.length){ return ""; }', ui)
+        self.assertNotIn('if(!chips.length && !eyeActive){ return ""; }', ui)
+        self.assertIn('.collection-detail-controls .browse-menu > .browse-bar-button', source_css)
+        self.assertIn('.collection-detail-controls .browse-menu > .browse-bar-button', built_css)
+
 
 
 
