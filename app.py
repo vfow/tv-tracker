@@ -1891,7 +1891,7 @@ def safe_next_url(value: str | None) -> str:
     if APP_COLLECTIONS_PATH_RE.fullmatch(candidate):
         genre = ""
         decade = ""
-        sort_mode = "name.asc"
+        sort_mode = "popularity.desc"
         page_number = ""
         if separator:
             current_decade = 2100
@@ -1912,7 +1912,7 @@ def safe_next_url(value: str | None) -> str:
             params["genre"] = genre
         if decade:
             params["decade"] = decade
-        if sort_mode != "name.asc":
+        if sort_mode != "popularity.desc":
             params["sort"] = sort_mode
         if page_number and page_number != "1":
             params["page"] = page_number

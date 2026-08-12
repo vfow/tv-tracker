@@ -71,7 +71,7 @@ function createRouter(route, options={}){
       const parts=[];
       if(state.genre){ parts.push('genre=' + encodeURIComponent(state.genre)); }
       if(state.decade){ parts.push('decade=' + encodeURIComponent(state.decade)); }
-      if(state.sort && state.sort !== 'name.asc'){ parts.push('sort=' + encodeURIComponent(state.sort)); }
+      if(state.sort && state.sort !== 'popularity.desc'){ parts.push('sort=' + encodeURIComponent(state.sort)); }
       if(Number(state.page || 1) > 1){ parts.push('page=' + encodeURIComponent(String(state.page))); }
       return '/app/collections' + (parts.length ? '?' + parts.join('&') : '');
     },
@@ -743,7 +743,7 @@ for (const route of [
 
 {
   const {calls,router}=createRouter('/app/collections?page=2&sort=popularity.desc&decade=2000&genre=28&bad=1');
-  assert.strictEqual(router.currentRoute(),'/app/collections?genre=28&decade=2000&sort=popularity.desc&page=2');
+  assert.strictEqual(router.currentRoute(),'/app/collections?genre=28&decade=2000&page=2');
   const call=calls.find(item=>item[0]==='openCollectionsPage');
   assert(call,'collections route should preserve collection filters');
   assert.strictEqual(call[1].filters.genre,'28');

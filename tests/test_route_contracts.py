@@ -135,7 +135,7 @@ class ProtectedRouteContractTests(unittest.TestCase):
         )
         self.assertEqual(
             safe_next_url("/app/collections?page=2&sort=popularity.desc&genre=28&decade=2000&junk=1"),
-            "/app/collections?genre=28&decade=2000&sort=popularity.desc&page=2",
+            "/app/collections?genre=28&decade=2000&page=2",
         )
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
 

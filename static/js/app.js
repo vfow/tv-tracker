@@ -141,7 +141,7 @@ var discoverHubState = {
     genres:{tv:[],movie:[]},
     collections:[]
 };
-var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"name.asc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
+var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
 var collectionIndexPollTimer = null;
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
 var selectedCollectionId = null;
@@ -168,7 +168,7 @@ const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const DISCOVER_COLLECTION_ROW_LIMIT = 12;
 const COLLECTIONS_PAGE_SIZE = 64;
-const COLLECTIONS_DEFAULT_SORT = "name.asc";
+const COLLECTIONS_DEFAULT_SORT = "popularity.desc";
 const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
 const COLLECTION_DETAIL_DEFAULT_SORT = "collection-order";
 const COLLECTION_DETAIL_SORT_VALUES = new Set(["collection-order","date-desc","date-asc","popularity-desc","popularity-asc","rating-desc","rating-asc","title-asc","title-desc"]);
@@ -3990,6 +3990,22 @@ function normalizeTMDBCollectionSummary(raw){
     return collection.movie_count > 0 ? collection : null;
 }
 
+function getCollectionMovieCount(collection){
+    return Number(collection && collection.movie_count || (Array.isArray(collection && collection.parts) ? collection.parts.length : 0) || 0);
+}
+
+function getCollectionPosterPaths(collection){
+    const posters = Array.isArray(collection && collection.poster_paths) ? collection.poster_paths.filter(Boolean) : [];
+    if(!posters.length && collection && collection.poster_path){
+        posters.push(collection.poster_path);
+    }
+    return posters;
+}
+
+function isPromotableCollection(collection){
+    return !!(collection && collection.id && collection.name && getCollectionMovieCount(collection) >= 2 && getCollectionPosterPaths(collection).length >= 1);
+}
+
 function normalizeTMDBCollectionDetails(raw){
     const collection = normalizeTMDBCollectionSummary(raw);
     if(!collection || !Array.isArray(collection.parts) || !collection.parts.length){
@@ -4160,11 +4176,12 @@ async function loadDiscoverCollectionRow(){
         const payload = await tmdbGetCollectionIndex();
         indexedCollections = Array.isArray(payload.collections) ? payload.collections : [];
     }catch(error){}
-    if(indexedCollections.length >= DISCOVER_COLLECTION_ROW_LIMIT){
-        return sortCollectionsForIndex(indexedCollections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    const promotableIndexedCollections = indexedCollections.filter(isPromotableCollection);
+    if(promotableIndexedCollections.length >= DISCOVER_COLLECTION_ROW_LIMIT){
+        return sortCollectionsForIndex(promotableIndexedCollections,"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
     }
-    const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT});
-    return sortCollectionsForIndex(mergeCollectionLists(indexedCollections,fallbackCollections),"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
+    const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT * 4});
+    return sortCollectionsForIndex(mergeCollectionLists(promotableIndexedCollections,fallbackCollections).filter(isPromotableCollection),"popularity.desc").slice(0,DISCOVER_COLLECTION_ROW_LIMIT);
 }
 
 function scheduleCollectionIndexPoll(){
@@ -4314,8 +4331,9 @@ function getFilteredCollectionsForIndex(collections,state){
 
 function buildCollectionsIndexState(collections,state){
     const filters = createCollectionsIndexState(state);
-    const options = buildCollectionsIndexOptions(collections);
-    const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(collections,filters),filters.sort);
+    const promotableCollections = (Array.isArray(collections) ? collections : []).filter(isPromotableCollection);
+    const options = buildCollectionsIndexOptions(promotableCollections);
+    const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(promotableCollections,filters),filters.sort);
     const totalPages = Math.max(1,Math.ceil(filtered.length / COLLECTIONS_PAGE_SIZE));
     const page = Math.min(filters.page,totalPages);
     const start = (page - 1) * COLLECTIONS_PAGE_SIZE;
@@ -5004,6 +5022,9 @@ async function openCollectionDetailPage(collectionId,options={}){
 }
 
 function attachCollectionsPageEvents(){
+    if(typeof ensureBrowseGlobalInteractionEvents === "function"){
+        ensureBrowseGlobalInteractionEvents();
+    }
     const backButton = document.getElementById("collections-page-back-button");
     if(backButton){
         backButton.addEventListener("click",function(){
@@ -5022,6 +5043,7 @@ function attachCollectionsPageEvents(){
             }else if(filter === "sort"){
                 applyCollectionsIndexState({sort:normalizeCollectionsIndexSort(value),page:1});
             }
+            if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
         });
     });
 
@@ -5035,6 +5057,7 @@ function attachCollectionsPageEvents(){
             }else if(filter === "all"){
                 applyCollectionsIndexState({genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
             }
+            if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
         });
     });
 

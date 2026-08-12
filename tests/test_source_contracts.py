@@ -1019,8 +1019,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('async function loadCollectionIndexWithFallback(options={})', app_js)
         self.assertIn('function mergeCollectionLists(primary,secondary)', app_js)
         self.assertIn('mergeCollectionLists(indexedCollections,fallbackCollections)', app_js)
-        self.assertIn('const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT});', app_js)
-        self.assertIn('sortCollectionsForIndex(mergeCollectionLists(indexedCollections,fallbackCollections),"popularity.desc")', app_js)
+        self.assertIn('const fallbackCollections = await loadCuratedCollectionFallback({limit:DISCOVER_COLLECTION_ROW_LIMIT * 4});', app_js)
+        self.assertIn('sortCollectionsForIndex(mergeCollectionLists(promotableIndexedCollections,fallbackCollections).filter(isPromotableCollection),"popularity.desc")', app_js)
         self.assertIn('payload.building === true', app_js)
         self.assertIn('Collections are loading. Please refresh in a moment.', ui)
 

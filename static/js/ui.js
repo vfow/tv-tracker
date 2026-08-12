@@ -475,7 +475,9 @@ function renderDiscoverHubSection(section){
 
 function renderCollectionPosterStackHTML(collection,placeholderLabel="COLLECTION"){
     const title = String(collection && (collection.name || collection.title) || "Collection");
-    const posters = Array.isArray(collection && collection.poster_paths) ? collection.poster_paths.filter(Boolean).slice(0,3) : [];
+    const posters = typeof getCollectionPosterPaths === "function"
+    ? getCollectionPosterPaths(collection).slice(0,3)
+    : (Array.isArray(collection && collection.poster_paths) ? collection.poster_paths.filter(Boolean).slice(0,3) : []);
     if(!posters.length && collection && collection.poster_path){
         posters.push(collection.poster_path);
     }
@@ -492,7 +494,7 @@ function renderCollectionCard(collection,extraClass=""){
     const id = collection && collection.id ? String(collection.id) : "";
     const name = String(collection && (collection.name || collection.title) || "Collection").trim();
     const route = typeof getCollectionDetailRoute === "function" ? getCollectionDetailRoute(id,name) : "";
-    const count = Number(collection && collection.movie_count || (Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
+    const count = typeof getCollectionMovieCount === "function" ? getCollectionMovieCount(collection) : Number(collection && collection.movie_count || (Array.isArray(collection && collection.parts) ? collection.parts.length : 0));
     const countLabel = count === 1 ? "1 movie" : `${count || 0} movies`;
     return `
         <a href="${escapeHTML(route)}" class="collection-card ${escapeHTML(extraClass)}" data-collection-id="${escapeHTML(id)}" data-collection-name="${escapeHTML(name)}">
@@ -505,7 +507,7 @@ function renderCollectionCard(collection,extraClass=""){
 
 function renderDiscoverCollectionsSection(collections){
     const cleanCollections = (Array.isArray(collections) ? collections : [])
-    .filter(collection=>collection && collection.id && collection.name)
+    .filter(collection=>typeof isPromotableCollection === "function" ? isPromotableCollection(collection) : collection && collection.id && collection.name)
     .slice(0,12);
     if(!cleanCollections.length){
         return "";
@@ -514,8 +516,7 @@ function renderDiscoverCollectionsSection(collections){
         <section class="discover-section-group discover-collections-section">
             <h2 class="discover-group-title">Collections</h2>
             <section class="discover-section">
-                <div class="discover-section-heading">
-                    <h3>Movie Collections</h3>
+                <div class="discover-section-heading discover-collections-heading">
                     <a class="view-more-button discover-view-more-link" href="/app/collections">VIEW MORE</a>
                 </div>
                 <div class="discover-carousel-shell">
@@ -1815,9 +1816,9 @@ const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
 ]);
 
 function getCollectionIndexSortLabel(sort){
-    const clean = String(sort || "name.asc").trim().toLowerCase();
+    const clean = String(sort || "popularity.desc").trim().toLowerCase();
     const match = COLLECTION_INDEX_SORT_OPTIONS.find(item=>item.value === clean);
-    return match ? match.label : "Collection Name";
+    return match ? match.label : "Most Popular";
 }
 
 function renderCollectionIndexGenreMenu(state){
@@ -1858,7 +1859,7 @@ function renderCollectionIndexDecadeMenu(state){
 }
 
 function renderCollectionIndexSortMenu(state){
-    const selectedSort = String(state && state.sort || "name.asc");
+    const selectedSort = String(state && state.sort || "popularity.desc");
     return `
         <div class="browse-option-list">
             ${COLLECTION_INDEX_SORT_OPTIONS.map(item=>{
@@ -1886,8 +1887,8 @@ function renderCollectionIndexActiveChipsHTML(state){
     if(decade){
         chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="decade">Decade: ${escapeHTML(decade)}s<span aria-hidden="true">×</span></button>`);
     }
-    if(String(state && state.sort || "name.asc") !== "name.asc"){
-        chips.push(`<button type="button" class="browse-active-chip" data-collection-filter="sort" data-collection-value="name.asc">Sort: ${escapeHTML(getCollectionIndexSortLabel(state.sort))}<span aria-hidden="true">×</span></button>`);
+    if(String(state && state.sort || "popularity.desc") !== "popularity.desc"){
+        chips.push(`<button type="button" class="browse-active-chip" data-collection-filter="sort" data-collection-value="popularity.desc">Sort: ${escapeHTML(getCollectionIndexSortLabel(state.sort))}<span aria-hidden="true">×</span></button>`);
     }
     return chips.length ? `<div class="browse-active-row collections-active-row" aria-label="Active collection filters">${chips.join("")}<button type="button" class="browse-clear-button" data-collection-clear="all">CLEAR ALL</button></div>` : "";
 }
@@ -1939,13 +1940,11 @@ function renderCollectionsIndexPage(state){
     const pageState = state || {};
     const hasPagedCollections = Array.isArray(pageState.visibleCollections) && (pageState.loaded === true || Number(pageState.totalResults || 0) >= 0);
     const renderCollections = hasPagedCollections ? pageState.visibleCollections : pageState.collections;
-    const collections = Array.isArray(renderCollections) ? renderCollections.filter(collection=>collection && collection.id && collection.name) : [];
+    const collections = Array.isArray(renderCollections) ? renderCollections.filter(collection=>typeof isPromotableCollection === "function" ? isPromotableCollection(collection) : collection && collection.id && collection.name) : [];
     const loading = pageState.loading === true;
     const building = pageState.building === true;
     const error = String(pageState.error || "").trim();
-    const hasFilters = !!(pageState.genre || pageState.decade || String(pageState.sort || "name.asc") !== "name.asc");
-    const totalResults = Number(pageState.totalResults || collections.length || 0);
-    const countLabel = totalResults === 1 ? "1 collection" : `${totalResults || 0} collections`;
+    const hasFilters = !!(pageState.genre || pageState.decade || String(pageState.sort || "popularity.desc") !== "popularity.desc");
 
     const bodyHTML = error
     ? `
@@ -1955,7 +1954,7 @@ function renderCollectionsIndexPage(state){
         </div>
     `
     : collections.length
-    ? `<div class="genre-result-summary collections-result-summary">${escapeHTML(countLabel)}</div><div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsPaginationHTML(pageState)}`
+    ? `<div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsPaginationHTML(pageState)}`
     : loading || building
     ? `
         <div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>

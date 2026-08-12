@@ -160,13 +160,13 @@
         const decadeNumber = /^(18|19|20|21)[0-9]0$/.test(rawDecade) ? Number(rawDecade) : 0;
         const decade = decadeNumber >= 1870 && decadeNumber <= currentDecade ? String(decadeNumber) : "";
         const rawSort = String(params.get("sort") || "").trim().toLowerCase();
-        const sort = COLLECTION_SORT_MODES.has(rawSort) ? rawSort : "name.asc";
+        const sort = COLLECTION_SORT_MODES.has(rawSort) ? rawSort : "popularity.desc";
         const rawPage = String(params.get("page") || "").trim();
         const page = /^[1-9][0-9]{0,5}$/.test(rawPage) ? Math.max(1,Number(rawPage)) : 1;
         const parts = [];
         if(genre){ parts.push("genre=" + encodeURIComponent(genre)); }
         if(decade){ parts.push("decade=" + encodeURIComponent(decade)); }
-        if(sort !== "name.asc"){ parts.push("sort=" + encodeURIComponent(sort)); }
+        if(sort !== "popularity.desc"){ parts.push("sort=" + encodeURIComponent(sort)); }
         if(page > 1){ parts.push("page=" + encodeURIComponent(String(page))); }
         return {state:{genre,decade,sort,page},search:parts.length ? "?" + parts.join("&") : ""};
     }
