@@ -130,6 +130,22 @@
         return {state:{media:cleanMedia},search:""};
     }
 
+    function canonicalCollectionDetailSearch(search){
+        if(typeof parseCollectionDetailSearch === "function" && typeof getCollectionDetailBrowseSearch === "function"){
+            const state = parseCollectionDetailSearch(search);
+            return {state,search:getCollectionDetailBrowseSearch(state)};
+        }
+        return canonicalBrowseSearch(search,"movie");
+    }
+
+    function canonicalCollectionsIndexSearch(search){
+        if(typeof parseCollectionIndexSearch === "function" && typeof serializeCollectionIndexSearch === "function"){
+            const state = parseCollectionIndexSearch(search);
+            return {state,search:serializeCollectionIndexSearch(state)};
+        }
+        return {state:{page:1,genre:"",decade:"",sort:"name-asc"},search:""};
+    }
+
     function buildParsedRoute(type,path,search="",params={}){
         const canonicalRoute = path + search;
         return {
@@ -182,6 +198,18 @@
         if(path === "/app/discover"){
             return buildParsedRoute("discover",path,"",{});
         }
+        if(path === "/app/collections"){
+            const collections = canonicalCollectionsIndexSearch(search);
+            return buildParsedRoute("collections-index",path,collections.search,{state:collections.state});
+        }
+
+        const collectionMatch = path.match(/^\/app\/collection\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
+        if(collectionMatch){
+            const collection = parseRouteIdSlug(collectionMatch[1]);
+            const browse = canonicalCollectionDetailSearch(search);
+            return buildParsedRoute("collection-detail",path,browse.search,{id:collection.id,slug:collection.slug,key:collectionMatch[1],browseState:browse.state});
+        }
+
         const browseMatch = path.match(/^\/app\/browse\/(tv|movie)$/);
         if(browseMatch){
             const browse = canonicalBrowseSearch(search,browseMatch[1]);
@@ -370,6 +398,14 @@
                 return getBrowseRoute(browsePageState.filters || {media:browsePageState.media || "tv"});
             }
             return "/app/browse/" + (browsePageState.media === "movie" ? "movie" : "tv");
+        }
+        if(activePage === "collections-index" && typeof collectionsPageState !== "undefined" && collectionsPageState){
+            return typeof getCollectionsRoute === "function" ? getCollectionsRoute(collectionsPageState) : "/app/collections";
+        }
+        if(activePage === "collection-detail" && typeof collectionDetailState !== "undefined" && collectionDetailState && collectionDetailState.collectionId){
+            const base = typeof getCollectionDetailRoute === "function" ? getCollectionDetailRoute(collectionDetailState.collectionId,collectionDetailState.collection || collectionDetailState.routeSlug || "collection") : "/app/collections";
+            const search = typeof getCollectionDetailBrowseSearch === "function" ? getCollectionDetailBrowseSearch(collectionDetailState.filters || {}) : "";
+            return base + search;
         }
         if(activePage === "episode-detail" && selectedEpisodeContext){
             if(typeof getEpisodeDetailRoute === "function"){
@@ -888,6 +924,24 @@
             clearDetailState();
             if(typeof openBrowsePage === "function"){
                 openBrowsePage(params.browseState || {media:params.media || "tv"},{fromRoute:true,media:params.media || "tv"});
+            }else{
+                showPage("discover");
+            }
+            return;
+        }
+        if(parsed.type === "collections-index"){
+            clearDetailState();
+            if(typeof openCollectionsPage === "function"){
+                openCollectionsPage(params.state || {},{fromRoute:true});
+            }else{
+                showPage("discover");
+            }
+            return;
+        }
+        if(parsed.type === "collection-detail"){
+            clearDetailState();
+            if(typeof openCollectionDetailPage === "function"){
+                openCollectionDetailPage(params.key || params.id,{fromRoute:true,routeSlug:params.slug || "",browseState:params.browseState || {}});
             }else{
                 showPage("discover");
             }
