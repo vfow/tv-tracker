@@ -34,6 +34,7 @@ def load_route_helpers():
         "APP_DISCOVER_CATEGORY_PATH_RE",
         "APP_LIST_PATH_RE",
         "APP_LIBRARY_SORT_MODES",
+        "APP_EYE_QUERY_FLAGS",
         "APP_SECTION_PATHS",
     }
     selected = []
@@ -48,6 +49,7 @@ def load_route_helpers():
             if names & wanted_names:
                 selected.append(node)
         elif isinstance(node, ast.FunctionDef) and node.name in {
+            "canonical_eye_query_params",
             "canonical_browse_query",
             "app_browse_media_for_path",
             "safe_next_url",
@@ -78,6 +80,14 @@ class ProtectedRouteContractTests(unittest.TestCase):
             self.assertEqual(safe_next_url(path), path)
         self.assertEqual(safe_next_url("/app/search?q=batman"), "/app/search?q=batman&type=tv")
         self.assertEqual(safe_next_url("/app/search?x=1&q=the matrix&type=movie"), "/app/search?q=the+matrix&type=movie")
+        self.assertEqual(
+            safe_next_url("/app/search?x=1&q=the matrix&type=movie&fadeWatched=1&hideFavorites=1"),
+            "/app/search?q=the+matrix&type=movie&fadeWatched=1&hideFavorites=1",
+        )
+        self.assertEqual(
+            safe_next_url("/app/search?q=nolan&type=person&hideWatched=1"),
+            "/app/search?q=nolan&type=person",
+        )
         self.assertTrue(valid_app_path("/app/list/watching"))
         self.assertTrue(valid_app_path("/app/list/completed"))
         self.assertEqual(safe_next_url("/app/list"), "/app/list/watching")
@@ -115,6 +125,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/person/525-christopher-nolan?media=tv"),
             "/app/person/525-christopher-nolan",
+        )
+        self.assertEqual(
+            safe_next_url("/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1"),
+            "/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1",
         )
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
 
@@ -195,6 +209,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/company/movie/49-hbo?genre=18&certification=pg-13&status=ended"),
             "/app/company/movie/49-hbo?genre=18&certification=pg-13",
+        )
+        self.assertEqual(
+            safe_next_url("/app/discover/movie/upcoming?genre=18&hideWatched=1&hidePlan=1"),
+            "/app/discover/movie/upcoming?genre=18&hideWatched=1&hidePlan=1",
         )
         self.assertEqual(safe_next_url("/app/browse/tv?sort=popularity-desc"), "/app/browse/tv")
         self.assertEqual(safe_next_url("/app/browse/tv?runtime=45-59"), "/app/browse/tv?runtime=45-59")

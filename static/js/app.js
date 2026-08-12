@@ -36,7 +36,7 @@ var selectedGenreMedia = "tv";
 var selectedDiscoveryContext = null;
 var selectedPersonContext = null;
 var selectedMovieId = null;
-var searchRouteState = {query:"",media:"tv"};
+var searchRouteState = {query:"",media:"tv",fadeWatched:false,hideWatched:false,hidePlan:false,hideFavorites:false};
 var personPageState = {
     role:"",
     personId:"",
@@ -44,7 +44,11 @@ var personPageState = {
     loading:false,
     error:"",
     person:null,
-    credits:[]
+    credits:[],
+    fadeWatched:false,
+    hideWatched:false,
+    hidePlan:false,
+    hideFavorites:false
 };
 var genrePageState = {
     media:"tv",
@@ -100,6 +104,7 @@ var browseReferencePromises = {common:null,tv:null,movie:null,certifications:nul
 var browsePickerSearchTimer = null;
 var browsePickerSearchRequestId = 0;
 var browseGlobalEventsBound = false;
+var keepEyeFilterMenuOpen = false;
 var genrePageRequestId = 0;
 var discoveryPageRequestId = 0;
 var browsePageRequestId = 0;
@@ -3382,7 +3387,7 @@ function setSearchMediaType(media){
     const query = String(discoverSearchState.query || (input ? input.value : "") || "").trim();
 
     if(activePage === "search"){
-        setAppHashRoute(getSearchRoute(query,nextMedia),true);
+        setAppHashRoute(getSearchRoute(query,nextMedia,searchRouteState),true);
     }
 
     if(query.length >= 2){
@@ -3554,6 +3559,7 @@ function openSearchPage(query="",options={}){
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
     const media = normalizeSearchMediaType(options && options.media || searchRouteState.media || discoverSearchState.media || "tv");
+    const eyeState = createEyeFilterState(options && options.eyeState ? options.eyeState : searchRouteState || {});
     selectedShowId = null;
     selectedEpisodeContext = null;
     selectedGenreSlug = null;
@@ -3565,14 +3571,15 @@ function openSearchPage(query="",options={}){
     discoverPreviewShow = null;
     searchRouteState.query = cleanQuery;
     searchRouteState.media = media;
-    discoverSearchState = {
+    applyEyeFilterState(searchRouteState,eyeState);
+    discoverSearchState = Object.assign({
         query:cleanQuery,
         media:media,
         page:1,
         totalPages:1,
         visibleLimit:SEARCH_RESULT_BATCH_SIZE,
         loading:false
-    };
+    },eyeState);
     showSearchPageShell();
     const input = document.getElementById("search");
     if(input){
@@ -3580,7 +3587,7 @@ function openSearchPage(query="",options={}){
         input.setAttribute("placeholder","Search shows, movies, people");
     }
     if(!fromRoute){
-        setAppHashRoute(getSearchRoute(cleanQuery,media),replaceRoute);
+        setAppHashRoute(getSearchRoute(cleanQuery,media,searchRouteState),replaceRoute);
     }
     searchShows(cleanQuery,{skipRoute:true});
 }
@@ -3601,6 +3608,7 @@ function openDiscoverHomePage(options={}){
     discoverPreviewShow = null;
     searchRouteState.query = "";
     searchRouteState.media = "tv";
+    applyEyeFilterState(searchRouteState,{});
     discoverSearchState = {query:"",media:normalizeSearchMediaType(discoverSearchState.media || "tv"),page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:false};
     lastDiscoverSearchQuery = "";
     lastDiscoverSearchResults = [];
@@ -4027,9 +4035,10 @@ async function searchShows(query,options={}){
 
     searchRouteState.query = cleanQuery;
     searchRouteState.media = cleanMedia;
+    applyEyeFilterState(searchRouteState,searchRouteState);
 
     if(!skipRoute && activePage === "search"){
-        setAppHashRoute(getSearchRoute(cleanQuery,cleanMedia),replaceRoute);
+        setAppHashRoute(getSearchRoute(cleanQuery,cleanMedia,searchRouteState),replaceRoute);
     }
 
     if(cleanQuery.length < 2){
@@ -4037,7 +4046,7 @@ async function searchShows(query,options={}){
         searchRequestId += 1;
         lastDiscoverSearchQuery = "";
         lastDiscoverSearchResults = [];
-        discoverSearchState = {query:"",media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:false};
+        discoverSearchState = Object.assign({query:"",media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:false},createEyeFilterState(searchRouteState));
         if(activePage === "discover"){
             if(typeof renderDiscoverHub === "function"){
                 renderDiscoverHub();
@@ -4063,7 +4072,7 @@ async function searchShows(query,options={}){
 
     lastDiscoverSearchQuery = "";
     lastDiscoverSearchResults = [];
-    discoverSearchState = {query:cleanQuery,media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:true};
+    discoverSearchState = Object.assign({query:cleanQuery,media:cleanMedia,page:1,totalPages:1,visibleLimit:SEARCH_RESULT_BATCH_SIZE,loading:true},createEyeFilterState(searchRouteState));
     renderSearchLoading(cleanQuery);
 
     try{
@@ -4074,16 +4083,44 @@ async function searchShows(query,options={}){
             return;
         }
 
+        let searchResults = payload.results || [];
+        let searchPage = Number(payload.page || 1);
+        let searchTotalPages = Number(payload.total_pages || 1);
+
+        if(cleanMedia !== "person" && hasEyeHideOptions(searchRouteState)){
+            const existing = new Set(searchResults.map(item=>item ? `${item.media_type}:${item.id}` : ""));
+            let extraPages = 0;
+            let nextPage = searchPage + 1;
+            while(countEyeVisibleItems(searchResults,cleanMedia,searchRouteState) < SEARCH_RESULT_BATCH_SIZE && extraPages < 2 && nextPage <= searchTotalPages){
+                const extraPayload = await tmdbSearchMediaPage(cleanQuery,cleanMedia,nextPage,{signal:controller ? controller.signal : undefined});
+                if(requestId !== searchRequestId){
+                    return;
+                }
+                searchPage = Number(extraPayload.page || nextPage);
+                searchTotalPages = Number(extraPayload.total_pages || searchTotalPages || nextPage);
+                (extraPayload.results || []).forEach(item=>{
+                    const key = item ? `${item.media_type}:${item.id}` : "";
+                    if(!item || !item.id || existing.has(key)){
+                        return;
+                    }
+                    existing.add(key);
+                    searchResults.push(item);
+                });
+                nextPage = searchPage + 1;
+                extraPages += 1;
+            }
+        }
+
         lastDiscoverSearchQuery = cacheKey;
-        lastDiscoverSearchResults = payload.results || [];
-        discoverSearchState = {
+        lastDiscoverSearchResults = searchResults;
+        discoverSearchState = Object.assign({
             query:cleanQuery,
             media:cleanMedia,
-            page:Number(payload.page || 1),
-            totalPages:Number(payload.total_pages || 1),
+            page:searchPage,
+            totalPages:searchTotalPages,
             visibleLimit:SEARCH_RESULT_BATCH_SIZE,
             loading:false
-        };
+        },createEyeFilterState(searchRouteState));
 
         renderSearchResults(lastDiscoverSearchResults);
 
@@ -4130,7 +4167,7 @@ async function loadMoreSearchResults(){
             media:media,
             visibleLimit:targetLimit,
             loading:false
-        });
+        },createEyeFilterState(searchRouteState));
         if(typeof renderSearchResults === "function"){
             renderSearchResults(lastDiscoverSearchResults || []);
         }
@@ -4169,14 +4206,14 @@ async function loadMoreSearchResults(){
         }
 
         lastDiscoverSearchResults = (lastDiscoverSearchResults || []).concat(fresh);
-        discoverSearchState = {
+        discoverSearchState = Object.assign({
             query:query,
             media:media,
             page:latestPage,
             totalPages:latestTotalPages,
             visibleLimit:targetLimit,
             loading:false
-        };
+        },createEyeFilterState(searchRouteState));
 
         if(typeof renderSearchResults === "function"){
             renderSearchResults(lastDiscoverSearchResults);
@@ -4785,9 +4822,17 @@ function getCertificationDetailRoute(media,certification){
 }
 
 function getSearchRoute(query="",media="tv"){
+    const eyeOptions = arguments.length > 2 ? arguments[2] : null;
     const clean = String(query || "").trim();
     const cleanMedia = normalizeSearchMediaType(media || searchRouteState.media || discoverSearchState.media || "tv");
-    return clean ? `/app/search?q=${encodeURIComponent(clean)}&type=${encodeURIComponent(cleanMedia)}` : "/app/search";
+    if(!clean){
+        return "/app/search";
+    }
+    const eyeParts = cleanMedia !== "person"
+    ? getEyeFilterQueryParts(eyeOptions || searchRouteState || {})
+    : [];
+    const eyeSuffix = eyeParts.length ? `&${eyeParts.join("&")}` : "";
+    return `/app/search?q=${encodeURIComponent(clean)}&type=${encodeURIComponent(cleanMedia)}${eyeSuffix}`;
 }
 
 function getLibraryListRoute(filter=activeFilter,query=librarySearchQuery){
@@ -5302,6 +5347,153 @@ function getCurrentBrowseLabels(){
     return createBrowseLabelState();
 }
 
+
+const EYE_FILTER_KEYS = Object.freeze(["fadeWatched","hideWatched","hidePlan","hideFavorites"]);
+
+function normalizeEyeFilterFlag(value){
+    return value === true || String(value || "").trim() === "1";
+}
+
+function createEyeFilterState(input={}){
+    const source = input && typeof input === "object" ? input : {};
+    return {
+        fadeWatched:normalizeEyeFilterFlag(source.fadeWatched),
+        hideWatched:normalizeEyeFilterFlag(source.hideWatched),
+        hidePlan:normalizeEyeFilterFlag(source.hidePlan),
+        hideFavorites:normalizeEyeFilterFlag(source.hideFavorites)
+    };
+}
+
+function shouldKeepEyeFilterMenuOpen(){
+    return keepEyeFilterMenuOpen === true;
+}
+
+function hasEyeFilterOptions(input={}){
+    const state = createEyeFilterState(input);
+    return EYE_FILTER_KEYS.some(key=>state[key] === true);
+}
+
+function hasEyeHideOptions(input={}){
+    const state = createEyeFilterState(input);
+    return !!(state.hideWatched || state.hidePlan || state.hideFavorites);
+}
+
+function toggleEyeFilterOption(input,key){
+    const state = createEyeFilterState(input);
+    if(!EYE_FILTER_KEYS.includes(key)){
+        return state;
+    }
+    state[key] = !state[key];
+    return state;
+}
+
+function getEyeFilterQueryParts(input={}){
+    const state = createEyeFilterState(input);
+    const parts = [];
+    if(state.fadeWatched){ parts.push("fadeWatched=1"); }
+    if(state.hideWatched){ parts.push("hideWatched=1"); }
+    if(state.hidePlan){ parts.push("hidePlan=1"); }
+    if(state.hideFavorites){ parts.push("hideFavorites=1"); }
+    return parts;
+}
+
+function applyEyeFilterState(target,input={}){
+    const state = createEyeFilterState(input);
+    if(!target || typeof target !== "object"){
+        return state;
+    }
+    EYE_FILTER_KEYS.forEach(key=>{ target[key] = state[key]; });
+    return target;
+}
+
+function isTrackedTVShowWatched(show){
+    if(!show){ return false; }
+    const status = String(show.status || "").trim().toLowerCase();
+    if(status === "finished" || status === "completed"){
+        return true;
+    }
+    const total = typeof getTotalEpisodeCount === "function" ? Number(getTotalEpisodeCount(show) || 0) : Number(show.number_of_episodes || 0);
+    const watched = typeof getWatchedEpisodeCount === "function" ? Number(getWatchedEpisodeCount(show) || 0) : Number(countWatchedProgressEntries(show) || 0);
+    return total > 0 && watched >= total;
+}
+
+function getTrackedTVShowRecord(mediaId){
+    const id = String(mediaId || "").trim();
+    return id && DATA && DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
+}
+
+function getTrackedMediaState(item,media="tv"){
+    const cleanMedia = normalizeBrowseMediaType(media || (item && item.media_type) || "tv");
+    const id = String(item && (item.id || item.tmdb_id || item.movie_id) || "").trim();
+    if(!id){
+        return {watched:false,plan:false,favorite:false,tracked:false};
+    }
+    if(cleanMedia === "movie"){
+        const state = typeof getMovieTrackingState === "function" ? getMovieTrackingState(id) : {watched:false,plan:false,favorite:false};
+        return {
+            watched:!!(state && state.watched),
+            plan:!!(state && state.plan),
+            favorite:!!(state && state.favorite),
+            tracked:!!(state && (state.watched || state.plan || state.favorite))
+        };
+    }
+    const show = getTrackedTVShowRecord(id);
+    if(!show){
+        return {watched:false,plan:false,favorite:false,tracked:false};
+    }
+    const watched = isTrackedTVShowWatched(show);
+    const plan = String(show.status || "").trim().toLowerCase() === "plan";
+    const favorite = typeof isShowFavorite === "function" ? isShowFavorite(id) : false;
+    return {watched,plan,favorite,tracked:true};
+}
+
+function isMediaItemHiddenByEyeFilters(item,media="tv",eyeState={}){
+    const state = createEyeFilterState(eyeState);
+    if(!hasEyeHideOptions(state)){
+        return false;
+    }
+    const tracked = getTrackedMediaState(item,media || (item && item.media_type) || "tv");
+    return !!(
+        (state.hideWatched && tracked.watched) ||
+        (state.hidePlan && tracked.plan) ||
+        (state.hideFavorites && tracked.favorite)
+    );
+}
+
+function shouldFadeMediaItemByEyeFilters(item,media="tv",eyeState={}){
+    const state = createEyeFilterState(eyeState);
+    if(!state.fadeWatched || state.hideWatched){
+        return false;
+    }
+    const tracked = getTrackedMediaState(item,media || (item && item.media_type) || "tv");
+    return !!tracked.watched;
+}
+
+function applyEyeFiltersToItems(items,media="tv",eyeState={}){
+    const cleanMedia = normalizeBrowseMediaType(media || "tv");
+    const state = createEyeFilterState(eyeState);
+    return (Array.isArray(items) ? items : [])
+    .filter(item=>!isMediaItemHiddenByEyeFilters(item,cleanMedia,state))
+    .map(item=>{
+        const faded = shouldFadeMediaItemByEyeFilters(item,cleanMedia,state);
+        return faded ? Object.assign({},item,{_eyeFaded:true}) : Object.assign({},item,{_eyeFaded:false});
+    });
+}
+
+function countEyeVisibleItems(items,media="tv",eyeState={}){
+    return applyEyeFiltersToItems(items,media,eyeState).length;
+}
+
+function getPersonProgressSummary(){
+    const state = personPageState || {};
+    const media = normalizePersonMediaType(state.media || "tv");
+    const credits = Array.isArray(state.credits) ? state.credits : [];
+    const watched = credits.filter(item=>getTrackedMediaState(item,media).watched).length;
+    const total = credits.length;
+    const percent = total > 0 ? Math.round((watched / total) * 100) : 0;
+    return {media,watched,total,percent};
+}
+
 function normalizeBrowseCountryOptions(payload){
     return (Array.isArray(payload) ? payload : [])
     .map(item=>{
@@ -5685,7 +5877,7 @@ function getKnownPersonRouteLabel(personId,label=""){
     return "";
 }
 
-function getPersonDetailRoute(role,personId,label="",media="tv"){
+function getPersonDetailRoute(role,personId,label="",media="tv",eyeOptions=null){
     const cleanId = normalizePersonId(personId);
     const key = buildRouteKey(cleanId,getKnownPersonRouteLabel(cleanId,label));
     const cleanMedia = normalizePersonMediaType(media);
@@ -5700,6 +5892,7 @@ function getPersonDetailRoute(role,personId,label="",media="tv"){
     if(cleanRole){
         params.push("role=" + encodeURIComponent(cleanRole));
     }
+    getEyeFilterQueryParts(eyeOptions || {}).forEach(part=>params.push(part));
     return `/app/person/${encodeURIComponent(key)}${params.length ? "?" + params.join("&") : ""}`;
 }
 
@@ -5958,7 +6151,7 @@ async function loadPersonPageResults(){
         }
 
         const role = personHasRole(person,requestedRole,media) ? requestedRole : "";
-        const canonicalPersonRoute = getPersonDetailRoute(role,cleanId,person.name,media);
+        const canonicalPersonRoute = getPersonDetailRoute(role,cleanId,person.name,media,personPageState);
         if(canonicalPersonRoute && canonicalPersonRoute !== "/app/list/watching"){
             setAppHashRoute(canonicalPersonRoute,true);
             rememberRouteNavContext(canonicalPersonRoute,"discover");
@@ -6000,7 +6193,8 @@ async function openPersonPage(role,personId,options={}){
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
     const routeLabel = String(options && (options.personName || options.routeLabel) || "").trim();
     const media = normalizePersonMediaType(options && options.media || (personPageState && personPageState.media) || "tv");
-    const initialPersonRoute = getPersonDetailRoute(cleanRole,cleanId,routeLabel,media);
+    const eyeState = createEyeFilterState(options && options.eyeState ? options.eyeState : personPageState || {});
+    const initialPersonRoute = getPersonDetailRoute(cleanRole,cleanId,routeLabel,media,eyeState);
     const navigationContext = getDetailNavContext("person",options,fromRoute ? getCurrentAppRoute() : initialPersonRoute);
     const isSamePerson = activePage === "person-detail" &&
     selectedPersonContext &&
@@ -6025,13 +6219,18 @@ async function openPersonPage(role,personId,options={}){
             loading:false,
             error:"",
             person:null,
-            credits:[]
+            credits:[],
+            fadeWatched:eyeState.fadeWatched,
+            hideWatched:eyeState.hideWatched,
+            hidePlan:eyeState.hidePlan,
+            hideFavorites:eyeState.hideFavorites
         };
     }else{
         personPageState.role = cleanRole;
         personPageState.personId = cleanId;
         personPageState.routeSlug = routeSlug;
         personPageState.media = media;
+        applyEyeFilterState(personPageState,eyeState);
     }
 
     if(!fromRoute && options && options.backRoute){
@@ -6053,7 +6252,7 @@ async function openPersonPage(role,personId,options={}){
         selectedPersonContext.role = nextRole;
         personPageState.credits = getPersonCreditsForRole(personPageState.person,nextRole,media);
         const personName = personPageState.person ? personPageState.person.name : routeLabel;
-        const nextRoute = getPersonDetailRoute(nextRole,cleanId,personName,media);
+        const nextRoute = getPersonDetailRoute(nextRole,cleanId,personName,media,personPageState);
         if(nextRoute && nextRoute !== "/app/list/watching" && nextRoute !== getCurrentAppRoute()){
             setAppHashRoute(nextRoute,true);
         }
@@ -6062,6 +6261,9 @@ async function openPersonPage(role,personId,options={}){
 }
 
 function attachPersonDetailPageEvents(){
+    if(typeof ensureBrowseGlobalInteractionEvents === "function"){
+        ensureBrowseGlobalInteractionEvents();
+    }
     const backButton = document.getElementById("person-page-back-button");
     if(backButton){
         backButton.addEventListener("click",function(){
@@ -6088,7 +6290,7 @@ function attachPersonDetailPageEvents(){
             personPageState.role = nextRole;
             if(selectedPersonContext){ selectedPersonContext.role = nextRole; }
             const personName = personPageState.person ? personPageState.person.name : (personPageState.routeSlug || "");
-            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,nextMedia);
+            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,nextMedia,personPageState);
             if(nextRoute && nextRoute !== "/app/list/watching"){
                 setAppHashRoute(nextRoute,false);
                 rememberRouteNavContext(nextRoute,"discover");
@@ -6114,7 +6316,7 @@ function attachPersonDetailPageEvents(){
             if(selectedPersonContext){ selectedPersonContext.role = nextRole; }
             personPageState.credits = getPersonCreditsForRole(personPageState.person,nextRole,personPageState.media);
             const personName = personPageState.person ? personPageState.person.name : (personPageState.routeSlug || "");
-            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,personPageState.media);
+            const nextRoute = getPersonDetailRoute(nextRole,personPageState.personId,personName,personPageState.media,personPageState);
             if(nextRoute && nextRoute !== "/app/list/watching"){
                 setAppHashRoute(nextRoute,false);
                 rememberRouteNavContext(nextRoute,"discover");
@@ -6363,7 +6565,9 @@ async function loadGenrePageResults(options={}){
         let currentPage = nextPage;
         let lastPage = nextPage;
 
-        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+        const shouldAutoRefillForEye = hasEyeHideOptions(browseFilters);
+        let eyeRefillPagesFetched = 0;
+        while((shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,browseFilters) : fresh.length) < DISCOVERY_GRID_PAGE_SIZE){
             const payload = await tmdbGetDiscoverPage("discover/" + media,Object.assign({},params,{page:currentPage}));
             if(!requestIsCurrent()){
                 return;
@@ -6380,7 +6584,9 @@ async function loadGenrePageResults(options={}){
                 fresh.push(show);
             });
 
-            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+            eyeRefillPagesFetched += 1;
+            const visibleTargetReached = (shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,browseFilters) : fresh.length) >= DISCOVERY_GRID_PAGE_SIZE;
+            if(lastPage >= totalPages || visibleTargetReached || (shouldAutoRefillForEye && eyeRefillPagesFetched >= 3)){
                 break;
             }
             currentPage = lastPage + 1;
@@ -6841,7 +7047,9 @@ async function loadDiscoveryFilterPageResults(options={}){
             }
         }
 
-        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+        const shouldAutoRefillForEye = hasEyeHideOptions(filters.browse);
+        let eyeRefillPagesFetched = 0;
+        while((shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,filters.browse) : fresh.length) < DISCOVERY_GRID_PAGE_SIZE){
             let requestPath = categoryConfig ? categoryConfig.path : (media === "movie" ? "discover/movie" : "discover/tv");
             let params = buildDiscoveryFilterRequest(cleanType,cleanValue,filters,currentPage);
             if(categoryHasBrowseChanges){
@@ -6875,7 +7083,9 @@ async function loadDiscoveryFilterPageResults(options={}){
                 fresh.push(item);
             });
 
-            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+            eyeRefillPagesFetched += 1;
+            const visibleTargetReached = (shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,filters.browse) : fresh.length) >= DISCOVERY_GRID_PAGE_SIZE;
+            if(lastPage >= totalPages || visibleTargetReached || (shouldAutoRefillForEye && eyeRefillPagesFetched >= 3)){
                 break;
             }
             currentPage = lastPage + 1;
@@ -7133,7 +7343,9 @@ async function loadBrowsePageResults(options={}){
         let lastPage = nextPage;
         const path = media === "movie" ? "discover/movie" : "discover/tv";
 
-        while(fresh.length < DISCOVERY_GRID_PAGE_SIZE){
+        const shouldAutoRefillForEye = hasEyeHideOptions(filters);
+        let eyeRefillPagesFetched = 0;
+        while((shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,filters) : fresh.length) < DISCOVERY_GRID_PAGE_SIZE){
             const params = buildBrowseDiscoverParams(filters,currentPage);
             const payload = await tmdbGetDiscoverPage(path,params);
             if(!requestIsCurrent()){
@@ -7152,7 +7364,9 @@ async function loadBrowsePageResults(options={}){
                 fresh.push(item);
             });
 
-            if(lastPage >= totalPages || fresh.length >= DISCOVERY_GRID_PAGE_SIZE){
+            eyeRefillPagesFetched += 1;
+            const visibleTargetReached = (shouldAutoRefillForEye ? countEyeVisibleItems(fresh,media,filters) : fresh.length) >= DISCOVERY_GRID_PAGE_SIZE;
+            if(lastPage >= totalPages || visibleTargetReached || (shouldAutoRefillForEye && eyeRefillPagesFetched >= 3)){
                 break;
             }
             currentPage = lastPage + 1;
@@ -7372,6 +7586,54 @@ function scheduleBrowsePickerSearch(input){
     },220);
 }
 
+
+async function handleEyeFilterToggle(key){
+    const cleanKey = String(key || "").trim();
+    if(!EYE_FILTER_KEYS.includes(cleanKey)){
+        return;
+    }
+
+    if(activePage === "search"){
+        const next = toggleEyeFilterOption(searchRouteState || {},cleanKey);
+        applyEyeFilterState(searchRouteState,next);
+        if(discoverSearchState){
+            applyEyeFilterState(discoverSearchState,next);
+        }
+        const query = String(searchRouteState && searchRouteState.query || "").trim();
+        const media = normalizeSearchMediaType(searchRouteState && searchRouteState.media || "tv");
+        if(typeof setAppHashRoute === "function"){
+            setAppHashRoute(getSearchRoute(query,media,searchRouteState),false);
+        }
+        if(query.length >= 2 && media !== "person" && hasEyeHideOptions(searchRouteState)){
+            await searchShows(query,{skipRoute:true});
+            return;
+        }
+        if(typeof renderSearchResults === "function"){
+            renderSearchResults(lastDiscoverSearchResults || []);
+        }
+        return;
+    }
+
+    if(activePage === "person-detail"){
+        const next = toggleEyeFilterOption(personPageState || {},cleanKey);
+        applyEyeFilterState(personPageState,next);
+        const personName = personPageState && personPageState.person ? personPageState.person.name : (personPageState && personPageState.routeSlug || "");
+        const route = getPersonDetailRoute(personPageState && personPageState.role || "",personPageState && personPageState.personId || "",personName,personPageState && personPageState.media || "tv",personPageState);
+        if(route && route !== "/app/list/watching" && typeof setAppHashRoute === "function"){
+            setAppHashRoute(route,false);
+            rememberRouteNavContext(route,"discover");
+        }
+        renderActivePersonPage();
+        return;
+    }
+
+    const api = getBrowseStateAPI();
+    if(api && typeof api.toggleEyeOption === "function"){
+        const next = api.toggleEyeOption(getCurrentBrowseState(),cleanKey);
+        await navigateToBrowseState(next,getCurrentBrowseLabels());
+    }
+}
+
 function ensureBrowseGlobalInteractionEvents(){
     if(browseGlobalEventsBound){
         return;
@@ -7383,6 +7645,7 @@ function ensureBrowseGlobalInteractionEvents(){
         if(target && typeof target.closest === "function" && target.closest(".browse-menu")){
             return;
         }
+        keepEyeFilterMenuOpen = false;
         closeBrowseMenus();
     });
 
@@ -7415,10 +7678,24 @@ function ensureBrowseGlobalInteractionEvents(){
         const summary = target.closest(".browse-menu > summary");
         if(summary){
             const menu = summary.parentElement;
+            if(menu && menu.classList && menu.classList.contains("eye-filter-menu")){
+                keepEyeFilterMenuOpen = !menu.open;
+            }else{
+                keepEyeFilterMenuOpen = false;
+            }
             if(menu && !menu.open){
                 resetBrowseYearDropdown(menu);
             }
             closeBrowseMenus(menu);
+            return;
+        }
+
+        const eyeToggleButton = target.closest("[data-eye-toggle]");
+        if(eyeToggleButton){
+            event.preventDefault();
+            event.stopPropagation();
+            keepEyeFilterMenuOpen = true;
+            await handleEyeFilterToggle(eyeToggleButton.dataset.eyeToggle || "");
             return;
         }
 

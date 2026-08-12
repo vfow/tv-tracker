@@ -51,7 +51,17 @@ function createRouter(route, options={}){
     renderShowsPage(){ calls.push(['renderShowsPage']); },
     updateShellTitle(){ calls.push(['updateShellTitle']); },
     closeShowModal(){ calls.push(['closeShowModal']); },
-    getSearchRoute(query='',media='tv'){ return query ? '/app/search?q=' + encodeURIComponent(query) + '&type=' + encodeURIComponent(media || 'tv') : '/app/search'; },
+    getSearchRoute(query='',media='tv',eyeOptions={}){
+      if(!query){ return '/app/search'; }
+      const parts=['q=' + encodeURIComponent(query),'type=' + encodeURIComponent(media || 'tv')];
+      if(media !== 'person'){
+        if(eyeOptions.fadeWatched){ parts.push('fadeWatched=1'); }
+        if(eyeOptions.hideWatched){ parts.push('hideWatched=1'); }
+        if(eyeOptions.hidePlan){ parts.push('hidePlan=1'); }
+        if(eyeOptions.hideFavorites){ parts.push('hideFavorites=1'); }
+      }
+      return '/app/search?' + parts.join('&');
+    },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
     getGenreDetailRoute(id,name='',media='tv'){ const slug=String(name||'genre').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); return `/app/genre/${media === 'movie' ? 'movie' : 'tv'}/${id}-${slug}`; },
     getKnownShowRouteLabel(){ return ''; },
@@ -61,13 +71,17 @@ function createRouter(route, options={}){
       if(type === 'certification'){ return `/app/certification/${value}`; }
       return `/app/${type}/${media || 'tv'}/${value}`;
     },
-    getPersonDetailRoute(role,id,name='',media='tv'){
+    getPersonDetailRoute(role,id,name='',media='tv',eyeOptions={}){
       const slug = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
       const base = `/app/person/${id}${slug ? '-' + slug : ''}`;
       const parts = [];
       if(media === 'movie'){ parts.push('media=movie'); }
       const cleanRole = String(role || '').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
       if(cleanRole && cleanRole !== 'person'){ parts.push('role=' + encodeURIComponent(cleanRole)); }
+      if(eyeOptions.fadeWatched){ parts.push('fadeWatched=1'); }
+      if(eyeOptions.hideWatched){ parts.push('hideWatched=1'); }
+      if(eyeOptions.hidePlan){ parts.push('hidePlan=1'); }
+      if(eyeOptions.hideFavorites){ parts.push('hideFavorites=1'); }
       return base + (parts.length ? '?' + parts.join('&') : '');
     },
     openSearchPage(query,options){ calls.push(['openSearchPage',query,options]); },
@@ -135,6 +149,24 @@ function createRouter(route, options={}){
   assert.strictEqual(call[1],'batman');
   assert.strictEqual(call[2].fromRoute,true);
   assert.strictEqual(call[2].media,'movie');
+}
+
+{
+  const {calls,router}=createRouter('/app/search/?type=movie&q=batman&hideFavorites=1&fadeWatched=1&bad=1');
+  assert.strictEqual(router.currentRoute(),'/app/search?q=batman&type=movie&fadeWatched=1&hideFavorites=1');
+  const call=calls.find(item=>item[0]==='openSearchPage');
+  assert(call,'search route should pass eye options into the page');
+  assert.strictEqual(call[2].eyeState.fadeWatched,true);
+  assert.strictEqual(call[2].eyeState.hideFavorites,true);
+  assert.strictEqual(call[2].eyeState.hideWatched,false);
+}
+
+{
+  const {calls,router}=createRouter('/app/search?q=nolan&type=person&hideWatched=1');
+  assert.strictEqual(router.currentRoute(),'/app/search?q=nolan&type=person');
+  const call=calls.find(item=>item[0]==='openSearchPage');
+  assert(call,'person search route should still open search page');
+  assert.strictEqual(call[2].media,'person');
 }
 
 {
@@ -213,6 +245,15 @@ function createRouter(route, options={}){
 }
 
 {
+  const {calls,router}=createRouter('/app/browse/movie?genre=18&hideWatched=1&hidePlan=1');
+  assert.strictEqual(router.currentRoute(),'/app/browse/movie?genre=18&hideWatched=1&hidePlan=1');
+  const call=calls.find(item=>item[0]==='openBrowsePage');
+  assert(call,'browse route should preserve eye modifiers');
+  assert.strictEqual(call[1].hideWatched,true);
+  assert.strictEqual(call[1].hidePlan,true);
+}
+
+{
   const {calls,router}=createRouter('/app/discover/tv/top-rated?genre=18&sort=title-desc');
   assert.strictEqual(router.currentRoute(),'/app/discover/tv/top-rated?genre=18');
   const call=calls.find(item=>item[0]==='openDiscoverCategoryPage');
@@ -246,6 +287,17 @@ function createRouter(route, options={}){
   assert.deepStrictEqual(call.slice(1,3),['','525']);
   assert.strictEqual(call[3].fromRoute,true);
   assert.strictEqual(call[3].routeSlug,'christopher-nolan');
+}
+
+{
+  const {calls,router}=createRouter('/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1');
+  assert.strictEqual(router.currentRoute(),'/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1');
+  const call=calls.find(item=>item[0]==='openPersonPage');
+  assert(call,'person route should preserve media, role, and eye options');
+  assert.deepStrictEqual(call.slice(1,3),['director','525']);
+  assert.strictEqual(call[3].media,'movie');
+  assert.strictEqual(call[3].eyeState.fadeWatched,true);
+  assert.strictEqual(call[3].eyeState.hideFavorites,true);
 }
 
 {

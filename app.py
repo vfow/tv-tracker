@@ -1623,6 +1623,14 @@ def replace_tracker_data_transactionally(data: dict[str, Any]) -> int:
     return revision
 
 
+APP_EYE_QUERY_FLAGS = ("fadeWatched", "hideWatched", "hidePlan", "hideFavorites")
+
+
+def canonical_eye_query_params(raw_values: dict[str, str]) -> dict[str, str]:
+    """Return supported tracked visibility flags as canonical URL params."""
+    return {key: "1" for key in APP_EYE_QUERY_FLAGS if raw_values.get(key) == "1"}
+
+
 def canonical_browse_query(raw_query: str, media_type: str) -> str:
     """Return a small canonical query string for Discover browse state."""
     media = "movie" if str(media_type or "").strip().lower() == "movie" else "tv"
@@ -1702,6 +1710,8 @@ def canonical_browse_query(raw_query: str, media_type: str) -> str:
     if sort_mode in APP_BROWSE_SORT_MODES and sort_mode != "popularity-desc":
         params["sort"] = sort_mode
 
+    params.update(canonical_eye_query_params(raw_values))
+
     return urlencode(params, safe=",") if params else ""
 
 
@@ -1709,6 +1719,9 @@ def app_browse_media_for_path(candidate: str) -> str | None:
     match = APP_BROWSE_PATH_RE.fullmatch(candidate)
     if match:
         return match.group(1)
+    if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
+        parts = candidate.split("/")
+        return parts[3] if len(parts) > 3 and parts[3] in {"tv", "movie"} else None
     match = APP_GENRE_PATH_RE.fullmatch(candidate)
     if match:
         return match.group(1)
@@ -1750,13 +1763,20 @@ def safe_next_url(value: str | None) -> str:
     if candidate == "/app/search":
         query = ""
         media_type = "tv"
+        raw_values: dict[str, str] = {}
         if separator:
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
-                if key == "q" and value.strip() and not query:
-                    query = value.strip()[:120]
-                elif key == "type" and value.strip().lower() in {"tv", "movie", "person"}:
-                    media_type = value.strip().lower()
-        return "/app/search" + (("?" + urlencode({"q": query, "type": media_type})) if query else "")
+                clean_value = value.strip()
+                if key not in raw_values:
+                    raw_values[key] = clean_value
+                if key == "q" and clean_value and not query:
+                    query = clean_value[:120]
+                elif key == "type" and clean_value.lower() in {"tv", "movie", "person"}:
+                    media_type = clean_value.lower()
+        params = {"q": query, "type": media_type} if query else {}
+        if query and media_type != "person":
+            params.update(canonical_eye_query_params(raw_values))
+        return "/app/search" + (("?" + urlencode(params)) if params else "")
     if APP_LIST_PATH_RE.fullmatch(candidate):
         query = ""
         genre = ""
@@ -1806,9 +1826,13 @@ def safe_next_url(value: str | None) -> str:
     if APP_PERSON_PATH_RE.fullmatch(candidate):
         media_type = "tv"
         role = ""
+        raw_values: dict[str, str] = {}
         if separator:
             for key, value in parse_qsl(raw_query, keep_blank_values=False):
-                clean_value = value.strip().lower()
+                raw_clean_value = value.strip()
+                clean_value = raw_clean_value.lower()
+                if key not in raw_values:
+                    raw_values[key] = raw_clean_value
                 if key == "media" and clean_value in {"tv", "movie"}:
                     media_type = clean_value
                 elif key == "role" and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", clean_value):
@@ -1818,6 +1842,7 @@ def safe_next_url(value: str | None) -> str:
             params["media"] = "movie"
         if role:
             params["role"] = role
+        params.update(canonical_eye_query_params(raw_values))
         return candidate + (("?" + urlencode(params)) if params else "")
     if APP_NETWORK_PATH_RE.fullmatch(candidate):
         return candidate

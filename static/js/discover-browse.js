@@ -17,6 +17,7 @@
         "canceled":"4"
     });
     const MULTI_KEYS = Object.freeze(["genres","themes","companies","providers","statuses"]);
+    const EYE_KEYS = Object.freeze(["fadeWatched","hideWatched","hidePlan","hideFavorites"]);
     const RUNTIME_RANGES = Object.freeze({
         tv:Object.freeze({
             "under-30":Object.freeze({label:"Under 30 min",min:0,max:29}),
@@ -84,6 +85,20 @@
         return SORTS.has(clean) ? clean : DEFAULT_SORT;
     }
 
+    function normalizeEyeFlag(value){
+        return value === true || String(value || "").trim() === "1";
+    }
+
+    function hasEyeOptions(input){
+        const state = normalizeState(input,input && input.media);
+        return EYE_KEYS.some(key=>state[key] === true);
+    }
+
+    function hasEyeHideOptions(input){
+        const state = normalizeState(input,input && input.media);
+        return state.hideWatched || state.hidePlan || state.hideFavorites;
+    }
+
     function unique(values,normalizer){
         const output = [];
         const seen = new Set();
@@ -124,6 +139,10 @@
             runtime:"",
             statuses:[],
             certification:"",
+            fadeWatched:false,
+            hideWatched:false,
+            hidePlan:false,
+            hideFavorites:false,
             sort:DEFAULT_SORT
         };
     }
@@ -149,6 +168,10 @@
             runtime:normalizeRuntime(source.runtime,cleanMedia),
             statuses:parseList(source.statuses || source.status,normalizeStatus),
             certification:normalizeCertification(source.certification),
+            fadeWatched:normalizeEyeFlag(source.fadeWatched),
+            hideWatched:normalizeEyeFlag(source.hideWatched),
+            hidePlan:normalizeEyeFlag(source.hidePlan),
+            hideFavorites:normalizeEyeFlag(source.hideFavorites),
             sort:normalizeSort(source.sort)
         };
 
@@ -186,6 +209,10 @@
             runtime:params.get("runtime") || "",
             statuses:params.get("status") || "",
             certification:params.get("certification") || "",
+            fadeWatched:params.get("fadeWatched") || "",
+            hideWatched:params.get("hideWatched") || "",
+            hidePlan:params.get("hidePlan") || "",
+            hideFavorites:params.get("hideFavorites") || "",
             sort:params.get("sort") || DEFAULT_SORT
         },media);
         return {state,search:serializeSearch(state)};
@@ -215,6 +242,10 @@
         }
         if(state.media === "tv" && state.statuses.length){ parts.push("status=" + encodeList(state.statuses)); }
         if(state.media === "movie" && state.certification){ parts.push("certification=" + encodeURIComponent(state.certification)); }
+        if(state.fadeWatched){ parts.push("fadeWatched=1"); }
+        if(state.hideWatched){ parts.push("hideWatched=1"); }
+        if(state.hidePlan){ parts.push("hidePlan=1"); }
+        if(state.hideFavorites){ parts.push("hideFavorites=1"); }
         if(state.sort !== DEFAULT_SORT){ parts.push("sort=" + encodeURIComponent(state.sort)); }
         return parts.length ? "?" + parts.join("&") : "";
     }
@@ -231,7 +262,11 @@
             themes:state.themes.slice(),
             companies:state.companies.slice(),
             providers:state.providers.slice(),
-            statuses:state.statuses.slice()
+            statuses:state.statuses.slice(),
+            fadeWatched:state.fadeWatched,
+            hideWatched:state.hideWatched,
+            hidePlan:state.hidePlan,
+            hideFavorites:state.hideFavorites
         });
     }
 
@@ -282,6 +317,8 @@
             state.runtime = normalizeRuntime(value,state.media);
         }else if(key === "certification"){
             state.certification = normalizeCertification(value);
+        }else if(EYE_KEYS.includes(key)){
+            state[key] = normalizeEyeFlag(value);
         }else if(key === "sort"){
             state.sort = normalizeSort(value);
         }
@@ -310,8 +347,25 @@
     }
 
     function clearFilters(input){
-        const media = normalizeMedia(input && input.media);
-        return emptyState(media);
+        const current = normalizeState(input,input && input.media);
+        const next = emptyState(current.media);
+        EYE_KEYS.forEach(key=>{ next[key] = current[key]; });
+        return normalizeState(next,next.media);
+    }
+
+    function clearEyeOptions(input){
+        const state = cloneState(input);
+        EYE_KEYS.forEach(key=>{ state[key] = false; });
+        return normalizeState(state,state.media);
+    }
+
+    function toggleEyeOption(input,key){
+        const state = cloneState(input);
+        if(!EYE_KEYS.includes(key)){
+            return state;
+        }
+        state[key] = !state[key];
+        return normalizeState(state,state.media);
     }
 
     function switchMedia(input,targetMedia){
@@ -449,8 +503,12 @@
         setSingle,
         removeValue,
         clearFilters,
+        clearEyeOptions,
+        toggleEyeOption,
         switchMedia,
         hasFilters,
+        hasEyeOptions,
+        hasEyeHideOptions,
         sortToTMDB,
         buildTMDBParams,
         sortLabel,
@@ -462,6 +520,7 @@
         normalizeId,
         normalizeCertification,
         normalizeRuntime,
-        normalizeSort
+        normalizeSort,
+        normalizeEyeFlag
     });
 }(window));

@@ -645,6 +645,7 @@ function renderSearchResultPosterCard(result){
         <a
         href="${escapeHTML(route)}"
         class="genre-result-card search-result-poster-card"
+        data-eye-faded="${result && result._eyeFaded ? "true" : "false"}"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(result && result.id)}"
         data-media-name="${escapeHTML(title)}"
@@ -689,7 +690,7 @@ function lockSearchRouteBeforeResultOpen(){
     const state = typeof discoverSearchState === "object" && discoverSearchState ? discoverSearchState : {};
     const query = String(state.query || (searchRouteState && searchRouteState.query) || "").trim();
     const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || (searchRouteState && searchRouteState.media) || "tv") : "tv";
-    const route = getSearchRoute(query,media);
+    const route = getSearchRoute(query,media,searchRouteState);
     if(searchRouteState){
         searchRouteState.query = query;
         searchRouteState.media = media;
@@ -719,7 +720,8 @@ function renderSearchResults(resultsList){
     const mediaItems = allItems.filter(item=>String(item && item.media_type || "tv") === media);
     const batchSize = typeof SEARCH_RESULT_BATCH_SIZE !== "undefined" ? SEARCH_RESULT_BATCH_SIZE : 21;
     const visibleLimit = Math.max(batchSize,Number(state.visibleLimit || batchSize));
-    const visibleItems = mediaItems.slice(0,visibleLimit);
+    const filteredItems = media === "person" ? mediaItems : getEyeFilteredRenderItems(mediaItems,media,state);
+    const visibleItems = filteredItems.slice(0,visibleLimit);
     const labels = {tv:"TV Shows",movie:"Movies",person:"People"};
 
     const tabsHTML = `
@@ -748,22 +750,28 @@ function renderSearchResults(resultsList){
         : `<div class="genre-tight-grid search-tight-grid">${visibleItems.map(renderSearchResultPosterCard).join("")}</div>`
     : `
         <div class="empty-state search-empty-state">
-            <h2>No ${escapeHTML(labels[media] || "results")} found</h2>
+            <h2>${escapeHTML(mediaItems.length ? "No results found" : `No ${labels[media] || "results"} found`)}</h2>
             <p>Try another tab or another search.</p>
         </div>
     `;
 
-    const canLoadMore = query && (visibleItems.length < mediaItems.length || Number(state.page || 1) < Number(state.totalPages || 1));
+    const canLoadMore = query && (visibleItems.length < filteredItems.length || Number(state.page || 1) < Number(state.totalPages || 1));
+    const searchEyeHTML = media !== "person" && query ? `<div class="search-eye-row">${renderEyeFilterControlHTML(state,"search-eye-filter-menu")}</div>` : "";
 
     results.innerHTML = `
         <div class="search-page-shell ${activePage === "discover" ? "discover-live-search-shell" : ""}">
             ${tabsHTML}
+            ${searchEyeHTML}
             <div class="search-results-body">
                 ${bodyHTML}
             </div>
             ${canLoadMore ? `<button type="button" class="view-more-button search-view-more-button" id="search-load-more-button" ${state.loading ? "disabled" : ""}>${state.loading ? "Loading…" : "VIEW MORE"}</button>` : ""}
         </div>
     `;
+
+    if(typeof ensureBrowseGlobalInteractionEvents === "function"){
+        ensureBrowseGlobalInteractionEvents();
+    }
 
     document.querySelectorAll(".search-tab-button[data-search-media]").forEach(button=>{
         button.addEventListener("click",function(){
@@ -902,7 +910,7 @@ function renderGenrePosterGridCard(show){
     return `
         <a
         href="${escapeHTML(route)}"
-        class="genre-result-card"
+        class="genre-result-card ${show && show._eyeFaded ? "eye-filter-faded" : ""}"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(show && show.id)}"
         data-show-id="${mediaType === "tv" ? escapeHTML(show && show.id) : ""}"
@@ -915,6 +923,24 @@ function renderGenrePosterGridCard(show){
             <div class="genre-result-title">${escapeHTML(title)}</div>
             <div class="genre-result-meta">${escapeHTML(year)}${escapeHTML(ratingHTML)}</div>
         </a>
+    `;
+}
+
+function renderPersonProgressCardHTML(){
+    const progress = typeof getPersonProgressSummary === "function" ? getPersonProgressSummary() : {watched:0,total:0,percent:0};
+    const watched = Number(progress && progress.watched || 0);
+    const total = Number(progress && progress.total || 0);
+    const percent = Math.max(0,Math.min(100,Number(progress && progress.percent || 0)));
+    return `
+        <div class="person-progress-card" aria-label="Watched progress">
+            <div class="person-progress-line">
+                <span>${escapeHTML(String(watched))} of ${escapeHTML(String(total))} watched</span>
+                <strong>${escapeHTML(String(percent))}%</strong>
+            </div>
+            <div class="person-progress-track" aria-hidden="true">
+                <div class="person-progress-fill" style="width:${escapeHTML(String(percent))}%"></div>
+            </div>
+        </div>
     `;
 }
 
@@ -932,6 +958,7 @@ function renderPersonProfileHTML(person,role){
                 <p class="person-profile-bio-text">${escapeHTML(biography || "No biography available yet.")}</p>
                 ${hasLongBio ? `<button type="button" class="person-bio-more-button">more</button>` : ""}
             </div>
+            ${renderPersonProgressCardHTML()}
         </aside>
     `;
 }
@@ -954,6 +981,7 @@ function renderPersonResultCard(item){
         <a
         href="${escapeHTML(route)}"
         class="genre-result-card person-result-card"
+        data-eye-faded="${item && item._eyeFaded ? "true" : "false"}"
         data-media-type="${escapeHTML(mediaType)}"
         data-media-id="${escapeHTML(item && item.id)}"
         data-media-name="${escapeHTML(item && item.title || "")}"
@@ -979,6 +1007,7 @@ function renderPersonDetailPage(state){
     const media = typeof normalizePersonMediaType === "function" ? normalizePersonMediaType(pageState.media) : "tv";
     const person = pageState.person || null;
     const credits = Array.isArray(pageState.credits) ? pageState.credits : [];
+    const visibleCredits = getEyeFilteredRenderItems(credits,media,pageState);
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
     const name = person && person.name ? person.name : "Person";
@@ -994,10 +1023,10 @@ function renderPersonDetailPage(state){
             <p>${escapeHTML(error)}</p>
         </div>
     `
-    : credits.length
+    : visibleCredits.length
     ? `
         <div class="genre-tight-grid person-tight-grid">
-            ${credits.map(renderPersonResultCard).join("")}
+            ${visibleCredits.map(renderPersonResultCard).join("")}
         </div>
     `
     : loading
@@ -1008,8 +1037,8 @@ function renderPersonDetailPage(state){
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No ${media === "movie" ? "movies" : "shows"} found</h2>
-            <p>Try switching the media filter.</p>
+            <h2>${credits.length ? "No results found" : `No ${media === "movie" ? "movies" : "shows"} found`}</h2>
+            <p>${credits.length ? "" : "Try switching the media filter."}</p>
         </div>
     `;
 
@@ -1030,8 +1059,8 @@ function renderPersonDetailPage(state){
 
                     <div class="genre-filter-bar person-filter-bar" aria-label="Person filters">
                         <div class="genre-media-switch person-media-switch" role="tablist" aria-label="Person media type">
-                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(tvRole,pageState.personId,personRouteLabel,"tv") : "")}" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-person-media="tv" role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</a>
-                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(movieRole,pageState.personId,personRouteLabel,"movie") : "")}" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-person-media="movie" role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</a>
+                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(tvRole,pageState.personId,personRouteLabel,"tv",pageState) : "")}" class="genre-media-switch-button ${media === "tv" ? "active" : ""}" data-person-media="tv" role="tab" aria-selected="${media === "tv" ? "true" : "false"}">TV Shows</a>
+                            <a href="${escapeHTML(typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(movieRole,pageState.personId,personRouteLabel,"movie",pageState) : "")}" class="genre-media-switch-button ${media === "movie" ? "active" : ""}" data-person-media="movie" role="tab" aria-selected="${media === "movie" ? "true" : "false"}">Movies</a>
                         </div>
                         <div class="browse-bar person-role-browse-bar">
                             <details class="browse-menu person-role-menu">
@@ -1046,6 +1075,7 @@ function renderPersonDetailPage(state){
                                     </div>
                                 </div>
                             </details>
+                            ${renderEyeFilterControlHTML(pageState,"person-eye-filter-menu")}
                         </div>
                     </div>
 
@@ -1098,6 +1128,53 @@ function renderBrowseCheckIcon(){
 
 function renderBrowseOptionLabel(label,selected=false){
     return `<span>${escapeHTML(label)}</span>${selected ? renderBrowseCheckIcon() : ""}`;
+}
+
+
+function getEyeFilterRenderState(inputState){
+    if(typeof createEyeFilterState === "function"){
+        return createEyeFilterState(inputState || {});
+    }
+    const source = inputState || {};
+    return {
+        fadeWatched:source.fadeWatched === true || String(source.fadeWatched || "") === "1",
+        hideWatched:source.hideWatched === true || String(source.hideWatched || "") === "1",
+        hidePlan:source.hidePlan === true || String(source.hidePlan || "") === "1",
+        hideFavorites:source.hideFavorites === true || String(source.hideFavorites || "") === "1"
+    };
+}
+
+function renderEyeFilterOption(label,key,selected){
+    return `<button type="button" class="browse-dropdown-option eye-filter-option ${selected ? "selected" : ""}" data-eye-toggle="${escapeHTML(key)}">${renderBrowseOptionLabel(label,selected)}</button>`;
+}
+
+function renderEyeFilterControlHTML(inputState,extraClass=""){
+    const state = getEyeFilterRenderState(inputState);
+    const active = !!(state.fadeWatched || state.hideWatched || state.hidePlan || state.hideFavorites);
+    const icon = active ? "/static/assets/icons/eye-closed.png" : "/static/assets/icons/eye-open.png";
+    const forcedOpen = typeof shouldKeepEyeFilterMenuOpen === "function" && shouldKeepEyeFilterMenuOpen();
+    return `
+        <details class="browse-menu eye-filter-menu ${escapeHTML(extraClass)}" ${forcedOpen ? "open" : ""}>
+            <summary class="browse-bar-button eye-filter-button" aria-label="Tracked filters" data-eye-filter-summary>
+                <img src="${escapeHTML(icon)}" alt="" aria-hidden="true" class="eye-filter-icon">
+            </summary>
+            <div class="browse-dropdown eye-filter-dropdown">
+                <div class="browse-option-list">
+                    ${renderEyeFilterOption("Fade watched","fadeWatched",state.fadeWatched)}
+                    ${renderEyeFilterOption("Hide watched","hideWatched",state.hideWatched)}
+                    ${renderEyeFilterOption("Hide Plan to Watch","hidePlan",state.hidePlan)}
+                    ${renderEyeFilterOption("Hide Favorites","hideFavorites",state.hideFavorites)}
+                </div>
+            </div>
+        </details>
+    `;
+}
+
+function getEyeFilteredRenderItems(items,media,state){
+    if(typeof applyEyeFiltersToItems === "function"){
+        return applyEyeFiltersToItems(items,media,state || {});
+    }
+    return Array.isArray(items) ? items : [];
 }
 
 function renderBrowseDecadeYearsHTML(decade,state){
@@ -1447,6 +1524,7 @@ function renderBrowseControlsHTML(inputState,inputLabels={},options={}){
                     <summary class="browse-bar-button">OTHER ${renderBrowseChevronIcon()}</summary>
                     <div class="browse-dropdown browse-dropdown-other">${renderBrowseOtherMenu(state,labels)}</div>
                 </details>
+                ${renderEyeFilterControlHTML(state,"browse-eye-filter-menu")}
                 ${hideSort ? "" : `
                     <details class="browse-menu browse-menu-sort">
                         <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
@@ -1469,6 +1547,7 @@ function renderBrowseDetailPage(state){
     const media = filters.media;
     const mediaWord = media === "movie" ? "movies" : "shows";
     const shows = Array.isArray(pageState.shows) ? pageState.shows : [];
+    const visibleShows = getEyeFilteredRenderItems(shows,media,filters);
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
     const page = Number(pageState.page || 1);
@@ -1476,11 +1555,11 @@ function renderBrowseDetailPage(state){
     const canLoadMore = !loading && page < totalPages;
     const bodyHTML = error
     ? `<div class="empty-state genre-detail-empty"><h2>Browse could not load</h2><p>${escapeHTML(error)}</p></div>`
-    : shows.length
-    ? `<div class="genre-tight-grid">${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card browse-result-card"')).join("")}</div>${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="browse-load-more-button">VIEW MORE</button>` : ""}${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}`
+    : visibleShows.length
+    ? `<div class="genre-tight-grid">${visibleShows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card','class="genre-result-card browse-result-card')).join("")}</div>${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="browse-load-more-button">VIEW MORE</button>` : ""}${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}`
     : loading
     ? `<div class="genre-tight-grid genre-tight-grid-loading">${renderTrackerPosterSkeletonCards(12)}</div>`
-    : `<div class="empty-state genre-detail-empty"><h2>No ${mediaWord} found</h2><p>Remove or change one or more filters.</p></div>`;
+    : `<div class="empty-state genre-detail-empty"><h2>${shows.length ? "No results found" : `No ${mediaWord} found`}</h2><p>Remove or change one or more filters.</p></div>`;
 
     content.innerHTML = `
         <div class="genre-detail-page-inner browse-detail-page-inner">
@@ -1516,6 +1595,7 @@ function renderGenreDetailPage(state){
     const canLoadMore = !loading && page < totalPages;
     const mediaWord = media === "movie" ? "movies" : "shows";
     const browseState = typeof getGenreBrowseState === "function" ? getGenreBrowseState() : getBrowseControlState({year,sort},media);
+    const visibleGenreShows = getEyeFilteredRenderItems(shows,media,browseState);
     const browseLabels = typeof genrePageState !== "undefined" && genrePageState ? getBrowseControlLabels(genrePageState.browseLabels) : getBrowseControlLabels({});
     const genreSwitchHTML = renderBrowseMediaSwitchHTML(media);
 
@@ -1526,10 +1606,10 @@ function renderGenreDetailPage(state){
             <p>${escapeHTML(error)}</p>
         </div>
     `
-    : shows.length
+    : visibleGenreShows.length
     ? `
         <div class="genre-tight-grid">
-            ${shows.map(renderGenrePosterGridCard).join("")}
+            ${visibleGenreShows.map(renderGenrePosterGridCard).join("")}
         </div>
         ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="genre-load-more-button">VIEW MORE</button>` : ""}
         ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}
@@ -1542,7 +1622,7 @@ function renderGenreDetailPage(state){
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No ${mediaWord} found</h2>
+            <h2>${shows.length ? "No results found" : `No ${mediaWord} found`}</h2>
             <p>Remove or change one or more filters.</p>
         </div>
     `;
@@ -1600,6 +1680,7 @@ function renderDiscoveryFilterDetailPage(state){
     const browseLabels = typeof discoveryPageState !== "undefined" && discoveryPageState
     ? getBrowseControlLabels(discoveryPageState.browseLabels)
     : getBrowseControlLabels({});
+    const visibleDiscoveryShows = getEyeFilteredRenderItems(shows,media,browseState);
 
     const bodyHTML = error
     ? `
@@ -1608,10 +1689,10 @@ function renderDiscoveryFilterDetailPage(state){
             <p>${escapeHTML(error)}</p>
         </div>
     `
-    : shows.length
+    : visibleDiscoveryShows.length
     ? `
         <div class="genre-tight-grid">
-            ${shows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card"','class="genre-result-card discovery-filter-result-card"')).join("")}
+            ${visibleDiscoveryShows.map(show=>renderGenrePosterGridCard(show).replace('class="genre-result-card','class="genre-result-card discovery-filter-result-card')).join("")}
         </div>
         ${canLoadMore ? `<button type="button" class="view-more-button genre-load-more-button" id="discovery-filter-load-more-button">VIEW MORE</button>` : ""}
         ${loading ? `<div class="v2-api-empty genre-loading-note">Loading more ${mediaWord}…</div>` : ""}
@@ -1624,7 +1705,7 @@ function renderDiscoveryFilterDetailPage(state){
     `
     : `
         <div class="empty-state genre-detail-empty">
-            <h2>No ${mediaWord} found</h2>
+            <h2>${shows.length ? "No results found" : `No ${mediaWord} found`}</h2>
             <p>${isDiscoverCategory ? "No titles are available for this category right now." : "Remove or change one or more filters."}</p>
         </div>
     `;

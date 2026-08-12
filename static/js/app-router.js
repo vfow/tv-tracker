@@ -49,15 +49,37 @@
         }
     }
 
+
+    function canonicalEyeParams(params){
+        const eye = {
+            fadeWatched:params.get("fadeWatched") === "1",
+            hideWatched:params.get("hideWatched") === "1",
+            hidePlan:params.get("hidePlan") === "1",
+            hideFavorites:params.get("hideFavorites") === "1"
+        };
+        const parts = [];
+        if(eye.fadeWatched){ parts.push("fadeWatched=1"); }
+        if(eye.hideWatched){ parts.push("hideWatched=1"); }
+        if(eye.hidePlan){ parts.push("hidePlan=1"); }
+        if(eye.hideFavorites){ parts.push("hideFavorites=1"); }
+        return {eye,parts};
+    }
+
     function canonicalSearchRoute(search){
         const params = readSearchParams(search);
         const query = String(params.get("q") || "").trim();
         const rawMedia = String(params.get("type") || "tv").trim().toLowerCase();
         const media = ["tv","movie","person"].includes(rawMedia) ? rawMedia : "tv";
+        const eye = canonicalEyeParams(params);
+        const parts = query ? ["q=" + encodeURIComponent(query),"type=" + encodeURIComponent(media)] : [];
+        if(query && media !== "person"){
+            eye.parts.forEach(part=>parts.push(part));
+        }
         return {
             query,
             media,
-            search:query ? "?q=" + encodeURIComponent(query) + "&type=" + encodeURIComponent(media) : ""
+            eyeState:eye.eye,
+            search:parts.length ? "?" + parts.join("&") : ""
         };
     }
 
@@ -148,7 +170,7 @@
 
         if(path === "/app/search"){
             const searchState = canonicalSearchRoute(search);
-            return buildParsedRoute("search",path,searchState.search,{query:searchState.query,media:searchState.media});
+            return buildParsedRoute("search",path,searchState.search,{query:searchState.query,media:searchState.media,eyeState:searchState.eyeState});
         }
 
         if(path === "/app/upcoming"){
@@ -209,11 +231,13 @@
             const media = String(personSearchParams.get("media") || "").trim().toLowerCase() === "movie" ? "movie" : "tv";
             const rawRole = String(personSearchParams.get("role") || "").trim().toLowerCase();
             const role = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(rawRole) ? rawRole : "";
+            const personEye = canonicalEyeParams(personSearchParams);
             const personParts = [];
             if(media === "movie"){ personParts.push("media=movie"); }
             if(role){ personParts.push("role=" + encodeURIComponent(role)); }
+            personEye.parts.forEach(part=>personParts.push(part));
             const personSearch = personParts.length ? "?" + personParts.join("&") : "";
-            return buildParsedRoute("person",path,personSearch,{id:person.id,slug:person.slug,role,media});
+            return buildParsedRoute("person",path,personSearch,{id:person.id,slug:person.slug,role,media,eyeState:personEye.eye});
         }
 
         const networkMatch = path.match(/^\/app\/network\/([1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)$/);
@@ -404,7 +428,7 @@
         if(activePage === "search"){
             const query = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.query : "";
             const media = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.media : "tv";
-            return typeof getSearchRoute === "function" ? getSearchRoute(query,media) : "/app/search";
+            return typeof getSearchRoute === "function" ? getSearchRoute(query,media,searchRouteState || {}) : "/app/search";
         }
         if(activePage === "discover"){
             return "/app/discover";
@@ -733,8 +757,9 @@
             if(parsed.type === "search"){
                 searchRouteState.query = params.query || "";
                 searchRouteState.media = params.media || "tv";
+                if(typeof applyEyeFilterState === "function"){ applyEyeFilterState(searchRouteState,params.eyeState || {}); }
                 if(typeof discoverSearchState !== "undefined"){
-                    discoverSearchState = Object.assign({},discoverSearchState,{query:params.query || "",media:params.media || "tv",loading:true});
+                    discoverSearchState = Object.assign({},discoverSearchState,{query:params.query || "",media:params.media || "tv",loading:true},params.eyeState || {});
                 }
             }else if(typeof discoverHubState !== "undefined"){
                 discoverHubState = Object.assign({},discoverHubState,{error:""});
@@ -853,7 +878,7 @@
         if(parsed.type === "search"){
             clearDetailState();
             if(typeof openSearchPage === "function"){
-                openSearchPage(params.query || "",{fromRoute:true,media:params.media || "tv"});
+                openSearchPage(params.query || "",{fromRoute:true,media:params.media || "tv",eyeState:params.eyeState || {}});
             }else{
                 showPage("discover");
             }
@@ -893,7 +918,7 @@
         }
         if(parsed.type === "person"){
             if(typeof openPersonPage === "function"){
-                openPersonPage(params.role || "",params.id,{fromRoute:true,routeSlug:params.slug,media:params.media || "tv"});
+                openPersonPage(params.role || "",params.id,{fromRoute:true,routeSlug:params.slug,media:params.media || "tv",eyeState:params.eyeState || {}});
             }
             return;
         }

@@ -1566,3 +1566,104 @@
         width:min(310px,calc(100vw - 48px));
     }
 }
+
+/* Phase 6.5A tracked eye filters */
+.eye-filter-button{
+    min-width:42px;
+    padding:0 11px;
+}
+.eye-filter-icon{
+    display:block;
+    width:18px;
+    height:18px;
+    object-fit:contain;
+    opacity:.9;
+    filter:invert(1) grayscale(1);
+}
+.eye-filter-button:hover .eye-filter-icon,
+.eye-filter-menu[open] .eye-filter-icon{
+    opacity:1;
+}
+.eye-filter-dropdown{
+    right:-1px;
+    left:auto;
+    width:230px;
+}
+.eye-filter-option{
+    text-transform:none;
+    letter-spacing:0;
+}
+.search-result-poster-card[data-eye-faded="true"] .genre-result-poster,
+.person-result-card[data-eye-faded="true"] .genre-result-poster,
+.eye-filter-faded .genre-result-poster,
+.search-result-poster-card[data-eye-faded="true"] .genre-result-title,
+.person-result-card[data-eye-faded="true"] .genre-result-title,
+.eye-filter-faded .genre-result-title,
+.search-result-poster-card[data-eye-faded="true"] .genre-result-meta,
+.person-result-card[data-eye-faded="true"] .genre-result-meta,
+.eye-filter-faded .genre-result-meta,
+.person-result-card[data-eye-faded="true"] .person-result-role,
+.eye-filter-faded .person-result-role{
+    opacity:.38;
+}
+.search-result-poster-card[data-eye-faded="true"] .genre-result-poster img,
+.person-result-card[data-eye-faded="true"] .genre-result-poster img,
+.eye-filter-faded .genre-result-poster img{
+    filter:grayscale(.65) brightness(.56);
+}
+.search-eye-row{
+    display:flex;
+    justify-content:flex-start;
+    margin:0 0 18px;
+}
+.search-eye-row .browse-bar{
+    width:auto;
+}
+.search-eye-row .eye-filter-menu{
+    border-left:0;
+}
+.person-progress-card{
+    margin-top:14px;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:14px;
+    background:linear-gradient(135deg,rgba(255,255,255,.075),rgba(255,255,255,.028));
+    padding:12px;
+    box-shadow:0 12px 30px rgba(0,0,0,.28);
+}
+.person-progress-line{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    color:#d7d7d7;
+    font:700 12px/1.2 Graphik,Arial,Helvetica,sans-serif;
+}
+.person-progress-line strong{
+    color:#fff;
+    font-size:16px;
+    letter-spacing:.02em;
+}
+.person-progress-track{
+    height:4px;
+    margin-top:10px;
+    overflow:hidden;
+    border-radius:999px;
+    background:rgba(255,255,255,.1);
+}
+.person-progress-fill{
+    height:100%;
+    border-radius:inherit;
+    background:rgba(255,255,255,.72);
+}
+@media (max-width:767.98px){
+    .eye-filter-dropdown{
+        right:auto;
+        left:-1px;
+    }
+    .person-progress-card{
+        max-width:280px;
+    }
+}
+.search-eye-row .eye-filter-menu{
+    border:1px solid #353535;
+}

@@ -51,6 +51,28 @@ assert(browse,'browse module should load');
 }
 
 {
+  const parsed = browse.parseSearch('?genre=18&fadeWatched=1&hideWatched=1&hidePlan=1&hideFavorites=1','movie');
+  assert.strictEqual(parsed.state.fadeWatched,true);
+  assert.strictEqual(parsed.state.hideWatched,true);
+  assert.strictEqual(parsed.state.hidePlan,true);
+  assert.strictEqual(parsed.state.hideFavorites,true);
+  assert.strictEqual(parsed.search,'?genre=18&fadeWatched=1&hideWatched=1&hidePlan=1&hideFavorites=1');
+  assert.strictEqual(browse.hasEyeOptions(parsed.state),true);
+  assert.strictEqual(browse.hasEyeHideOptions(parsed.state),true);
+}
+
+{
+  let state = browse.normalizeState({media:'movie',year:'2024',fadeWatched:true,hideFavorites:true});
+  state = browse.clearFilters(state);
+  assert.strictEqual(state.media,'movie');
+  assert.strictEqual(state.year,'');
+  assert.strictEqual(state.fadeWatched,true,'eye modifiers should survive normal filter clearing');
+  assert.strictEqual(state.hideFavorites,true,'eye hide modifiers should survive normal filter clearing');
+  state = browse.toggleEyeOption(state,'hideFavorites');
+  assert.strictEqual(state.hideFavorites,false);
+}
+
+{
   const params = browse.buildTMDBParams(browse.normalizeState({media:'movie',decade:'1990'}),1,{});
   assert.strictEqual(params['primary_release_date.gte'],'1990-01-01');
   assert.strictEqual(params['primary_release_date.lte'],'1999-12-31');
