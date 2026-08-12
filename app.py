@@ -72,6 +72,16 @@ APP_BROWSE_SORT_MODES = {
     "date-desc",
     "date-asc",
 }
+APP_COLLECTION_SORT_MODES = {
+    "name.asc",
+    "size.desc",
+    "date.desc",
+    "date.asc",
+    "rating.desc",
+    "rating.asc",
+    "popularity.desc",
+    "popularity.asc",
+}
 APP_BROWSE_STATUS_VALUES = {"returning-series", "in-production", "ended", "canceled"}
 APP_BROWSE_RUNTIME_VALUES = {
     "tv": {"under-30", "30-44", "45-59", "60-89", "90-plus"},
@@ -1866,7 +1876,36 @@ def safe_next_url(value: str | None) -> str:
         return candidate
     if APP_CERTIFICATION_PATH_RE.fullmatch(candidate):
         return candidate
-    if APP_COLLECTIONS_PATH_RE.fullmatch(candidate) or APP_COLLECTION_PATH_RE.fullmatch(candidate):
+    if APP_COLLECTIONS_PATH_RE.fullmatch(candidate):
+        genre = ""
+        decade = ""
+        sort_mode = "name.asc"
+        page_number = ""
+        if separator:
+            current_decade = 2100
+            for key, value in parse_qsl(raw_query, keep_blank_values=False):
+                clean_value = value.strip()
+                if key == "genre" and re.fullmatch(r"[1-9][0-9]{0,11}", clean_value) and not genre:
+                    genre = clean_value
+                elif key == "decade" and re.fullmatch(r"(?:18|19|20|21)[0-9]0", clean_value):
+                    decade_value = int(clean_value)
+                    if 1870 <= decade_value <= current_decade and not decade:
+                        decade = clean_value
+                elif key == "sort" and clean_value.lower() in APP_COLLECTION_SORT_MODES:
+                    sort_mode = clean_value.lower()
+                elif key == "page" and re.fullmatch(r"[1-9][0-9]{0,5}", clean_value) and not page_number:
+                    page_number = clean_value
+        params = {}
+        if genre:
+            params["genre"] = genre
+        if decade:
+            params["decade"] = decade
+        if sort_mode != "name.asc":
+            params["sort"] = sort_mode
+        if page_number and page_number != "1":
+            params["page"] = page_number
+        return candidate + (("?" + urlencode(params)) if params else "")
+    if APP_COLLECTION_PATH_RE.fullmatch(candidate):
         return candidate
     return "/app/list/watching"
 

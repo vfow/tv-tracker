@@ -1803,6 +1803,133 @@ function renderDiscoveryFilterDetailPage(state){
     `;
 }
 
+const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
+    {value:"name.asc",label:"Collection Name"},
+    {value:"size.desc",label:"Collection Size"},
+    {value:"date.desc",label:"Newest First"},
+    {value:"date.asc",label:"Oldest First"},
+    {value:"rating.desc",label:"Highest Rated"},
+    {value:"rating.asc",label:"Lowest Rated"},
+    {value:"popularity.desc",label:"Most Popular"},
+    {value:"popularity.asc",label:"Least Popular"}
+]);
+
+function getCollectionIndexSortLabel(sort){
+    const clean = String(sort || "name.asc").trim().toLowerCase();
+    const match = COLLECTION_INDEX_SORT_OPTIONS.find(item=>item.value === clean);
+    return match ? match.label : "Collection Name";
+}
+
+function renderCollectionIndexGenreMenu(state){
+    const genres = Array.isArray(state && state.availableGenres) ? state.availableGenres : [];
+    if(!genres.length){
+        return `<div class="browse-dropdown-empty">Genres are loading…</div>`;
+    }
+    const selectedGenre = String(state && state.genre || "");
+    return `
+        <div class="browse-option-list browse-option-list-genre">
+            <button type="button" class="browse-dropdown-option ${!selectedGenre ? "selected" : ""}" data-collection-filter="genre" data-collection-value="">${renderBrowseOptionLabel("Any",!selectedGenre)}</button>
+            ${genres.map(genre=>{
+                const id = String(genre && genre.id || "");
+                const name = String(genre && genre.name || "").trim() || "Genre " + id;
+                const selected = selectedGenre === id;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-filter="genre" data-collection-value="${escapeHTML(id)}">${renderBrowseOptionLabel(name,selected)}</button>`;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderCollectionIndexDecadeMenu(state){
+    const decades = Array.isArray(state && state.availableDecades) ? state.availableDecades : [];
+    if(!decades.length){
+        return `<div class="browse-dropdown-empty">Decades are loading…</div>`;
+    }
+    const selectedDecade = String(state && state.decade || "");
+    return `
+        <div class="browse-option-list">
+            <button type="button" class="browse-dropdown-option ${!selectedDecade ? "selected" : ""}" data-collection-filter="decade" data-collection-value="">${renderBrowseOptionLabel("Any",!selectedDecade)}</button>
+            ${decades.map(decade=>{
+                const value = String(decade || "");
+                const selected = selectedDecade === value;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-filter="decade" data-collection-value="${escapeHTML(value)}">${renderBrowseOptionLabel(value + "s",selected)}</button>`;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderCollectionIndexSortMenu(state){
+    const selectedSort = String(state && state.sort || "name.asc");
+    return `
+        <div class="browse-option-list">
+            ${COLLECTION_INDEX_SORT_OPTIONS.map(item=>{
+                const selected = selectedSort === item.value;
+                return `<button type="button" class="browse-dropdown-option ${selected ? "selected" : ""}" data-collection-filter="sort" data-collection-value="${escapeHTML(item.value)}">${renderBrowseOptionLabel(item.label,selected)}</button>`;
+            }).join("")}
+        </div>
+    `;
+}
+
+function getCollectionIndexGenreLabel(state,genreId){
+    const id = String(genreId || "");
+    const genres = Array.isArray(state && state.availableGenres) ? state.availableGenres : [];
+    const match = genres.find(genre=>String(genre && genre.id || "") === id);
+    return match ? String(match.name || "").trim() : "Genre " + id;
+}
+
+function renderCollectionIndexActiveChipsHTML(state){
+    const chips = [];
+    const genre = String(state && state.genre || "");
+    const decade = String(state && state.decade || "");
+    if(genre){
+        chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="genre">Genre: ${escapeHTML(getCollectionIndexGenreLabel(state,genre))}<span aria-hidden="true">×</span></button>`);
+    }
+    if(decade){
+        chips.push(`<button type="button" class="browse-active-chip" data-collection-clear="decade">Decade: ${escapeHTML(decade)}s<span aria-hidden="true">×</span></button>`);
+    }
+    if(String(state && state.sort || "name.asc") !== "name.asc"){
+        chips.push(`<button type="button" class="browse-active-chip" data-collection-filter="sort" data-collection-value="name.asc">Sort: ${escapeHTML(getCollectionIndexSortLabel(state.sort))}<span aria-hidden="true">×</span></button>`);
+    }
+    return chips.length ? `<div class="browse-active-row collections-active-row" aria-label="Active collection filters">${chips.join("")}<button type="button" class="browse-clear-button" data-collection-clear="all">CLEAR ALL</button></div>` : "";
+}
+
+function renderCollectionIndexControlsHTML(state){
+    return `
+        <div class="browse-controls collections-controls">
+            <div class="browse-bar collections-browse-bar" aria-label="Collection filters">
+                <span class="browse-bar-kicker">BROWSE BY</span>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">GENRE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown">${renderCollectionIndexGenreMenu(state)}</div>
+                </details>
+                <details class="browse-menu">
+                    <summary class="browse-bar-button">DECADE ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown">${renderCollectionIndexDecadeMenu(state)}</div>
+                </details>
+                <details class="browse-menu browse-menu-sort">
+                    <summary class="browse-bar-button">SORT ${renderBrowseChevronIcon()}</summary>
+                    <div class="browse-dropdown browse-dropdown-sort">${renderCollectionIndexSortMenu(state)}</div>
+                </details>
+            </div>
+            ${renderCollectionIndexActiveChipsHTML(state)}
+        </div>
+    `;
+}
+
+function renderCollectionsPaginationHTML(state){
+    const page = Number(state && state.page || 1);
+    const totalPages = Number(state && state.totalPages || 1);
+    if(totalPages <= 1){
+        return "";
+    }
+    return `
+        <div class="collections-pagination" aria-label="Collections pagination">
+            <button type="button" class="view-more-button collections-pagination-button" data-collection-page="${Math.max(1,page - 1)}" ${page <= 1 ? "disabled" : ""}>PREVIOUS</button>
+            <span class="collections-pagination-status">Page ${escapeHTML(String(page))} of ${escapeHTML(String(totalPages))}</span>
+            <button type="button" class="view-more-button collections-pagination-button" data-collection-page="${Math.min(totalPages,page + 1)}" ${page >= totalPages ? "disabled" : ""}>NEXT</button>
+        </div>
+    `;
+}
+
 function renderCollectionsIndexPage(state){
     const content = document.getElementById("genre-detail-content");
     if(!content){
@@ -1810,9 +1937,14 @@ function renderCollectionsIndexPage(state){
     }
 
     const pageState = state || {};
-    const collections = Array.isArray(pageState.collections) ? pageState.collections.filter(collection=>collection && collection.id && collection.name) : [];
+    const hasPagedCollections = Array.isArray(pageState.visibleCollections) && (pageState.loaded === true || Number(pageState.totalResults || 0) >= 0);
+    const renderCollections = hasPagedCollections ? pageState.visibleCollections : pageState.collections;
+    const collections = Array.isArray(renderCollections) ? renderCollections.filter(collection=>collection && collection.id && collection.name) : [];
     const loading = pageState.loading === true;
     const error = String(pageState.error || "").trim();
+    const hasFilters = !!(pageState.genre || pageState.decade || String(pageState.sort || "name.asc") !== "name.asc");
+    const totalResults = Number(pageState.totalResults || collections.length || 0);
+    const countLabel = totalResults === 1 ? "1 collection" : `${totalResults || 0} collections`;
 
     const bodyHTML = error
     ? `
@@ -1822,13 +1954,13 @@ function renderCollectionsIndexPage(state){
         </div>
     `
     : collections.length
-    ? `<div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>`
+    ? `<div class="genre-result-summary collections-result-summary">${escapeHTML(countLabel)}</div><div class="collection-grid">${collections.map(collection=>renderCollectionCard(collection,"collection-index-card")).join("")}</div>${renderCollectionsPaginationHTML(pageState)}`
     : loading
     ? `<div class="collection-grid collection-grid-loading">${Array.from({length:12}).map(()=>renderCollectionSkeletonCardHTML()).join("")}</div>`
     : `
         <div class="empty-state genre-detail-empty">
             <h2>No collections found</h2>
-            <p>Try again later.</p>
+            <p>${hasFilters ? "Remove or change one or more filters." : "Try again later."}</p>
         </div>
     `;
 
@@ -1842,6 +1974,7 @@ function renderCollectionsIndexPage(state){
                     <h1 class="genre-detail-title">Collections</h1>
                 </div>
             </div>
+            ${renderCollectionIndexControlsHTML(pageState)}
             <div class="genre-result-content">
                 ${bodyHTML}
             </div>

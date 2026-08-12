@@ -67,6 +67,14 @@ function createRouter(route, options={}){
     },
     getMovieDetailRoute(id,name=''){ return name ? `/app/movie/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/movie/${id}`; },
     getCollectionDetailRoute(id,name=''){ return name ? `/app/collection/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}` : `/app/collection/${id}`; },
+    getCollectionsRoute(state={}){
+      const parts=[];
+      if(state.genre){ parts.push('genre=' + encodeURIComponent(state.genre)); }
+      if(state.decade){ parts.push('decade=' + encodeURIComponent(state.decade)); }
+      if(state.sort && state.sort !== 'name.asc'){ parts.push('sort=' + encodeURIComponent(state.sort)); }
+      if(Number(state.page || 1) > 1){ parts.push('page=' + encodeURIComponent(String(state.page))); }
+      return '/app/collections' + (parts.length ? '?' + parts.join('&') : '');
+    },
     getGenreDetailRoute(id,name='',media='tv'){ const slug=String(name||'genre').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); return `/app/genre/${media === 'movie' ? 'movie' : 'tv'}/${id}-${slug}`; },
     getKnownShowRouteLabel(){ return ''; },
     getEpisodeDetailRoute(id,season,episode,name=''){ return name ? `/app/show/${id}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}/season/${season}/episode/${episode}` : `/app/show/${id}/season/${season}/episode/${episode}`; },
@@ -731,6 +739,17 @@ for (const route of [
   const call=calls.find(item=>item[0]==='openCollectionsPage');
   assert(call,'collections route should open collections page');
   assert.strictEqual(call[1].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/collections?page=2&sort=popularity.desc&decade=2000&genre=28&bad=1');
+  assert.strictEqual(router.currentRoute(),'/app/collections?genre=28&decade=2000&sort=popularity.desc&page=2');
+  const call=calls.find(item=>item[0]==='openCollectionsPage');
+  assert(call,'collections route should preserve collection filters');
+  assert.strictEqual(call[1].filters.genre,'28');
+  assert.strictEqual(call[1].filters.decade,'2000');
+  assert.strictEqual(call[1].filters.sort,'popularity.desc');
+  assert.strictEqual(call[1].filters.page,2);
 }
 
 {

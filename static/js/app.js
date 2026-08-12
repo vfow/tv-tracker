@@ -141,7 +141,7 @@ var discoverHubState = {
     genres:{tv:[],movie:[]},
     collections:[]
 };
-var collectionsPageState = {loaded:false,loading:false,error:"",collections:[]};
+var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],genre:"",decade:"",sort:"name.asc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[]};
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[]};
 var selectedCollectionId = null;
 var discoverGenreMedia = "tv";
@@ -166,6 +166,9 @@ const DISCOVER_HUB_CACHE_KEY = "tv-tracker-discover-hub:v6";
 const DISCOVER_HUB_CACHE_TTL = 1000 * 60 * 60 * 3;
 const DISCOVER_ROW_LIMIT = 14;
 const DISCOVER_COLLECTION_ROW_LIMIT = 12;
+const COLLECTIONS_PAGE_SIZE = 64;
+const COLLECTIONS_DEFAULT_SORT = "name.asc";
+const COLLECTION_SORT_VALUES = new Set(["name.asc","size.desc","date.desc","date.asc","rating.desc","rating.asc","popularity.desc","popularity.asc"]);
 const TMDB_COLLECTION_DETAIL_CACHE_PREFIX = "tv-tracker-tmdb-collection-detail:v1:";
 const TMDB_COLLECTION_DETAIL_CACHE_TTL = 1000 * 60 * 60 * 24;
 const DISCOVER_COLLECTION_IDS = Object.freeze([
@@ -3853,12 +3856,88 @@ function writeCachedTMDBCollectionDetails(collection){
     }catch(error){}
 }
 
+function normalizeCollectionGenreIds(value){
+    const source = Array.isArray(value) ? value : [];
+    const output = [];
+    const seen = new Set();
+    source.forEach(item=>{
+        const id = normalizeCollectionId(item);
+        if(!id || seen.has(id)){
+            return;
+        }
+        seen.add(id);
+        output.push(id);
+    });
+    return output;
+}
+
+function getCollectionPartReleaseYear(movie){
+    const date = String(movie && (movie.release_date || movie.date) || "").trim();
+    const match = date.match(/^(18|19|20|21)[0-9]{2}/);
+    return match ? Number(match[0]) : 0;
+}
+
 function normalizeCollectionMoviePart(raw){
     const item = normalizeBrowseResultItem(raw,"movie");
     if(!item || !item.id){
         return null;
     }
-    return Object.assign({},item,{media_type:"movie"});
+    return Object.assign({},item,{
+        media_type:"movie",
+        genre_ids:normalizeCollectionGenreIds(raw && raw.genre_ids)
+    });
+}
+
+function computeCollectionMetadata(parts){
+    const movies = Array.isArray(parts) ? parts : [];
+    const genreIds = [];
+    const genreSeen = new Set();
+    const decades = [];
+    const decadeSeen = new Set();
+    const releaseYears = [];
+    let popularityTotal = 0;
+    let popularityCount = 0;
+    let ratingTotal = 0;
+    let ratingCount = 0;
+
+    movies.forEach(movie=>{
+        normalizeCollectionGenreIds(movie && movie.genre_ids).forEach(id=>{
+            if(genreSeen.has(id)){ return; }
+            genreSeen.add(id);
+            genreIds.push(id);
+        });
+
+        const year = getCollectionPartReleaseYear(movie);
+        if(year){
+            releaseYears.push(year);
+            const decade = String(Math.floor(year / 10) * 10);
+            if(!decadeSeen.has(decade)){
+                decadeSeen.add(decade);
+                decades.push(decade);
+            }
+        }
+
+        const popularity = Number(movie && movie.popularity || 0);
+        if(Number.isFinite(popularity) && popularity > 0){
+            popularityTotal += popularity;
+            popularityCount += 1;
+        }
+
+        const rating = Number(movie && movie.vote_average || 0);
+        if(Number.isFinite(rating) && rating > 0){
+            ratingTotal += rating;
+            ratingCount += 1;
+        }
+    });
+
+    return {
+        genre_ids:genreIds.sort((a,b)=>Number(a) - Number(b)),
+        decades:decades.sort((a,b)=>Number(b) - Number(a)),
+        average_popularity:popularityCount ? popularityTotal / popularityCount : 0,
+        average_rating:ratingCount ? ratingTotal / ratingCount : 0,
+        newest_release_year:releaseYears.length ? Math.max.apply(null,releaseYears) : 0,
+        oldest_release_year:releaseYears.length ? Math.min.apply(null,releaseYears) : 0
+    };
 }
 
 function normalizeTMDBCollectionDetails(raw){
@@ -3887,7 +3966,8 @@ function normalizeTMDBCollectionDetails(raw){
     if(!posterPaths.length && raw && raw.poster_path){
         posterPaths.push(String(raw.poster_path));
     }
-    return {
+    const metadata = computeCollectionMetadata(parts);
+    return Object.assign({
         id:Number(id),
         name,
         title:name,
@@ -3898,7 +3978,7 @@ function normalizeTMDBCollectionDetails(raw){
         movie_count:parts.length,
         parts,
         route:getCollectionDetailRoute(id,name)
-    };
+    },metadata);
 }
 
 async function tmdbGetCollectionDetails(collectionId){
@@ -3948,6 +4028,161 @@ async function loadCollectionSummaries(collectionIds){
 
 async function loadDiscoverCollectionRow(){
     return loadCollectionSummaries(DISCOVER_COLLECTION_IDS.slice(0,DISCOVER_COLLECTION_ROW_LIMIT));
+}
+
+function normalizeCollectionsIndexSort(value){
+    const clean = String(value || "").trim().toLowerCase();
+    return COLLECTION_SORT_VALUES.has(clean) ? clean : COLLECTIONS_DEFAULT_SORT;
+}
+
+function normalizeCollectionsIndexDecade(value){
+    const clean = String(value || "").trim();
+    if(!/^(18|19|20|21)[0-9]0$/.test(clean)){
+        return "";
+    }
+    const decade = Number(clean);
+    const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+    return decade >= 1870 && decade <= currentDecade ? String(decade) : "";
+}
+
+function createCollectionsIndexState(input={}){
+    const source = input && typeof input === "object" ? input : {};
+    const pageNumber = Math.max(1,Math.floor(Number(source.page || 1)));
+    return {
+        genre:normalizeCollectionId(source.genre),
+        decade:normalizeCollectionsIndexDecade(source.decade),
+        sort:normalizeCollectionsIndexSort(source.sort),
+        page:pageNumber
+    };
+}
+
+function serializeCollectionsIndexSearch(input={}){
+    const state = createCollectionsIndexState(input);
+    const parts = [];
+    if(state.genre){ parts.push("genre=" + encodeURIComponent(state.genre)); }
+    if(state.decade){ parts.push("decade=" + encodeURIComponent(state.decade)); }
+    if(state.sort !== COLLECTIONS_DEFAULT_SORT){ parts.push("sort=" + encodeURIComponent(state.sort)); }
+    if(state.page > 1){ parts.push("page=" + encodeURIComponent(String(state.page))); }
+    return parts.length ? "?" + parts.join("&") : "";
+}
+
+function getCollectionsRoute(input={}){
+    return "/app/collections" + serializeCollectionsIndexSearch(input || collectionsPageState || {});
+}
+
+function getCollectionGenreIds(collection){
+    if(collection && Array.isArray(collection.genre_ids)){
+        return normalizeCollectionGenreIds(collection.genre_ids);
+    }
+    const metadata = computeCollectionMetadata(collection && collection.parts);
+    return metadata.genre_ids;
+}
+
+function getCollectionDecades(collection){
+    if(collection && Array.isArray(collection.decades)){
+        return collection.decades.map(normalizeCollectionsIndexDecade).filter(Boolean);
+    }
+    const metadata = computeCollectionMetadata(collection && collection.parts);
+    return metadata.decades;
+}
+
+function getCollectionSortValue(collection,sort){
+    const movies = Array.isArray(collection && collection.parts) ? collection.parts : [];
+    const metadata = collection && (collection.average_rating !== undefined || collection.average_popularity !== undefined || collection.newest_release_year !== undefined)
+    ? collection
+    : computeCollectionMetadata(movies);
+    if(sort === "size.desc"){
+        return Number(collection && collection.movie_count || movies.length || 0);
+    }
+    if(sort === "date.desc" || sort === "date.asc"){
+        return Number(metadata.newest_release_year || 0);
+    }
+    if(sort === "rating.desc" || sort === "rating.asc"){
+        return Number(metadata.average_rating || 0);
+    }
+    if(sort === "popularity.desc" || sort === "popularity.asc"){
+        return Number(metadata.average_popularity || 0);
+    }
+    return String(collection && (collection.name || collection.title) || "").trim().toLowerCase();
+}
+
+function sortCollectionsForIndex(collections,sort){
+    const cleanSort = normalizeCollectionsIndexSort(sort);
+    const list = (Array.isArray(collections) ? collections : []).slice();
+    list.sort((a,b)=>{
+        const aName = String(a && (a.name || a.title) || "").trim().toLowerCase();
+        const bName = String(b && (b.name || b.title) || "").trim().toLowerCase();
+        if(cleanSort === "name.asc"){
+            return aName.localeCompare(bName) || Number(a && a.id || 0) - Number(b && b.id || 0);
+        }
+        const av = getCollectionSortValue(a,cleanSort);
+        const bv = getCollectionSortValue(b,cleanSort);
+        const direction = cleanSort.endsWith(".asc") ? 1 : -1;
+        const numericCompare = (Number(av) - Number(bv)) * direction;
+        if(numericCompare){ return numericCompare; }
+        return aName.localeCompare(bName) || Number(a && a.id || 0) - Number(b && b.id || 0);
+    });
+    return list;
+}
+
+function getCollectionGenreLabel(genreId){
+    const id = String(genreId || "");
+    const fromBrowse = typeof browseGenreNameById === "function" ? browseGenreNameById("movie",id) : "";
+    return fromBrowse || "Genre " + id;
+}
+
+function buildCollectionsIndexOptions(collections){
+    const genreIds = new Set();
+    const decadeIds = new Set();
+    (Array.isArray(collections) ? collections : []).forEach(collection=>{
+        getCollectionGenreIds(collection).forEach(id=>genreIds.add(id));
+        getCollectionDecades(collection).forEach(decade=>decadeIds.add(decade));
+    });
+    return {
+        genres:Array.from(genreIds).map(id=>({id,name:getCollectionGenreLabel(id)})).sort((a,b)=>a.name.localeCompare(b.name)),
+        decades:Array.from(decadeIds).sort((a,b)=>Number(b) - Number(a))
+    };
+}
+
+function getFilteredCollectionsForIndex(collections,state){
+    const filters = createCollectionsIndexState(state);
+    return (Array.isArray(collections) ? collections : []).filter(collection=>{
+        if(filters.genre && !getCollectionGenreIds(collection).includes(filters.genre)){
+            return false;
+        }
+        if(filters.decade && !getCollectionDecades(collection).includes(filters.decade)){
+            return false;
+        }
+        return true;
+    });
+}
+
+function buildCollectionsIndexState(collections,state){
+    const filters = createCollectionsIndexState(state);
+    const options = buildCollectionsIndexOptions(collections);
+    const filtered = sortCollectionsForIndex(getFilteredCollectionsForIndex(collections,filters),filters.sort);
+    const totalPages = Math.max(1,Math.ceil(filtered.length / COLLECTIONS_PAGE_SIZE));
+    const page = Math.min(filters.page,totalPages);
+    const start = (page - 1) * COLLECTIONS_PAGE_SIZE;
+    return Object.assign({},filters,{
+        page,
+        totalPages,
+        totalResults:filtered.length,
+        filteredCollections:filtered,
+        visibleCollections:filtered.slice(start,start + COLLECTIONS_PAGE_SIZE),
+        availableGenres:options.genres,
+        availableDecades:options.decades
+    });
+}
+
+function applyCollectionsIndexState(nextState={},options={}){
+    const merged = createCollectionsIndexState(Object.assign({},collectionsPageState,nextState));
+    const built = buildCollectionsIndexState(collectionsPageState.collections || [],merged);
+    collectionsPageState = Object.assign({},collectionsPageState,built);
+    if(options && options.updateRoute !== false && activePage === "collections-index"){
+        setAppHashRoute(getCollectionsRoute(collectionsPageState),options.replaceRoute === true);
+    }
+    renderActiveCollectionsPage();
 }
 
 function getDiscoverCategoryKey(media,category){
@@ -4253,20 +4488,29 @@ async function loadCollectionsIndexResults(){
     collectionsPageState = Object.assign({},collectionsPageState,{loading:true,error:""});
     renderActiveCollectionsPage();
     try{
+        await ensureBrowseReferenceData("movie").catch(()=>{});
         const collections = await loadCollectionSummaries(DISCOVER_COLLECTION_IDS);
-        collectionsPageState = {
+        const built = buildCollectionsIndexState(collections,collectionsPageState);
+        collectionsPageState = Object.assign({},collectionsPageState,built,{
             loaded:true,
             loading:false,
             error:"",
             collections
-        };
+        });
+        if(activePage === "collections-index"){
+            setAppHashRoute(getCollectionsRoute(collectionsPageState),true);
+        }
         renderActiveCollectionsPage();
     }catch(error){
         collectionsPageState = Object.assign({},collectionsPageState,{
             loaded:false,
             loading:false,
             error:"Couldn’t load collections. Try again later.",
-            collections:[]
+            collections:[],
+            filteredCollections:[],
+            visibleCollections:[],
+            totalPages:1,
+            totalResults:0
         });
         renderActiveCollectionsPage();
     }
@@ -4275,7 +4519,8 @@ async function loadCollectionsIndexResults(){
 async function openCollectionsPage(options={}){
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
-    const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : "/app/collections");
+    const requestedFilters = createCollectionsIndexState(options && options.filters ? options.filters : options || {});
+    const navigationContext = getDiscoveryNavContext(options,fromRoute ? getCurrentAppRoute() : getCollectionsRoute(requestedFilters));
 
     selectedShowId = null;
     selectedEpisodeContext = null;
@@ -4288,11 +4533,17 @@ async function openCollectionsPage(options={}){
     showDetailPreview = null;
     discoverPreviewShow = null;
 
+    collectionsPageState = Object.assign({},collectionsPageState,requestedFilters);
+    if(collectionsPageState.collections && collectionsPageState.collections.length){
+        collectionsPageState = Object.assign({},collectionsPageState,buildCollectionsIndexState(collectionsPageState.collections,collectionsPageState));
+    }
+
     showCollectionsPageShell(navigationContext);
 
+    const targetRoute = getCollectionsRoute(collectionsPageState);
     if(!fromRoute){
-        setAppHashRoute("/app/collections",replaceRoute);
-        rememberRouteNavContext("/app/collections",navigationContext);
+        setAppHashRoute(targetRoute,replaceRoute);
+        rememberRouteNavContext(targetRoute,navigationContext);
     }
 
     if(collectionsPageState.loaded && collectionsPageState.collections.length){
@@ -4384,6 +4635,42 @@ function attachCollectionsPageEvents(){
             navigateBackOrRouteFallback("/app/discover");
         });
     }
+
+    document.querySelectorAll("[data-collection-filter]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const filter = String(button.dataset.collectionFilter || "");
+            const value = String(button.dataset.collectionValue || "");
+            if(filter === "genre"){
+                applyCollectionsIndexState({genre:normalizeCollectionId(value),page:1});
+            }else if(filter === "decade"){
+                applyCollectionsIndexState({decade:normalizeCollectionsIndexDecade(value),page:1});
+            }else if(filter === "sort"){
+                applyCollectionsIndexState({sort:normalizeCollectionsIndexSort(value),page:1});
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-collection-clear]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const filter = String(button.dataset.collectionClear || "");
+            if(filter === "genre"){
+                applyCollectionsIndexState({genre:"",page:1});
+            }else if(filter === "decade"){
+                applyCollectionsIndexState({decade:"",page:1});
+            }else if(filter === "all"){
+                applyCollectionsIndexState({genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-collection-page]").forEach(button=>{
+        button.addEventListener("click",function(){
+            const page = Math.max(1,Math.floor(Number(button.dataset.collectionPage || 1)));
+            applyCollectionsIndexState({page});
+            const pageElement = document.getElementById("genre-detail-page");
+            if(pageElement){ pageElement.scrollTop = 0; }
+        });
+    });
 }
 
 function attachCollectionDetailPageEvents(){

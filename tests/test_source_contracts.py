@@ -854,6 +854,32 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('showToast("You can only choose 8 favorite movies")', app)
         self.assertIn('saveData({stateKeys:["profile","movies"]})', app)
 
+    def test_phase66b_collection_index_filters_and_sorting_exist(self):
+        app = self.read('static/js/app.js')
+        ui = self.read('static/js/ui.js')
+        router = self.read('static/js/app-router.js')
+        backend = self.read('app.py')
+
+        self.assertIn('const COLLECTIONS_PAGE_SIZE = 64;', app)
+        self.assertIn('function createCollectionsIndexState(input={})', app)
+        self.assertIn('function buildCollectionsIndexState(collections,state)', app)
+        self.assertIn('function applyCollectionsIndexState(nextState={},options={})', app)
+        self.assertIn('average_popularity', app)
+        self.assertIn('average_rating', app)
+        self.assertIn('newest_release_year', app)
+        self.assertIn('data-collection-filter="genre"', ui)
+        self.assertIn('data-collection-filter="decade"', ui)
+        self.assertIn('Collection Size', ui)
+        self.assertIn('Most Popular', ui)
+        self.assertIn('Least Popular', ui)
+        self.assertIn('Highest Rated', ui)
+        self.assertIn('Lowest Rated', ui)
+        self.assertIn('data-collection-page', ui)
+        self.assertIn('canonicalCollectionsSearch', router)
+        self.assertIn('COLLECTION_SORT_MODES', backend)
+        self.assertIn('APP_COLLECTION_SORT_MODES', backend)
+
+
     def test_phase61_movie_tracking_foundation_exists(self):
         app = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')

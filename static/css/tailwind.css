@@ -1756,3 +1756,5 @@
 .collection-poster-count-1 .collection-stack-poster-1{left:50%;transform:translateX(-50%);}
 .collection-poster-count-2 .collection-stack-poster-1{left:24px;}
 .collection-poster-count-2 .collection-stack-poster-2{left:72px;}
+
+.collections-pagination{margin-top:2rem;display:flex;align-items:center;justify-content:center;gap:1rem}.collections-pagination-button{margin:0}.collections-pagination-button:disabled{cursor:not-allowed;opacity:.4}.collections-pagination-status{font-size:.75rem;line-height:1rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;--tw-text-opacity:1;color:rgb(119 119 119/var(--tw-text-opacity,1))}

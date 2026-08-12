@@ -1167,6 +1167,22 @@
         animation:discoverSkeleton 1.2s ease-in-out infinite;
     }
 
+    .collections-pagination{
+        @apply tw-mt-8 tw-flex tw-items-center tw-justify-center tw-gap-4;
+    }
+
+    .collections-pagination-button{
+        @apply tw-m-0;
+    }
+
+    .collections-pagination-button:disabled{
+        @apply tw-cursor-not-allowed tw-opacity-40;
+    }
+
+    .collections-pagination-status{
+        @apply tw-text-xs tw-font-semibold tw-uppercase tw-tracking-[.12em] tw-text-tt-controlText;
+    }
+
     .skeleton-card{
         @apply tw-h-[260px];
         background:linear-gradient(90deg,#080808,#141414,#080808);

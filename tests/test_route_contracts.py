@@ -31,6 +31,7 @@ def load_route_helpers():
         "APP_COLLECTION_PATH_RE",
         "APP_BROWSE_PATH_RE",
         "APP_BROWSE_SORT_MODES",
+        "APP_COLLECTION_SORT_MODES",
         "APP_BROWSE_STATUS_VALUES",
         "APP_BROWSE_RUNTIME_VALUES",
         "APP_DISCOVER_CATEGORY_PATH_RE",
@@ -131,6 +132,10 @@ class ProtectedRouteContractTests(unittest.TestCase):
         self.assertEqual(
             safe_next_url("/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1"),
             "/app/person/525-christopher-nolan?media=movie&role=director&fadeWatched=1&hideFavorites=1",
+        )
+        self.assertEqual(
+            safe_next_url("/app/collections?page=2&sort=popularity.desc&genre=28&decade=2000&junk=1"),
+            "/app/collections?genre=28&decade=2000&sort=popularity.desc&page=2",
         )
         self.assertEqual(safe_next_url("/app/actor/123-leonardo-dicaprio"), "/app/list/watching")
 

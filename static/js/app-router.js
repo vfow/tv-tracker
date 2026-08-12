@@ -26,6 +26,16 @@
         "year-newest",
         "year-oldest"
     ]);
+    const COLLECTION_SORT_MODES = new Set([
+        "name.asc",
+        "size.desc",
+        "date.desc",
+        "date.asc",
+        "rating.desc",
+        "rating.asc",
+        "popularity.desc",
+        "popularity.asc"
+    ]);
     let applyingRoute = false;
     let initialRoutePrepared = false;
 
@@ -130,6 +140,26 @@
         return {state:{media:cleanMedia},search:""};
     }
 
+    function canonicalCollectionsSearch(search){
+        const params = readSearchParams(search);
+        const rawGenre = String(params.get("genre") || "").trim();
+        const genre = /^[1-9][0-9]{0,11}$/.test(rawGenre) ? rawGenre : "";
+        const rawDecade = String(params.get("decade") || "").trim();
+        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+        const decadeNumber = /^(18|19|20|21)[0-9]0$/.test(rawDecade) ? Number(rawDecade) : 0;
+        const decade = decadeNumber >= 1870 && decadeNumber <= currentDecade ? String(decadeNumber) : "";
+        const rawSort = String(params.get("sort") || "").trim().toLowerCase();
+        const sort = COLLECTION_SORT_MODES.has(rawSort) ? rawSort : "name.asc";
+        const rawPage = String(params.get("page") || "").trim();
+        const page = /^[1-9][0-9]{0,5}$/.test(rawPage) ? Math.max(1,Number(rawPage)) : 1;
+        const parts = [];
+        if(genre){ parts.push("genre=" + encodeURIComponent(genre)); }
+        if(decade){ parts.push("decade=" + encodeURIComponent(decade)); }
+        if(sort !== "name.asc"){ parts.push("sort=" + encodeURIComponent(sort)); }
+        if(page > 1){ parts.push("page=" + encodeURIComponent(String(page))); }
+        return {state:{genre,decade,sort,page},search:parts.length ? "?" + parts.join("&") : ""};
+    }
+
     function buildParsedRoute(type,path,search="",params={}){
         const canonicalRoute = path + search;
         return {
@@ -183,7 +213,8 @@
             return buildParsedRoute("discover",path,"",{});
         }
         if(path === "/app/collections"){
-            return buildParsedRoute("collections",path,"",{});
+            const collectionFilters = canonicalCollectionsSearch(search);
+            return buildParsedRoute("collections",path,collectionFilters.search,{filters:collectionFilters.state});
         }
         const browseMatch = path.match(/^\/app\/browse\/(tv|movie)$/);
         if(browseMatch){
@@ -403,7 +434,7 @@
             return "/app/collections";
         }
         if(activePage === "collections-index"){
-            return "/app/collections";
+            return typeof getCollectionsRoute === "function" ? getCollectionsRoute(collectionsPageState || {}) : "/app/collections";
         }
         if(activePage === "person-detail" && typeof selectedPersonContext !== "undefined" && selectedPersonContext && selectedPersonContext.personId){
             if(typeof getPersonDetailRoute === "function"){
@@ -825,6 +856,9 @@
         }
         if(parsed.type === "collections"){
             activePage = "collections-index";
+            if(typeof collectionsPageState !== "undefined"){
+                collectionsPageState = Object.assign({},collectionsPageState,params.filters || {});
+            }
             if(typeof showCollectionsPageShell === "function"){
                 showCollectionsPageShell("discover");
             }
@@ -970,7 +1004,7 @@
         if(parsed.type === "collections"){
             clearDetailState();
             if(typeof openCollectionsPage === "function"){
-                openCollectionsPage({fromRoute:true});
+                openCollectionsPage({fromRoute:true,filters:params.filters || {}});
             }else{
                 showPage("discover");
             }
