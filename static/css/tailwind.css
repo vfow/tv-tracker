@@ -1897,7 +1897,7 @@
 
     .episode-page-actions{
         width:100%;
-        margin:14px 0 0;
+        margin:0;
     }
 
     .episode-page-action-buttons{
@@ -1927,7 +1927,31 @@
         padding:22px 48px 80px;
     }
 
-    .episode-page-info-section,
+    .episode-page-primary-row{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        align-items:start;
+        gap:32px;
+        width:100%;
+        margin-bottom:30px;
+    }
+
+    .episode-page-primary-row .episode-page-info-section{
+        max-width:none;
+        min-width:0;
+        margin-bottom:0;
+    }
+
+    .episode-page-actions-section{
+        min-width:0;
+        margin:0;
+        padding:0;
+    }
+
+    .episode-page-actions-section .episode-page-action-buttons{
+        justify-content:flex-start;
+    }
+
     .episode-page-status-section,
     .episode-page-body .v2-episode-guest-stars-section,
     .episode-page-body .v2-episode-cast-section{
@@ -2022,6 +2046,12 @@
 
         .episode-page-body{
             padding:18px 24px 72px;
+        }
+
+        .episode-page-primary-row{
+            grid-template-columns:1fr;
+            gap:18px;
+            margin-bottom:24px;
         }
 
         .episode-page-info-section,

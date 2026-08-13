@@ -7302,6 +7302,19 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                             ${episodeRatingHTML ? `<span class="modal-meta-separator">•</span>${episodeRatingHTML}` : ""}
                         </div>
 
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-body show-page-body episode-page-body">
+                <div class="episode-page-primary-row">
+                    <section class="modal-section show-info-synopsis-section episode-page-info-section">
+                        <h3 class="modal-section-heading">Episode Info</h3>
+                        <div class="modal-overview">${escapeHTML(episodeData.overview || "No episode overview available.")}</div>
+                        ${externalLinksHTML}
+                    </section>
+
+                    <section class="episode-page-actions-section" aria-label="Episode actions">
                         <div class="show-page-actions-wrap episode-detail-actions episode-page-actions">
                             <div class="modal-status-buttons show-page-status-buttons episode-page-action-buttons">
                                 ${canToggle ? `<button class="modal-status-button episode-page-action-button ${isWatched ? "active" : ""}" id="episode-toggle-watched-button" type="button">${isWatched ? "MARK UNWATCHED" : "MARK WATCHED"}</button>` : ""}
@@ -7309,16 +7322,8 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                                 ${nextEpisodeTarget ? `<a class="modal-status-button episode-page-action-button episode-page-nav-button" id="episode-next-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,nextEpisodeTarget.season,nextEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">NEXT EPISODE</a>` : ""}
                             </div>
                         </div>
-                    </div>
+                    </section>
                 </div>
-            </div>
-
-            <div class="modal-body show-page-body episode-page-body">
-                <section class="modal-section show-info-synopsis-section episode-page-info-section">
-                    <h3 class="modal-section-heading">Episode Info</h3>
-                    <div class="modal-overview">${escapeHTML(episodeData.overview || "No episode overview available.")}</div>
-                    ${externalLinksHTML}
-                </section>
 
                 <section class="modal-section episode-page-status-section">
                     <div class="episode-page-status-grid">
