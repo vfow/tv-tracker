@@ -141,3 +141,12 @@
     }
     schedule();
 })();
+
+(function(){
+    if(typeof document === "undefined" || document.querySelector('script[data-episode-tabs-loader="true"]')){ return; }
+    const script = document.createElement("script");
+    script.src = "/static/js/episode-tabs.js";
+    script.async = false;
+    script.dataset.episodeTabsLoader = "true";
+    document.head.appendChild(script);
+})();
