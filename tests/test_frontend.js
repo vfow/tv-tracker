@@ -30,6 +30,7 @@ const template = fs.readFileSync('templates/index.html','utf8');
 const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
+const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(router.includes('/app/list/'));
@@ -140,6 +141,50 @@ assert(db.includes('let requestRevision = Number(operation.baseRevision || 0);')
 assert(db.includes('operation.baseRevision = Number(SERVER_REVISION || 0);'));
 assert(app.includes('history.pushState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
+assert(template.includes('history-activity.js'));
+assert(template.indexOf('js/app.js') < template.indexOf('js/history-activity.js'));
+assert(historyActivity.includes('function getActivityHistoryEntries'));
+assert(historyActivity.includes('function renderHistory'));
+assert(historyActivity.includes('getMovieDetailRoute(movie.id,movie.title)'));
+assert(historyActivity.includes('entry && entry.backdrop_path || trackedMovie.backdrop_path || ""'));
+assert(!historyActivity.includes('poster_path'),'movie History must use backdrop/still imagery, not posters');
+
+const historyActivityRuleSource = historyActivity.slice(
+  historyActivity.indexOf('function getActivityHistoryEntries'),
+  historyActivity.indexOf('function getMovieHistoryDisplayData')
+);
+const historyActivityContext = {
+  console,
+  Object,
+  Array,
+  Number,
+  String,
+  Date,
+  DATA:{
+    shows:{
+      1:{tmdb_id:'1',title:'Show One'},
+      2:{tmdb_id:'2',title:'Future Show'}
+    },
+    history:[
+      {id:'tv-1',tmdb_id:'1',season:1,episode:1,title:'Show One',watched_at:'2026-08-13T08:00:00Z',air_date:'2026-08-01'},
+      {id:'movie-1',media_type:'movie',movie_id:'10',tmdb_id:'10',title:'Movie One',watched_at:'2026-08-13T09:00:00Z'},
+      {id:'tv-future',tmdb_id:'2',season:1,episode:1,title:'Future Show',watched_at:'2026-08-13T10:00:00Z',air_date:'2099-01-01'}
+    ]
+  },
+  isMovieHistoryEntry(entry){
+    return !!entry && (String(entry.media_type || '').toLowerCase() === 'movie' || !!entry.movie_id);
+  },
+  isEpisodeAired(airDate){
+    return String(airDate || '') <= '2026-08-13';
+  }
+};
+vm.createContext(historyActivityContext);
+vm.runInContext(historyActivityRuleSource,historyActivityContext);
+assert.deepStrictEqual(
+  Array.from(historyActivityContext.getActivityHistoryEntries()).map(entry=>entry.id),
+  ['movie-1','tv-1'],
+  'History should combine watched movies and aired TV episodes chronologically'
+);
 
 
 const completionRuleSource = app.slice(

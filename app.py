@@ -2642,7 +2642,12 @@ def create_app() -> Flask:
             or request.path.startswith("/app")
             or request.path in {"/", "/login", "/signup"}
         ):
-            response.headers["Cache-Control"] = "no-store"
+            preserve_explicit_cache_control = (
+                request.endpoint == "tmdb_proxy"
+                and bool(response.headers.get("Cache-Control"))
+            )
+            if not preserve_explicit_cache_control:
+                response.headers["Cache-Control"] = "no-store"
         elif request.path.startswith("/static/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 

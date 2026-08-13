@@ -6,11 +6,12 @@
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <meta name="app-route" content="{{ initial_app_path }}">
+<meta name="frontend-build" content="2.0-tailwind">
 
 <title>TV Tracker</title>
 
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-tailwind') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
@@ -308,16 +309,21 @@
 
 
 
-<script src="{{ url_for('static', filename='js/config.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/audit-utils.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/pending-save-store.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/db.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/tmdb.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/show-detail-filters.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/ui.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/discover-browse.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/app.js', v='2.0-tailwind') }}"></script>
-<script src="{{ url_for('static', filename='js/app-router.js', v='2.0-tailwind') }}"></script>
+<script src="{{ url_for('static', filename='js/config.js') }}"></script>
+<script src="{{ url_for('static', filename='js/audit-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/pending-save-store.js') }}"></script>
+<script src="{{ url_for('static', filename='js/db.js') }}"></script>
+<script src="{{ url_for('static', filename='js/save-storage-fallback.js') }}"></script>
+<script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tmdb.js') }}"></script>
+<script src="{{ url_for('static', filename='js/show-detail-filters.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/show-removal-integrity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/history-activity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
 
 </body>
 </html>

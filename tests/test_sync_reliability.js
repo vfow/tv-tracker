@@ -9,6 +9,19 @@ const pendingSaveStore = fs.readFileSync(
   'utf8'
 );
 const db = fs.readFileSync(path.join(root, 'static/js/db.js'), 'utf8');
+const saveStorageFallback = fs.readFileSync(
+  path.join(root, 'static/js/save-storage-fallback.js'),
+  'utf8'
+);
+const template = fs.readFileSync(path.join(root, 'templates/index.html'), 'utf8');
+const dbNeedle = "filename='js/db.js'";
+const fallbackNeedle = "filename='js/save-storage-fallback.js'";
+const appNeedle = "filename='js/app.js'";
+assert.ok(
+  template.indexOf(dbNeedle) < template.indexOf(fallbackNeedle) &&
+  template.indexOf(fallbackNeedle) < template.indexOf(appNeedle),
+  'save storage fallback must load after db.js and before app.js'
+);
 
 function createContext(){
   const context = {
@@ -109,6 +122,49 @@ async function runDbReliabilityChecks(){
       assert.strictEqual(requests[0].operationId,'operation-test-1234-g0-1');
     }
 
+    async function saveStillReachesServerWithoutBrowserStorage(){
+      Object.defineProperty(globalThis,'localStorage',{
+        configurable:true,
+        get(){ throw new Error('localStorage blocked'); }
+      });
+      Object.defineProperty(globalThis,'sessionStorage',{
+        configurable:true,
+        get(){ throw new Error('sessionStorage blocked'); }
+      });
+
+      initializePendingSaveStore();
+      assert.strictEqual(PENDING_SAVE_STORE,null);
+      assert.strictEqual(PENDING_SAVE_OPERATIONS.length,0);
+
+      LAST_SAVED_DATA = emptyTrackerData();
+      DATA = cloneTrackerData(LAST_SAVED_DATA);
+      DATA.shows['789'] = showRecord('789','No storage save');
+      SERVER_REVISION = 30;
+
+      const requests = [];
+      globalThis.fetch = async (url,options)=>{
+        assert.strictEqual(url,'/api/state');
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return jsonResponse(200,{
+          ok: true,
+          revision: 31,
+          reset: false,
+          duplicate: false,
+          changes: [],
+          appliedDelta: body
+        });
+      };
+
+      const saved = await saveData();
+
+      assert.strictEqual(saved,true);
+      assert.strictEqual(requests.length,1);
+      assert.ok(requests[0].showsUpsert['789']);
+      assert.strictEqual(PENDING_SAVE_OPERATIONS.length,0);
+      assert.strictEqual(SERVER_REVISION,31);
+    }
+
     async function queuedSaveRebasesBaseRevisionAfterConflict(){
       LAST_SAVED_DATA = emptyTrackerData();
       DATA = cloneTrackerData(LAST_SAVED_DATA);
@@ -166,10 +222,11 @@ async function runDbReliabilityChecks(){
     globalThis.__testPromise = (async()=>{
       await queuedSaveUsesCapturedBaseRevision();
       await queuedSaveRebasesBaseRevisionAfterConflict();
+      await saveStillReachesServerWithoutBrowserStorage();
     })();
   `;
 
-  const script = new vm.Script(`${pendingSaveStore}\n${db}\n${testScript}`, {
+  const script = new vm.Script(`${pendingSaveStore}\n${db}\n${saveStorageFallback}\n${testScript}`, {
     filename: 'sync-reliability.vm.js',
   });
   script.runInContext(context);

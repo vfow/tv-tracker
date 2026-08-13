@@ -120,7 +120,15 @@ function readTMDBSearchCache(query){
     }
 
     if(tmdbSearchMemoryCache.has(key)){
-        return tmdbSearchMemoryCache.get(key);
+        const cached = tmdbSearchMemoryCache.get(key);
+        if(
+            cached &&
+            Array.isArray(cached.results) &&
+            Date.now() - Number(cached.savedAt || 0) <= TMDB_SEARCH_CACHE_TTL
+        ){
+            return cached.results;
+        }
+        tmdbSearchMemoryCache.delete(key);
     }
 
     try{
@@ -141,7 +149,7 @@ function readTMDBSearchCache(query){
             return null;
         }
 
-        tmdbSearchMemoryCache.set(key,cached.results);
+        tmdbSearchMemoryCache.set(key,cached);
         return cached.results;
 
     }catch(error){
@@ -170,21 +178,18 @@ function writeTMDBSearchCache(query,results){
         };
     });
 
-    tmdbSearchMemoryCache.set(key,cleanResults);
+    const cached = {
+        savedAt:Date.now(),
+        results:cleanResults
+    };
+    tmdbSearchMemoryCache.set(key,cached);
 
     try{
         sessionStorage.setItem(
             TMDB_SEARCH_CACHE_PREFIX + key,
-            JSON.stringify({
-                savedAt:Date.now(),
-                results:cleanResults
-            })
+            JSON.stringify(cached)
         );
     }catch(error){}
-}
-
-function tmdbGetCachedSearchShows(query){
-    return readTMDBSearchCache(query);
 }
 
 function tmdbHasApiKey(){
@@ -498,21 +503,6 @@ async function tmdbGetSeason(showId,seasonNumber,options={}){
     );
 }
 
-async function tmdbGetExternalIds(showId){
-    return await tmdbFetchJSON("tv/" + encodeURIComponent(String(showId)) + "/external_ids");
-}
-
-
-async function tmdbGetSimilarShows(showId,page=1,options={}){
-    const data = await tmdbFetchJSON(
-        "tv/" + encodeURIComponent(String(showId)) + "/similar",
-        {page:Math.max(1,Number(page || 1))},
-        options
-    );
-
-    return data;
-}
-
 async function tmdbGetEpisodeDetails(showId,seasonNumber,episodeNumber,options={}){
     return await tmdbFetchJSON(
         "tv/" + encodeURIComponent(String(showId)) +
@@ -523,20 +513,8 @@ async function tmdbGetEpisodeDetails(showId,seasonNumber,episodeNumber,options={
     );
 }
 
-async function tmdbGetEpisodeCredits(showId,seasonNumber,episodeNumber,options={}){
-    return await tmdbFetchJSON(
-        "tv/" + encodeURIComponent(String(showId)) +
-        "/season/" + encodeURIComponent(String(seasonNumber)) +
-        "/episode/" + encodeURIComponent(String(episodeNumber)) +
-        "/credits",
-        {},
-        options
-    );
-}
-
 window.TVTrackerTMDB = window.TVTrackerTMDB || {};
 window.TVTrackerTMDB.detectInput = detectTMDBSearchInput;
 window.TVTrackerTMDB.imageURL = tmdbConfiguredImageURL;
 window.TVTrackerTMDB.getConfiguration = tmdbGetConfiguration;
 window.TVTrackerTMDB.warmImageConfiguration = tmdbWarmImageConfiguration;
-
