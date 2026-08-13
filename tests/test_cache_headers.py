@@ -4,6 +4,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from static_asset_versioning import install_static_asset_versioning, static_asset_version
+
 try:
     import psycopg  # noqa: F401
 except ModuleNotFoundError:
@@ -58,6 +60,7 @@ class CacheHeaderTests(unittest.TestCase):
         self.schema_patch.start()
         self.cleanup_patch.start()
         self.app = tracker.create_app()
+        install_static_asset_versioning(self.app)
         self.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
         self.client = self.app.test_client()
         self.account = {
@@ -78,6 +81,28 @@ class CacheHeaderTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+
+    def test_static_cache_is_immutable_only_for_matching_content_version(self):
+        filename = "js/config.js"
+        version = static_asset_version(self.app.static_folder, filename)
+
+        versioned = self.client.get(f"/static/{filename}?v={version}")
+        unversioned = self.client.get(f"/static/{filename}")
+        stale = self.client.get(f"/static/{filename}?v=stale")
+
+        self.assertEqual(versioned.status_code, 200)
+        self.assertEqual(
+            versioned.headers.get("Cache-Control"),
+            "public, max-age=31536000, immutable",
+        )
+        self.assertEqual(
+            unversioned.headers.get("Cache-Control"),
+            "public, max-age=0, must-revalidate",
+        )
+        self.assertEqual(
+            stale.headers.get("Cache-Control"),
+            "public, max-age=0, must-revalidate",
+        )
 
     def test_tmdb_proxy_preserves_private_cache_control(self):
         authenticated_session(self.client)

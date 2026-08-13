@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
     <title>{{ status_code }} - TV Tracker</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='2.0-tailwind') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 </head>
 {% if status_code == 404 %}
 <body class="route-error-hero tw-m-0 tw-overflow-x-hidden tw-bg-black tw-font-sans tw-text-white tw-antialiased {{ route_error_gradient_class }}">
