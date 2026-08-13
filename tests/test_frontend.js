@@ -141,4 +141,131 @@ assert(db.includes('operation.baseRevision = Number(SERVER_REVISION || 0);'));
 assert(app.includes('history.pushState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
 
+
+const completionRuleSource = app.slice(
+  app.indexOf('function isKnownFutureRegularEpisode'),
+  app.indexOf('async function completeShow')
+);
+assert(completionRuleSource.includes('async function autoCompleteShowAfterLogging'));
+assert(completionRuleSource.includes('function reopenCompletedShowAfterUnwatch'));
+
+async function runCompletionRuleChecks(){
+  let refreshCalls = 0;
+  const completionContext = {
+    console,
+    Object,
+    Array,
+    Number,
+    String,
+    Date,
+    Math,
+    Promise,
+    isMainSeasonNumber(value){
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 1;
+    },
+    isEpisodeAired(airDate){
+      return !!airDate && String(airDate) <= '2026-08-13';
+    },
+    isEpisodeLoggable(ep,show,seasonNumber){
+      if(ep && ep.air_date){
+        return String(ep.air_date) <= '2026-08-13';
+      }
+      const last = show && show.last_episode_to_air;
+      if(!last){
+        return false;
+      }
+      const season = Number(seasonNumber);
+      const episode = Number(ep && ep.episode_number || 0);
+      const lastSeason = Number(last.season_number || 0);
+      const lastEpisode = Number(last.episode_number || 0);
+      return season < lastSeason || (season === lastSeason && episode <= lastEpisode);
+    },
+    canUseTMDBShow(){ return true; },
+    async refreshShowDetails(){ refreshCalls += 1; return true; },
+    async loadSeasonData(){ return true; },
+    seasonDataAlreadyLoaded(){ return true; },
+    getAllAiredUnwatchedEpisodes(show){ return Array.isArray(show._testUnwatched) ? show._testUnwatched : []; }
+  };
+  vm.createContext(completionContext);
+  vm.runInContext(completionRuleSource, completionContext);
+
+  const completedShow = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:null,
+    _episode_list:{'1':[{episode_number:1,air_date:'2026-08-01'}]},
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(completedShow),true);
+  assert.strictEqual(completedShow.status,'finished');
+  assert(completedShow.completed_at,'automatic completion should set completed_at');
+
+  const futureUnknownDate = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:2,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:{season_number:2,episode_number:1,air_date:''},
+    _episode_list:{
+      '1':[{episode_number:1,air_date:'2026-08-01'}],
+      '2':[{episode_number:1,air_date:''}]
+    },
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(futureUnknownDate),false);
+  assert.strictEqual(futureUnknownDate.status,'watching','an announced future episode without an air date must block completion');
+
+  const futureSpecialOnly = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:null,
+    _episode_list:{
+      '0':[{episode_number:1,air_date:'2099-01-01'}],
+      '1':[{episode_number:1,air_date:'2026-08-01'}]
+    },
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(futureSpecialOnly),true,'specials must not block completion');
+
+  refreshCalls = 0;
+  const pausedShow = {status:'paused',completed_at:'',_testUnwatched:[]};
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(pausedShow),false);
+  assert.strictEqual(pausedShow.status,'paused');
+  assert.strictEqual(refreshCalls,0,'paused shows should not trigger completion verification');
+
+  completionContext.refreshShowDetails = async()=>false;
+  const failedVerification = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1},
+    next_episode_to_air:null,
+    _episode_list:{'1':[{episode_number:1,air_date:'2026-08-01'}]},
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(failedVerification),false);
+  assert.strictEqual(failedVerification.status,'watching','failed TMDB verification must leave status unchanged');
+
+  const reopened = {status:'finished',completed_at:'2026-08-13T00:00:00.000Z'};
+  assert.strictEqual(completionContext.reopenCompletedShowAfterUnwatch(reopened,1),true);
+  assert.strictEqual(reopened.status,'watching');
+  assert.strictEqual(reopened.completed_at,'');
+
+  const specialUnwatch = {status:'finished',completed_at:'2026-08-13T00:00:00.000Z'};
+  assert.strictEqual(completionContext.reopenCompletedShowAfterUnwatch(specialUnwatch,0),false);
+  assert.strictEqual(specialUnwatch.status,'finished','unwatching a special must not reopen a completed show');
+}
+
+runCompletionRuleChecks()
+.then(()=>console.log('Automatic completion rule checks passed'))
+.catch(error=>{
+  console.error(error);
+  process.exitCode = 1;
+});
+
 console.log('Frontend integration checks passed');

@@ -14,8 +14,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('Metadata ' + 'Source', ui)
         self.assertNotIn('Artwork ' + 'Source', ui)
         self.assertNotIn('<h2>SOURCE</h2>', ui)
-        self.assertIn('Export or import a full backup of this tracker.', ui)
-        self.assertNotIn('Export a full backup of this tracker.', ui)
+        self.assertIn('Export or import a full backup.', ui)
+        self.assertNotIn('Export or import a full backup of this tracker.', ui)
+
+    def test_episode_logging_auto_completion_rules_exist(self):
+        app_js = self.read('static/js/app.js')
+        self.assertIn('async function autoCompleteShowAfterLogging(show)', app_js)
+        self.assertIn('async function verifyRegularEpisodeCompletionData(show)', app_js)
+        self.assertIn('function hasKnownFutureRegularEpisode(show)', app_js)
+        self.assertIn('function reopenCompletedShowAfterUnwatch(show,seasonNumber)', app_js)
+        self.assertEqual(app_js.count('await autoCompleteShowAfterLogging(show);'), 5)
+        self.assertEqual(app_js.count('reopenCompletedShowAfterUnwatch(show,'), 3)
+        self.assertIn('show.status === "paused"', app_js)
+        self.assertIn('show.status === "dropped"', app_js)
 
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')

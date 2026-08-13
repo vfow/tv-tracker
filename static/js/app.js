@@ -2990,6 +2990,7 @@ async function addDiscoverSeasonAsWatched(showId,season){
 
         markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
         const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
+        await autoCompleteShowAfterLogging(show);
 
         discoverPreviewShow = null;
         selectedShowId = String(show.tmdb_id);
@@ -3051,6 +3052,7 @@ async function addDiscoverEpisodeAsWatched(showId,season,episode){
 
         markEpAndPrevious(show.tmdb_id,seasonNumber,episodeNumber);
         const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
+        await autoCompleteShowAfterLogging(show);
 
         discoverPreviewShow = null;
         selectedShowId = String(show.tmdb_id);
@@ -6163,23 +6165,23 @@ async function addPendingShow(status){
 async function loadSeasonData(show,seasonNumber){
 
     if(!canUseTMDBShow(show)){
-        return;
+        return false;
     }
 
     if(!isMainSeasonNumber(seasonNumber)){
-        return;
+        return false;
     }
 
     try{
 
         if(seasonNumber < 1){
-            return;
+            return false;
         }
 
         const season = await tmdbGetSeason(show.tmdb_id,seasonNumber);
 
-        if(!season || !season.episodes){
-            return;
+        if(!season || !Array.isArray(season.episodes)){
+            return false;
         }
 
         if(!show._season_episodes){
@@ -6255,8 +6257,10 @@ async function loadSeasonData(show,seasonNumber){
 
         });
 
+        return true;
+
     }catch(error){
-        return;
+        return false;
     }
 
 }
@@ -10872,13 +10876,14 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
     await ensureSeasonLoaded(show,season,false,{skipSave:true});
 
     const episodeData = getEpisodeData(show,season,episode);
+    const wasWatched = isEpisodeWatched(show,season,episode);
 
     if(isWatched && !isEpisodeLoggable(episodeData,show,season)){
         showToast("This episode has not aired yet");
         return;
     }
 
-    if(!isWatched && isEpisodeWatched(show,season,episode)){
+    if(!isWatched && wasWatched){
         const confirmed = await confirmEpisodeUnwatch(show,season,episode);
 
         if(!confirmed){
@@ -10900,6 +10905,7 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
 
         markEpAndPrevious(id,season,episode);
         addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
+        await autoCompleteShowAfterLogging(show);
     }else{
         if(show.episodes_watched && show.episodes_watched[String(season)]){
             show.episodes_watched[String(season)] =
@@ -10908,6 +10914,10 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
 
         deletedHistoryIds = removeHistoryEntry(id,season,episode);
         updateShowLastWatchedFromHistory(show);
+
+        if(wasWatched){
+            reopenCompletedShowAfterUnwatch(show,season);
+        }
     }
 
     refreshAfterLocalShowChange(id,true);
@@ -10969,6 +10979,7 @@ async function markSeasonWatched(showId,seasonNumber){
             );
         });
         updateShowLastWatchedFromHistory(show);
+        reopenCompletedShowAfterUnwatch(show,seasonNumber);
 
         refreshAfterLocalShowChange(id,true);
         showToast("Marked Season " + seasonNumber + " as unwatched");
@@ -10996,6 +11007,8 @@ async function markSeasonWatched(showId,seasonNumber){
     if(show.status === "plan"){
         show.status = "watching";
     }
+
+    await autoCompleteShowAfterLogging(show);
 
     refreshAfterLocalShowChange(id,true);
     showToast("Marked aired episodes in Season " + seasonNumber);
@@ -11227,6 +11240,219 @@ function markEpisodesWatchedInSeason(show,seasonNumber,episodes){
 
 
 
+function isKnownFutureRegularEpisode(show,seasonNumber,episodeInfo){
+
+    if(!show || !isMainSeasonNumber(seasonNumber) || !episodeInfo){
+        return false;
+    }
+
+    const episodeNumber = Number(episodeInfo.episode_number);
+
+    if(!Number.isFinite(episodeNumber) || episodeNumber < 1){
+        return false;
+    }
+
+    if(episodeInfo.air_date){
+        return !isEpisodeAired(episodeInfo.air_date,episodeInfo,show);
+    }
+
+    const last = show.last_episode_to_air || null;
+
+    if(last && Number.isFinite(Number(last.season_number))){
+        const lastSeason = Number(last.season_number);
+        const lastEpisode = Number(last.episode_number || 0);
+
+        if(
+            Number(seasonNumber) > lastSeason ||
+            (Number(seasonNumber) === lastSeason && episodeNumber > lastEpisode)
+        ){
+            return true;
+        }
+    }
+
+    return !isEpisodeLoggable(episodeInfo,show,seasonNumber);
+
+}
+
+
+function hasKnownFutureRegularEpisode(show){
+
+    if(!show){
+        return false;
+    }
+
+    const next = show.next_episode_to_air || null;
+
+    if(
+        next &&
+        isMainSeasonNumber(next.season_number) &&
+        !isEpisodeAired(next.air_date || "",next,show)
+    ){
+        return true;
+    }
+
+    const episodeLists = show._episode_list || {};
+    const seasonKeys = Object.keys(episodeLists);
+
+    for(let i = 0; i < seasonKeys.length; i++){
+        const seasonNumber = Number(seasonKeys[i]);
+
+        if(!isMainSeasonNumber(seasonNumber)){
+            continue;
+        }
+
+        const episodes = episodeLists[seasonKeys[i]];
+
+        if(!Array.isArray(episodes)){
+            continue;
+        }
+
+        for(let j = 0; j < episodes.length; j++){
+            if(isKnownFutureRegularEpisode(show,seasonNumber,episodes[j])){
+                return true;
+            }
+        }
+    }
+
+    return false;
+
+}
+
+
+function hasAnyLoggableRegularEpisode(show){
+
+    if(!show){
+        return false;
+    }
+
+    const episodeLists = show._episode_list || {};
+    const seasonKeys = Object.keys(episodeLists);
+
+    for(let i = 0; i < seasonKeys.length; i++){
+        const seasonNumber = Number(seasonKeys[i]);
+
+        if(!isMainSeasonNumber(seasonNumber)){
+            continue;
+        }
+
+        const episodes = episodeLists[seasonKeys[i]];
+
+        if(
+            Array.isArray(episodes) &&
+            episodes.some(ep=>isEpisodeLoggable(ep,show,seasonNumber))
+        ){
+            return true;
+        }
+    }
+
+    return false;
+
+}
+
+
+async function verifyRegularEpisodeCompletionData(show){
+
+    if(!show || !canUseTMDBShow(show)){
+        return false;
+    }
+
+    const refreshed = await refreshShowDetails(show);
+
+    if(!refreshed){
+        return false;
+    }
+
+    const totalSeasons = Math.max(Number(show.number_of_seasons || 1),1);
+    const concurrency = 6;
+
+    for(let start = 1; start <= totalSeasons; start += concurrency){
+        const seasons = [];
+
+        for(
+            let season = start;
+            season <= totalSeasons && season < start + concurrency;
+            season++
+        ){
+            seasons.push(season);
+        }
+
+        const loaded = await Promise.all(
+            seasons.map(season=>loadSeasonData(show,season))
+        );
+
+        if(loaded.some(result=>result !== true)){
+            return false;
+        }
+    }
+
+    for(let season = 1; season <= totalSeasons; season++){
+        if(!seasonDataAlreadyLoaded(show,season,false)){
+            return false;
+        }
+    }
+
+    return true;
+
+}
+
+
+async function autoCompleteShowAfterLogging(show){
+
+    if(
+        !show ||
+        show.status === "finished" ||
+        show.status === "paused" ||
+        show.status === "dropped"
+    ){
+        return false;
+    }
+
+    if(show.status !== "watching" && show.status !== "plan"){
+        return false;
+    }
+
+    if(getAllAiredUnwatchedEpisodes(show).length > 0){
+        return false;
+    }
+
+    const verified = await verifyRegularEpisodeCompletionData(show);
+
+    if(!verified){
+        return false;
+    }
+
+    if(
+        !hasAnyLoggableRegularEpisode(show) ||
+        getAllAiredUnwatchedEpisodes(show).length > 0 ||
+        hasKnownFutureRegularEpisode(show)
+    ){
+        return false;
+    }
+
+    show.status = "finished";
+    show.completed_at = new Date().toISOString();
+    return true;
+
+}
+
+
+function reopenCompletedShowAfterUnwatch(show,seasonNumber){
+
+    if(
+        !show ||
+        show.status !== "finished" ||
+        !isMainSeasonNumber(seasonNumber)
+    ){
+        return false;
+    }
+
+    show.status = "watching";
+    show.completed_at = "";
+    return true;
+
+}
+
+
 async function completeShow(show){
 
     if(!show){
@@ -11363,6 +11589,7 @@ async function markNextEpisode(showId){
 
     markEpAndPrevious(id,nextEp.season,nextEp.episode);
     const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
+    await autoCompleteShowAfterLogging(show);
 
     refreshAfterLocalShowChange(id,true);
     showToast(getWatchedMessage(show,newlyMarkedEpisodes));

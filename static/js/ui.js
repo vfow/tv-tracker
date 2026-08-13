@@ -8932,7 +8932,7 @@ function renderSettings(){
 
                 <div class="settings-section-header">
                     <h2>APP BACKUP</h2>
-                    <p>Export or import a full backup of this tracker.</p>
+                    <p>Export or import a full backup.</p>
                 </div>
 
                 <div class="settings-summary-grid">
