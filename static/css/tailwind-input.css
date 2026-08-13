@@ -3193,6 +3193,14 @@
         @apply tw-min-h-0;
     }
 
+    .v2-more-like-section .v2-similar-card{
+        font:inherit;
+    }
+
+    .v2-more-like-section .v2-similar-poster > .poster-placeholder.v2-similar-poster-placeholder{
+        @apply tw-h-full tw-w-full tw-rounded-none tw-border-0;
+    }
+
     .v2-similar-actions{
         @apply tw-mt-[9px] tw-flex tw-gap-1.5;
     }

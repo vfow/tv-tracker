@@ -5181,8 +5181,7 @@ function renderMovieMoreLikeThisHTML(movie){
         const title = item.title || "Untitled";
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
-        : renderPosterTitlePlaceholderHTML(item,"movie");
-        const route = typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item.id,item.title || "") : "/app/discover";
+        : renderPosterTitlePlaceholderHTML(item,"movie","v2-similar-poster-placeholder");
         const adultBadgeHTML = renderAdultMovieBadgeHTML(item,"movie");
         const adultMetaParts = [];
         if(adultBadgeHTML){
@@ -5193,14 +5192,14 @@ function renderMovieMoreLikeThisHTML(movie){
             adultMetaParts.push(adultBadgeHTML);
         }
         return `
-            <a href="${escapeHTML(route)}" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}">
+            <button type="button" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}" aria-label="Open ${escapeHTML(title)}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(title)}</div>
                 ${adultBadgeHTML ? `<div class="v2-similar-meta">${adultMetaParts.join(" • ")}</div>` : ""}
-            </a>
+            </button>
         `;
     }).join("");
-    return renderV2RailSectionHTML("More Like This",cards,"v2-more-like-section movie-more-like-section");
+    return renderV2RailSectionHTML("YOU MAY ALSO LIKE",cards,"v2-more-like-section movie-more-like-section");
 }
 
 function renderMovieInfoTabHTML(movie){
@@ -5975,18 +5974,16 @@ function renderV2SimilarShowsHTML(show){
     const cards = similar.slice(0,10).map(item=>{
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
-        : renderPosterTitlePlaceholderHTML(item,"tv");
-
-        const route = typeof getShowDetailRoute === "function" ? getShowDetailRoute(item.id,item.name || "") : "/app/list/watching";
+        : renderPosterTitlePlaceholderHTML(item,"tv","v2-similar-poster-placeholder");
         return `
-            <a href="${escapeHTML(route)}" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}">
+            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}" aria-label="Open ${escapeHTML(item.name || "Untitled")}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(item.name || "Untitled")}</div>
-            </a>
+            </button>
         `;
     }).join("");
 
-    return renderV2RailSectionHTML("More Like This",cards,"v2-more-like-section");
+    return renderV2RailSectionHTML("YOU MAY ALSO LIKE",cards,"v2-more-like-section");
 }
 
 function renderV2ShowAPISectionsHTML(show){

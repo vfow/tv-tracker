@@ -2086,3 +2086,7 @@
 /* Episode page action layout + watched-confirm animation scope */
 .episode-page-action-buttons{flex-wrap:nowrap;width:max-content;max-width:100%}
 @media (max-width:720px){.episode-page-action-buttons{width:100%;flex-wrap:wrap}}
+
+/* YOU MAY ALSO LIKE: recommendation cards use native buttons and posterless items fill the full poster slot. */
+.v2-more-like-section .v2-similar-card{font:inherit}
+.v2-more-like-section .v2-similar-poster>.poster-placeholder.v2-similar-poster-placeholder{height:100%;width:100%;border-width:0;border-radius:0}
