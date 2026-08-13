@@ -183,10 +183,6 @@ function writeTMDBSearchCache(query,results){
     }catch(error){}
 }
 
-function tmdbGetCachedSearchShows(query){
-    return readTMDBSearchCache(query);
-}
-
 function tmdbHasApiKey(){
     // The key is held by Flask and never exposed to the browser.
     return true;
@@ -498,21 +494,6 @@ async function tmdbGetSeason(showId,seasonNumber,options={}){
     );
 }
 
-async function tmdbGetExternalIds(showId){
-    return await tmdbFetchJSON("tv/" + encodeURIComponent(String(showId)) + "/external_ids");
-}
-
-
-async function tmdbGetSimilarShows(showId,page=1,options={}){
-    const data = await tmdbFetchJSON(
-        "tv/" + encodeURIComponent(String(showId)) + "/similar",
-        {page:Math.max(1,Number(page || 1))},
-        options
-    );
-
-    return data;
-}
-
 async function tmdbGetEpisodeDetails(showId,seasonNumber,episodeNumber,options={}){
     return await tmdbFetchJSON(
         "tv/" + encodeURIComponent(String(showId)) +
@@ -523,20 +504,8 @@ async function tmdbGetEpisodeDetails(showId,seasonNumber,episodeNumber,options={
     );
 }
 
-async function tmdbGetEpisodeCredits(showId,seasonNumber,episodeNumber,options={}){
-    return await tmdbFetchJSON(
-        "tv/" + encodeURIComponent(String(showId)) +
-        "/season/" + encodeURIComponent(String(seasonNumber)) +
-        "/episode/" + encodeURIComponent(String(episodeNumber)) +
-        "/credits",
-        {},
-        options
-    );
-}
-
 window.TVTrackerTMDB = window.TVTrackerTMDB || {};
 window.TVTrackerTMDB.detectInput = detectTMDBSearchInput;
 window.TVTrackerTMDB.imageURL = tmdbConfiguredImageURL;
 window.TVTrackerTMDB.getConfiguration = tmdbGetConfiguration;
 window.TVTrackerTMDB.warmImageConfiguration = tmdbWarmImageConfiguration;
-
