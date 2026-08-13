@@ -6683,6 +6683,9 @@
 
     .episode-page-action-buttons{
         gap:10px;
+        flex-wrap:nowrap;
+        width:max-content;
+        max-width:100%;
     }
 
     .episode-page-action-button{
@@ -6700,6 +6703,13 @@
         border-color:#22c55e !important;
         color:#000 !important;
         animation:circleFastConfirm .52s ease-out both !important;
+    }
+
+    @media (max-width:720px){
+        .episode-page-action-buttons{
+            width:100%;
+            flex-wrap:wrap;
+        }
     }
 
     .episode-page-body{

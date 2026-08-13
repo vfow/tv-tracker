@@ -70,6 +70,7 @@ function getCheckSuccessAnimationTarget(element){
     }
 
     return (
+        element.closest("#episode-toggle-watched-button") ||
         element.closest(".episode-row") ||
         element.closest(".behind-episode-row") ||
         element.closest(".upcoming-batch-row") ||

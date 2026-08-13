@@ -2053,3 +2053,6 @@
             font-size:38px;
         }
     }
+/* Episode page action layout + watched-confirm animation scope */
+.episode-page-action-buttons{flex-wrap:nowrap;width:max-content;max-width:100%}
+@media (max-width:720px){.episode-page-action-buttons{width:100%;flex-wrap:wrap}}
