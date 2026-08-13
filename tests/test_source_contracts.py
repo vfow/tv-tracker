@@ -28,6 +28,26 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('show.status === "paused"', app_js)
         self.assertIn('show.status === "dropped"', app_js)
 
+    def test_episode_detail_page_rebuild_matches_show_page_language(self):
+        ui = self.read('static/js/ui.js')
+        app_js = self.read('static/js/app.js')
+        css = self.read('static/css/tailwind-input.css')
+        episode_render = ui[ui.index('function renderEpisodeModal'):ui.index('function formatEpisodeWatchedDate')]
+
+        self.assertIn('episode-page-rebuild', episode_render)
+        self.assertIn('show-page-hero-shell episode-page-hero-shell', episode_render)
+        self.assertIn('episodeData.still_path || show.backdrop_path || ""', episode_render)
+        self.assertIn('PREVIOUS EPISODE', episode_render)
+        self.assertIn('NEXT EPISODE', episode_render)
+        self.assertIn('MARK UNWATCHED', episode_render)
+        self.assertNotIn('releaseTimeText', episode_render)
+        self.assertIn('renderV2EpisodeLinksHTML', episode_render)
+        self.assertIn('Guest Stars', ui)
+        self.assertIn('_episode_guest_stars', app_js)
+        self.assertIn('_episode_cast_credits', app_js)
+        self.assertIn('normalizeTMDBEpisodeCreditGroups', app_js)
+        self.assertIn('.episode-page-status-card.watched', css)
+
     def test_source_provider_script_removed_from_template(self):
         template = self.read('templates/index.html')
         self.assertNotIn('source-' + 'provider.js', template)

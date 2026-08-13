@@ -6602,3 +6602,236 @@
 .search-eye-row .eye-filter-menu{
     border:1px solid #353535;
 }
+
+@layer components{
+    /* Episode detail rebuild: mirror the show-detail page without a poster. */
+    .episode-page-rebuild .episode-page-hero-shell,
+    .tt-episode-skeleton-page .episode-page-hero-shell{
+        position:relative;
+        width:100%;
+        max-width:none;
+        margin:0;
+        padding:0;
+    }
+
+    .episode-page-rebuild .episode-page-hero,
+    .tt-episode-skeleton-page .episode-page-hero{
+        display:block;
+        min-height:390px;
+        padding:0;
+        border:0;
+        border-radius:0;
+        overflow:hidden;
+        background-size:cover;
+        background-position:center 34%;
+        box-shadow:none;
+    }
+
+    .episode-page-rebuild .episode-page-back-button,
+    .tt-episode-skeleton-page .episode-page-back-button{
+        position:absolute;
+        top:28px;
+        left:48px;
+        margin:0;
+        z-index:45;
+    }
+
+    .episode-page-identity-row,
+    .tt-episode-skeleton-page .episode-page-identity-row{
+        position:relative;
+        z-index:2;
+        display:block;
+        margin:-112px 48px 0;
+    }
+
+    .episode-page-hero-content,
+    .tt-episode-skeleton-page .episode-page-hero-content{
+        width:100%;
+        max-width:980px;
+        min-width:0;
+        padding-bottom:6px;
+    }
+
+    .episode-page-title{
+        max-width:980px;
+        margin-bottom:12px;
+    }
+
+    .episode-page-meta-line{
+        margin-bottom:0;
+        gap:8px 10px;
+        line-height:1.45;
+    }
+
+    .episode-page-show-link{
+        color:#f5f5f5;
+        font-weight:800;
+        text-decoration:none;
+    }
+
+    .episode-page-show-link:hover,
+    .episode-page-show-link:focus-visible{
+        color:#fff;
+        text-decoration:underline;
+        text-underline-offset:3px;
+    }
+
+    .episode-page-actions{
+        width:100%;
+        margin:14px 0 0;
+    }
+
+    .episode-page-action-buttons{
+        gap:10px;
+    }
+
+    .episode-page-action-button{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        flex-shrink:0;
+        min-height:38px;
+        text-decoration:none;
+        font-weight:700;
+    }
+
+    .episode-page-action-button.marking{
+        background:#22c55e !important;
+        border-color:#22c55e !important;
+        color:#000 !important;
+        animation:circleFastConfirm .52s ease-out both !important;
+    }
+
+    .episode-page-body{
+        max-width:none;
+        margin:0;
+        padding:22px 48px 80px;
+    }
+
+    .episode-page-info-section,
+    .episode-page-status-section,
+    .episode-page-body .v2-episode-guest-stars-section,
+    .episode-page-body .v2-episode-cast-section{
+        max-width:980px;
+    }
+
+    .episode-page-info-section .modal-section-heading{
+        margin-top:0;
+    }
+
+    .episode-page-info-section .modal-overview{
+        max-width:840px;
+    }
+
+    .episode-page-info-section .v2-episode-links-line{
+        margin-top:14px;
+        margin-bottom:0;
+    }
+
+    .episode-page-status-grid{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
+    }
+
+    .episode-page-status-card{
+        min-height:96px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+    }
+
+    .episode-page-status-card.watched{
+        border-color:rgba(34,197,94,.6);
+        background:linear-gradient(90deg,rgba(34,197,94,.18) 0%,rgba(34,197,94,.13) 18%,rgba(34,197,94,.075) 40%,rgba(34,197,94,.035) 62%,rgba(34,197,94,.012) 80%,rgba(34,197,94,0) 100%),#0d0d0d;
+    }
+
+    .episode-page-body .v2-episode-guest-stars-section .v2-actor-list,
+    .episode-page-body .v2-episode-cast-section .v2-actor-list{
+        max-height:none;
+        overflow:visible;
+        padding-right:0;
+    }
+
+    .tt-episode-skeleton-page .tt-episode-skeleton-still{
+        width:100%;
+        min-height:390px;
+        margin:0;
+        border-radius:0;
+        aspect-ratio:auto;
+        box-shadow:none;
+    }
+
+    .tt-episode-skeleton-page .tt-episode-skeleton-copy{
+        padding-bottom:6px;
+    }
+
+    @media (max-width:767.98px){
+        .episode-page-rebuild .episode-page-hero,
+        .tt-episode-skeleton-page .episode-page-hero,
+        .tt-episode-skeleton-page .tt-episode-skeleton-still{
+            min-height:260px;
+            background-position:center top;
+        }
+
+        .episode-page-rebuild .episode-page-back-button,
+        .tt-episode-skeleton-page .episode-page-back-button{
+            top:18px;
+            left:24px;
+        }
+
+        .episode-page-identity-row,
+        .tt-episode-skeleton-page .episode-page-identity-row{
+            margin:-64px 24px 0;
+        }
+
+        .episode-page-hero-content,
+        .tt-episode-skeleton-page .episode-page-hero-content{
+            padding-bottom:0;
+        }
+
+        .episode-page-title{
+            max-width:calc(100vw - 48px);
+            font-size:48px;
+            line-height:.9;
+        }
+
+        .episode-page-meta-line{
+            font-size:13px;
+            line-height:1.45;
+        }
+
+        .episode-page-body{
+            padding:18px 24px 72px;
+        }
+
+        .episode-page-info-section,
+        .episode-page-status-section,
+        .episode-page-body .v2-episode-guest-stars-section,
+        .episode-page-body .v2-episode-cast-section{
+            max-width:none;
+        }
+
+        .episode-page-status-grid{
+            grid-template-columns:1fr;
+        }
+    }
+
+    @media (max-width:419.98px){
+        .episode-page-rebuild .episode-page-hero,
+        .tt-episode-skeleton-page .episode-page-hero,
+        .tt-episode-skeleton-page .tt-episode-skeleton-still{
+            min-height:230px;
+        }
+
+        .episode-page-identity-row,
+        .tt-episode-skeleton-page .episode-page-identity-row{
+            margin-top:-58px;
+        }
+
+        .episode-page-title{
+            max-width:calc(100vw - 48px);
+            font-size:38px;
+        }
+    }
+}

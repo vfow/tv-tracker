@@ -415,19 +415,22 @@ function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-bac
 function renderTrackerEpisodeSkeletonHTML(seasonNumber,episodeNumber){
     return `
         <div class="episode-detail-page-inner tt-episode-skeleton-page">
-            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-            <section class="tt-episode-skeleton" aria-label="Loading episode">
-                <div class="tt-episode-skeleton-still"></div>
-                <div class="tt-episode-skeleton-copy">
-                    <div class="tt-skeleton-kicker"></div>
-                    <div class="tt-skeleton-heading"></div>
-                    <div class="tt-skeleton-line tt-skeleton-line-wide"></div>
-                    <div class="tt-skeleton-line tt-skeleton-line-mid"></div>
-                    <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
+            <div class="show-page-hero-shell episode-page-hero-shell">
+                <button class="show-page-back-button episode-page-back-button" id="episode-open-show-button" type="button" aria-label="Back">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
+                <div class="show-page-hero episode-page-hero tt-episode-skeleton-still"></div>
+                <div class="show-page-identity-row episode-page-identity-row tt-episode-skeleton-copy">
+                    <div class="show-page-hero-content episode-page-hero-content">
+                        <div class="tt-skeleton-kicker"></div>
+                        <div class="tt-skeleton-heading"></div>
+                        <div class="tt-skeleton-line tt-skeleton-line-wide"></div>
+                        <div class="tt-skeleton-line tt-skeleton-line-mid"></div>
+                        <div class="tt-skeleton-action-row"><span></span><span></span><span></span></div>
+                        <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
+                    </div>
                 </div>
-            </section>
+            </div>
         </div>
     `;
 }
@@ -5866,13 +5869,25 @@ function renderV2ShowCastHTML(show){
     return renderV2ActorListSectionHTML("Cast",cast,"v2-cast-section");
 }
 
-function renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber){
+function getV2EpisodeCreditGroups(show,seasonNumber,episodeNumber){
     const key = `${Number(seasonNumber)}-${Number(episodeNumber)}`;
-    const actors = show && show._episode_actor_credits && Array.isArray(show._episode_actor_credits[key])
-    ? show._episode_actor_credits[key]
+    const guestStars = show && show._episode_guest_stars && Array.isArray(show._episode_guest_stars[key])
+    ? show._episode_guest_stars[key]
+    : [];
+    const cast = show && show._episode_cast_credits && Array.isArray(show._episode_cast_credits[key])
+    ? show._episode_cast_credits[key]
     : [];
 
-    return renderV2ActorListSectionHTML("Episode Cast",actors,"v2-episode-cast-section",{limit:null});
+    return {guestStars,cast};
+}
+
+function renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber){
+    const credits = getV2EpisodeCreditGroups(show,seasonNumber,episodeNumber);
+
+    return [
+        renderV2ActorListSectionHTML("Guest Stars",credits.guestStars,"v2-episode-guest-stars-section",{limit:null}),
+        renderV2ActorListSectionHTML("Cast",credits.cast,"v2-episode-cast-section",{limit:null})
+    ].filter(Boolean).join("");
 }
 
 function v2GetEpisodeDetailsObject(show,seasonNumber,episodeNumber){
@@ -7218,6 +7233,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     if(!content){
         return;
     }
+
     const isDiscoverPreview = context && context.discoverPreview;
     const episodeData = v2GetEpisodeDetailsObject(show,seasonNumber,episodeNumber);
     const historyEntry = getEpisodeHistoryEntry(show.tmdb_id,seasonNumber,episodeNumber);
@@ -7226,30 +7242,22 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
 
     const episodeTitle = episodeData.name || "Untitled Episode";
     const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
-
-    const imagePath = episodeData.still_path || show.backdrop_path || show.poster_path || "";
-
+    const imagePath = episodeData.still_path || show.backdrop_path || "";
     const backdrop = imagePath
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.4) 65%), ${trackerBackgroundImage(imagePath,"original")}`
-    : `linear-gradient(to top, #080808 0%, #111 100%)`;
+    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), ${trackerBackgroundImage(imagePath,"original")}`
+    : `linear-gradient(to top, #080808 0%, #141414 100%)`;
 
     const airDateText = episodeData.air_date
     ? formatAirDate(episodeData.air_date,episodeData)
     : "Unknown";
-
-    const releaseTimeText = episodeData.air_date
-    ? getEpisodeReleaseTimeText(episodeData.air_date,episodeData,show)
-    : "";
-
-    const runtimeText = episodeData.runtime
-    ? `${episodeData.runtime} min`
-    : "Unknown";
-
+    const runtimeText = episodeData.runtime ? `${episodeData.runtime} min` : "";
     const episodeRating = Number(episodeData.vote_average || 0);
     const episodeRatingHTML = episodeRating > 0
-    ? `<span class="episode-rating-group"><span class="episode-rating-value">${episodeRating.toFixed(1)}</span><span class="episode-rating-slash">/</span><span class="episode-rating-ten">10</span></span>`
+    ? `<span class="tmdb-rating-group"><span class="tmdb-rating-inline">${episodeRating.toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
     : "";
-
+    const showRoute = typeof getShowDetailRoute === "function"
+    ? getShowDetailRoute(show.tmdb_id,show.title || show.name || "")
+    : "/app/list/watching";
 
     const watchedText = isDiscoverPreview
     ? "Not in library"
@@ -7266,132 +7274,72 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     : "Not aired yet";
 
     const canToggle = !isDiscoverPreview && (aired || isWatched);
-    const statusClass = isDiscoverPreview
-    ? "preview"
-    : isWatched
-    ? "watched"
-    : aired
-    ? "unwatched"
-    : "future";
-
-    const episodeDetailCardsHTML = "";
-
+    const statusClass = isWatched ? "watched" : "";
     const previousEpisodeTarget = getPreviousEpisodeTarget(show,seasonNumber,episodeNumber);
     const nextEpisodeTarget = getNextEpisodeTarget(show,seasonNumber,episodeNumber);
+    const externalLinksHTML = renderV2EpisodeLinksHTML(show,seasonNumber,episodeNumber,episodeData);
 
     content.innerHTML = `
+        <div class="episode-detail-page-inner episode-page-rebuild">
+            <div class="show-page-hero-shell episode-page-hero-shell">
+                <button class="show-page-back-button episode-page-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
+                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                </button>
 
-        <div class="episode-detail-page-inner">
+                <div class="modal-hero show-detail-hero show-page-hero episode-page-hero" style='background-image:${backdrop}'></div>
 
-        <div class="modal-hero episode-detail-hero" style='background-image:${backdrop}'>
+                <div class="show-page-identity-row episode-page-identity-row">
+                    <div class="show-page-hero-content episode-page-hero-content">
+                        <div class="modal-title show-page-title episode-page-title">${escapeHTML(episodeTitle)}</div>
+                        <div class="modal-meta modal-meta-under-status show-page-meta-line episode-page-meta-line">
+                            <a class="show-detail-entity-link episode-page-show-link" href="${escapeHTML(showRoute)}">${escapeHTML(show.title || "Untitled Show")}</a>
+                            <span class="modal-meta-separator">•</span>
+                            <span>${escapeHTML(episodeCode)}</span>
+                            <span class="modal-meta-separator">•</span>
+                            <span>${escapeHTML(airDateText)}</span>
+                            ${runtimeText ? `<span class="modal-meta-separator">•</span><span>${escapeHTML(runtimeText)}</span>` : ""}
+                            ${episodeRatingHTML ? `<span class="modal-meta-separator">•</span>${episodeRatingHTML}` : ""}
+                        </div>
 
-            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-
-            <div class="modal-hero-content episode-detail-hero-content">
-
-                <div class="modal-title episode-detail-title">
-                    ${escapeHTML(episodeTitle)}
-                </div>
-
-                <div class="modal-meta episode-detail-meta-line">
-                    <span>${escapeHTML(show.title)}</span>
-                    <span class="episode-meta-separator">•</span>
-                    <span>${escapeHTML(episodeCode)}</span>
-                    <span class="episode-meta-separator">•</span>
-                    <span>${escapeHTML(airDateText)}</span>
-                    ${releaseTimeText ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(releaseTimeText)}</span>` : ""}
-                    ${runtimeText !== "Unknown" ? `<span class="episode-meta-separator">•</span><span>${escapeHTML(runtimeText)}</span>` : ""}
-                    ${episodeRatingHTML ? `<span class="episode-meta-separator">•</span>${episodeRatingHTML}` : ""}
-                </div>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="modal-body episode-detail-body">
-
-            <div class="modal-section episode-detail-actions">
-
-                ${
-                previousEpisodeTarget
-                ? `<a class="episode-detail-action-button episode-nav-button" id="episode-prev-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,previousEpisodeTarget.season,previousEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">
-                    ${escapeHTML(getEpisodeNavLabel("← Previous",previousEpisodeTarget))}
-                </a>`
-                : `<button class="episode-detail-action-button episode-nav-button disabled" disabled>
-                    First Episode
-                </button>`
-                }
-
-                ${
-                nextEpisodeTarget
-                ? `<a class="episode-detail-action-button episode-nav-button" id="episode-next-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,nextEpisodeTarget.season,nextEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">
-                    ${escapeHTML(getEpisodeNavLabel("Next",nextEpisodeTarget))} →
-                </a>`
-                : `<button class="episode-detail-action-button episode-nav-button disabled" disabled>
-                    Latest Episode
-                </button>`
-                }
-
-                ${
-                canToggle
-                ? `<button class="episode-detail-action-button ${isWatched ? "primary" : ""}" id="episode-toggle-watched-button">
-                    ${isWatched ? "Mark Unwatched" : "Mark Watched"}
-                </button>`
-                : ""
-                }
-
-            </div>
-
-
-
-            <div class="episode-detail-main modal-section">
-
-                <div class="episode-detail-overview-card">
-                    <div class="episode-detail-section-label">Episode Info</div>
-                    <div class="episode-detail-overview">
-                        ${escapeHTML(episodeData.overview || "No episode overview available.")}
+                        <div class="show-page-actions-wrap episode-detail-actions episode-page-actions">
+                            <div class="modal-status-buttons show-page-status-buttons episode-page-action-buttons">
+                                ${canToggle ? `<button class="modal-status-button episode-page-action-button ${isWatched ? "active" : ""}" id="episode-toggle-watched-button" type="button">${isWatched ? "MARK UNWATCHED" : "MARK WATCHED"}</button>` : ""}
+                                ${previousEpisodeTarget ? `<a class="modal-status-button episode-page-action-button episode-page-nav-button" id="episode-prev-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,previousEpisodeTarget.season,previousEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">PREVIOUS EPISODE</a>` : ""}
+                                ${nextEpisodeTarget ? `<a class="modal-status-button episode-page-action-button episode-page-nav-button" id="episode-next-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,nextEpisodeTarget.season,nextEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">NEXT EPISODE</a>` : ""}
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <div class="episode-detail-grid">
-
-                    ${episodeDetailCardsHTML}
-
-                    <div class="episode-detail-info-card ${statusClass}">
-                        <div class="episode-detail-label">Status</div>
-                        <div class="episode-detail-value">${escapeHTML(statusText)}</div>
-                    </div>
-
-                    <div class="episode-detail-info-card">
-                        <div class="episode-detail-label">Watched</div>
-                        <div class="episode-detail-value">${escapeHTML(watchedText)}</div>
-                    </div>
-
-
-                </div>
-
             </div>
 
-            ${renderV2EpisodeExtraHTML(show,seasonNumber,episodeNumber,episodeData)}
+            <div class="modal-body show-page-body episode-page-body">
+                <section class="modal-section show-info-synopsis-section episode-page-info-section">
+                    <h3 class="modal-section-heading">Episode Info</h3>
+                    <div class="modal-overview">${escapeHTML(episodeData.overview || "No episode overview available.")}</div>
+                    ${externalLinksHTML}
+                </section>
 
-            ${renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber)}
+                <section class="modal-section episode-page-status-section">
+                    <div class="episode-page-status-grid">
+                        <div class="show-progress-card episode-page-status-card ${statusClass}">
+                            <div class="episode-detail-label">Status</div>
+                            <div class="episode-detail-value">${escapeHTML(statusText)}</div>
+                        </div>
+                        <div class="show-progress-card episode-page-status-card">
+                            <div class="episode-detail-label">Watched</div>
+                            <div class="episode-detail-value">${escapeHTML(watchedText)}</div>
+                        </div>
+                    </div>
+                </section>
 
+                ${renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber)}
+            </div>
         </div>
-
-        </div>
-
     `;
-
-    attachV2RailScrollEvents();
 
     const openShowButton = document.getElementById("episode-open-show-button");
 
     if(openShowButton){
-
         openShowButton.addEventListener("click",function(){
             if(!expandedSeasons[String(show.tmdb_id)]){
                 expandedSeasons[String(show.tmdb_id)] = {};
@@ -7400,15 +7348,12 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
             expandedSeasons[String(show.tmdb_id)][String(seasonNumber)] = true;
             closeEpisodeDetailsPage();
         });
-
     }
 
     const previousButton = document.getElementById("episode-prev-button");
 
     if(previousButton && previousEpisodeTarget){
-
         previousButton.addEventListener("click",function(event){
-
             if(!isPlainAppLinkClick(event)){ return; }
             event.preventDefault();
 
@@ -7428,17 +7373,13 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                 previousEpisodeTarget.episode,
                 {backToShow:true,replaceInPlace:true,replaceRoute:true}
             );
-
         });
-
     }
 
     const nextButton = document.getElementById("episode-next-button");
 
     if(nextButton && nextEpisodeTarget){
-
         nextButton.addEventListener("click",function(event){
-
             if(!isPlainAppLinkClick(event)){ return; }
             event.preventDefault();
 
@@ -7458,19 +7399,13 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                 nextEpisodeTarget.episode,
                 {backToShow:true,replaceInPlace:true,replaceRoute:true}
             );
-
         });
-
     }
-
-
 
     const toggleButton = document.getElementById("episode-toggle-watched-button");
 
     if(toggleButton){
-
         toggleButton.addEventListener("click",async function(){
-
             if(this.disabled){
                 return;
             }
@@ -7493,11 +7428,8 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
                     this.disabled = false;
                 }
             }
-
         });
-
     }
-
 }
 
 

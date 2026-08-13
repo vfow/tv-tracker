@@ -261,6 +261,26 @@ async function runCompletionRuleChecks(){
   assert.strictEqual(specialUnwatch.status,'finished','unwatching a special must not reopen a completed show');
 }
 
+const episodeCreditSource = app.slice(
+  app.indexOf('function normalizeActorCharacter'),
+  app.indexOf('function normalizeTMDBEpisodeExternalIds')
+);
+const episodeCreditContext = {Object,Array,Number,String,Set};
+vm.createContext(episodeCreditContext);
+vm.runInContext(episodeCreditSource, episodeCreditContext);
+const splitCredits = episodeCreditContext.normalizeTMDBEpisodeCreditGroups({
+  guest_stars:[
+    {id:10,name:'Guest One',character:'Guest',order:1},
+    {id:20,name:'Guest Two',character:'Guest',order:2}
+  ],
+  cast:[
+    {id:10,name:'Guest One',character:'Regular duplicate',order:1},
+    {id:30,name:'Cast One',character:'Lead',order:3}
+  ]
+});
+assert.deepStrictEqual(Array.from(splitCredits.guest_stars,item=>item.id),[10,20]);
+assert.deepStrictEqual(Array.from(splitCredits.cast,item=>item.id),[30],'guest stars must be removed from the regular episode cast section');
+
 runCompletionRuleChecks()
 .then(()=>console.log('Automatic completion rule checks passed'))
 .catch(error=>{

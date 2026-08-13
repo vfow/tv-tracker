@@ -1238,6 +1238,14 @@ function normalizeExistingData(){
             show._episode_actor_credits = {};
         }
 
+        if(!show._episode_guest_stars || typeof show._episode_guest_stars !== "object"){
+            show._episode_guest_stars = {};
+        }
+
+        if(!show._episode_cast_credits || typeof show._episode_cast_credits !== "object"){
+            show._episode_cast_credits = {};
+        }
+
         if(!show._episode_v2_details || typeof show._episode_v2_details !== "object"){
             show._episode_v2_details = {};
         }
@@ -2333,27 +2341,47 @@ function normalizeEpisodeActorMember(person){
     };
 }
 
-function normalizeTMDBEpisodeActors(credits){
-    const combined = []
-    .concat(Array.isArray(credits && credits.cast) ? credits.cast : [])
-    .concat(Array.isArray(credits && credits.guest_stars) ? credits.guest_stars : []);
+function getEpisodeActorIdentity(actor){
+    if(!actor){
+        return "";
+    }
+    return actor.id ? String(actor.id) : String(actor.name || "").trim().toLowerCase();
+}
 
+function normalizeTMDBEpisodeCreditList(people){
     const seen = new Set();
 
-    return combined
+    return (Array.isArray(people) ? people : [])
     .map(normalizeEpisodeActorMember)
     .filter(actor=>{
         if(!actor){
             return false;
         }
-        const key = actor.id ? String(actor.id) : actor.name.toLowerCase();
-        if(seen.has(key)){
+        const key = getEpisodeActorIdentity(actor);
+        if(!key || seen.has(key)){
             return false;
         }
         seen.add(key);
         return true;
     })
     .sort((a,b)=>a.order - b.order);
+}
+
+function normalizeTMDBEpisodeCreditGroups(credits){
+    const guestStars = normalizeTMDBEpisodeCreditList(credits && credits.guest_stars);
+    const guestKeys = new Set(guestStars.map(getEpisodeActorIdentity).filter(Boolean));
+    const cast = normalizeTMDBEpisodeCreditList(credits && credits.cast)
+    .filter(actor=>!guestKeys.has(getEpisodeActorIdentity(actor)));
+
+    return {
+        guest_stars:guestStars,
+        cast:cast
+    };
+}
+
+function normalizeTMDBEpisodeActors(credits){
+    const groups = normalizeTMDBEpisodeCreditGroups(credits);
+    return groups.guest_stars.concat(groups.cast);
 }
 
 
@@ -2446,11 +2474,21 @@ function mergeV2EpisodeDetails(show,seasonNumber,episodeNumber,details){
 
     show._episode_v2_details[key] = normalized;
 
-    if(details.credits){
+    if(details.credits && typeof details.credits === "object"){
         if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
             show._episode_actor_credits = {};
         }
-        show._episode_actor_credits[key] = normalizeTMDBEpisodeActors(details.credits);
+        if(!show._episode_guest_stars || typeof show._episode_guest_stars !== "object"){
+            show._episode_guest_stars = {};
+        }
+        if(!show._episode_cast_credits || typeof show._episode_cast_credits !== "object"){
+            show._episode_cast_credits = {};
+        }
+
+        const creditGroups = normalizeTMDBEpisodeCreditGroups(details.credits);
+        show._episode_guest_stars[key] = creditGroups.guest_stars;
+        show._episode_cast_credits[key] = creditGroups.cast;
+        show._episode_actor_credits[key] = creditGroups.guest_stars.concat(creditGroups.cast);
     }
 
     return true;
@@ -2523,7 +2561,12 @@ function hasLoadedV2EpisodeDetails(show,seasonNumber,episodeNumber){
         return false;
     }
 
-    return !!show._episode_v2_details[getEpisodeActorCreditsKey(seasonNumber,episodeNumber)];
+    const key = getEpisodeActorCreditsKey(seasonNumber,episodeNumber);
+    const hasDetails = !!show._episode_v2_details[key];
+    const hasGuestStars = !!(show._episode_guest_stars && Array.isArray(show._episode_guest_stars[key]));
+    const hasCast = !!(show._episode_cast_credits && Array.isArray(show._episode_cast_credits[key]));
+
+    return hasDetails && hasGuestStars && hasCast;
 }
 
 function applyV2TMDBDetails(show,details){
@@ -2569,6 +2612,12 @@ function applyV2TMDBDetails(show,details){
     show._v2_bundle7_2_loaded_at = new Date().toISOString();
     if(!show._episode_actor_credits || typeof show._episode_actor_credits !== "object"){
         show._episode_actor_credits = {};
+    }
+    if(!show._episode_guest_stars || typeof show._episode_guest_stars !== "object"){
+        show._episode_guest_stars = {};
+    }
+    if(!show._episode_cast_credits || typeof show._episode_cast_credits !== "object"){
+        show._episode_cast_credits = {};
     }
     show._v2_api_loaded_at = new Date().toISOString();
 
@@ -2710,13 +2759,21 @@ async function ensureEpisodeV2Details(show,seasonNumber,episodeNumber,{skipSave=
         show._episode_actor_credits = {};
     }
 
+    if(!show._episode_guest_stars || typeof show._episode_guest_stars !== "object"){
+        show._episode_guest_stars = {};
+    }
+
+    if(!show._episode_cast_credits || typeof show._episode_cast_credits !== "object"){
+        show._episode_cast_credits = {};
+    }
+
     if(!show._episode_v2_details || typeof show._episode_v2_details !== "object"){
         show._episode_v2_details = {};
     }
 
     const key = getEpisodeActorCreditsKey(seasonNumber,episodeNumber);
 
-    if(show._episode_v2_details[key]){
+    if(hasLoadedV2EpisodeDetails(show,seasonNumber,episodeNumber)){
         return false;
     }
 
@@ -2864,6 +2921,8 @@ function createShowObject(details,status){
         _v2_bundle7_loaded_at:"",
         _v2_bundle7_2_loaded_at:"",
         _episode_actor_credits:{},
+        _episode_guest_stars:{},
+        _episode_cast_credits:{},
         _episode_v2_details:{}
     };
 
