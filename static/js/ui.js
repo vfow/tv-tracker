@@ -5191,12 +5191,13 @@ function renderMovieMoreLikeThisHTML(movie){
             if(rating > 0){ adultMetaParts.push(escapeHTML(rating.toFixed(1))); }
             adultMetaParts.push(adultBadgeHTML);
         }
+        const route = typeof getMovieDetailRoute === "function" ? getMovieDetailRoute(item.id,item.title || "") : "/app/discover";
         return `
-            <button type="button" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}" aria-label="Open ${escapeHTML(title)}">
+            <a href="${escapeHTML(route)}" class="v2-similar-card" data-movie-similar-open="${escapeHTML(item.id)}" data-movie-similar-name="${escapeHTML(item.title || "")}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(title)}</div>
                 ${adultBadgeHTML ? `<div class="v2-similar-meta">${adultMetaParts.join(" • ")}</div>` : ""}
-            </button>
+            </a>
         `;
     }).join("");
     return renderV2RailSectionHTML("YOU MAY ALSO LIKE",cards,"v2-more-like-section movie-more-like-section");
@@ -5975,11 +5976,12 @@ function renderV2SimilarShowsHTML(show){
         const poster = item.poster_path
         ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(item.poster_path,"w500"))}" alt="">`
         : renderPosterTitlePlaceholderHTML(item,"tv","v2-similar-poster-placeholder");
+        const route = typeof getShowDetailRoute === "function" ? getShowDetailRoute(item.id,item.name || "") : "/app/list/watching";
         return `
-            <button type="button" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}" aria-label="Open ${escapeHTML(item.name || "Untitled")}">
+            <a href="${escapeHTML(route)}" class="v2-similar-card" data-v2-similar-open="${escapeHTML(item.id)}" data-v2-similar-name="${escapeHTML(item.name || "")}">
                 <div class="v2-similar-poster">${poster}</div>
                 <div class="v2-similar-title">${escapeHTML(item.name || "Untitled")}</div>
-            </button>
+            </a>
         `;
     }).join("");
 
