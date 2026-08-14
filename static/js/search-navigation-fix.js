@@ -44,49 +44,46 @@
 (function(global){
     "use strict";
 
-    const REGION_PATTERN = /^[A-Z]{2}$/;
-    const REGION_REQUIRED_MESSAGE = "Choose a streaming region in Settings.";
-    const NO_PROVIDER_MESSAGE = "No streaming provider data available for this region.";
+    const REGION_RE = /^[A-Z]{2}$/;
+    const REGION_REQUIRED = "Choose a streaming region in Settings.";
+    const NO_PROVIDER_DATA = "No streaming provider data available for this region.";
+    let countries = [];
+    let countriesPromise = null;
 
-    let countryOptions = [];
-    let countryOptionsPromise = null;
-
-    function normalizeStreamingRegion(value){
-        const clean = String(value || "").trim().toUpperCase();
-        return REGION_PATTERN.test(clean) ? clean : "";
+    function normalize(value){
+        const code = String(value || "").trim().toUpperCase();
+        return REGION_RE.test(code) ? code : "";
     }
 
-    function ensureStreamingProfile(){
+    function profile(){
         if(!global.DATA || typeof global.DATA !== "object"){
             return null;
         }
         if(!global.DATA.profile || typeof global.DATA.profile !== "object"){
             global.DATA.profile = {};
         }
-        const clean = normalizeStreamingRegion(global.DATA.profile.streaming_region);
-        global.DATA.profile.streaming_region = clean;
+        global.DATA.profile.streaming_region = normalize(global.DATA.profile.streaming_region);
         return global.DATA.profile;
     }
 
-    function getStreamingRegion(){
-        const profile = ensureStreamingProfile();
-        return profile ? normalizeStreamingRegion(profile.streaming_region) : "";
+    function getRegion(){
+        const data = profile();
+        return data ? data.streaming_region : "";
     }
 
-    function setStreamingRegion(value){
-        const profile = ensureStreamingProfile();
-        const clean = normalizeStreamingRegion(value);
-        if(profile){
-            profile.streaming_region = clean;
+    function setRegion(value){
+        const data = profile();
+        const code = normalize(value);
+        if(data){
+            data.streaming_region = code;
         }
-        return clean;
+        return code;
     }
 
-    function normalizeCountryOptions(payload){
-        const source = Array.isArray(payload) ? payload : [];
+    function normalizeCountries(items){
         const seen = new Set();
-        return source.map(item=>{
-            const code = normalizeStreamingRegion(item && (item.code || item.iso_3166_1));
+        return (Array.isArray(items) ? items : []).map(item=>{
+            const code = normalize(item && (item.code || item.iso_3166_1));
             const name = String(item && (item.name || item.english_name || item.native_name) || "").trim();
             if(!code || !name || seen.has(code)){
                 return null;
@@ -96,144 +93,141 @@
         }).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name));
     }
 
-    function readRuntimeCountryOptions(){
-        const runtime = global.browseOptionState && Array.isArray(global.browseOptionState.countries)
-        ? global.browseOptionState.countries
-        : [];
-        return normalizeCountryOptions(runtime);
+    function runtimeCountries(){
+        return normalizeCountries(
+            global.browseOptionState && Array.isArray(global.browseOptionState.countries)
+            ? global.browseOptionState.countries
+            : []
+        );
     }
 
-    async function loadCountryOptions(){
-        const runtime = readRuntimeCountryOptions();
+    async function loadCountries(){
+        const runtime = runtimeCountries();
         if(runtime.length){
-            countryOptions = runtime;
-            return countryOptions;
+            countries = runtime;
+            return countries;
         }
-        if(countryOptions.length){
-            return countryOptions;
+        if(countries.length){
+            return countries;
         }
-        if(countryOptionsPromise){
-            return countryOptionsPromise;
+        if(countriesPromise){
+            return countriesPromise;
         }
         if(typeof global.tmdbFetchJSON !== "function"){
             return [];
         }
 
-        countryOptionsPromise = global.tmdbFetchJSON("configuration/countries")
+        countriesPromise = global.tmdbFetchJSON("configuration/countries")
         .then(payload=>{
-            countryOptions = normalizeCountryOptions(payload);
-            if(global.browseOptionState && typeof global.browseOptionState === "object" && !global.browseOptionState.countries.length){
-                global.browseOptionState.countries = countryOptions.slice();
+            countries = normalizeCountries(payload);
+            if(global.browseOptionState && !global.browseOptionState.countries.length){
+                global.browseOptionState.countries = countries.slice();
             }
-            return countryOptions;
+            return countries;
         })
         .catch(()=>[])
-        .finally(()=>{
-            countryOptionsPromise = null;
-        });
+        .finally(()=>{ countriesPromise = null; });
 
-        return countryOptionsPromise;
+        return countriesPromise;
     }
 
-    function countryNameForRegion(region){
-        const code = normalizeStreamingRegion(region);
-        const options = countryOptions.length ? countryOptions : readRuntimeCountryOptions();
-        const match = options.find(item=>item.code === code);
-        return match ? match.name : code;
+    function countryName(code){
+        const clean = normalize(code);
+        const match = (countries.length ? countries : runtimeCountries()).find(item=>item.code === clean);
+        return match ? match.name : clean;
     }
 
-    function resolveCountryInput(value){
+    function resolveCountry(value){
         const raw = String(value || "").trim();
         if(!raw){
             return "";
         }
-        const direct = normalizeStreamingRegion(raw);
+        const direct = normalize(raw);
         if(direct){
             return direct;
         }
         const lower = raw.toLowerCase();
-        const options = countryOptions.length ? countryOptions : readRuntimeCountryOptions();
-        const match = options.find(item=>String(item.name || "").toLowerCase() === lower);
+        const match = (countries.length ? countries : runtimeCountries())
+        .find(item=>item.name.toLowerCase() === lower);
         return match ? match.code : "";
     }
 
-    function resetProviderRuntime(){
-        if(global.browseOptionState && typeof global.browseOptionState === "object"){
-            if(global.browseOptionState.providers){
-                global.browseOptionState.providers.tv = [];
-                global.browseOptionState.providers.movie = [];
+    function resetProviders(){
+        const options = global.browseOptionState;
+        if(options){
+            if(options.providers){
+                options.providers.tv = [];
+                options.providers.movie = [];
             }
-            if(global.browseOptionState.loaded){
-                global.browseOptionState.loaded.tvProviders = false;
-                global.browseOptionState.loaded.movieProviders = false;
+            if(options.loaded){
+                options.loaded.tvProviders = false;
+                options.loaded.movieProviders = false;
             }
-            if(global.browseOptionState.picker && global.browseOptionState.picker.type === "provider"){
-                global.browseOptionState.picker = {type:"",query:"",loading:false,error:"",results:[]};
+            if(options.picker && options.picker.type === "provider"){
+                options.picker = {type:"",query:"",loading:false,error:"",results:[]};
             }
         }
-        if(global.browseReferencePromises && typeof global.browseReferencePromises === "object"){
+        if(global.browseReferencePromises){
             global.browseReferencePromises.tvProviders = null;
             global.browseReferencePromises.movieProviders = null;
         }
     }
 
-    function refreshRegionSensitiveView(){
-        if(global.activePage === "show-detail" && typeof global.renderActiveShowDetailPage === "function"){
-            global.renderActiveShowDetailPage();
-        }else if(global.activePage === "movie-detail" && typeof global.renderActiveMoviePage === "function"){
-            global.renderActiveMoviePage();
-        }else if(global.activePage === "browse-detail" && typeof global.renderActiveBrowsePage === "function"){
-            global.renderActiveBrowsePage();
-        }else if(global.activePage === "settings" && typeof global.renderSettings === "function"){
-            global.renderSettings();
+    function refreshRegionView(){
+        const renders = {
+            "show-detail":"renderActiveShowDetailPage",
+            "movie-detail":"renderActiveMoviePage",
+            "browse-detail":"renderActiveBrowsePage",
+            settings:"renderSettings"
+        };
+        const name = renders[global.activePage];
+        if(name && typeof global[name] === "function"){
+            global[name]();
         }
     }
 
-    function providerMessageHTML(message){
-        return `<div class="v2-api-empty">${String(message || "")}</div>`;
+    function emptyMessage(text){
+        return `<div class="v2-api-empty">${text}</div>`;
     }
 
     function installRegionGetters(){
-        global.getAppWatchRegion = getStreamingRegion;
-        global.getStaticWatchRegion = getStreamingRegion;
-        global.v2GetWatchRegion = getStreamingRegion;
+        global.getAppWatchRegion = getRegion;
+        global.getStaticWatchRegion = getRegion;
+        global.v2GetWatchRegion = getRegion;
     }
 
-    function guardProviderCatalog(){
-        if(typeof global.tmdbGetWatchProviderCatalog !== "function" || global.tmdbGetWatchProviderCatalog.__streamingRegionGuard){
+    function installProviderCatalogGuard(){
+        const original = global.tmdbGetWatchProviderCatalog;
+        if(typeof original !== "function" || original.__streamingRegionGuard){
             return;
         }
-        const original = global.tmdbGetWatchProviderCatalog;
-        const guarded = async function(media){
-            const region = getStreamingRegion();
+        const wrapped = async function(media){
+            const region = getRegion();
             if(!region){
                 return [];
             }
             const results = await original.call(this,media,region);
-            if(getStreamingRegion() !== region){
+            if(getRegion() !== region){
                 const error = new Error("Streaming region changed while provider data was loading.");
                 error.code = "STALE_STREAMING_REGION";
                 throw error;
             }
             return results;
         };
-        guarded.__streamingRegionGuard = true;
-        global.tmdbGetWatchProviderCatalog = guarded;
+        wrapped.__streamingRegionGuard = true;
+        global.tmdbGetWatchProviderCatalog = wrapped;
     }
 
-    function guardBrowseProviderParams(){
+    function installBrowseGuard(){
         const api = global.TVTrackerBrowse;
         if(!api || typeof api.buildTMDBParams !== "function" || api.__streamingRegionGuard){
             return;
         }
-
-        const originalBuild = api.buildTMDBParams;
-        const wrapped = Object.assign({},api,{
-            buildTMDBParams:function(input,page,options={}){
-                const region = getStreamingRegion();
-                const safeOptions = Object.assign({},options,{watchRegion:region || "ZZ"});
-                const params = originalBuild.call(api,input,page,safeOptions);
-
+        const original = api.buildTMDBParams;
+        global.TVTrackerBrowse = Object.freeze(Object.assign({},api,{
+            buildTMDBParams(input,page,options={}){
+                const region = getRegion();
+                const params = original.call(api,input,page,Object.assign({},options,{watchRegion:region || "ZZ"}));
                 if(!region){
                     delete params.with_watch_providers;
                     delete params.watch_region;
@@ -241,112 +235,123 @@
                 }else if(params.with_watch_providers){
                     params.watch_region = region;
                 }
-
                 return params;
             },
             __streamingRegionGuard:true
-        });
-
-        global.TVTrackerBrowse = Object.freeze(wrapped);
+        }));
     }
 
-    function guardProviderRendering(){
-        if(typeof global.renderShowReleasesTabHTML === "function" && !global.renderShowReleasesTabHTML.__streamingRegionGuard){
-            const originalShowReleases = global.renderShowReleasesTabHTML;
-            const wrappedShowReleases = function(show){
-                const region = getStreamingRegion();
-                if(!region){
-                    return providerMessageHTML(REGION_REQUIRED_MESSAGE);
+    function installDetailRequestGuard(){
+        if(typeof global.tmdbFetchJSON !== "function"){
+            return;
+        }
+
+        const showDetails = global.tmdbGetShowDetails;
+        if(typeof showDetails === "function" && !showDetails.__streamingRegionGuard){
+            const wrappedShow = async function(showId,options={}){
+                if(getRegion()){
+                    return showDetails.apply(this,arguments);
                 }
-                const providers = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
+                return global.tmdbFetchJSON(
+                    "tv/" + encodeURIComponent(String(showId)),
+                    {append_to_response:"external_ids,videos,content_ratings,similar,aggregate_credits,alternative_titles,keywords"},
+                    options
+                );
+            };
+            wrappedShow.__streamingRegionGuard = true;
+            global.tmdbGetShowDetails = wrappedShow;
+        }
+
+        const movieDetails = global.tmdbGetMovieDetails;
+        if(typeof movieDetails === "function" && !movieDetails.__streamingRegionGuard){
+            const wrappedMovie = async function(movieId){
+                if(getRegion()){
+                    return movieDetails.apply(this,arguments);
+                }
+                return global.tmdbFetchJSON(
+                    "movie/" + encodeURIComponent(String(movieId)),
+                    {append_to_response:"external_ids,videos,release_dates,credits,similar,keywords"}
+                );
+            };
+            wrappedMovie.__streamingRegionGuard = true;
+            global.tmdbGetMovieDetails = wrappedMovie;
+        }
+    }
+
+    function installProviderRenderGuard(){
+        const showRender = global.renderShowReleasesTabHTML;
+        if(typeof showRender === "function" && !showRender.__streamingRegionGuard){
+            const wrappedShow = function(show){
+                const region = getRegion();
+                if(!region){
+                    return emptyMessage(REGION_REQUIRED);
+                }
+                const data = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
                 ? show._tmdb_watch_providers.results[region]
                 : null;
-                if(!providers){
-                    return providerMessageHTML(NO_PROVIDER_MESSAGE);
-                }
-                return originalShowReleases.call(this,show);
+                return data ? showRender.call(this,show) : emptyMessage(NO_PROVIDER_DATA);
             };
-            wrappedShowReleases.__streamingRegionGuard = true;
-            global.renderShowReleasesTabHTML = wrappedShowReleases;
+            wrappedShow.__streamingRegionGuard = true;
+            global.renderShowReleasesTabHTML = wrappedShow;
         }
 
-        if(typeof global.renderMovieProvidersHTML === "function" && !global.renderMovieProvidersHTML.__streamingRegionGuard){
-            const originalMovieProviders = global.renderMovieProvidersHTML;
-            const wrappedMovieProviders = function(movie){
-                const region = getStreamingRegion();
+        const movieRender = global.renderMovieProvidersHTML;
+        if(typeof movieRender === "function" && !movieRender.__streamingRegionGuard){
+            const wrappedMovie = function(movie){
+                const region = getRegion();
                 if(!region){
-                    return providerMessageHTML(REGION_REQUIRED_MESSAGE);
+                    return emptyMessage(REGION_REQUIRED);
                 }
-                const providers = movie && movie.watch_providers && movie.watch_providers.results
+                const data = movie && movie.watch_providers && movie.watch_providers.results
                 ? movie.watch_providers.results[region]
                 : null;
-                if(!providers){
-                    return providerMessageHTML(NO_PROVIDER_MESSAGE);
-                }
-                return originalMovieProviders.call(this,movie);
+                return data ? movieRender.call(this,movie) : emptyMessage(NO_PROVIDER_DATA);
             };
-            wrappedMovieProviders.__streamingRegionGuard = true;
-            global.renderMovieProvidersHTML = wrappedMovieProviders;
+            wrappedMovie.__streamingRegionGuard = true;
+            global.renderMovieProvidersHTML = wrappedMovie;
         }
     }
 
-    function extendSettingsDraft(){
-        if(typeof global.createProfileSettingsDraft !== "function" || global.createProfileSettingsDraft.__streamingRegionGuard){
+    function installSettingsDraft(){
+        const original = global.createProfileSettingsDraft;
+        if(typeof original !== "function" || original.__streamingRegionGuard){
             return;
         }
-        const originalCreateDraft = global.createProfileSettingsDraft;
-        const wrappedCreateDraft = function(){
-            const draft = originalCreateDraft.apply(this,arguments) || {};
-            draft.streaming_region = getStreamingRegion();
+        const wrapped = function(){
+            const draft = original.apply(this,arguments) || {};
+            draft.streaming_region = getRegion();
             return draft;
         };
-        wrappedCreateDraft.__streamingRegionGuard = true;
-        global.createProfileSettingsDraft = wrappedCreateDraft;
+        wrapped.__streamingRegionGuard = true;
+        global.createProfileSettingsDraft = wrapped;
     }
 
-    function extendSettingsSave(){
-        if(typeof global.saveProfileSettings !== "function" || global.saveProfileSettings.__streamingRegionGuard){
+    function installSettingsSave(){
+        const original = global.saveProfileSettings;
+        if(typeof original !== "function" || original.__streamingRegionGuard){
             return;
         }
-        const originalSave = global.saveProfileSettings;
-        const wrappedSave = async function(settings){
-            const before = getStreamingRegion();
-            const next = normalizeStreamingRegion(settings && settings.streaming_region);
-            setStreamingRegion(next);
-
+        const wrapped = async function(settings){
+            const before = getRegion();
+            const next = normalize(settings && settings.streaming_region);
+            setRegion(next);
             try{
-                const result = await originalSave.apply(this,arguments);
+                const result = await original.apply(this,arguments);
                 if(before !== next){
-                    resetProviderRuntime();
-                    refreshRegionSensitiveView();
+                    resetProviders();
+                    refreshRegionView();
                 }
                 return result;
             }catch(error){
-                setStreamingRegion(before);
+                setRegion(before);
                 throw error;
             }
         };
-        wrappedSave.__streamingRegionGuard = true;
-        global.saveProfileSettings = wrappedSave;
+        wrapped.__streamingRegionGuard = true;
+        global.saveProfileSettings = wrapped;
     }
 
-    function populateRegionDatalist(datalist,input,draft){
-        return loadCountryOptions().then(options=>{
-            if(!datalist || !input){
-                return;
-            }
-            datalist.innerHTML = options.map(item=>
-                `<option value="${String(item.name).replace(/"/g,"&quot;")}">${item.code}</option>`
-            ).join("");
-
-            const current = normalizeStreamingRegion(draft && draft.streaming_region);
-            if(current && (!input.value || normalizeStreamingRegion(input.value) === current)){
-                input.value = countryNameForRegion(current);
-            }
-        });
-    }
-
-    function mountStreamingRegionSetting(){
+    function mountSetting(){
         if(!global.document || typeof global.document.querySelector !== "function"){
             return;
         }
@@ -355,57 +360,44 @@
             return;
         }
 
-        const buttons = controls.querySelector(".profile-settings-buttons");
-        const draft = global.profileSettingsDraft && typeof global.profileSettingsDraft === "object"
-        ? global.profileSettingsDraft
-        : null;
-        if(!draft){
+        const draft = global.profileSettingsDraft;
+        if(!draft || typeof draft !== "object"){
             return;
         }
-
-        draft.streaming_region = normalizeStreamingRegion(draft.streaming_region || getStreamingRegion());
+        draft.streaming_region = normalize(draft.streaming_region || getRegion());
 
         const block = global.document.createElement("div");
         block.className = "streaming-region-setting";
         block.innerHTML = `
             <label class="profile-settings-label" for="streaming-region-input">Streaming Region</label>
-            <input
-                class="profile-settings-input"
-                id="streaming-region-input"
-                type="search"
-                list="streaming-region-options"
-                autocomplete="off"
-                placeholder="Search countries"
-                aria-describedby="streaming-region-help"
-            >
+            <input class="profile-settings-input" id="streaming-region-input" type="search"
+                list="streaming-region-options" autocomplete="off" placeholder="Search countries"
+                aria-describedby="streaming-region-help">
             <datalist id="streaming-region-options"></datalist>
             <p id="streaming-region-help" style="margin:8px 0 0;color:#888;font-size:13px;">
                 Controls Where to Watch and streaming-service filters. Leave empty for no region.
             </p>
-            <button class="settings-action-button muted" id="clear-streaming-region" type="button" style="margin-top:10px;">Clear Region</button>
+            <button class="settings-action-button muted" id="clear-streaming-region"
+                type="button" style="margin-top:10px;">Clear Region</button>
         `;
 
-        if(buttons){
-            controls.insertBefore(block,buttons);
-        }else{
-            controls.appendChild(block);
-        }
+        const buttons = controls.querySelector(".profile-settings-buttons");
+        buttons ? controls.insertBefore(block,buttons) : controls.appendChild(block);
 
         const input = global.document.getElementById("streaming-region-input");
-        const datalist = global.document.getElementById("streaming-region-options");
-        const clearButton = global.document.getElementById("clear-streaming-region");
-        const saveButton = global.document.getElementById("save-profile-settings");
+        const list = global.document.getElementById("streaming-region-options");
+        const clear = global.document.getElementById("clear-streaming-region");
+        const save = global.document.getElementById("save-profile-settings");
+        input.value = countryName(draft.streaming_region);
 
-        input.value = countryNameForRegion(draft.streaming_region);
-
-        const updateDraft = function(strict=false){
+        const sync = strict=>{
             const raw = String(input.value || "").trim();
             if(!raw){
                 draft.streaming_region = "";
                 input.removeAttribute("aria-invalid");
                 return true;
             }
-            const region = resolveCountryInput(raw);
+            const region = resolveCountry(raw);
             if(region){
                 draft.streaming_region = region;
                 input.removeAttribute("aria-invalid");
@@ -421,69 +413,71 @@
             return false;
         };
 
-        input.addEventListener("input",function(){
-            updateDraft(false);
-        });
-        input.addEventListener("change",function(){
-            if(updateDraft(false)){
-                const region = normalizeStreamingRegion(draft.streaming_region);
-                if(region){
-                    input.value = countryNameForRegion(region);
-                }
+        input.addEventListener("input",()=>sync(false));
+        input.addEventListener("change",()=>{
+            if(sync(false) && draft.streaming_region){
+                input.value = countryName(draft.streaming_region);
             }
         });
-
-        if(clearButton){
-            clearButton.addEventListener("click",function(){
+        if(clear){
+            clear.addEventListener("click",()=>{
                 input.value = "";
                 draft.streaming_region = "";
                 input.removeAttribute("aria-invalid");
                 input.focus();
             });
         }
-
-        if(saveButton){
-            saveButton.addEventListener("click",function(event){
-                if(!updateDraft(true)){
+        if(save){
+            save.addEventListener("click",event=>{
+                if(!sync(true)){
                     event.preventDefault();
                     event.stopImmediatePropagation();
                 }
             },true);
         }
 
-        populateRegionDatalist(datalist,input,draft);
+        loadCountries().then(items=>{
+            list.innerHTML = items.map(item=>
+                `<option value="${item.name.replace(/"/g,"&quot;")}">${item.code}</option>`
+            ).join("");
+            const current = normalize(draft.streaming_region);
+            if(current && (!input.value || normalize(input.value) === current)){
+                input.value = countryName(current);
+            }
+        });
     }
 
-    function extendSettingsRender(){
-        if(typeof global.renderSettings !== "function" || global.renderSettings.__streamingRegionGuard){
+    function installSettingsRender(){
+        const original = global.renderSettings;
+        if(typeof original !== "function" || original.__streamingRegionGuard){
             return;
         }
-        const originalRender = global.renderSettings;
-        const wrappedRender = function(){
-            const result = originalRender.apply(this,arguments);
-            mountStreamingRegionSetting();
+        const wrapped = function(){
+            const result = original.apply(this,arguments);
+            mountSetting();
             return result;
         };
-        wrappedRender.__streamingRegionGuard = true;
-        global.renderSettings = wrappedRender;
+        wrapped.__streamingRegionGuard = true;
+        global.renderSettings = wrapped;
     }
 
     installRegionGetters();
-    guardProviderCatalog();
-    guardBrowseProviderParams();
-    guardProviderRendering();
-    extendSettingsDraft();
-    extendSettingsSave();
-    extendSettingsRender();
-    ensureStreamingProfile();
+    installProviderCatalogGuard();
+    installBrowseGuard();
+    installDetailRequestGuard();
+    installProviderRenderGuard();
+    installSettingsDraft();
+    installSettingsSave();
+    installSettingsRender();
+    profile();
 
     global.TVTrackerStreamingRegion = Object.freeze({
-        normalizeStreamingRegion,
-        getStreamingRegion,
-        setStreamingRegion,
-        resolveCountryInput,
-        resetProviderRuntime,
-        REGION_REQUIRED_MESSAGE,
-        NO_PROVIDER_MESSAGE
+        normalizeStreamingRegion:normalize,
+        getStreamingRegion:getRegion,
+        setStreamingRegion:setRegion,
+        resolveCountryInput:resolveCountry,
+        resetProviderRuntime:resetProviders,
+        REGION_REQUIRED_MESSAGE:REGION_REQUIRED,
+        NO_PROVIDER_MESSAGE:NO_PROVIDER_DATA
     });
 })(window);
