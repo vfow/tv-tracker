@@ -16,7 +16,9 @@
 html:not(.tt-display-font-ready) .sidebar-nav a,
 html:not(.tt-display-font-ready) .top-tabs a,
 html:not(.tt-display-font-ready) .mobile-bottom-nav a {
-    visibility: hidden;
+    font-family: "Arial Narrow", "Roboto Condensed", "Liberation Sans Narrow", Arial, sans-serif !important;
+    font-stretch: condensed;
+    letter-spacing: -0.015em;
 }
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
