@@ -12,65 +12,36 @@
 
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
 <link rel="preload" href="{{ url_for('static', filename='assets/league-gothic.regular.ttf') }}" as="font" type="font/ttf" crossorigin>
-<style>
-html:not(.tt-display-font-ready) .sidebar-nav a,
-html:not(.tt-display-font-ready) .top-tabs a,
-html:not(.tt-display-font-ready) .mobile-bottom-nav a {
-    font-family: "Arial Narrow", "Roboto Condensed", "Liberation Sans Narrow", Arial, sans-serif !important;
-    font-stretch: condensed;
-    letter-spacing: -0.015em;
-}
-</style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
-<script>
-(function(){
-    const root = document.documentElement;
-    const reveal = function(){ root.classList.add("tt-display-font-ready"); };
-
-    if(!document.fonts || typeof document.fonts.load !== "function"){
-        reveal();
-        return;
-    }
-
-    const fallback = setTimeout(reveal,1500);
-    document.fonts.load('1em "League Gothic"').then(function(){
-        clearTimeout(fallback);
-        reveal();
-    },function(){
-        clearTimeout(fallback);
-        reveal();
-    });
-})();
-</script>
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
 
 <aside class="sidebar" id="app-sidebar">
     <nav class="sidebar-nav app-primary-nav" aria-label="Primary navigation">
-        <a data-page="shows" href="/app/list/watching">
+        <a class="tw-font-league" data-page="shows" href="/app/list/watching">
             SHOWS
         </a>
 
-        <a data-page="discover" href="/app/discover">
+        <a class="tw-font-league" data-page="discover" href="/app/discover">
             DiSCOVER
         </a>
 
-        <a data-page="profile" href="/app/profile">
+        <a class="tw-font-league" data-page="profile" href="/app/profile">
             PROFILE
         </a>
 
-        <a class="sidebar-settings-button" data-page="settings" href="/app/settings">
+        <a class="sidebar-settings-button tw-font-league" data-page="settings" href="/app/settings">
             SETTINGS
         </a>
     </nav>
 </aside>
 
 <nav class="mobile-bottom-nav app-primary-nav" aria-label="Primary navigation">
-    <a data-page="shows" href="/app/list/watching">SHOWS</a>
-    <a data-page="discover" href="/app/discover">DiSCOVER</a>
-    <a data-page="profile" href="/app/profile">PROFILE</a>
-    <a data-page="settings" href="/app/settings">SETTINGS</a>
+    <a class="tw-font-league" data-page="shows" href="/app/list/watching">SHOWS</a>
+    <a class="tw-font-league" data-page="discover" href="/app/discover">DiSCOVER</a>
+    <a class="tw-font-league" data-page="profile" href="/app/profile">PROFILE</a>
+    <a class="tw-font-league" data-page="settings" href="/app/settings">SETTINGS</a>
 </nav>
 
 <section class="main">
@@ -83,15 +54,15 @@ html:not(.tt-display-font-ready) .mobile-bottom-nav a {
 
     <nav class="top-tabs">
 
-      <a data-tab="watchlist" href="/app/list/watching">
+      <a class="tw-font-league" data-tab="watchlist" href="/app/list/watching">
         WATCHLIST
       </a>
 
-      <a data-tab="upcoming" href="/app/upcoming">
+      <a class="tw-font-league" data-tab="upcoming" href="/app/upcoming">
         UPCOMING
       </a>
 
-      <a data-tab="history" href="/app/history">
+      <a class="tw-font-league" data-tab="history" href="/app/history">
         HISTORY
      </a>
 
