@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const source = fs.readFileSync(path.join(__dirname,"..","static","js","search-navigation-fix.js"),"utf8");
+const source = fs.readFileSync(path.join(__dirname,"..","static","js","streaming-region.js"),"utf8");
 
 function load(){
     const providerCalls = [];
@@ -69,6 +69,7 @@ function load(){
     const {win,providerCalls,saveCalls,fetchCalls,detailCalls} = load();
     const api = win.TVTrackerStreamingRegion;
 
+    assert.ok(api,"Streaming Region API should be exported");
     assert.strictEqual(api.getStreamingRegion(),"");
     assert.strictEqual(api.normalizeStreamingRegion(" my "),"MY");
     assert.strictEqual(api.normalizeStreamingRegion("USA"),"");
@@ -123,6 +124,11 @@ function load(){
 
     await win.saveProfileSettings({...draft,streaming_region:""});
     assert.strictEqual(win.DATA.profile.streaming_region,"");
+
+    assert.ok(source.includes("MutationObserver"),"Settings re-renders should be observed so the Region field can remount");
+    assert.ok(source.includes("saveButton.closest(\".profile-settings-buttons\")"),"Region field should mount next to the final Save Profile controls");
+    assert.ok(source.includes("mountStreamingRegionSetting:mountSetting"),"Region mount should be directly testable and recoverable");
+    assert.ok(!source.includes("if(!draft || typeof draft !== \"object\")"),"Region visibility must not depend on the settings draft already existing");
 
     console.log("Streaming region regression tests passed.");
 })().catch(error=>{
