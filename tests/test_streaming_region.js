@@ -51,7 +51,12 @@ function load(){
         },
         renderSettings:()=>{},
         browseOptionState:{
-            countries:[{code:"MY",name:"Malaysia"},{code:"US",name:"United States"}],
+            countries:[
+                {code:"MY",name:"Malaysia"},
+                {code:"MV",name:"Maldives"},
+                {code:"ML",name:"Mali"},
+                {code:"US",name:"United States"}
+            ],
             providers:{tv:[1],movie:[2]},
             loaded:{tvProviders:true,movieProviders:true},
             picker:{type:"provider",query:"x",loading:false,error:"",results:[1]}
@@ -65,6 +70,25 @@ function load(){
     return {win,providerCalls,browseCalls,saveCalls,fetchCalls,detailCalls};
 }
 
+function fakeElement(extra={}){
+    const listeners = {};
+    const attributes = {};
+    return Object.assign({
+        value:"",
+        hidden:false,
+        disabled:false,
+        innerHTML:"",
+        listeners,
+        attributes,
+        addEventListener(type,fn){ listeners[type] = fn; },
+        setAttribute(name,value){ attributes[name] = String(value); },
+        removeAttribute(name){ delete attributes[name]; },
+        getAttribute(name){ return attributes[name]; },
+        focus(){},
+        closest(){ return null; }
+    },extra);
+}
+
 (async()=>{
     const {win,providerCalls,saveCalls,fetchCalls,detailCalls} = load();
     const api = win.TVTrackerStreamingRegion;
@@ -75,6 +99,10 @@ function load(){
     assert.strictEqual(api.normalizeStreamingRegion("USA"),"");
     assert.strictEqual(api.resolveCountryInput("Malaysia"),"MY");
     assert.strictEqual(api.resolveCountryInput("us"),"US");
+    assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(api.filterCountries("mal",win.browseOptionState.countries))).map(item=>item.name),
+        ["Malaysia","Maldives","Mali"]
+    );
 
     assert.strictEqual(JSON.stringify(await win.tmdbGetWatchProviderCatalog("tv","US")),"[]");
     assert.strictEqual(JSON.stringify(providerCalls),"[]");
@@ -125,42 +153,72 @@ function load(){
     await win.saveProfileSettings({...draft,streaming_region:""});
     assert.strictEqual(win.DATA.profile.streaming_region,"");
 
+    // Exact UI regression: standalone STREAMING section + one-click custom country menu.
     let inserted = false;
     let insertedMarkup = "";
-    const input = {value:"",addEventListener(){},removeAttribute(){},setAttribute(){},focus(){}};
-    const list = {innerHTML:""};
-    const clear = {addEventListener(){}};
-    const finalButtons = {
+    const input = fakeElement({
+        closest:()=>({contains:()=>true})
+    });
+    const menu = fakeElement({hidden:true});
+    const clear = fakeElement();
+    const saveRegion = fakeElement();
+    const saveProfile = fakeElement();
+    const profileSection = {
         insertAdjacentHTML(position,html){
-            assert.strictEqual(position,"beforebegin");
+            assert.strictEqual(position,"afterend");
             inserted = true;
             insertedMarkup = html;
         }
     };
-    const save = {addEventListener(){},closest:()=>finalButtons};
-    const controls = {insertAdjacentHTML(){ throw new Error("final Save Profile group should be preferred"); }};
+    const controls = {
+        closest:selector=>selector === ".settings-section" ? profileSection : null,
+        insertAdjacentHTML(){ throw new Error("Streaming must be outside the Profile section"); }
+    };
     win.profileSettingsDraft = null;
     win.document = {
+        head:null,
         querySelector:selector=>selector === ".profile-settings-controls" ? controls : null,
+        addEventListener(){},
         getElementById:id=>{
             if(id === "streaming-region-setting"){ return inserted ? {} : null; }
             if(id === "streaming-region-input"){ return inserted ? input : null; }
-            if(id === "streaming-region-options"){ return inserted ? list : null; }
+            if(id === "streaming-region-menu"){ return inserted ? menu : null; }
             if(id === "clear-streaming-region"){ return inserted ? clear : null; }
-            if(id === "save-profile-settings"){ return save; }
+            if(id === "save-streaming-region"){ return inserted ? saveRegion : null; }
+            if(id === "save-profile-settings"){ return saveProfile; }
             return null;
         }
     };
 
     assert.strictEqual(api.mountStreamingRegionSetting(),true,"Streaming Region should mount even before a profile settings draft exists");
-    assert.ok(insertedMarkup.includes("Streaming Region"));
-    assert.ok(insertedMarkup.includes("Search countries"));
-    await Promise.resolve();
+    assert.ok(insertedMarkup.includes("<h2>Streaming</h2>"),"Streaming Region must be its own Settings section");
+    assert.ok(insertedMarkup.includes("role=\"combobox\""));
+    assert.ok(insertedMarkup.includes("role=\"listbox\""));
+    assert.ok(!insertedMarkup.includes("<datalist"),"Native datalist must be removed");
+    assert.ok(!insertedMarkup.includes("list=\"streaming-region-options\""),"Native datalist linkage must be removed");
+    assert.ok(input.listeners.click,"Click should open the custom country menu on the first click");
+    assert.ok(input.listeners.focus,"Focus should open the custom country menu");
 
-    assert.ok(source.includes("MutationObserver"),"Settings re-renders should be observed so the Region field can remount");
-    assert.ok(source.includes("saveButton.closest(\".profile-settings-buttons\")"),"Region field should mount next to the final Save Profile controls");
-    assert.ok(source.includes("mountStreamingRegionSetting:mountSetting"),"Region mount should be directly testable and recoverable");
-    assert.ok(!source.includes("if(!draft || typeof draft !== \"object\")"),"Region visibility must not depend on the settings draft already existing");
+    input.listeners.click();
+    await Promise.resolve();
+    assert.strictEqual(menu.hidden,false,"One click should open the country menu");
+    assert.strictEqual(input.attributes["aria-expanded"],"true");
+    assert.ok(menu.innerHTML.includes("Malaysia"),"Country names should be the primary menu text");
+    assert.ok(menu.innerHTML.includes("MY"),"ISO code may appear as secondary metadata");
+
+    input.value = "mal";
+    input.listeners.input();
+    assert.ok(menu.innerHTML.includes("Malaysia"));
+    assert.ok(menu.innerHTML.includes("Maldives"));
+    assert.ok(menu.innerHTML.includes("Mali"));
+    assert.ok(!menu.innerHTML.includes("United States"),"Typing should filter the custom menu immediately");
+
+    assert.ok(source.includes("profileSection.insertAdjacentHTML(\"afterend\",settingMarkup())"),"Streaming section must be inserted after Profile, not inside it");
+    assert.ok(source.includes("input.addEventListener(\"click\",openMenu)"),"Picker must open on first click");
+    assert.ok(source.includes("streaming-region-option-name"),"Country names should be the primary option label");
+    assert.ok(source.includes("streaming-region-option-code"),"Country code should be secondary metadata only");
+    assert.ok(source.includes("MutationObserver"),"Settings re-renders should remount the Region section");
+    assert.ok(source.includes("mountStreamingRegionSetting:mountSetting"),"Region mount should remain directly testable");
 
     console.log("Streaming region regression tests passed.");
 })().catch(error=>{
