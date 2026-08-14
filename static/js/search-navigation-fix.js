@@ -124,9 +124,6 @@
             countryOptions = normalizeCountryOptions(payload);
             if(global.browseOptionState && typeof global.browseOptionState === "object" && !global.browseOptionState.countries.length){
                 global.browseOptionState.countries = countryOptions.slice();
-                if(global.browseOptionState.loaded){
-                    global.browseOptionState.loaded.common = true;
-                }
             }
             return countryOptions;
         })
