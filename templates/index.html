@@ -11,7 +11,35 @@
 <title>TV Tracker</title>
 
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
+<link rel="preload" href="{{ url_for('static', filename='assets/league-gothic.regular.ttf') }}" as="font" type="font/ttf" crossorigin>
+<style>
+html:not(.tt-display-font-ready) .sidebar-nav a,
+html:not(.tt-display-font-ready) .top-tabs a,
+html:not(.tt-display-font-ready) .mobile-bottom-nav a {
+    visibility: hidden;
+}
+</style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+<script>
+(function(){
+    const root = document.documentElement;
+    const reveal = function(){ root.classList.add("tt-display-font-ready"); };
+
+    if(!document.fonts || typeof document.fonts.load !== "function"){
+        reveal();
+        return;
+    }
+
+    const fallback = setTimeout(reveal,1500);
+    document.fonts.load('1em "League Gothic"').then(function(){
+        clearTimeout(fallback);
+        reveal();
+    },function(){
+        clearTimeout(fallback);
+        reveal();
+    });
+})();
+</script>
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
@@ -325,6 +353,7 @@
 <script src="{{ url_for('static', filename='js/history-activity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/episode-crew.js') }}"></script>
 <script src="{{ url_for('static', filename='js/trending.js') }}"></script>
+<script src="{{ url_for('static', filename='js/search-navigation-fix.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
 
 </body>
