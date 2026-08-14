@@ -186,6 +186,41 @@ function load(options={}){
     {
         const staleAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
         const {win,calls} = load({
+            shows:{"60":{tmdb_id:"60"}},
+            provider_metadata:{
+                "tv:60:MY":{
+                    media:"tv",id:"60",region:"MY",refreshed_at:staleAt,
+                    providers:{id:60,results:{MY:{flatrate:[{provider_id:1}]}}}
+                }
+            }
+        });
+
+        let releaseProviderFetch;
+        const originalFetch = win.tmdbFetchJSON;
+        win.tmdbFetchJSON = async (requestPath,params)=>{
+            if(requestPath === "tv/60/watch/providers"){
+                calls.push({requestPath,params});
+                await new Promise(resolve=>{ releaseProviderFetch = resolve; });
+                return {id:60,results:{MY:{flatrate:[{provider_id:8}]}}};
+            }
+            return originalFetch(requestPath,params);
+        };
+
+        const startupRefresh = win.TVTrackerProviderFreshness.refreshProviderAvailability("tv","60");
+        await Promise.resolve();
+        const details = await win.tmdbGetShowDetails("60");
+        assert.strictEqual(calls.filter(call=>call.requestPath === "tv/60/watch/providers").length,1,"opening during startup refresh must reuse the in-flight provider request");
+        assert.strictEqual(calls.some(call=>call.requestPath === "original-show:60"),false,"in-flight refresh should prevent a second provider-bearing details request");
+        const detailCall = calls.find(call=>call.requestPath === "tv/60");
+        assert.ok(detailCall && !String(detailCall.params.append_to_response).includes("watch/providers"));
+        assert.strictEqual(details["watch/providers"].results.MY.flatrate[0].provider_id,1,"stale provider data should remain visible while refresh is in flight");
+        releaseProviderFetch();
+        await startupRefresh;
+    }
+
+    {
+        const staleAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+        const {win,calls} = load({
             shows:{"51":{tmdb_id:"51"}},
             movies:{"52":{id:"52",plan:true}},
             provider_metadata:{
