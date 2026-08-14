@@ -255,6 +255,15 @@
                     return details;
                 }
 
+                const requestKey = key(type,cleanId,watchRegion);
+                if(inflight.has(requestKey)){
+                    const details = await detailsWithoutProviders(type,cleanId,options);
+                    if(cached && cached.providers){
+                        details["watch/providers"] = clone(cached.providers);
+                    }
+                    return details;
+                }
+
                 const details = await original.apply(this,arguments);
                 if(!capture(type,cleanId,watchRegion,details)){
                     if(cached){ details["watch/providers"] = clone(cached.providers); }
