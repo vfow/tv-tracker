@@ -58,5 +58,7 @@ const source = fs.readFileSync(path.join(__dirname,"../static/js/trending.js"),"
 assert.ok(source.includes("tmdbFetchJSON"),"Trending should use the existing TMDB fetch helper");
 assert.ok(!source.includes("sortBrowseResultsForDisplay"),"Trending must not re-sort TMDB ranking");
 assert.ok(!source.includes("renderBrowseControlsHTML"),"Trending full pages must not expose normal Discover browse filters");
+assert.ok(source.includes("originalNavigateToRouteFallback"),"Trending detail back routes should restore the dedicated Trending page");
+assert.ok(source.includes("currentRouteKey() !== config.key"),"Stale Trending failures must not overwrite a page after navigation");
 
 console.log("Trending regression tests passed.");
