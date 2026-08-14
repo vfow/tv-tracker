@@ -354,7 +354,7 @@
             renderFullPage(config,items,false,"");
             if(typeof global.updateShellTitle === "function"){ global.updateShellTitle(); }
         }catch(error){
-            if(requestId !== pageRequestId){ return true; }
+            if(requestId !== pageRequestId || currentRouteKey() !== config.key){ return true; }
             const message = "Couldn’t load this page. Try again later.";
             global.discoveryPageState = Object.assign({},global.discoveryPageState || {},{loading:false,error:message,shows:[]});
             renderFullPage(config,[],false,message);
@@ -384,6 +384,21 @@
             const result = originalOpenDiscoverHomePage.apply(this,arguments);
             Promise.resolve(result).then(()=>loadHubRows(false)).catch(()=>{});
             return result;
+        };
+    }
+
+    const originalNavigateToRouteFallback = typeof global.navigateToRouteFallback === "function" ? global.navigateToRouteFallback : null;
+    if(originalNavigateToRouteFallback){
+        global.navigateToRouteFallback = function(route){
+            let key = "";
+            try{
+                const url = new URL(String(route || ""),global.location && global.location.origin ? global.location.origin : "http://localhost");
+                key = parseRoute(url.pathname,url.search);
+            }catch(error){}
+            if(key){
+                return openPage(key,{replace:false});
+            }
+            return originalNavigateToRouteFallback.apply(this,arguments);
         };
     }
 
