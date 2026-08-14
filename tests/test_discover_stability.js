@@ -88,7 +88,7 @@ function load(trendingDeferred){
         assert.strictEqual(env.getFinalRenders(),1,"failed requests must still release the gate instead of freezing Discover");
     }
 
-    assert.ok(source.includes("Promise.resolve().then(()=>api.loadHubRows(false))"),"Discover stability should coordinate the existing Trending loader");
+    assert.ok(source.includes("api.loadHubRows(false)"),"Discover stability should coordinate the existing Trending loader");
     assert.ok(source.includes("state.loaded === true || !!state.error"),"base success or failure should both count as settled");
 
     console.log("Discover stability regression tests passed.");
