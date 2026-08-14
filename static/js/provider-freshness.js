@@ -349,33 +349,6 @@
         return results;
     }
 
-    function cleanupStreamingCopy(){
-        if(!global.document || typeof global.document.getElementById !== "function"){ return false; }
-        const section = global.document.getElementById("streaming-region-setting");
-        if(!section || typeof section.querySelector !== "function"){ return false; }
-        const header = section.querySelector(".settings-section-header p");
-        const help = section.querySelector(".streaming-region-help");
-        const input = global.document.getElementById("streaming-region-input");
-        if(header && header.remove){ header.remove(); }
-        if(help && help.remove){ help.remove(); }
-        if(input && input.removeAttribute){ input.removeAttribute("aria-describedby"); }
-        return !!(header || help);
-    }
-
-    function installSettingsCleanup(){
-        const original = global.renderSettings;
-        if(typeof original !== "function"){ cleanupStreamingCopy(); return; }
-        const wrapped = function(){
-            const result = original.apply(this,arguments);
-            cleanupStreamingCopy();
-            return result;
-        };
-        if(original.__streamingRegionGuard){ wrapped.__streamingRegionGuard = true; }
-        wrapped.__providerCopyCleanup = true;
-        global.renderSettings = wrapped;
-        cleanupStreamingCopy();
-    }
-
     function installRegionRefresh(){
         const original = global.saveProfileSettings;
         if(typeof original !== "function" || original.__providerFreshness){ return; }
@@ -405,7 +378,6 @@
     installDetailWrappers();
     installOpenWrappers();
     installRegionRefresh();
-    installSettingsCleanup();
     start();
 
     global.TVTrackerProviderFreshness = Object.freeze({
@@ -420,7 +392,6 @@
         captureProviderPayload:capture,
         pruneTrackedState:prune,
         flushTrackedSave:flushSave,
-        cleanupStreamingSettingsCopy:cleanupStreamingCopy,
         _inflight:inflight
     });
 })(window);
