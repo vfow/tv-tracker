@@ -95,12 +95,16 @@
         return countriesPromise;
     }
 
+    function availableCountries(){
+        return countries.length ? countries : runtimeCountries();
+    }
+
     function countryName(code){
         const clean = normalize(code);
         if(!clean){
             return "";
         }
-        const match = (countries.length ? countries : runtimeCountries()).find(item=>item.code === clean);
+        const match = availableCountries().find(item=>item.code === clean);
         return match ? match.name : clean;
     }
 
@@ -114,17 +118,28 @@
             return direct;
         }
         const lower = raw.toLowerCase();
-        const match = (countries.length ? countries : runtimeCountries())
-        .find(item=>item.name.toLowerCase() === lower);
+        const match = availableCountries().find(item=>item.name.toLowerCase() === lower);
         return match ? match.code : "";
     }
 
-    function escapeAttribute(value){
+    function filterCountries(query,items=availableCountries()){
+        const clean = String(query || "").trim().toLowerCase();
+        const list = normalizeCountries(items);
+        if(!clean){
+            return list;
+        }
+        return list.filter(item=>
+            item.name.toLowerCase().includes(clean) || item.code.toLowerCase().includes(clean)
+        );
+    }
+
+    function escapeHTML(value){
         return String(value || "")
         .replace(/&/g,"&amp;")
-        .replace(/"/g,"&quot;")
         .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;");
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
     }
 
     function resetProviders(){
@@ -293,6 +308,13 @@
         : null;
     }
 
+    function writeDraftRegion(value){
+        const draft = currentDraft();
+        if(draft){
+            draft.streaming_region = normalize(value);
+        }
+    }
+
     function installSettingsDraft(){
         const original = global.createProfileSettingsDraft;
         if(typeof original !== "function" || original.__streamingRegionGuard){
@@ -341,20 +363,68 @@
         global.saveProfileSettings = wrapped;
     }
 
+    function ensurePickerStyles(){
+        if(
+            !global.document ||
+            !global.document.head ||
+            typeof global.document.createElement !== "function" ||
+            global.document.getElementById("streaming-region-picker-styles")
+        ){
+            return;
+        }
+        const style = global.document.createElement("style");
+        style.id = "streaming-region-picker-styles";
+        style.textContent = `
+            .streaming-region-section{overflow:visible!important;}
+            .streaming-region-control{max-width:760px;}
+            .streaming-region-combobox{position:relative;max-width:520px;}
+            .streaming-region-combobox .profile-settings-input{width:100%;}
+            .streaming-region-menu{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:1200;max-height:300px;overflow-y:auto;border:1px solid #2b2b2b;background:#0b0b0b;box-shadow:0 18px 45px rgba(0,0,0,.55);}
+            .streaming-region-menu[hidden]{display:none!important;}
+            .streaming-region-option{display:flex;width:100%;align-items:center;justify-content:space-between;gap:18px;border:0;border-bottom:1px solid #1e1e1e;background:transparent;padding:11px 13px;text-align:left;color:#fff;cursor:pointer;}
+            .streaming-region-option:last-child{border-bottom:0;}
+            .streaming-region-option:hover,.streaming-region-option:focus,.streaming-region-option.is-active{background:#fff;color:#000;outline:0;}
+            .streaming-region-option-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+            .streaming-region-option-code{flex:0 0 auto;font-size:12px;letter-spacing:.08em;color:#888;}
+            .streaming-region-option:hover .streaming-region-option-code,.streaming-region-option:focus .streaming-region-option-code,.streaming-region-option.is-active .streaming-region-option-code{color:#444;}
+            .streaming-region-menu-state{padding:12px 13px;color:#888;font-size:13px;}
+            .streaming-region-help{margin:8px 0 0;color:#888;font-size:13px;line-height:1.45;}
+            .streaming-region-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;}
+            @media (max-width:575.98px){
+                .streaming-region-combobox{max-width:none;}
+                .streaming-region-menu{max-height:260px;}
+                .streaming-region-actions{align-items:stretch;}
+                .streaming-region-actions .settings-action-button{flex:1 1 160px;}
+            }
+        `;
+        global.document.head.appendChild(style);
+    }
+
     function settingMarkup(){
         return `
-            <div class="streaming-region-setting" id="streaming-region-setting" style="margin:22px 0;">
-                <label class="profile-settings-label" for="streaming-region-input">Streaming Region</label>
-                <input class="profile-settings-input" id="streaming-region-input" type="search"
-                    list="streaming-region-options" autocomplete="off" placeholder="Search countries"
-                    aria-describedby="streaming-region-help">
-                <datalist id="streaming-region-options"></datalist>
-                <p id="streaming-region-help" style="margin:8px 0 0;color:#888;font-size:13px;line-height:1.45;">
-                    Controls Where to Watch and streaming-service filters. Leave empty for no region.
-                </p>
-                <button class="settings-action-button muted" id="clear-streaming-region"
-                    type="button" style="margin-top:10px;">Clear Region</button>
-            </div>
+            <section class="settings-section streaming-region-section" id="streaming-region-setting">
+                <div class="settings-section-header">
+                    <h2>Streaming</h2>
+                    <p>Choose the country used for Where to Watch and streaming-service filters.</p>
+                </div>
+                <div class="streaming-region-control">
+                    <label class="profile-settings-label" for="streaming-region-input">Streaming Region</label>
+                    <div class="streaming-region-combobox">
+                        <input class="profile-settings-input" id="streaming-region-input" type="search"
+                            autocomplete="off" placeholder="Search countries" role="combobox"
+                            aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false"
+                            aria-controls="streaming-region-menu" aria-describedby="streaming-region-help">
+                        <div class="streaming-region-menu" id="streaming-region-menu" role="listbox" hidden></div>
+                    </div>
+                    <p class="streaming-region-help" id="streaming-region-help">
+                        No region is selected by default. Country codes are saved internally for TMDB, but this menu always shows country names first.
+                    </p>
+                    <div class="streaming-region-actions">
+                        <button class="settings-action-button muted" id="clear-streaming-region" type="button">Clear Region</button>
+                        <button class="settings-action-button" id="save-streaming-region" type="button">Save Region</button>
+                    </div>
+                </div>
+            </section>
         `;
     }
 
@@ -376,48 +446,116 @@
             ? draft.streaming_region
             : (pendingRegion || getRegion())
         );
-        if(draft){
-            draft.streaming_region = pendingRegion;
-        }
+        writeDraftRegion(pendingRegion);
+        ensurePickerStyles();
 
-        const saveButton = global.document.getElementById("save-profile-settings");
-        const finalButtons = saveButton && typeof saveButton.closest === "function"
-        ? saveButton.closest(".profile-settings-buttons")
+        const profileSection = typeof controls.closest === "function"
+        ? controls.closest(".settings-section")
         : null;
-        if(finalButtons && typeof finalButtons.insertAdjacentHTML === "function"){
-            finalButtons.insertAdjacentHTML("beforebegin",settingMarkup());
+        if(profileSection && typeof profileSection.insertAdjacentHTML === "function"){
+            profileSection.insertAdjacentHTML("afterend",settingMarkup());
         }else if(typeof controls.insertAdjacentHTML === "function"){
-            controls.insertAdjacentHTML("beforeend",settingMarkup());
+            controls.insertAdjacentHTML("afterend",settingMarkup());
         }else{
             return false;
         }
 
         const input = global.document.getElementById("streaming-region-input");
-        const list = global.document.getElementById("streaming-region-options");
+        const menu = global.document.getElementById("streaming-region-menu");
         const clear = global.document.getElementById("clear-streaming-region");
-        const save = global.document.getElementById("save-profile-settings");
-        if(!input || !list){
+        const saveRegion = global.document.getElementById("save-streaming-region");
+        const saveProfile = global.document.getElementById("save-profile-settings");
+        if(!input || !menu){
             return false;
         }
 
-        input.value = countryName(pendingRegion);
+        let menuOpen = false;
+        let activeIndex = -1;
+        let visibleItems = [];
 
-        const sync = strict=>{
+        function setExpanded(open){
+            menuOpen = !!open;
+            menu.hidden = !menuOpen;
+            if(typeof input.setAttribute === "function"){
+                input.setAttribute("aria-expanded",menuOpen ? "true" : "false");
+            }
+        }
+
+        function renderMenu(){
+            if(!menuOpen){
+                return;
+            }
+            const source = availableCountries();
+            if(!source.length){
+                menu.innerHTML = `<div class="streaming-region-menu-state">Loading countries…</div>`;
+                visibleItems = [];
+                activeIndex = -1;
+                return;
+            }
+            visibleItems = filterCountries(input.value,source);
+            if(!visibleItems.length){
+                menu.innerHTML = `<div class="streaming-region-menu-state">No countries found.</div>`;
+                activeIndex = -1;
+                return;
+            }
+            if(activeIndex >= visibleItems.length){
+                activeIndex = visibleItems.length - 1;
+            }
+            menu.innerHTML = visibleItems.map((item,index)=>`
+                <button class="streaming-region-option${index === activeIndex ? " is-active" : ""}" type="button"
+                    role="option" data-region="${escapeHTML(item.code)}" aria-selected="${index === activeIndex ? "true" : "false"}">
+                    <span class="streaming-region-option-name">${escapeHTML(item.name)}</span>
+                    <span class="streaming-region-option-code">${escapeHTML(item.code)}</span>
+                </button>
+            `).join("");
+        }
+
+        function closeMenu(){
+            activeIndex = -1;
+            setExpanded(false);
+        }
+
+        function openMenu(){
+            setExpanded(true);
+            renderMenu();
+            loadCountries().then(()=>{
+                if(pendingRegion && !String(input.value || "").trim()){
+                    input.value = countryName(pendingRegion);
+                }
+                renderMenu();
+            });
+        }
+
+        function chooseRegion(code){
+            const next = normalize(code);
+            if(!next){
+                return false;
+            }
+            pendingRegion = next;
+            writeDraftRegion(next);
+            input.value = countryName(next);
+            if(typeof input.removeAttribute === "function"){
+                input.removeAttribute("aria-invalid");
+            }
+            closeMenu();
+            return true;
+        }
+
+        function validateInput(strict=true){
             const raw = String(input.value || "").trim();
             if(!raw){
                 pendingRegion = "";
-                const liveDraft = currentDraft();
-                if(liveDraft){ liveDraft.streaming_region = ""; }
+                writeDraftRegion("");
                 if(typeof input.removeAttribute === "function"){
                     input.removeAttribute("aria-invalid");
                 }
                 return true;
             }
-            const region = resolveCountry(raw);
-            if(region){
-                pendingRegion = region;
-                const liveDraft = currentDraft();
-                if(liveDraft){ liveDraft.streaming_region = region; }
+            const next = resolveCountry(raw);
+            if(next){
+                pendingRegion = next;
+                writeDraftRegion(next);
+                input.value = countryName(next);
                 if(typeof input.removeAttribute === "function"){
                     input.removeAttribute("aria-invalid");
                 }
@@ -428,40 +566,111 @@
                     input.setAttribute("aria-invalid","true");
                 }
                 if(typeof global.showToast === "function"){
-                    global.showToast("Choose a valid streaming region or clear the field.");
+                    global.showToast("Choose a country from the streaming region list or clear the field.");
                 }
                 if(typeof input.focus === "function"){
                     input.focus();
                 }
+                openMenu();
             }
             return false;
-        };
+        }
+
+        async function saveSelectedRegion(){
+            if(!validateInput(true) || typeof global.saveProfileSettings !== "function"){
+                return;
+            }
+            let settings = currentDraft();
+            if(!settings && typeof global.createProfileSettingsDraft === "function"){
+                settings = global.createProfileSettingsDraft() || {};
+            }
+            settings = settings && typeof settings === "object" ? settings : {};
+            settings.streaming_region = pendingRegion;
+            if(saveRegion){ saveRegion.disabled = true; }
+            try{
+                await global.saveProfileSettings(settings);
+            }finally{
+                if(saveRegion){ saveRegion.disabled = false; }
+            }
+        }
+
+        input.value = countryName(pendingRegion);
 
         if(typeof input.addEventListener === "function"){
-            input.addEventListener("input",()=>sync(false));
-            input.addEventListener("change",()=>{
-                if(sync(false) && pendingRegion){
-                    input.value = countryName(pendingRegion);
+            input.addEventListener("focus",openMenu);
+            input.addEventListener("click",openMenu);
+            input.addEventListener("input",()=>{
+                activeIndex = -1;
+                openMenu();
+                renderMenu();
+            });
+            input.addEventListener("keydown",event=>{
+                const key = event && event.key;
+                if(key === "Escape"){
+                    closeMenu();
+                    return;
+                }
+                if(key === "ArrowDown" || key === "ArrowUp"){
+                    if(event && typeof event.preventDefault === "function"){
+                        event.preventDefault();
+                    }
+                    if(!menuOpen){
+                        openMenu();
+                    }
+                    if(!visibleItems.length){
+                        renderMenu();
+                    }
+                    if(visibleItems.length){
+                        const direction = key === "ArrowDown" ? 1 : -1;
+                        activeIndex = activeIndex < 0
+                        ? (direction > 0 ? 0 : visibleItems.length - 1)
+                        : (activeIndex + direction + visibleItems.length) % visibleItems.length;
+                        renderMenu();
+                    }
+                    return;
+                }
+                if(key === "Enter" && menuOpen && activeIndex >= 0 && visibleItems[activeIndex]){
+                    if(event && typeof event.preventDefault === "function"){
+                        event.preventDefault();
+                    }
+                    chooseRegion(visibleItems[activeIndex].code);
                 }
             });
         }
+
+        if(typeof menu.addEventListener === "function"){
+            menu.addEventListener("click",event=>{
+                const target = event && event.target && typeof event.target.closest === "function"
+                ? event.target.closest("[data-region]")
+                : null;
+                if(target){
+                    chooseRegion(target.getAttribute("data-region"));
+                }
+            });
+        }
+
         if(clear && typeof clear.addEventListener === "function"){
             clear.addEventListener("click",()=>{
                 input.value = "";
                 pendingRegion = "";
-                const liveDraft = currentDraft();
-                if(liveDraft){ liveDraft.streaming_region = ""; }
+                writeDraftRegion("");
                 if(typeof input.removeAttribute === "function"){
                     input.removeAttribute("aria-invalid");
                 }
+                closeMenu();
                 if(typeof input.focus === "function"){
                     input.focus();
                 }
             });
         }
-        if(save && typeof save.addEventListener === "function"){
-            save.addEventListener("click",event=>{
-                if(!sync(true)){
+
+        if(saveRegion && typeof saveRegion.addEventListener === "function"){
+            saveRegion.addEventListener("click",saveSelectedRegion);
+        }
+
+        if(saveProfile && typeof saveProfile.addEventListener === "function"){
+            saveProfile.addEventListener("click",event=>{
+                if(!validateInput(true)){
                     if(event && typeof event.preventDefault === "function"){
                         event.preventDefault();
                     }
@@ -472,14 +681,21 @@
             },true);
         }
 
-        loadCountries().then(items=>{
-            list.innerHTML = items.map(item=>
-                `<option value="${escapeAttribute(item.name)}">${escapeAttribute(item.code)}</option>`
-            ).join("");
-            const current = normalize(pendingRegion);
-            if(current){
-                input.value = countryName(current);
+        if(global.document && typeof global.document.addEventListener === "function"){
+            global.document.addEventListener("click",event=>{
+                const target = event && event.target;
+                const shell = typeof input.closest === "function" ? input.closest(".streaming-region-combobox") : null;
+                if(menuOpen && shell && target && typeof shell.contains === "function" && !shell.contains(target)){
+                    closeMenu();
+                }
+            });
+        }
+
+        loadCountries().then(()=>{
+            if(pendingRegion){
+                input.value = countryName(pendingRegion);
             }
+            renderMenu();
         });
 
         return true;
@@ -503,7 +719,7 @@
         }
         const wrapped = function(){
             const result = original.apply(this,arguments);
-            queueMount();
+            mountSetting();
             return result;
         };
         wrapped.__streamingRegionGuard = true;
@@ -564,9 +780,12 @@
         getStreamingRegion:getRegion,
         setStreamingRegion:value=>{
             pendingRegion = normalize(value);
+            writeDraftRegion(pendingRegion);
             return setRegion(pendingRegion);
         },
         resolveCountryInput:resolveCountry,
+        filterCountries,
+        getCountryName:countryName,
         loadCountries,
         mountStreamingRegionSetting:mountSetting,
         resetProviderRuntime:resetProviders,
