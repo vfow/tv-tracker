@@ -1,0 +1,54 @@
+name: Notifications inspection temporary
+
+on:
+  push:
+    branches:
+      - feature/notifications-v1
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Upcoming and routing
+        shell: bash
+        run: |
+          set -eu
+          echo '=== FILES ==='
+          find static/js -maxdepth 1 -type f -printf '%f\n' | sort
+          echo '=== UPCOMING FUNCTIONS ==='
+          grep -n -E 'renderUpcoming|CATCH UP|Catch Up|catch up|TOMORROW|Tomorrow|TODAY|Today|loggable|air_date|aired yesterday' static/js/*.js | head -n 260 || true
+          echo '=== renderUpcoming context ==='
+          line=$(grep -n 'async function renderUpcoming' static/js/ui.js | head -1 | cut -d: -f1 || true)
+          if [ -n "$line" ]; then start=$((line-80)); [ "$start" -lt 1 ] && start=1; end=$((line+330)); sed -n "${start},${end}p" static/js/ui.js; fi
+          echo '=== ROUTER ROUTES ==='
+          grep -n -E '/app/(upcoming|history|settings)|activeShowsTab|showPage\(' static/js/app-router.js | head -n 240 || true
+          echo '=== ROUTER CONTEXT ==='
+          sed -n '1,420p' static/js/app-router.js
+      - name: Inspect settings and TMDB helpers
+        shell: bash
+        run: |
+          set -eu
+          echo '=== SETTINGS UI ==='
+          grep -n -E 'function renderSettings|toggle|switch|settings-row|setting' static/js/ui.js | head -n 180 || true
+          line=$(grep -n 'function renderSettings' static/js/ui.js | head -1 | cut -d: -f1 || true)
+          if [ -n "$line" ]; then start=$((line-60)); [ "$start" -lt 1 ] && start=1; end=$((line+420)); sed -n "${start},${end}p" static/js/ui.js; fi
+          echo '=== TMDB SERVER ==='
+          grep -n -E 'TMDB|tmdb|fetch_tmdb|api_key|API_KEY' app.py | head -n 260 || true
+          echo '=== APP ROUTES / TEMPLATE ROUTING ==='
+          grep -n -E 'APP_SECTION_PATHS|APP_LIST_PATH_RE|initial_app_path|render_template\("index.html"' app.py | head -n 180 || true
+          echo '=== TEMPLATE SCRIPT ORDER / END ==='
+          tail -n 180 templates/index.html
+      - name: Inspect data shapes and tests
+        shell: bash
+        run: |
+          set -eu
+          echo '=== STATUS / HISTORY SHAPES ==='
+          grep -n -E 'status["'"']|\.status|season.*episode|history.*show|history.*season|watched' static/js/app.js static/js/ui.js | head -n 260 || true
+          echo '=== DATE UTIL FILES / TESTS ==='
+          find static/js tests -type f | grep -Ei 'upcoming|date|air|episode' | sort || true
+          echo '=== PACKAGE ==='
+          cat package.json
