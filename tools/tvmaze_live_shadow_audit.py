@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections import Counter
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from tvmaze_integration import TVMAZE_API_BASE, TVMAZE_USER_AGENT, classify_episode_timing
 
@@ -19,7 +25,10 @@ SHOWS = {
 
 def get(path: str, params=None):
     query = urlencode(params or {})
-    req = Request(TVMAZE_API_BASE + path + (("?" + query) if query else ""), headers={"User-Agent": TVMAZE_USER_AGENT, "Accept":"application/json"})
+    req = Request(
+        TVMAZE_API_BASE + path + (("?" + query) if query else ""),
+        headers={"User-Agent": TVMAZE_USER_AGENT, "Accept": "application/json"},
+    )
     with urlopen(req, timeout=8) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -40,23 +49,33 @@ def main():
             precision = (result or {}).get("precision") or "unusable"
             counts[precision] += 1
             totals[precision] += 1
-            examples.setdefault(precision, {
-                "season": episode.get("season"), "episode": episode.get("number"),
-                "airdate": episode.get("airdate"), "airtime": episode.get("airtime"),
-                "airstamp": episode.get("airstamp"), "reason": (result or {}).get("reason", "")
-            })
+            examples.setdefault(
+                precision,
+                {
+                    "season": episode.get("season"),
+                    "episode": episode.get("number"),
+                    "airdate": episode.get("airdate"),
+                    "airtime": episode.get("airtime"),
+                    "airstamp": episode.get("airstamp"),
+                    "reason": (result or {}).get("reason", ""),
+                },
+            )
         channel = show.get("network") or show.get("webChannel") or {}
-        report.append({
-            "name": label,
-            "tvmaze_id": show.get("id"),
-            "channel": channel.get("name"),
-            "channel_type": "network" if show.get("network") else "web",
-            "country": (channel.get("country") or {}).get("code") if isinstance(channel.get("country"), dict) else None,
-            "episodes": len(episodes),
-            "season_zero": season_zero,
-            "classification_counts": dict(counts),
-            "examples": examples,
-        })
+        report.append(
+            {
+                "name": label,
+                "tvmaze_id": show.get("id"),
+                "channel": channel.get("name"),
+                "channel_type": "network" if show.get("network") else "web",
+                "country": (channel.get("country") or {}).get("code")
+                if isinstance(channel.get("country"), dict)
+                else None,
+                "episodes": len(episodes),
+                "season_zero": season_zero,
+                "classification_counts": dict(counts),
+                "examples": examples,
+            }
+        )
     print(json.dumps({"shows": report, "totals": dict(totals)}, indent=2, sort_keys=True))
 
 
