@@ -36,6 +36,14 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in raw.splitlines()
           ) + "\n"
+
+          bad_start = "if chunk.count('if(renderedGroups === 0){') != 1:"
+          bad_end = "ui = ui[:start] + chunk + ui[next_function:]"
+          block_start = code.index(bad_start)
+          block_end = code.index(bad_end, block_start)
+          replacement = '''empty_refresh_anchor = '        if(startBackgroundRefresh){'\nif chunk.count(empty_refresh_anchor) < 1:\n    raise SystemExit('renderUpcoming: empty-state refresh marker missing')\nchunk = chunk.replace(\n    empty_refresh_anchor,\n    ''' + '"""' + '''        if(\n            window.TVTrackerNotifications &&\n            typeof window.TVTrackerNotifications.mountUpcomingBellFallback === "function"\n        ){\n            window.TVTrackerNotifications.mountUpcomingBellFallback(list);\n        }\n\n        if(startBackgroundRefresh){''' + '"""' + ''',\n    1,\n)\n'''
+          code = code[:block_start] + replacement + code[block_end:]
+
           Path('/tmp/notifications_patch.py').write_text(code)
           compile(code,'notifications_patch.py','exec')
           PY
