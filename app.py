@@ -53,7 +53,7 @@ from notifications_backend import (
 
 APP_NAME = "TV Tracker"
 BACKUP_VERSION = 2
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
@@ -292,6 +292,7 @@ def ensure_schema() -> None:
         singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
         enabled BOOLEAN NOT NULL DEFAULT TRUE,
         timezone TEXT NOT NULL DEFAULT '',
+        timezone_mode TEXT NOT NULL DEFAULT 'automatic',
         new_season BOOLEAN NOT NULL DEFAULT TRUE,
         season_premiere_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,
         new_episode BOOLEAN NOT NULL DEFAULT TRUE,
@@ -302,6 +303,9 @@ def ensure_schema() -> None:
         last_checked_at TIMESTAMPTZ,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE tv_tracker_notification_settings
+    ADD COLUMN IF NOT EXISTS timezone_mode TEXT NOT NULL DEFAULT 'automatic';
 
     CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline (
         show_id TEXT PRIMARY KEY,
@@ -4064,3 +4068,16 @@ def create_app() -> Flask:
 
 
 app = create_app()
+
+# Optional release-timing integration is installed after the core app exists so
+# deleting its modules can never prevent Flask from constructing TV Tracker.
+try:
+    from release_timing_routes import install_release_timing_routes
+    install_release_timing_routes(
+        app,
+        login_required=login_required,
+        connection_factory=database_connection,
+        tmdb_fetcher=fetch_tmdb_notification_json,
+    )
+except (ImportError, OSError, RuntimeError):
+    app.logger.exception("Optional release timing integration unavailable; using core fallback")

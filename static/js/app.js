@@ -932,6 +932,13 @@ async function init(){
         tmdbWarmImageConfiguration();
     }
     setupEvents();
+    if(window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.initialize === "function"){
+        window.TVTrackerReleaseTiming.initialize({
+            onRefresh:()=>{
+                if(activePage === "shows" && activeShowsTab === "upcoming"){ renderUpcoming(false); }
+            }
+        }).then(()=>window.TVTrackerReleaseTiming.prefetchShows(DATA.shows)).catch(()=>{});
+    }
     renderAll();
     appDataReady = true;
 
@@ -12152,8 +12159,6 @@ function addHistoryEntries(show,episodes){
             episode_title:episodeData.name || "",
             episode_still_path:episodeData.still_path || "",
             air_date:episodeData.air_date || "",
-            air_time:episodeData.air_time || "",
-            air_timestamp:episodeData.air_timestamp || "",
             watched_at:watchedAt,
             action:"watched"
         };
@@ -12347,26 +12352,18 @@ function makeDateOnlyEpisodeReleaseDate(dateString){
 
 function getEpisodeReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
 
-    const baseDateString = getEpisodeCalendarDateString(
-        airDateString,
-        episodeInfo
-    );
-
-    if(!baseDateString){
-        return null;
+    if(window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.getReleaseInfo === "function"){
+        const canonical = window.TVTrackerReleaseTiming.getReleaseInfo(airDateString,episodeInfo,showInfo);
+        if(canonical){
+            return canonical;
+        }
     }
 
+    const baseDateString = getEpisodeCalendarDateString(airDateString,episodeInfo);
+    if(!baseDateString){ return null; }
     const releaseDate = makeDateOnlyEpisodeReleaseDate(baseDateString);
-
-    if(!releaseDate){
-        return null;
-    }
-
-    return {
-        date:releaseDate,
-        hasTime:false,
-        source:"date-only"
-    };
+    if(!releaseDate){ return null; }
+    return {date:releaseDate,hasTime:false,precision:"date_only",source:"date-only"};
 
 }
 
@@ -12486,19 +12483,6 @@ function getHistoryEntries(){
 
     return DATA.history
     .filter(entry=>!isMovieHistoryEntry(entry))
-    .filter(entry=>{
-
-        if(!entry.air_date){
-            return true;
-        }
-
-        return isEpisodeAired(
-            entry.air_date,
-            entry,
-            DATA.shows[String(entry.tmdb_id)] || null
-        );
-
-    })
     .slice()
     .sort((a,b)=>{
 
@@ -12590,6 +12574,10 @@ async function prepareUpcomingData(forceRefresh=false){
     }
 
     await autoUpdateStatuses(forceRefresh);
+
+    if(window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.prefetchShows === "function"){
+        await window.TVTrackerReleaseTiming.prefetchShows(DATA.shows);
+    }
 
     await saveData();
 
@@ -12733,7 +12721,7 @@ function getUpcomingScheduleItems(show){
 
     if(missedEpisode){
 
-        const group = getUpcomingGroup(missedEpisode.air_date,missedEpisode);
+        const group = getUpcomingGroup(missedEpisode.air_date,missedEpisode,show);
 
         if(group){
 
@@ -12776,7 +12764,7 @@ function getUpcomingScheduleItems(show){
             return;
         }
 
-        const group = getUpcomingGroup(ep.air_date,ep);
+        const group = getUpcomingGroup(ep.air_date,ep,show);
 
         if(!group){
             return;
@@ -13215,9 +13203,9 @@ function compareEpisodeCalendarDates(dateA,episodeA,dateB,episodeB){
 
 
 
-function getUpcomingGroup(airDateString,episodeInfo=null){
+function getUpcomingGroup(airDateString,episodeInfo=null,showInfo=null){
 
-    const diffDays = getDayDiffFromToday(airDateString,episodeInfo);
+    const diffDays = getDayDiffFromToday(airDateString,episodeInfo,showInfo);
 
     if(diffDays === null){
         return null;
@@ -13268,7 +13256,7 @@ function getUpcomingGroup(airDateString,episodeInfo=null){
 
 function getUpcomingTimeLabel(airDateString,episodeInfo=null,showInfo=null){
 
-    const diffDays = getDayDiffFromToday(airDateString,episodeInfo);
+    const diffDays = getDayDiffFromToday(airDateString,episodeInfo,showInfo);
 
     if(diffDays === null){
         return "";
@@ -13334,7 +13322,12 @@ function getEpisodeReleaseTimeText(airDateString,episodeInfo=null,showInfo=null)
 
 
 
-function getDayDiffFromToday(dateString,episodeInfo=null){
+function getDayDiffFromToday(dateString,episodeInfo=null,showInfo=null){
+
+    if(window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.getDayDiff === "function"){
+        const canonicalDiff = window.TVTrackerReleaseTiming.getDayDiff(dateString,episodeInfo,showInfo);
+        if(canonicalDiff !== null){ return canonicalDiff; }
+    }
 
     const date = makeLocalDate(
         getEpisodeCalendarDateString(dateString,episodeInfo)

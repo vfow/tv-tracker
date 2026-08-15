@@ -278,8 +278,8 @@ def _base_candidate(
     }
 
 
-def premiere_tomorrow_event_key(show_id: str, season_number: int, air_date: str) -> str:
-    return f"season-premiere-tomorrow:{show_id}:s{season_number}:{air_date}"
+def premiere_tomorrow_event_key(show_id: str, season_number: int, air_date: str = "") -> str:
+    return f"season-premiere-tomorrow:{show_id}:s{season_number}"
 
 
 def collect_metadata_notification_candidates(
@@ -482,8 +482,8 @@ def collect_time_notification_candidates(
                         snapshot,
                         family="new_episode",
                         kind="new_episode",
-                        event_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
-                        group_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
+                        event_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}",
+                        group_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}",
                         message=f"{title} {code}{suffix} aired yesterday",
                         event_date=air_date,
                         episode=episode,
@@ -547,11 +547,11 @@ def collect_time_notification_candidates(
                         kind="returns_tomorrow",
                         event_key=(
                             f"returns-tomorrow:{show_id}:s{season_number}:"
-                            f"e{int(episode['episode_number'])}:{air_date}"
+                            f"e{int(episode['episode_number'])}"
                         ),
                         group_key=(
                             f"returns-tomorrow:{show_id}:s{season_number}:"
-                            f"e{int(episode['episode_number'])}:{air_date}"
+                            f"e{int(episode['episode_number'])}"
                         ),
                         message=f"{title} returns tomorrow with {code}{suffix}",
                         event_date=air_date,

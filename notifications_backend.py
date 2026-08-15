@@ -26,6 +26,7 @@ DEFAULT_NOTIFICATION_SETTINGS = {
     "canceled_ended": True,
     "premiere_date_updates": True,
     "timezone": "",
+    "timezone_mode": "automatic",
 }
 
 SETTING_API_TO_DB = {
@@ -41,6 +42,7 @@ SETTING_API_TO_DB = {
 SETTINGS_COLUMNS = (
     "enabled",
     "timezone",
+    "timezone_mode",
     "new_season",
     "season_premiere_tomorrow",
     "new_episode",
@@ -73,6 +75,7 @@ def _settings_from_row(row: Any) -> dict[str, Any]:
         result[family] = bool(result.get(family, True))
     result["enabled"] = bool(result.get("enabled", True))
     result["timezone"] = str(result.get("timezone") or "")
+    result["timezone_mode"] = "manual" if str(result.get("timezone_mode") or "automatic") == "manual" else "automatic"
     return result
 
 
@@ -80,6 +83,7 @@ def serialize_notification_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return {
         "enabled": bool(settings.get("enabled", True)),
         "timezone": str(settings.get("timezone") or ""),
+        "timezoneMode": str(settings.get("timezone_mode") or "automatic"),
         "newSeason": bool(settings.get("new_season", True)),
         "seasonPremiereTomorrow": bool(settings.get("season_premiere_tomorrow", True)),
         "newEpisode": bool(settings.get("new_episode", True)),
@@ -125,6 +129,13 @@ def update_notification_settings(
         timezone_value = str(payload.get("timezone") or "").strip()
         notification_zone(timezone_value)
 
+    timezone_mode = None
+    if "timezoneMode" in payload:
+        timezone_mode = str(payload.get("timezoneMode") or "").strip().lower()
+        if timezone_mode not in {"automatic", "manual"}:
+            raise ValueError("timezoneMode must be automatic or manual")
+        updates["timezone_mode"] = timezone_mode
+
     timezone_if_unset = payload.get("timezoneIfUnset") is True
 
     with connection_factory() as connection:
@@ -163,6 +174,7 @@ def notification_status(connection_factory: Callable[[], Any]) -> dict[str, Any]
     return {
         "unread": unread,
         "timezone": str(settings.get("timezone") or ""),
+        "timezoneMode": str(settings.get("timezone_mode") or "automatic"),
         "enabled": bool(settings.get("enabled", True)),
         "latestId": int(latest[0]) if latest else 0,
         "latestCreatedAt": latest[1].isoformat() if latest and latest[1] else "",
