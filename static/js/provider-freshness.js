@@ -16,6 +16,8 @@
     let startupStarted = false;
     let saveTimer = null;
     let saveDirty = false;
+    let savePromise = null;
+    let saveBatchDepth = 0;
 
     const media = value=>String(value || "").toLowerCase() === "movie" ? "movie" : "tv";
     const id = value=>/^\d+$/.test(String(value || "").trim()) ? String(value).trim() : "";
@@ -87,23 +89,77 @@
         catch(error){}
     }
 
+    function clearScheduledSave(){
+        if(saveTimer !== null && typeof global.clearTimeout === "function"){
+            global.clearTimeout(saveTimer);
+        }
+        saveTimer = null;
+    }
+
     function scheduleSave(){
         saveDirty = true;
-        if(saveTimer || typeof global.setTimeout !== "function"){ return; }
+        if(
+            saveBatchDepth > 0 ||
+            saveTimer !== null ||
+            savePromise ||
+            typeof global.setTimeout !== "function"
+        ){
+            return;
+        }
         saveTimer = global.setTimeout(()=>{
             saveTimer = null;
             flushSave();
         },500);
     }
 
-    function flushSave(){
-        if(!saveDirty){ return Promise.resolve(false); }
+    async function flushSave(){
+        if(saveBatchDepth > 0){ return false; }
+        clearScheduledSave();
+
+        if(savePromise){
+            const current = await savePromise;
+            if(saveDirty && saveBatchDepth === 0){
+                const followUp = await flushSave();
+                return current && followUp;
+            }
+            return current;
+        }
+
+        if(!saveDirty){ return false; }
         saveDirty = false;
-        if(typeof global.saveData !== "function"){ return Promise.resolve(false); }
+        if(typeof global.saveData !== "function"){ return false; }
+
+        let request;
         try{
-            return Promise.resolve(global.saveData({stateKeys:[STATE_KEY],silent:true}))
-            .then(()=>true).catch(()=>false);
-        }catch(error){ return Promise.resolve(false); }
+            request = Promise.resolve(global.saveData({stateKeys:[STATE_KEY],silent:true}))
+            .then(value=>value !== false)
+            .catch(()=>false);
+        }catch(error){
+            return false;
+        }
+
+        savePromise = request;
+        const result = await request;
+        if(savePromise === request){ savePromise = null; }
+
+        if(saveDirty && saveBatchDepth === 0){
+            const followUp = await flushSave();
+            return result && followUp;
+        }
+        return result;
+    }
+
+    function beginSaveBatch(){
+        saveBatchDepth += 1;
+        if(saveBatchDepth === 1){ clearScheduledSave(); }
+    }
+
+    async function endSaveBatch(){
+        if(saveBatchDepth > 0){ saveBatchDepth -= 1; }
+        if(saveBatchDepth === 0 && saveDirty){
+            return flushSave();
+        }
+        return false;
     }
 
     function read(type,titleId,watchRegion){
@@ -325,28 +381,32 @@
     async function refreshTracked(){
         const watchRegion = region();
         if(!watchRegion || !global.DATA){ return []; }
-        prune();
+        beginSaveBatch();
+        try{
+            prune();
 
-        const tasks = [];
-        const add = (type,items)=>Object.keys(items || {}).forEach(titleId=>{
-            const entry = hydrate(type,titleId,watchRegion);
-            if(!fresh(entry)){ tasks.push({type,id:id(titleId)}); }
-        });
-        add("tv",global.DATA.shows);
-        add("movie",global.DATA.movies);
+            const tasks = [];
+            const add = (type,items)=>Object.keys(items || {}).forEach(titleId=>{
+                const entry = hydrate(type,titleId,watchRegion);
+                if(!fresh(entry)){ tasks.push({type,id:id(titleId)}); }
+            });
+            add("tv",global.DATA.shows);
+            add("movie",global.DATA.movies);
 
-        let cursor = 0;
-        const results = [];
-        async function worker(){
-            while(cursor < tasks.length && region() === watchRegion){
-                const task = tasks[cursor++];
-                results.push({media:task.type,id:task.id,providers:await refresh(task.type,task.id,{region:watchRegion})});
-                if(cursor < tasks.length){ await wait(STARTUP_DELAY); }
+            let cursor = 0;
+            const results = [];
+            async function worker(){
+                while(cursor < tasks.length && region() === watchRegion){
+                    const task = tasks[cursor++];
+                    results.push({media:task.type,id:task.id,providers:await refresh(task.type,task.id,{region:watchRegion})});
+                    if(cursor < tasks.length){ await wait(STARTUP_DELAY); }
+                }
             }
+            await Promise.all(Array.from({length:Math.min(STARTUP_CONCURRENCY,tasks.length)},worker));
+            return results;
+        }finally{
+            await endSaveBatch();
         }
-        await Promise.all(Array.from({length:Math.min(STARTUP_CONCURRENCY,tasks.length)},worker));
-        await flushSave();
-        return results;
     }
 
     function cleanupStreamingCopy(){
