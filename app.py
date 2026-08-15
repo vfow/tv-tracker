@@ -42,6 +42,7 @@ from notifications_backend import (
     delete_notification as delete_notification_record,
     list_notifications as get_notification_records,
     mark_all_notifications_read as mark_notifications_read,
+    mark_notification_read as mark_notification_read_record,
     notification_status as get_notification_status,
     read_notification_settings as get_notification_settings,
     run_notification_check as execute_notification_check,
@@ -3396,6 +3397,19 @@ def create_app() -> Flask:
         check_csrf()
         changed = mark_notifications_read(database_connection)
         return jsonify({"ok": True, "updated": changed})
+
+    @app.post("/api/notifications/<int:notification_id>/read")
+    @login_required
+    def notification_read_api(notification_id: int):
+        check_csrf()
+        if notification_id <= 0 or not mark_notification_read_record(
+            database_connection, notification_id
+        ):
+            return jsonify({
+                "ok": False,
+                "error": "Notification not found",
+            }), 404
+        return jsonify({"ok": True})
 
     @app.delete("/api/notifications/<int:notification_id>")
     @login_required

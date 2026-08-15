@@ -155,10 +155,17 @@ def notification_status(connection_factory: Callable[[], Any]) -> dict[str, Any]
             )
             row = cursor.fetchone()
             unread = bool(row and row[0])
+            cursor.execute(
+                "SELECT notification_id, created_at FROM tv_tracker_notifications "
+                "ORDER BY created_at DESC, notification_id DESC LIMIT 1"
+            )
+            latest = cursor.fetchone()
     return {
         "unread": unread,
         "timezone": str(settings.get("timezone") or ""),
         "enabled": bool(settings.get("enabled", True)),
+        "latestId": int(latest[0]) if latest else 0,
+        "latestCreatedAt": latest[1].isoformat() if latest and latest[1] else "",
     }
 
 
@@ -207,6 +214,22 @@ def mark_all_notifications_read(connection_factory: Callable[[], Any]) -> int:
                 "WHERE is_read = FALSE"
             )
             changed = int(cursor.rowcount or 0)
+        connection.commit()
+    return changed
+
+
+def mark_notification_read(
+    connection_factory: Callable[[], Any],
+    notification_id: int,
+) -> bool:
+    with connection_factory() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE tv_tracker_notifications SET is_read = TRUE, updated_at = NOW() "
+                "WHERE notification_id = %s",
+                (int(notification_id),),
+            )
+            changed = int(cursor.rowcount or 0) > 0
         connection.commit()
     return changed
 
