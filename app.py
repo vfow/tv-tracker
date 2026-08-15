@@ -38,6 +38,17 @@ from flask import (
 from psycopg.types.json import Jsonb
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from notifications_backend import (
+    delete_notification as delete_notification_record,
+    list_notifications as get_notification_records,
+    mark_all_notifications_read as mark_notifications_read,
+    notification_status as get_notification_status,
+    read_notification_settings as get_notification_settings,
+    run_notification_check as execute_notification_check,
+    serialize_notification_settings,
+    update_notification_settings as patch_notification_settings,
+)
+
 
 APP_NAME = "TV Tracker"
 BACKUP_VERSION = 2
@@ -110,6 +121,8 @@ APP_SECTION_PATHS = {
     "/app/search",
     "/app/profile",
     "/app/settings",
+    "/app/notifications",
+    "/app/notifications/settings",
 }
 ERROR_PAGE_MESSAGES = {
     404: ("Are you lost?", ""),
@@ -273,6 +286,63 @@ def ensure_schema() -> None:
         schema_version INTEGER NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_settings (
+        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        timezone TEXT NOT NULL DEFAULT '',
+        new_season BOOLEAN NOT NULL DEFAULT TRUE,
+        season_premiere_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,
+        new_episode BOOLEAN NOT NULL DEFAULT TRUE,
+        returns_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,
+        canceled_ended BOOLEAN NOT NULL DEFAULT TRUE,
+        premiere_date_updates BOOLEAN NOT NULL DEFAULT TRUE,
+        initialized_at TIMESTAMPTZ,
+        last_checked_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline (
+        show_id TEXT PRIMARY KEY,
+        snapshot JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_events (
+        event_key TEXT PRIMARY KEY,
+        show_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_notifications (
+        notification_id BIGSERIAL PRIMARY KEY,
+        group_key TEXT NOT NULL UNIQUE,
+        event_key TEXT NOT NULL,
+        notification_type TEXT NOT NULL,
+        show_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        image_path TEXT NOT NULL DEFAULT '',
+        event_date DATE,
+        is_read BOOLEAN NOT NULL DEFAULT FALSE,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_created_at_idx
+    ON tv_tracker_notifications (created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_unread_idx
+    ON tv_tracker_notifications (is_read, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS tv_tracker_notification_events_observed_idx
+    ON tv_tracker_notification_events (observed_at);
+
+    INSERT INTO tv_tracker_notification_settings (singleton_id)
+    VALUES (1)
+    ON CONFLICT (singleton_id) DO NOTHING;
 
     CREATE INDEX IF NOT EXISTS tv_tracker_changes_created_at_idx
     ON tv_tracker_changes (created_at);
@@ -2671,6 +2741,54 @@ def get_cached_tmdb_collection_summary(collection_id: int) -> dict[str, Any] | N
             continue
     return None
 
+def fetch_tmdb_notification_json(
+    tmdb_path: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not TMDB_PATH_RE.fullmatch(tmdb_path):
+        raise RuntimeError("Invalid TMDB notification path")
+
+    query_items: list[tuple[str, str]] = []
+    for key, value in (params or {}).items():
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple)):
+            query_items.extend((str(key), str(item)) for item in value)
+        else:
+            query_items.append((str(key), str(value)))
+    query_items.append(("api_key", required_env("TMDB_API_KEY")))
+
+    target = (
+        "https://api.themoviedb.org/3/"
+        + tmdb_path
+        + "?"
+        + urlencode(query_items)
+    )
+    upstream_request = Request(
+        target,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "TVTracker/1.0",
+        },
+    )
+    try:
+        with urlopen(upstream_request, timeout=20) as upstream:
+            payload = json.loads(upstream.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("TMDB notification request failed") from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("TMDB notification response was invalid")
+    return payload
+
+
+def run_notification_check(now: datetime | None = None) -> dict[str, Any]:
+    return execute_notification_check(
+        database_connection,
+        fetch_tmdb_notification_json,
+        now,
+    )
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     if env_flag("TRUST_PROXY_HEADERS"):
@@ -2875,6 +2993,8 @@ def create_app() -> Flask:
     @app.get("/app/search", strict_slashes=False)
     @app.get("/app/profile", strict_slashes=False)
     @app.get("/app/settings", strict_slashes=False)
+    @app.get("/app/notifications", strict_slashes=False)
+    @app.get("/app/notifications/settings", strict_slashes=False)
     @login_required
     def app_section_page():
         requested_path = request.path.rstrip("/")
@@ -3255,6 +3375,73 @@ def create_app() -> Flask:
         return jsonify({
             "ok": True,
             "reauthenticate": True,
+        })
+
+    @app.get("/api/notifications/status")
+    @login_required
+    def notification_status_api():
+        return jsonify({"ok": True, **get_notification_status(database_connection)})
+
+    @app.get("/api/notifications")
+    @login_required
+    def notifications_api():
+        return jsonify({
+            "ok": True,
+            "notifications": get_notification_records(database_connection),
+        })
+
+    @app.post("/api/notifications/read-all")
+    @login_required
+    def notifications_read_all_api():
+        check_csrf()
+        changed = mark_notifications_read(database_connection)
+        return jsonify({"ok": True, "updated": changed})
+
+    @app.delete("/api/notifications/<int:notification_id>")
+    @login_required
+    def notification_delete_api(notification_id: int):
+        check_csrf()
+        if notification_id <= 0 or not delete_notification_record(
+            database_connection, notification_id
+        ):
+            return jsonify({
+                "ok": False,
+                "error": "Notification not found",
+                "code": "not_found",
+            }), 404
+        return jsonify({"ok": True})
+
+    @app.get("/api/notifications/settings")
+    @login_required
+    def notification_settings_api():
+        settings = get_notification_settings(database_connection)
+        return jsonify({
+            "ok": True,
+            "settings": serialize_notification_settings(settings),
+        })
+
+    @app.patch("/api/notifications/settings")
+    @login_required
+    def notification_settings_patch_api():
+        check_csrf()
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({
+                "ok": False,
+                "error": "Invalid notification settings",
+                "code": "invalid_notification_settings",
+            }), 400
+        try:
+            settings = patch_notification_settings(database_connection, payload)
+        except ValueError as error:
+            return jsonify({
+                "ok": False,
+                "error": str(error),
+                "code": "invalid_notification_settings",
+            }), 400
+        return jsonify({
+            "ok": True,
+            "settings": serialize_notification_settings(settings),
         })
 
     @app.get("/api/state")

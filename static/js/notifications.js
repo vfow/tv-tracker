@@ -1,8 +1,13 @@
 (function(global){
     "use strict";
 
-    const BELL_ICON = "/static/assets/icons/notification-bell.svg";
-    const SETTINGS_ICON = "/static/assets/icons/notification-settings.svg";
+    function staticAsset(metaName,fallback){
+        const meta = document.querySelector(`meta[name="${metaName}"]`);
+        return meta && meta.content ? String(meta.content) : fallback;
+    }
+
+    const BELL_ICON = staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg");
+    const SETTINGS_ICON = staticAsset("notification-settings-icon","/static/assets/icons/notification-settings.svg");
     const SETTINGS_LABELS = [
         ["newSeason","New Season"],
         ["seasonPremiereTomorrow","Season Premiere Tomorrow"],

@@ -152,6 +152,10 @@ function createRouter(route, options={}){
   context.window.document=context.document;
   context.window.showPage=context.showPage;
   context.window.URLSearchParams=URLSearchParams;
+  context.window.TVTrackerNotifications={
+    openNotificationsPage(options){ context.activePage='notifications'; calls.push(['openNotificationsPage',options]); },
+    openNotificationSettingsPage(options){ context.activePage='notification-settings'; calls.push(['openNotificationSettingsPage',options]); }
+  };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync('static/js/discover-browse.js','utf8'),context);
   vm.runInContext(fs.readFileSync('static/js/app-router.js','utf8'),context);
@@ -763,3 +767,20 @@ for (const route of [
 }
 
 console.log('Real-path router runtime checks passed');
+
+
+{
+  const {calls,router}=createRouter('/app/notifications');
+  assert.strictEqual(router.currentRoute(),'/app/notifications');
+  const call=calls.find(item=>item[0]==='openNotificationsPage');
+  assert(call,'notification route should open the Notifications page');
+  assert.strictEqual(call[1].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/notifications/settings');
+  assert.strictEqual(router.currentRoute(),'/app/notifications/settings');
+  const call=calls.find(item=>item[0]==='openNotificationSettingsPage');
+  assert(call,'notification settings route should open settings page');
+  assert.strictEqual(call[1].fromRoute,true);
+}
