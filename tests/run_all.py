@@ -14,11 +14,8 @@ subprocess.run(
 node = shutil.which("node")
 if not node:
     raise SystemExit("Node.js is required for the frontend regression tests.")
-subprocess.run([node, str(ROOT / "tests" / "test_frontend.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_router.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_phase_63c.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_sync_reliability.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_tmdb_cache.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_show_removal_integrity.js")], cwd=ROOT, check=True)
-subprocess.run([node, str(ROOT / "tests" / "test_duplicate_show_merge.js")], cwd=ROOT, check=True)
+
+for test_file in sorted((ROOT / "tests").glob("test_*.js")):
+    subprocess.run([node, str(test_file)], cwd=ROOT, check=True)
+
 print("All TV Tracker integration tests passed.")
