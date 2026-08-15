@@ -1,0 +1,39 @@
+name: Notifications full regression temporary
+
+on:
+  push:
+    branches:
+      - feature/notifications-v1
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/notifications-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          npm ci
+      - name: Run complete repository integration suite
+        run: python tests/run_all.py
+      - name: Notification-specific syntax and source build
+        run: |
+          python -m py_compile app.py notification_engine.py notifications_backend.py notification_worker.py
+          node --check static/js/notifications.js
+          node --check static/js/app-router.js
+          node --check static/js/ui.js
+          cp static/css/tailwind.css /tmp/runtime.css
+          npm run css:build
+          cp /tmp/runtime.css static/css/tailwind.css
