@@ -163,7 +163,14 @@ CHANGE_LOG_RETENTION_DAYS = 30
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STATE_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
-ALLOWED_STATE_KEYS = {"profile", "movies", "metadata_sync", "network_sync", "import_info"}
+ALLOWED_STATE_KEYS = {
+    "profile",
+    "movies",
+    "metadata_sync",
+    "network_sync",
+    "import_info",
+    "provider_metadata",
+}
 MAX_JSON_DEPTH = 16
 MAX_JSON_CONTAINER_ITEMS = 500000
 MAX_JSON_STRING_CHARS = 12 * 1024 * 1024
@@ -1154,7 +1161,7 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
 
     allowed_fields = {
         "username", "favorite_shows", "favorite_movies", "avatar_type", "avatar_preset",
-        "avatar_data", "header_type", "header_preset", "header_image",
+        "avatar_data", "header_type", "header_preset", "header_image", "streaming_region",
     }
     unknown = set(profile) - allowed_fields
     if unknown:
@@ -1216,6 +1223,16 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
         if field in profile and profile[field] is not None:
             if not isinstance(profile[field], str) or len(profile[field]) > limit:
                 raise BackupValidationError(f"Profile field {field} is invalid")
+
+    streaming_region = profile.get("streaming_region", "")
+    if streaming_region is None:
+        streaming_region = ""
+    if not isinstance(streaming_region, str):
+        raise BackupValidationError("Profile field streaming_region is invalid")
+    streaming_region = streaming_region.strip().upper()
+    if streaming_region and re.fullmatch(r"[A-Z]{2}", streaming_region) is None:
+        raise BackupValidationError("Profile field streaming_region is invalid")
+    profile["streaming_region"] = streaming_region
 
     if profile.get("avatar_type") not in (None, "", "initial", "preset", "upload"):
         raise BackupValidationError("Profile field avatar_type is invalid")
@@ -1395,6 +1412,64 @@ def validate_import_info_state(raw_value: Any) -> dict[str, Any]:
     return json_clone(raw_value)
 
 
+def validate_provider_metadata_state(raw_value: Any) -> dict[str, Any]:
+    if raw_value is None:
+        return {}
+    if not isinstance(raw_value, dict) or len(raw_value) > 100000:
+        raise BackupValidationError("State provider_metadata is invalid")
+    validate_json_value(raw_value, "State provider_metadata")
+
+    normalized: dict[str, Any] = {}
+    key_re = re.compile(r"^(tv|movie):([1-9][0-9]{0,15}):([A-Z]{2})$")
+    for raw_key, raw_entry in raw_value.items():
+        if not isinstance(raw_key, str):
+            raise BackupValidationError("State provider_metadata contains an invalid key")
+        match = key_re.fullmatch(raw_key)
+        if match is None or not isinstance(raw_entry, dict):
+            raise BackupValidationError("State provider_metadata contains an invalid entry")
+
+        clean_media, clean_id, clean_region = match.groups()
+        allowed_fields = {"media", "id", "region", "refreshed_at", "providers"}
+        if set(raw_entry) - allowed_fields:
+            raise BackupValidationError("State provider_metadata contains unsupported fields")
+
+        entry_media = str(raw_entry.get("media") or "").strip().lower()
+        entry_id = normalized_identifier(
+            raw_entry.get("id"), "Provider metadata title identifier", maximum=160
+        )
+        entry_region = str(raw_entry.get("region") or "").strip().upper()
+        refreshed_at = raw_entry.get("refreshed_at")
+        providers = raw_entry.get("providers")
+
+        if entry_media != clean_media or entry_id != clean_id or entry_region != clean_region:
+            raise BackupValidationError("State provider_metadata key does not match its entry")
+        if not isinstance(refreshed_at, str) or not refreshed_at:
+            raise BackupValidationError("State provider_metadata refreshed_at is invalid")
+        validate_timestamp(refreshed_at, "Provider metadata refreshed_at")
+        if not isinstance(providers, dict):
+            raise BackupValidationError("State provider_metadata providers are invalid")
+        provider_results = providers.get("results")
+        if not isinstance(provider_results, dict):
+            raise BackupValidationError("State provider_metadata providers are invalid")
+        if set(provider_results) - {clean_region}:
+            raise BackupValidationError("State provider_metadata contains another region")
+        provider_id = providers.get("id", 0)
+        if isinstance(provider_id, bool) or not isinstance(provider_id, (int, str)):
+            raise BackupValidationError("State provider_metadata provider id is invalid")
+        if str(provider_id).strip() and not str(provider_id).strip().isdigit():
+            raise BackupValidationError("State provider_metadata provider id is invalid")
+
+        normalized[raw_key] = {
+            "media": clean_media,
+            "id": clean_id,
+            "region": clean_region,
+            "refreshed_at": refreshed_at,
+            "providers": json_clone(providers),
+        }
+
+    return normalized
+
+
 def validate_state_record(key: Any, raw_value: Any) -> tuple[str, Any]:
     state_key = normalized_identifier(key, "State key", maximum=80)
     if not STATE_KEY_RE.fullmatch(state_key) or state_key not in ALLOWED_STATE_KEYS:
@@ -1405,6 +1480,8 @@ def validate_state_record(key: Any, raw_value: Any) -> tuple[str, Any]:
         return state_key, validate_movie_tracking_state(raw_value)
     if state_key == "import_info":
         return state_key, validate_import_info_state(raw_value)
+    if state_key == "provider_metadata":
+        return state_key, validate_provider_metadata_state(raw_value)
     return state_key, validate_sync_metadata_state(state_key, raw_value)
 
 
@@ -1441,7 +1518,13 @@ def validate_tracker_data(raw_data: Any) -> dict[str, Any]:
         "history": history,
         "profile": validate_profile_record(raw_data.get("profile", {})),
     }
-    for state_key in ("movies", "metadata_sync", "network_sync", "import_info"):
+    for state_key in (
+        "movies",
+        "metadata_sync",
+        "network_sync",
+        "import_info",
+        "provider_metadata",
+    ):
         if state_key in raw_data:
             _, state_value = validate_state_record(state_key, raw_data[state_key])
             result[state_key] = state_value
