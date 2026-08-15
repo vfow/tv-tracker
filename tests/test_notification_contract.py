@@ -79,6 +79,7 @@ assert 'swipeLabel.textContent = "DELETE"' in frontend
 assert "notification-swipe-delete-reveal" in frontend
 assert "notification-live-toast-stack" in css
 assert "notification-swipe-delete-reveal" in css
+assert ".notification-row-delete{position:absolute;z-index:2" in css
 assert "🗑" not in frontend and "🗑" not in css
 assert "radial-gradient(circle at 10% 20%, rgba(120,0,40,.45), transparent 35%),linear-gradient(135deg,#111 0%,#080808 60%,#000 100%)" in css
 

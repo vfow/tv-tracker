@@ -6928,7 +6928,7 @@
 .notification-row-time{color:#777;font-size:12px;line-height:1.2}
 .notification-row-thumb{width:80px;height:48px;justify-self:end;border-radius:5px;background:#151515;object-fit:cover}
 .notification-row-thumb--empty{display:block}
-.notification-row-delete{position:absolute;right:16px;top:50%;width:80px;height:48px;transform:translateY(-50%);border:1px solid #333;border-radius:5px;background:#111;color:#ddd;font-size:12px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .14s ease,background-color .14s ease,color .14s ease}
+.notification-row-delete{position:absolute;z-index:2;right:16px;top:50%;width:80px;height:48px;transform:translateY(-50%);border:1px solid #333;border-radius:5px;background:#111;color:#ddd;font-size:12px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .14s ease,background-color .14s ease,color .14s ease}
 .notification-row:hover .notification-row-delete,.notification-row:focus-within .notification-row-delete{opacity:1;pointer-events:auto}
 .notification-row-delete:hover{background:#fff;color:#000}
 .notification-row--removing{opacity:0;transform:translateX(-30px)}
