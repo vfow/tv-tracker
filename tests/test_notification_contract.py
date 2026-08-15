@@ -56,9 +56,15 @@ for copy in expected_notification_copy:
 
 assert 'href="/app/upcoming" aria-label="Back to Upcoming"' in frontend
 assert 'href="/app/notifications" aria-label="Back to Notifications"' in frontend
-assert "Updates from the shows you follow." in frontend
-assert "Choose which updates you want to receive." in frontend
-assert ".notifications-back-link" in css
+assert frontend.count('/static/assets/icons/arrow-narrow-left.svg') == 2
+assert frontend.count('class="show-page-back-button notifications-back-button"') == 2
+assert frontend.count('<h1 class="tw-font-league">') == 2
+assert "Updates from the shows you follow." not in frontend
+assert "Choose which updates you want to receive." not in frontend
+assert "←" not in frontend
+assert ".notifications-back-link" not in css
+assert ".notifications-subtitle" not in css
+assert ".notifications-back-button.show-page-back-button" in css
 assert ".notification-setting-description" in css
 
 settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
