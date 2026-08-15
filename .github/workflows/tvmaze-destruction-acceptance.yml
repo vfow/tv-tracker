@@ -1,0 +1,56 @@
+name: TVmaze destruction acceptance
+
+on:
+  push:
+    branches:
+      - agent/tvmaze-full-rollout
+    paths:
+      - tests/test_tvmaze_destruction.py
+      - .github/workflows/tvmaze-destruction-acceptance.yml
+
+permissions:
+  contents: read
+
+jobs:
+  destroy-and-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tvmaze-full-rollout
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci
+      - name: Full suite with TVmaze disabled
+        env:
+          TVMAZE_ENABLED: 'false'
+          TVMAZE_EXACT_ENABLED: 'false'
+          TVMAZE_DATE_ONLY_ENABLED: 'false'
+        run: python tests/run_all.py
+      - name: Core app boots with TVmaze provider module physically absent
+        run: |
+          mv tvmaze_integration.py /tmp/tvmaze_integration.py
+          TVMAZE_ENABLED=true TVMAZE_EXACT_ENABLED=true python - <<'PY'
+          import app
+          assert app.app is not None
+          print('Core app booted without tvmaze_integration.py')
+          PY
+          mv /tmp/tvmaze_integration.py tvmaze_integration.py
+      - name: Core app boots with entire optional timing route boundary absent
+        run: |
+          mv release_timing_routes.py /tmp/release_timing_routes.py
+          python - <<'PY'
+          import app
+          assert app.app is not None
+          print('Core app booted without release_timing_routes.py')
+          PY
+          mv /tmp/release_timing_routes.py release_timing_routes.py
+      - name: Provider failure and stale-candidate acceptance tests
+        run: python -m unittest tests.test_tvmaze_destruction tests.test_release_timing tests.test_tvmaze_integration -v
