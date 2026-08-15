@@ -89,6 +89,11 @@ function renderHistory(){
 
     const list = document.getElementById("show-list");
 
+    if(typeof appDataReady !== "undefined" && appDataReady === false){
+        list.innerHTML = renderTrackerListSkeletonRows(5,"Loading watch history");
+        return;
+    }
+
     list.innerHTML = "";
 
     const allHistoryEntries = getActivityHistoryEntries();

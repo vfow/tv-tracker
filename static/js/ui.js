@@ -370,6 +370,31 @@ function renderDiscoverHub(){
     }
 }
 
+function renderTrackerListSkeletonRows(count=5,label="Loading"){
+    const safeCount = Math.max(1,Number(count) || 1);
+    const safeLabel = escapeHTML(String(label || "Loading"));
+    const rows = Array.from({length:safeCount}).map((_,index)=>{
+        const variant = (index % 5) + 1;
+        return `
+            <article class="watchlist-skeleton-row" aria-hidden="true">
+                <div class="watchlist-skeleton-block watchlist-skeleton-poster"></div>
+                <div class="watchlist-skeleton-content">
+                    <div class="watchlist-skeleton-block watchlist-skeleton-title watchlist-skeleton-title--${variant}"></div>
+                    <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--${variant}"></div>
+                    <div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${variant}"></div>
+                </div>
+                <div class="watchlist-skeleton-block watchlist-skeleton-action"></div>
+            </article>
+        `;
+    }).join("");
+    return `
+        <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="${safeLabel}">
+            ${rows}
+            <span class="watchlist-skeleton-sr">${safeLabel}…</span>
+        </div>
+    `;
+}
+
 function renderTrackerPosterSkeletonCards(count=12){
     return Array.from({length:count}).map(()=>`
         <div class="tt-skeleton-poster-card" aria-hidden="true">
@@ -3538,6 +3563,16 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
     if(upcoming.length === 0){
 
+        if(startBackgroundRefresh || isRefreshingUpcoming){
+            list.innerHTML = renderTrackerListSkeletonRows(5,"Loading upcoming episodes");
+
+            if(startBackgroundRefresh && !isRefreshingUpcoming){
+                refreshUpcomingDataInBackground();
+            }
+
+            return;
+        }
+
         list.innerHTML = `
             <div class="empty-state">
                 <h2>No upcoming episodes</h2>
@@ -3550,10 +3585,6 @@ async function renderUpcoming(startBackgroundRefresh=true){
             typeof window.TVTrackerNotifications.mountUpcomingBellFallback === "function"
         ){
             window.TVTrackerNotifications.mountUpcomingBellFallback(list);
-        }
-
-        if(startBackgroundRefresh){
-            refreshUpcomingDataInBackground();
         }
 
         return;

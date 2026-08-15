@@ -21,7 +21,7 @@
     let statusPromise = null;
     let timezoneBootstrapAttempted = false;
     const LIVE_NOTIFICATION_POLL_MS = 30 * 1000;
-    const LIVE_NOTIFICATION_TOAST_MS = 5 * 1000;
+    const LIVE_NOTIFICATION_TOAST_MS = 10 * 1000;
     const MAX_VISIBLE_NOTIFICATION_TOASTS = 3;
     const liveNotificationVersions = new Map();
     const liveToastQueue = [];
@@ -503,7 +503,6 @@
                     </header>
                     <section class="notification-settings-list" aria-label="Notification settings">
                         ${switchMarkup("enabled","Notifications",settings.enabled !== false,false)}
-                        <div class="notification-settings-divider"></div>
                         ${familyRows}
                     </section>
                 </div>
