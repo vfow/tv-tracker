@@ -8,13 +8,13 @@
 
     const BELL_ICON = staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg");
     const SETTINGS_ICON = staticAsset("notification-settings-icon","/static/assets/icons/notification-settings.svg");
-    const SETTINGS_LABELS = [
-        ["newSeason","New Season"],
-        ["seasonPremiereTomorrow","Season Premiere Tomorrow"],
-        ["newEpisode","New Episode"],
-        ["returnsTomorrow","Returns Tomorrow"],
-        ["canceledEnded","Canceled / Ended"],
-        ["premiereDateUpdates","Premiere Date Updates"]
+    const SETTINGS_OPTIONS = [
+        ["newSeason","New Season","When a new season is added to a show."],
+        ["seasonPremiereTomorrow","Season Premiere Tomorrow","When a show's new season begins tomorrow."],
+        ["newEpisode","New Episode","When a new episode show becomes available."],
+        ["returnsTomorrow","Returns Tomorrow","When a Watching show returns."],
+        ["canceledEnded","Canceled / Ended","When a show is canceled or ended."],
+        ["premiereDateUpdates","Premiere Date Updates","When a season premiere date is announced, changed, or delayed."]
     ];
     const bellButtons = new Set();
     let notificationSettings = null;
@@ -344,7 +344,13 @@
         root.innerHTML = `
             <div class="notifications-shell">
                 <header class="notifications-header">
-                    <h1>Notifications</h1>
+                    <div class="notifications-heading">
+                        <div class="notifications-title-row">
+                            <a class="notifications-back-link" href="/app/upcoming" aria-label="Back to Upcoming"><span aria-hidden="true">←</span></a>
+                            <h1>Notifications</h1>
+                        </div>
+                        <p class="notifications-subtitle">Updates from the shows you follow.</p>
+                    </div>
                     <a class="notifications-settings-link" href="/app/notifications/settings" aria-label="Notification settings">
                         <img src="${SETTINGS_ICON}" alt="" aria-hidden="true" class="notification-icon notification-icon--light">
                     </a>
@@ -392,11 +398,12 @@
         return notificationSettings;
     }
 
-    function switchMarkup(key,label,checked,disabled=false){
+    function switchMarkup(key,label,checked,disabled=false,description=""){
         return `
             <label class="notification-setting-row" data-setting-row="${key}">
                 <span class="notification-setting-copy">
                     <strong>${label}</strong>
+                    ${description ? '<span class="notification-setting-description">' + description + '</span>' : ""}
                 </span>
                 <span class="notification-switch">
                     <input type="checkbox" data-notification-setting="${key}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
@@ -432,13 +439,19 @@
         root.innerHTML = '<div class="notifications-shell"><div class="notifications-loading">Loading settings…</div></div>';
         try{
             const settings = await loadSettings();
-            const familyRows = SETTINGS_LABELS.map(([key,label])=>{
-                return switchMarkup(key,label,settings[key] !== false,settings.enabled === false);
+            const familyRows = SETTINGS_OPTIONS.map(([key,label,description])=>{
+                return switchMarkup(key,label,settings[key] !== false,settings.enabled === false,description);
             }).join("");
             root.innerHTML = `
                 <div class="notifications-shell notification-settings-shell">
                     <header class="notifications-header notification-settings-header">
-                        <h1>Notification Settings</h1>
+                        <div class="notifications-heading">
+                            <div class="notifications-title-row">
+                                <a class="notifications-back-link" href="/app/notifications" aria-label="Back to Notifications"><span aria-hidden="true">←</span></a>
+                                <h1>Notification Settings</h1>
+                            </div>
+                            <p class="notifications-subtitle">Choose which updates you want to receive.</p>
+                        </div>
                     </header>
                     <section class="notification-settings-list" aria-label="Notification settings">
                         ${switchMarkup("enabled","Notifications",settings.enabled !== false,false)}

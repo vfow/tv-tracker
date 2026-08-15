@@ -43,6 +43,28 @@ assert 'path === "/app/notifications"' in router
 assert 'path === "/app/notifications/settings"' in router
 assert "/* Notifications V1 */" in css
 
+expected_notification_copy = (
+    "When a new season is added to a show.",
+    "When a show's new season begins tomorrow.",
+    "When a new episode show becomes available.",
+    "When a Watching show returns.",
+    "When a show is canceled or ended.",
+    "When a season premiere date is announced, changed, or delayed.",
+)
+for copy in expected_notification_copy:
+    assert copy in frontend
+
+assert 'href="/app/upcoming" aria-label="Back to Upcoming"' in frontend
+assert 'href="/app/notifications" aria-label="Back to Notifications"' in frontend
+assert "Updates from the shows you follow." in frontend
+assert "Choose which updates you want to receive." in frontend
+assert ".notifications-back-link" in css
+assert ".notification-setting-description" in css
+
+settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
+for internal_wording in ("tracked", "loggable", "14 days"):
+    assert internal_wording not in settings_options
+
 notification_css = css.split("/* Notifications V1 */", 1)[1]
 for forbidden in ("gradient", "tt-blue", "tt-gold", "#ff0000", "#00ff00"):
     assert forbidden not in notification_css.lower()
