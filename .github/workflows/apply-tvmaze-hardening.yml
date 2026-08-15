@@ -1,0 +1,42 @@
+name: Apply TVmaze hardening gate
+
+on:
+  push:
+    branches:
+      - agent/tvmaze-full-rollout
+    paths:
+      - tools/apply_tvmaze_hardening.py
+      - .github/workflows/apply-tvmaze-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tvmaze-full-rollout
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python tools/apply_tvmaze_hardening.py
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci
+      - run: python tests/run_all.py
+      - name: Commit hardened rollout
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release_timing.py tvmaze_integration.py static/js/release-timing.js static/js/notifications.js tests/test_tvmaze_rollout_contracts.py
+          git commit -m "Harden TVmaze fallback and timezone behavior" || exit 0
+          git pull --rebase origin agent/tvmaze-full-rollout
+          git push origin HEAD:agent/tvmaze-full-rollout
