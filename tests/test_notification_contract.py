@@ -21,6 +21,7 @@ for route in (
     "/api/notifications/status",
     "/api/notifications",
     "/api/notifications/read-all",
+    "/api/notifications/<int:notification_id>/read",
     "/api/notifications/settings",
     "/app/notifications",
     "/app/notifications/settings",
@@ -66,13 +67,28 @@ assert ".notifications-back-link" not in css
 assert ".notifications-subtitle" not in css
 assert ".notifications-back-button.show-page-back-button" in css
 assert ".notification-setting-description" in css
+assert "mark_notification_read" in backend
+assert '"latestId"' in backend and '"latestCreatedAt"' in backend
+assert "LIVE_NOTIFICATION_POLL_MS = 30 * 1000" in frontend
+assert "LIVE_NOTIFICATION_TOAST_MS = 5 * 1000" in frontend
+assert "MAX_VISIBLE_NOTIFICATION_TOASTS = 3" in frontend
+assert 'document.addEventListener("visibilitychange"' in frontend
+assert 'toast.addEventListener("mouseenter",pauseTimer)' in frontend
+assert 'close.textContent = "×"' in frontend
+assert 'swipeLabel.textContent = "DELETE"' in frontend
+assert "notification-swipe-delete-reveal" in frontend
+assert "notification-live-toast-stack" in css
+assert "notification-swipe-delete-reveal" in css
+assert ".notification-row-delete{position:absolute;z-index:2" in css
+assert "🗑" not in frontend and "🗑" not in css
+assert "radial-gradient(circle at 10% 20%, rgba(120,0,40,.45), transparent 35%),linear-gradient(135deg,#111 0%,#080808 60%,#000 100%)" in css
 
 settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
 for internal_wording in ("tracked", "loggable", "14 days"):
     assert internal_wording not in settings_options
 
 notification_css = css.split("/* Notifications V1 */", 1)[1]
-for forbidden in ("gradient", "tt-blue", "tt-gold", "#ff0000", "#00ff00"):
+for forbidden in ("tt-blue", "tt-gold", "#ff0000", "#00ff00"):
     assert forbidden not in notification_css.lower()
 
 print("Notification integration contract test passed.")
