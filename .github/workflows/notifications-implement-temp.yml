@@ -1,0 +1,509 @@
+name: Notifications implementation temporary
+
+on:
+  push:
+    branches:
+      - feature/notifications-v1
+
+permissions:
+  contents: write
+
+jobs:
+  implement-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/notifications-v1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Patch Notifications V1 integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {text.count(old)}')
+              return text.replace(old, new, 1)
+
+          # app.py: imports, schema, routes, APIs and worker wrapper.
+          app_path = Path('app.py')
+          app = app_path.read_text()
+          import_anchor = 'from werkzeug.middleware.proxy_fix import ProxyFix\n'
+          import_block = '''from werkzeug.middleware.proxy_fix import ProxyFix\n\nfrom notifications_backend import (\n    delete_notification as delete_notification_record,\n    list_notifications as get_notification_records,\n    mark_all_notifications_read as mark_notifications_read,\n    notification_status as get_notification_status,\n    read_notification_settings as get_notification_settings,\n    run_notification_check as execute_notification_check,\n    serialize_notification_settings,\n    update_notification_settings as patch_notification_settings,\n)\n'''
+          app = replace_once(app, import_anchor, import_block, 'notification backend import')
+
+          section_old = '''APP_SECTION_PATHS = {\n    "/app/upcoming",\n    "/app/history",\n    "/app/discover",\n    "/app/search",\n    "/app/profile",\n    "/app/settings",\n}\n'''
+          section_new = '''APP_SECTION_PATHS = {\n    "/app/upcoming",\n    "/app/history",\n    "/app/discover",\n    "/app/search",\n    "/app/profile",\n    "/app/settings",\n    "/app/notifications",\n    "/app/notifications/settings",\n}\n'''
+          app = replace_once(app, section_old, section_new, 'app section paths')
+
+          schema_anchor = '''    CREATE INDEX IF NOT EXISTS tv_tracker_changes_created_at_idx\n    ON tv_tracker_changes (created_at);\n'''
+          schema_block = '''    CREATE TABLE IF NOT EXISTS tv_tracker_notification_settings (\n        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),\n        enabled BOOLEAN NOT NULL DEFAULT TRUE,\n        timezone TEXT NOT NULL DEFAULT '',\n        new_season BOOLEAN NOT NULL DEFAULT TRUE,\n        season_premiere_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,\n        new_episode BOOLEAN NOT NULL DEFAULT TRUE,\n        returns_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,\n        canceled_ended BOOLEAN NOT NULL DEFAULT TRUE,\n        premiere_date_updates BOOLEAN NOT NULL DEFAULT TRUE,\n        initialized_at TIMESTAMPTZ,\n        last_checked_at TIMESTAMPTZ,\n        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n    );\n\n    CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline (\n        show_id TEXT PRIMARY KEY,\n        snapshot JSONB NOT NULL,\n        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n    );\n\n    CREATE TABLE IF NOT EXISTS tv_tracker_notification_events (\n        event_key TEXT PRIMARY KEY,\n        show_id TEXT NOT NULL,\n        event_type TEXT NOT NULL,\n        observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n    );\n\n    CREATE TABLE IF NOT EXISTS tv_tracker_notifications (\n        notification_id BIGSERIAL PRIMARY KEY,\n        group_key TEXT NOT NULL UNIQUE,\n        event_key TEXT NOT NULL,\n        notification_type TEXT NOT NULL,\n        show_id TEXT NOT NULL,\n        title TEXT NOT NULL,\n        message TEXT NOT NULL,\n        image_path TEXT NOT NULL DEFAULT '',\n        event_date DATE,\n        is_read BOOLEAN NOT NULL DEFAULT FALSE,\n        payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n    );\n\n    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_created_at_idx\n    ON tv_tracker_notifications (created_at DESC);\n\n    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_unread_idx\n    ON tv_tracker_notifications (is_read, created_at DESC);\n\n    CREATE INDEX IF NOT EXISTS tv_tracker_notification_events_observed_idx\n    ON tv_tracker_notification_events (observed_at);\n\n    INSERT INTO tv_tracker_notification_settings (singleton_id)\n    VALUES (1)\n    ON CONFLICT (singleton_id) DO NOTHING;\n\n    CREATE INDEX IF NOT EXISTS tv_tracker_changes_created_at_idx\n    ON tv_tracker_changes (created_at);\n'''
+          app = replace_once(app, schema_anchor, schema_block, 'notification schema')
+
+          helper_anchor = '\ndef create_app() -> Flask:\n'
+          helper_block = '''\ndef fetch_tmdb_notification_json(\n    tmdb_path: str,\n    params: dict[str, Any] | None = None,\n) -> dict[str, Any]:\n    if not TMDB_PATH_RE.fullmatch(tmdb_path):\n        raise RuntimeError("Invalid TMDB notification path")\n\n    query_items: list[tuple[str, str]] = []\n    for key, value in (params or {}).items():\n        if value is None:\n            continue\n        if isinstance(value, (list, tuple)):\n            query_items.extend((str(key), str(item)) for item in value)\n        else:\n            query_items.append((str(key), str(value)))\n    query_items.append(("api_key", required_env("TMDB_API_KEY")))\n\n    target = (\n        "https://api.themoviedb.org/3/"\n        + tmdb_path\n        + "?"\n        + urlencode(query_items)\n    )\n    upstream_request = Request(\n        target,\n        headers={\n            "Accept": "application/json",\n            "User-Agent": "TVTracker/1.0",\n        },\n    )\n    try:\n        with urlopen(upstream_request, timeout=20) as upstream:\n            payload = json.loads(upstream.read().decode("utf-8"))\n    except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:\n        raise RuntimeError("TMDB notification request failed") from error\n    if not isinstance(payload, dict):\n        raise RuntimeError("TMDB notification response was invalid")\n    return payload\n\n\ndef run_notification_check(now: datetime | None = None) -> dict[str, Any]:\n    return execute_notification_check(\n        database_connection,\n        fetch_tmdb_notification_json,\n        now,\n    )\n\n\ndef create_app() -> Flask:\n'''
+          app = replace_once(app, helper_anchor, helper_block, 'notification worker helper')
+
+          app_decorators_old = '''    @app.get("/app/upcoming", strict_slashes=False)\n    @app.get("/app/history", strict_slashes=False)\n    @app.get("/app/discover", strict_slashes=False)\n    @app.get("/app/search", strict_slashes=False)\n    @app.get("/app/profile", strict_slashes=False)\n    @app.get("/app/settings", strict_slashes=False)\n'''
+          app_decorators_new = '''    @app.get("/app/upcoming", strict_slashes=False)\n    @app.get("/app/history", strict_slashes=False)\n    @app.get("/app/discover", strict_slashes=False)\n    @app.get("/app/search", strict_slashes=False)\n    @app.get("/app/profile", strict_slashes=False)\n    @app.get("/app/settings", strict_slashes=False)\n    @app.get("/app/notifications", strict_slashes=False)\n    @app.get("/app/notifications/settings", strict_slashes=False)\n'''
+          app = replace_once(app, app_decorators_old, app_decorators_new, 'notification page routes')
+
+          api_anchor = '''    @app.get("/api/state")\n    @login_required\n    def get_state():\n'''
+          api_block = '''    @app.get("/api/notifications/status")\n    @login_required\n    def notification_status_api():\n        return jsonify({"ok": True, **get_notification_status(database_connection)})\n\n    @app.get("/api/notifications")\n    @login_required\n    def notifications_api():\n        return jsonify({\n            "ok": True,\n            "notifications": get_notification_records(database_connection),\n        })\n\n    @app.post("/api/notifications/read-all")\n    @login_required\n    def notifications_read_all_api():\n        check_csrf()\n        changed = mark_notifications_read(database_connection)\n        return jsonify({"ok": True, "updated": changed})\n\n    @app.delete("/api/notifications/<int:notification_id>")\n    @login_required\n    def notification_delete_api(notification_id: int):\n        check_csrf()\n        if notification_id <= 0 or not delete_notification_record(\n            database_connection, notification_id\n        ):\n            return jsonify({\n                "ok": False,\n                "error": "Notification not found",\n                "code": "not_found",\n            }), 404\n        return jsonify({"ok": True})\n\n    @app.get("/api/notifications/settings")\n    @login_required\n    def notification_settings_api():\n        settings = get_notification_settings(database_connection)\n        return jsonify({\n            "ok": True,\n            "settings": serialize_notification_settings(settings),\n        })\n\n    @app.patch("/api/notifications/settings")\n    @login_required\n    def notification_settings_patch_api():\n        check_csrf()\n        payload = request.get_json(silent=True)\n        if not isinstance(payload, dict):\n            return jsonify({\n                "ok": False,\n                "error": "Invalid notification settings",\n                "code": "invalid_notification_settings",\n            }), 400\n        try:\n            settings = patch_notification_settings(database_connection, payload)\n        except ValueError as error:\n            return jsonify({\n                "ok": False,\n                "error": str(error),\n                "code": "invalid_notification_settings",\n            }), 400\n        return jsonify({\n            "ok": True,\n            "settings": serialize_notification_settings(settings),\n        })\n\n    @app.get("/api/state")\n    @login_required\n    def get_state():\n'''
+          app = replace_once(app, api_anchor, api_block, 'notification API routes')
+          app_path.write_text(app)
+
+          # Template: versioned icon URLs, page shells, module script before app.js.
+          template_path = Path('templates/index.html')
+          template = template_path.read_text()
+          meta_anchor = '<meta name="frontend-build" content="2.0-tailwind">\n'
+          meta_block = '''<meta name="frontend-build" content="2.0-tailwind">\n<meta name="notification-bell-icon" content="{{ url_for('static', filename='assets/icons/notification-bell.svg') }}">\n<meta name="notification-settings-icon" content="{{ url_for('static', filename='assets/icons/notification-settings.svg') }}">\n'''
+          template = replace_once(template, meta_anchor, meta_block, 'notification icon meta')
+          settings_shell = '''<div id="settings-page" class="page">\n\n    <div class="settings" id="settings-content"></div>\n\n</div>\n'''
+          notification_shells = '''<div id="settings-page" class="page">\n\n    <div class="settings" id="settings-content"></div>\n\n</div>\n\n\n<!-- NOTIFICATIONS PAGE -->\n\n<div id="notifications-page" class="page notifications-page">\n    <div id="notifications-content"></div>\n</div>\n\n\n<!-- NOTIFICATION SETTINGS PAGE -->\n\n<div id="notification-settings-page" class="page notification-settings-page">\n    <div id="notification-settings-content"></div>\n</div>\n'''
+          template = replace_once(template, settings_shell, notification_shells, 'notification page shells')
+          app_script = '<script src="{{ url_for(\'static\', filename=\'js/app.js\') }}"></script>\n'
+          notification_script = '<script src="{{ url_for(\'static\', filename=\'js/notifications.js\') }}"></script>\n' + app_script
+          template = replace_once(template, app_script, notification_script, 'notification script')
+          template_path.write_text(template)
+
+          # Notifications JS: use Flask-versioned icon URLs exposed in meta tags.
+          notifications_path = Path('static/js/notifications.js')
+          notifications = notifications_path.read_text()
+          icon_old = '''    const BELL_ICON = "/static/assets/icons/notification-bell.svg";\n    const SETTINGS_ICON = "/static/assets/icons/notification-settings.svg";\n'''
+          icon_new = '''    function staticAsset(metaName,fallback){\n        const meta = document.querySelector(`meta[name="${metaName}"]`);\n        return meta && meta.content ? String(meta.content) : fallback;\n    }\n\n    const BELL_ICON = staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg");\n    const SETTINGS_ICON = staticAsset("notification-settings-icon","/static/assets/icons/notification-settings.svg");\n'''
+          notifications = replace_once(notifications, icon_old, icon_new, 'versioned notification icons')
+          notifications_path.write_text(notifications)
+
+          # UI: mount one bell on the first non-empty Upcoming group, with fallback when empty.
+          ui_path = Path('static/js/ui.js')
+          ui = ui_path.read_text()
+          start = ui.index('function renderUpcoming(')
+          next_function = ui.find('\nfunction ', start + len('function renderUpcoming('))
+          if next_function == -1:
+              next_function = len(ui)
+          chunk = ui[start:next_function]
+          if chunk.count('const groupOrder = [') != 1:
+              raise SystemExit('renderUpcoming: groupOrder marker missing')
+          chunk = chunk.replace(
+              'const groupOrder = [',
+              'let notificationBellMounted = false;\n\n    const groupOrder = [',
+              1,
+          )
+          group_pattern = re.compile(
+              r'(groupBox\.innerHTML\s*=\s*`\s*<div class="upcoming-group-title">.*?</div>\s*`;)',
+              re.S,
+          )
+          matches = list(group_pattern.finditer(chunk))
+          if len(matches) != 1:
+              raise SystemExit(f'renderUpcoming: expected one group heading template, got {len(matches)}')
+          mounted = '''\\1\n\n            if(\n                !notificationBellMounted &&\n                window.TVTrackerNotifications &&\n                typeof window.TVTrackerNotifications.mountUpcomingBell === "function"\n            ){\n                const notificationTitle = groupBox.querySelector(".upcoming-group-title");\n                notificationBellMounted = window.TVTrackerNotifications.mountUpcomingBell(notificationTitle);\n            }'''
+          chunk = group_pattern.sub(mounted, chunk, count=1)
+          if chunk.count('if(renderedGroups === 0){') != 1:
+              raise SystemExit('renderUpcoming: empty group marker missing')
+          chunk = chunk.replace(
+              'if(renderedGroups === 0){',
+              '''if(\n        !notificationBellMounted &&\n        window.TVTrackerNotifications &&\n        typeof window.TVTrackerNotifications.mountUpcomingBellFallback === "function"\n    ){\n        window.TVTrackerNotifications.mountUpcomingBellFallback(container);\n    }\n\n    if(renderedGroups === 0){''',
+              1,
+          )
+          ui = ui[:start] + chunk + ui[next_function:]
+
+          # Add document title labels without disturbing existing title logic.
+          title_match = re.search(r'(settings\s*:\s*"Settings"\s*,?)', ui)
+          if title_match and 'notifications:"Notifications"' not in ui:
+              insertion = title_match.group(1)
+              if not insertion.rstrip().endswith(','):
+                  insertion = insertion.rstrip() + ','
+              insertion += '\n        notifications:"Notifications",\n        "notification-settings":"Notification Settings"'
+              ui = ui[:title_match.start()] + insertion + ui[title_match.end():]
+          ui_path.write_text(ui)
+
+          # Router: dedicated paths and standalone page activation.
+          router_path = Path('static/js/app-router.js')
+          router = router_path.read_text()
+          parse_anchor = '''        if(path === "/app/settings"){\n            return buildParsedRoute("settings",path,"",{});\n        }\n'''
+          parse_block = '''        if(path === "/app/settings"){\n            return buildParsedRoute("settings",path,"",{});\n        }\n        if(path === "/app/notifications"){\n            return buildParsedRoute("notifications",path,"",{});\n        }\n        if(path === "/app/notifications/settings"){\n            return buildParsedRoute("notification-settings",path,"",{});\n        }\n'''
+          router = replace_once(router, parse_anchor, parse_block, 'notification router parse')
+          state_anchor = '''        if(activePage === "settings"){\n            return "/app/settings";\n        }\n'''
+          state_block = '''        if(activePage === "settings"){\n            return "/app/settings";\n        }\n        if(activePage === "notifications"){\n            return "/app/notifications";\n        }\n        if(activePage === "notification-settings"){\n            return "/app/notifications/settings";\n        }\n'''
+          router = replace_once(router, state_anchor, state_block, 'notification router state')
+
+          initial_anchor = '''        if(parsed.type === "profile" || parsed.type === "settings"){\n            activePage = parsed.type;\n            setPageActiveWithoutRender(parsed.type + "-page",parsed.type);\n            if(typeof updateShellTitle === "function"){\n                updateShellTitle();\n            }\n            return;\n        }\n'''
+          initial_block = '''        if(parsed.type === "notifications"){\n            activePage = "notifications";\n            setPageActiveWithoutRender("notifications-page","shows");\n            if(typeof updateShellTitle === "function"){ updateShellTitle(); }\n            return;\n        }\n        if(parsed.type === "notification-settings"){\n            activePage = "notification-settings";\n            setPageActiveWithoutRender("notification-settings-page","shows");\n            if(typeof updateShellTitle === "function"){ updateShellTitle(); }\n            return;\n        }\n        if(parsed.type === "profile" || parsed.type === "settings"){\n            activePage = parsed.type;\n            setPageActiveWithoutRender(parsed.type + "-page",parsed.type);\n            if(typeof updateShellTitle === "function"){\n                updateShellTitle();\n            }\n            return;\n        }\n'''
+          router = replace_once(router, initial_anchor, initial_block, 'notification initial route')
+
+          apply_anchor = '''        if(parsed.type === "profile"){\n            clearDetailState();\n            showPage("profile");\n            return;\n        }\n'''
+          apply_block = '''        if(parsed.type === "notifications"){\n            clearDetailState();\n            if(\n                window.TVTrackerNotifications &&\n                typeof window.TVTrackerNotifications.openNotificationsPage === "function"\n            ){\n                window.TVTrackerNotifications.openNotificationsPage({fromRoute:true});\n            }\n            return;\n        }\n        if(parsed.type === "notification-settings"){\n            clearDetailState();\n            if(\n                window.TVTrackerNotifications &&\n                typeof window.TVTrackerNotifications.openNotificationSettingsPage === "function"\n            ){\n                window.TVTrackerNotifications.openNotificationSettingsPage({fromRoute:true});\n            }\n            return;\n        }\n        if(parsed.type === "profile"){\n            clearDetailState();\n            showPage("profile");\n            return;\n        }\n'''
+          router = replace_once(router, apply_anchor, apply_block, 'notification apply route')
+          router_path.write_text(router)
+
+          # CSS: plain CSS is appended to both source and runtime output to avoid a full compiled-CSS rewrite.
+          css_block = r'''
+
+/* Notifications V1 */
+.upcoming-group-title--notifications{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.upcoming-group-title-label{min-width:0}
+.upcoming-notification-bell{position:relative;margin-left:auto;display:inline-flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center;border:0;border-radius:9999px;background:transparent;color:#fff;text-decoration:none;transition:background-color .16s ease,color .16s ease}
+.upcoming-notification-bell:hover{background:#1b1b1b}
+.notification-icon{width:24px;height:24px;display:block}
+.notification-icon--light{filter:invert(1)}
+.notification-unread-dot{position:absolute;right:6px;top:5px;width:8px;height:8px;border-radius:9999px;background:#fff}
+.notifications-page,.notification-settings-page{background:#000}
+.notifications-shell{width:100%;max-width:1000px;margin:0 auto;padding:18px 30px 48px}
+.notification-settings-shell{max-width:820px}
+.notifications-header{display:flex;min-height:54px;align-items:center;justify-content:space-between;gap:16px;padding:0 16px;border-bottom:1px solid #1d1d1d}
+.notifications-header h1{margin:0;color:#fff;font-size:28px;font-weight:700;line-height:1.2}
+.notifications-settings-link{display:inline-flex;width:40px;height:40px;flex:0 0 40px;align-items:center;justify-content:center;border-radius:9999px;background:#242424;color:#fff;text-decoration:none;transition:background-color .16s ease}
+.notifications-settings-link:hover{background:#303030}
+.notifications-list{width:100%}
+.notifications-loading,.notifications-empty{padding:32px 16px;color:#777;font-size:15px}
+.notification-row{position:relative;border-bottom:1px solid #171717;transition:opacity .18s ease,transform .18s ease;touch-action:pan-y}
+.notification-row-link{display:grid;grid-template-columns:48px minmax(0,1fr) 80px;align-items:center;gap:14px;min-height:74px;padding:12px 16px;color:#bdbdbd;text-decoration:none;transition:background-color .16s ease}
+.notification-row-link:hover{background:#080808}
+.notification-row-icon{display:flex;width:48px;height:48px;align-items:center;justify-content:center;border-radius:9999px;background:#fff;color:#000}
+.notification-row-icon .notification-icon{width:21px;height:21px}
+.notification-row-copy{display:flex;min-width:0;flex-direction:column;gap:3px}
+.notification-row-message{color:#c6c6c6;font-size:16px;line-height:1.3}
+.notification-row-time{color:#777;font-size:12px;line-height:1.2}
+.notification-row-thumb{width:80px;height:48px;justify-self:end;border-radius:5px;background:#151515;object-fit:cover}
+.notification-row-thumb--empty{display:block}
+.notification-row-delete{position:absolute;right:16px;top:50%;width:80px;height:48px;transform:translateY(-50%);border:1px solid #333;border-radius:5px;background:#111;color:#ddd;font-size:12px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .14s ease,background-color .14s ease,color .14s ease}
+.notification-row:hover .notification-row-delete,.notification-row:focus-within .notification-row-delete{opacity:1;pointer-events:auto}
+.notification-row-delete:hover{background:#fff;color:#000}
+.notification-row--removing{opacity:0;transform:translateX(-30px)}
+.notification-settings-header{padding-bottom:8px}
+.notification-settings-list{margin-top:18px;border-top:1px solid #1d1d1d}
+.notification-setting-row{display:flex;min-height:68px;align-items:center;justify-content:space-between;gap:24px;padding:14px 16px;border-bottom:1px solid #1d1d1d;cursor:pointer;transition:background-color .16s ease,opacity .16s ease}
+.notification-setting-row:hover{background:#080808}
+.notification-setting-row--disabled{opacity:.45;cursor:default}
+.notification-setting-copy{min-width:0}
+.notification-setting-copy strong{color:#ddd;font-size:16px;font-weight:500}
+.notification-settings-divider{height:16px;border-bottom:1px solid #1d1d1d;background:#050505}
+.notification-switch{position:relative;display:inline-flex;width:48px;height:28px;flex:0 0 48px}
+.notification-switch input{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+.notification-switch-track{display:flex;width:48px;height:28px;align-items:center;padding:3px;border:1px solid #444;border-radius:9999px;background:#222;transition:background-color .16s ease,border-color .16s ease}
+.notification-switch-thumb{display:block;width:20px;height:20px;border-radius:9999px;background:#aaa;transform:translateX(0);transition:transform .16s ease,background-color .16s ease}
+.notification-switch input:checked + .notification-switch-track{border-color:#fff;background:#fff}
+.notification-switch input:checked + .notification-switch-track .notification-switch-thumb{background:#000;transform:translateX(20px)}
+.notification-switch input:focus-visible + .notification-switch-track{outline:2px solid #fff;outline-offset:3px}
+.notification-switch input:disabled + .notification-switch-track{cursor:not-allowed}
+@media (pointer:coarse){.notification-row-delete{display:none}}
+@media (max-width:767px){
+  .notifications-shell{padding:14px 16px calc(88px + env(safe-area-inset-bottom))}
+  .notifications-header{min-height:58px;padding:0 6px}
+  .notifications-header h1{font-size:25px}
+  .notification-row-link{grid-template-columns:44px minmax(0,1fr) 72px;gap:12px;min-height:70px;padding:11px 6px}
+  .notification-row-icon{width:44px;height:44px}
+  .notification-row-message{font-size:15px}
+  .notification-row-thumb{width:72px;height:44px}
+  .notification-setting-row{padding-left:6px;padding-right:6px}
+  .upcoming-notification-bell{width:36px;height:36px;flex-basis:36px}
+}
+'''
+          for css_path in (Path('static/css/tailwind-input.css'),Path('static/css/tailwind.css')):
+              css = css_path.read_text()
+              if '/* Notifications V1 */' in css:
+                  raise SystemExit(f'{css_path}: notification CSS already present')
+              css_path.write_text(css.rstrip() + css_block + '\n')
+
+          # Router test harness gets explicit notification module stubs + route coverage.
+          router_test_path = Path('tests/test_router.js')
+          router_test = router_test_path.read_text()
+          harness_anchor = '''  context.window.showPage=context.showPage;\n  context.window.URLSearchParams=URLSearchParams;\n'''
+          harness_block = '''  context.window.showPage=context.showPage;\n  context.window.URLSearchParams=URLSearchParams;\n  context.window.TVTrackerNotifications={\n    openNotificationsPage(options){ context.activePage='notifications'; calls.push(['openNotificationsPage',options]); },\n    openNotificationSettingsPage(options){ context.activePage='notification-settings'; calls.push(['openNotificationSettingsPage',options]); }\n  };\n'''
+          router_test = replace_once(router_test, harness_anchor, harness_block, 'router notification harness')
+          router_tests = r'''
+
+{
+  const {calls,router}=createRouter('/app/notifications');
+  assert.strictEqual(router.currentRoute(),'/app/notifications');
+  const call=calls.find(item=>item[0]==='openNotificationsPage');
+  assert(call,'notification route should open the Notifications page');
+  assert.strictEqual(call[1].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/notifications/settings');
+  assert.strictEqual(router.currentRoute(),'/app/notifications/settings');
+  const call=calls.find(item=>item[0]==='openNotificationSettingsPage');
+  assert(call,'notification settings route should open settings page');
+  assert.strictEqual(call[1].fromRoute,true);
+}
+'''
+          if 'notification route should open the Notifications page' in router_test:
+              raise SystemExit('router notification tests already present')
+          router_test += router_tests
+          router_test_path.write_text(router_test)
+
+          # Pure rule tests preserve the existing air_date + one local day contract.
+          Path('tests/test_notifications.py').write_text(r'''import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from notification_engine import (
+    collect_metadata_notification_candidates,
+    collect_time_notification_candidates,
+)
+
+
+def snapshot(*, seasons=None, episodes=None, status="Returning Series"):
+    return {
+        "show_id": "123",
+        "title": "Example Show",
+        "tmdb_status": status,
+        "number_of_seasons": len(seasons or {}),
+        "poster_path": "/poster.jpg",
+        "backdrop_path": "/backdrop.jpg",
+        "seasons": seasons or {},
+        "episodes": episodes or [],
+    }
+
+
+def tracker_show(status="watching", watched=None):
+    return {
+        "tmdb_id": "123",
+        "title": "Example Show",
+        "status": status,
+        "episodes_watched": watched or {},
+    }
+
+
+class NotificationRuleTests(unittest.TestCase):
+    zone = ZoneInfo("Asia/Kuala_Lumpur")
+
+    def test_episode_becomes_notification_eligible_next_local_day(self):
+        current = snapshot(
+            seasons={"1": {"season_number": 1, "air_date": "2026-08-01"}},
+            episodes=[{
+                "season_number": 1,
+                "episode_number": 4,
+                "name": "The Party",
+                "air_date": "2026-08-17",
+                "still_path": "/still.jpg",
+            }],
+        )
+        before = datetime(2026,8,17,23,59,tzinfo=self.zone)
+        after = datetime(2026,8,18,0,1,tzinfo=self.zone)
+        self.assertFalse(any(
+            item["family"] == "new_episode"
+            for item in collect_time_notification_candidates(current,tracker_show(),before,"Asia/Kuala_Lumpur")
+        ))
+        ready = [
+            item for item in collect_time_notification_candidates(current,tracker_show(),after,"Asia/Kuala_Lumpur")
+            if item["family"] == "new_episode"
+        ]
+        self.assertEqual(len(ready),1)
+        self.assertEqual(ready[0]["message"],"Example Show S01E04 - The Party aired yesterday")
+
+    def test_logged_episode_does_not_notify(self):
+        current = snapshot(episodes=[{
+            "season_number":1,"episode_number":4,"name":"The Party","air_date":"2026-08-17"
+        }])
+        now = datetime(2026,8,18,0,1,tzinfo=self.zone)
+        items = collect_time_notification_candidates(
+            current,tracker_show(watched={"1":[4]}),now,"Asia/Kuala_Lumpur"
+        )
+        self.assertFalse(any(item["family"] == "new_episode" for item in items))
+
+    def test_new_episode_only_applies_to_watching(self):
+        current = snapshot(episodes=[{
+            "season_number":1,"episode_number":4,"name":"The Party","air_date":"2026-08-17"
+        }])
+        now = datetime(2026,8,18,0,1,tzinfo=self.zone)
+        for status in ("paused","finished","plan","dropped"):
+            with self.subTest(status=status):
+                items = collect_time_notification_candidates(
+                    current,tracker_show(status=status),now,"Asia/Kuala_Lumpur"
+                )
+                self.assertFalse(any(item["family"] == "new_episode" for item in items))
+
+    def test_return_tomorrow_requires_fourteen_day_gap_and_watching(self):
+        current = snapshot(episodes=[
+            {"season_number":1,"episode_number":5,"name":"Five","air_date":"2026-08-03"},
+            {"season_number":1,"episode_number":6,"name":"Six","air_date":"2026-08-18"},
+        ])
+        now = datetime(2026,8,17,12,0,tzinfo=self.zone)
+        returns = [
+            item for item in collect_time_notification_candidates(
+                current,tracker_show(),now,"Asia/Kuala_Lumpur"
+            ) if item["family"] == "returns_tomorrow"
+        ]
+        self.assertEqual(len(returns),1)
+        self.assertIn("returns tomorrow",returns[0]["message"])
+        paused = collect_time_notification_candidates(
+            current,tracker_show(status="paused"),now,"Asia/Kuala_Lumpur"
+        )
+        self.assertFalse(any(item["family"] == "returns_tomorrow" for item in paused))
+
+    def test_new_season_excludes_specials_and_combines_tomorrow_copy(self):
+        previous = snapshot(seasons={"1":{"season_number":1,"air_date":"2025-01-01"}})
+        current = snapshot(seasons={
+            "0":{"season_number":0,"air_date":"2026-01-01"},
+            "1":{"season_number":1,"air_date":"2025-01-01"},
+            "2":{"season_number":2,"air_date":"2026-08-18"},
+        })
+        now = datetime(2026,8,17,12,0,tzinfo=self.zone)
+        items = collect_metadata_notification_candidates(
+            previous,current,"finished",now,"Asia/Kuala_Lumpur"
+        )
+        new_seasons = [item for item in items if item["family"] == "new_season"]
+        self.assertEqual(len(new_seasons),1)
+        self.assertEqual(new_seasons[0]["payload"]["season"],2)
+        self.assertEqual(new_seasons[0]["combined_message"],"Example Show Season 2 premieres tomorrow")
+
+    def test_dropped_show_does_not_get_new_season(self):
+        previous = snapshot(seasons={"1":{"season_number":1,"air_date":"2025-01-01"}})
+        current = snapshot(seasons={
+            "1":{"season_number":1,"air_date":"2025-01-01"},
+            "2":{"season_number":2,"air_date":"2027-01-01"},
+        })
+        now = datetime(2026,8,17,12,0,tzinfo=self.zone)
+        items = collect_metadata_notification_candidates(
+            previous,current,"dropped",now,"Asia/Kuala_Lumpur"
+        )
+        self.assertFalse(any(item["family"] == "new_season" for item in items))
+
+    def test_season_premiere_tomorrow_allowed_statuses(self):
+        current = snapshot(seasons={"2":{"season_number":2,"air_date":"2026-08-18"}})
+        now = datetime(2026,8,17,12,0,tzinfo=self.zone)
+        for status in ("watching","paused","finished","plan"):
+            with self.subTest(status=status):
+                items = collect_time_notification_candidates(
+                    current,tracker_show(status=status),now,"Asia/Kuala_Lumpur"
+                )
+                self.assertTrue(any(item["family"] == "season_premiere_tomorrow" for item in items))
+        dropped = collect_time_notification_candidates(
+            current,tracker_show(status="dropped"),now,"Asia/Kuala_Lumpur"
+        )
+        self.assertFalse(any(item["family"] == "season_premiere_tomorrow" for item in dropped))
+
+    def test_status_and_premiere_date_updates(self):
+        previous = snapshot(
+            seasons={"2":{"season_number":2,"air_date":"2026-09-01"}},
+            status="Returning Series",
+        )
+        current = snapshot(
+            seasons={"2":{"season_number":2,"air_date":"2026-09-15"}},
+            status="Canceled",
+        )
+        now = datetime(2026,8,17,12,0,tzinfo=self.zone)
+        items = collect_metadata_notification_candidates(
+            previous,current,"watching",now,"Asia/Kuala_Lumpur"
+        )
+        self.assertTrue(any(item["kind"] == "canceled" for item in items))
+        delayed = [item for item in items if item["kind"] == "delayed"]
+        self.assertEqual(len(delayed),1)
+        self.assertEqual(delayed[0]["group_key"],"premiere-date:123:s2")
+
+
+if __name__ == "__main__":
+    unittest.main()
+''')
+
+          # Contract tests: dedicated notification persistence, no tracker sync coupling, UI paths/assets.
+          Path('tests/test_notification_contract.py').write_text(r'''from pathlib import Path
+
+app = Path("app.py").read_text()
+backend = Path("notifications_backend.py").read_text()
+engine = Path("notification_engine.py").read_text()
+frontend = Path("static/js/notifications.js").read_text()
+router = Path("static/js/app-router.js").read_text()
+ui = Path("static/js/ui.js").read_text()
+template = Path("templates/index.html").read_text()
+css = Path("static/css/tailwind-input.css").read_text()
+
+for table in (
+    "tv_tracker_notifications",
+    "tv_tracker_notification_settings",
+    "tv_tracker_notification_baseline",
+    "tv_tracker_notification_events",
+):
+    assert f"CREATE TABLE IF NOT EXISTS {table}" in app
+
+for route in (
+    '/api/notifications/status',
+    '/api/notifications',
+    '/api/notifications/read-all',
+    '/api/notifications/settings',
+    '/app/notifications',
+    '/app/notifications/settings',
+):
+    assert route in app or route in router
+
+assert "/api/state" not in frontend
+assert "/api/state" not in backend
+assert "saveData(" not in frontend
+assert "tv_tracker_state" not in backend
+assert "TVmaze" not in backend + engine + frontend
+assert "tvmaze" not in backend.lower() + engine.lower() + frontend.lower()
+assert 'filename=\'assets/icons/notification-bell.svg\'' in template
+assert 'filename=\'assets/icons/notification-settings.svg\'' in template
+assert 'filename=\'js/notifications.js\'' in template
+assert 'id="notifications-page"' in template
+assert 'id="notification-settings-page"' in template
+assert "mountUpcomingBell" in ui
+assert "mountUpcomingBellFallback" in ui
+assert 'path === "/app/notifications"' in router
+assert 'path === "/app/notifications/settings"' in router
+assert "/* Notifications V1 */" in css
+notification_css = css.split("/* Notifications V1 */",1)[1]
+for forbidden in ("gradient", "tt-blue", "tt-gold", "#ff0000", "#00ff00"):
+    assert forbidden not in notification_css.lower()
+
+print("Notification integration contract test passed.")
+''')
+          PY
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          npm ci
+      - name: Validate source CSS build without accepting unrelated generated churn
+        run: |
+          cp static/css/tailwind.css /tmp/notifications-focused-tailwind.css
+          npm run css:build
+          cp /tmp/notifications-focused-tailwind.css static/css/tailwind.css
+      - name: Syntax checks
+        run: |
+          python -m py_compile app.py notification_engine.py notifications_backend.py notification_worker.py
+          node --check static/js/notifications.js
+          node --check static/js/app-router.js
+          node --check static/js/ui.js
+      - name: Run Notifications V1 regression tests
+        run: |
+          python -m unittest tests.test_notifications
+          python tests/test_notification_contract.py
+          node tests/test_router.js
+          node tests/test_nav_font_delivery.js
+          python -m unittest tests.test_cache_headers tests.test_route_contracts
+      - name: Check focused runtime CSS diff
+        run: |
+          git fetch origin main
+          python - <<'PY'
+          import subprocess
+          diff = subprocess.check_output(
+              ['git','diff','--numstat','origin/main','--','static/css/tailwind.css'],
+              text=True,
+          ).strip()
+          print('Runtime CSS numstat:', diff)
+          if diff:
+              added, deleted, *_ = diff.split()
+              assert added != '-' and deleted != '-'
+              assert int(deleted) <= 5, diff
+          PY
+      - name: Commit integrated Notifications V1
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app.py templates/index.html static/js/notifications.js static/js/app-router.js static/js/ui.js static/css/tailwind-input.css static/css/tailwind.css tests/test_router.js tests/test_notifications.py tests/test_notification_contract.py
+          git commit -m "Integrate Notifications V1"
+          git push origin HEAD:feature/notifications-v1
