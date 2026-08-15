@@ -11,6 +11,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from psycopg.types.json import Jsonb
+
 
 TVMAZE_API_BASE = "https://api.tvmaze.com"
 TVMAZE_USER_AGENT = "TVTracker/2.0 (optional TVmaze release timing; github.com/vfow/tv-tracker)"
@@ -323,7 +325,7 @@ class TVmazeProvider:
                         reason = EXCLUDED.reason, validator_version = EXCLUDED.validator_version,
                         checked_at = NOW(), expires_at = EXCLUDED.expires_at
                     """,
-                    (tvmaze_id, season, episode, json.dumps(raw), str((result or {}).get("precision") or ""),
+                    (tvmaze_id, season, episode, Jsonb(raw), str((result or {}).get("precision") or ""),
                      release_at, release_date, reason, VALIDATOR_VERSION, str(ttl)),
                 )
             connection.commit()

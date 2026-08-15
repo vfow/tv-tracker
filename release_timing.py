@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import os
+
+import psycopg
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
 from typing import Any, Callable, Protocol
@@ -151,7 +153,7 @@ class ReleaseTimingResolver:
                     episode_number=int(episode_number),
                     tmdb_air_date=str(tmdb_air_date or ""),
                 )
-            except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
+            except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError, psycopg.Error):
                 candidate = None
 
         if candidate:

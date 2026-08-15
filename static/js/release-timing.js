@@ -120,6 +120,9 @@
 
     function collectEpisodes(shows){
         const output = []; const seen = new Set();
+        const today = new Date(); today.setHours(0,0,0,0);
+        const minTime = today.getTime() - (14 * 86400000);
+        const maxTime = today.getTime() + (366 * 86400000);
         Object.values(shows || {}).forEach(show=>{
             const showId = Number(show && (show.tmdb_id || show.id));
             if(!showId){ return; }
@@ -129,8 +132,11 @@
                 const episode = Number(raw.episode_number !== undefined ? raw.episode_number : raw.episode);
                 const identity = key(showId,season,episode);
                 if(!identity || seen.has(identity)){ return; }
+                const airDate = String(raw.air_date || "");
+                const day = Date.parse(airDate + "T00:00:00Z");
+                if(!airDate || !Number.isFinite(day) || day < minTime || day > maxTime){ return; }
                 seen.add(identity);
-                output.push({tmdbId:showId,season,episode,airDate:String(raw.air_date || "")});
+                output.push({tmdbId:showId,season,episode,airDate});
             }
             const lists = show._episode_list && typeof show._episode_list === "object" ? show._episode_list : {};
             Object.keys(lists).forEach(season=>{
@@ -188,7 +194,12 @@
                 status.timezone = String(payload.timezone || status.timezone || "UTC");
                 status.timezoneMode = String(payload.timezoneMode || status.timezoneMode || "automatic");
                 Object.entries(payload.results || {}).forEach(([identity,item])=>cache.set(identity,item));
-                if(payload.attribution && payload.attribution.required){ status.attribution = payload.attribution; }
+                if(payload.attribution && payload.attribution.required){
+                    status.attribution = payload.attribution;
+                    if(typeof document !== "undefined"){
+                        mountAttribution(document.getElementById("app") || document.body);
+                    }
+                }
             }
             scheduleBoundary();
         }catch(error){
@@ -213,6 +224,7 @@
         try{
             const payload = await requestJSON("/api/release-timing/status");
             status = Object.assign(status,payload || {});
+            if(!status.capability || status.capability.enabled !== true){ cache.clear(); }
         }catch(error){ /* core fallback remains available */ }
         initialized = true;
         await syncAutomaticTimezone();

@@ -78,27 +78,35 @@
         }
     }
 
-    async function ensureTimezone(timezone){
-        if(timezone || timezoneBootstrapAttempted){
+    async function ensureTimezone(timezone,timezoneMode="automatic"){
+        if(String(timezoneMode || "automatic") === "manual"){
             return timezone || "";
         }
-        timezoneBootstrapAttempted = true;
         const detected = detectedTimezone();
-        if(!detected){
-            return "";
-        }
+        if(!detected){ return timezone || ""; }
+        if(timezone === detected && timezoneBootstrapAttempted){ return detected; }
+        timezoneBootstrapAttempted = true;
         try{
             const payload = await requestJSON("/api/notifications/settings",{
                 method:"PATCH",
-                body:{timezone:detected,timezoneIfUnset:true}
+                body:{timezone:detected,timezoneMode:"automatic"}
             });
             notificationSettings = payload.settings || notificationSettings;
             return notificationSettings && notificationSettings.timezone || detected;
         }catch(error){
-            console.warn("TV Tracker could not initialize notification timezone",error);
-            return "";
+            console.warn("TV Tracker could not synchronize notification timezone",error);
+            return timezone || "";
         }
     }
+
+    document.addEventListener("visibilitychange",()=>{
+        if(!document.hidden && notificationSettings){
+            ensureTimezone(notificationSettings.timezone || "",notificationSettings.timezoneMode || "automatic");
+        }
+    });
+    global.addEventListener && global.addEventListener("focus",()=>{
+        if(notificationSettings){ ensureTimezone(notificationSettings.timezone || "",notificationSettings.timezoneMode || "automatic"); }
+    });
 
     function setUnreadDot(button,unread){
         if(!button){ return; }
@@ -124,7 +132,7 @@
         }
         statusPromise = requestJSON("/api/notifications/status")
         .then(async payload=>{
-            await ensureTimezone(payload.timezone || "");
+            await ensureTimezone(payload.timezone || "",payload.timezoneMode || "automatic");
             updateBellDots(payload.unread === true);
             return payload;
         })
@@ -436,7 +444,7 @@
     async function loadSettings(){
         const payload = await requestJSON("/api/notifications/settings");
         notificationSettings = payload.settings || {};
-        await ensureTimezone(notificationSettings.timezone || "");
+        await ensureTimezone(notificationSettings.timezone || "",notificationSettings.timezoneMode || "automatic");
         if(notificationSettings && !notificationSettings.timezone){
             const refreshed = await requestJSON("/api/notifications/settings");
             notificationSettings = refreshed.settings || notificationSettings;
@@ -500,10 +508,50 @@
                     </header>
                     <section class="notification-settings-list" aria-label="Notification settings">
                         ${switchMarkup("enabled","Notifications",settings.enabled !== false,false)}
+                        <div class="notification-setting-row" data-timezone-setting>
+                            <span class="notification-setting-copy">
+                                <strong>Timezone</strong>
+                                <span class="notification-setting-description">Automatic follows this device. Manual stays fixed.</span>
+                            </span>
+                            <span>
+                                <select data-notification-timezone-mode aria-label="Timezone mode">
+                                    <option value="automatic" ${settings.timezoneMode !== "manual" ? "selected" : ""}>Automatic</option>
+                                    <option value="manual" ${settings.timezoneMode === "manual" ? "selected" : ""}>Manual</option>
+                                </select>
+                                <input data-notification-timezone type="text" value="${String(settings.timezone || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}" aria-label="IANA timezone" placeholder="Asia/Kuala_Lumpur" ${settings.timezoneMode === "manual" ? "" : "disabled"}>
+                            </span>
+                        </div>
                         ${familyRows}
                     </section>
                 </div>
             `;
+            const timezoneModeInput = root.querySelector("[data-notification-timezone-mode]");
+            const timezoneInput = root.querySelector("[data-notification-timezone]");
+            if(timezoneModeInput && timezoneInput){
+                timezoneModeInput.addEventListener("change",async()=>{
+                    const mode = timezoneModeInput.value === "manual" ? "manual" : "automatic";
+                    timezoneInput.disabled = mode !== "manual";
+                    try{
+                        if(mode === "automatic"){
+                            const detected = detectedTimezone();
+                            const payload = await requestJSON("/api/notifications/settings",{method:"PATCH",body:{timezoneMode:mode,timezone:detected}});
+                            notificationSettings = payload.settings || notificationSettings;
+                            timezoneInput.value = notificationSettings.timezone || detected;
+                        }else{
+                            await saveSetting("timezoneMode",mode);
+                        }
+                    }catch(error){ console.error("TV Tracker could not save timezone mode",error); }
+                });
+                timezoneInput.addEventListener("change",async()=>{
+                    if(timezoneModeInput.value !== "manual"){ return; }
+                    try{
+                        const payload = await requestJSON("/api/notifications/settings",{method:"PATCH",body:{timezoneMode:"manual",timezone:timezoneInput.value.trim()}});
+                        notificationSettings = payload.settings || notificationSettings;
+                        timezoneInput.value = notificationSettings.timezone || timezoneInput.value;
+                    }catch(error){ console.error("TV Tracker could not save manual timezone",error); }
+                });
+            }
+
             root.querySelectorAll("[data-notification-setting]").forEach(input=>{
                 input.addEventListener("change",async()=>{
                     const key = input.dataset.notificationSetting;
