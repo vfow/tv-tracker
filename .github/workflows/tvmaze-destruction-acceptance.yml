@@ -75,3 +75,5 @@ jobs:
           mv /tmp/release_timing_routes.py release_timing_routes.py
       - name: Provider failure and stale-candidate acceptance tests
         run: python -m unittest tests.test_tvmaze_destruction tests.test_release_timing tests.test_tvmaze_integration -v
+
+# Re-run after canonical ordering and request-deduplication finalization.
