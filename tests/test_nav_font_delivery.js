@@ -1,4 +1,5 @@
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -7,7 +8,28 @@ const html = fs.readFileSync(path.join(root,"templates","index.html"),"utf8");
 const compiledCss = fs.readFileSync(path.join(root,"static","css","tailwind.css"),"utf8");
 const sourceCss = fs.readFileSync(path.join(root,"static","css","tailwind-input.css"),"utf8");
 
-assert.ok(html.includes("league-gothic.regular.ttf"),"League Gothic should remain preloaded");
+const leagueFontPath = path.join(root,"static","assets","league-gothic.regular.woff2");
+const leagueFontVersion = crypto.createHash("sha256")
+    .update(fs.readFileSync(leagueFontPath))
+    .digest("hex")
+    .slice(0,12);
+const leagueFontCssUrl = `../assets/league-gothic.regular.woff2?v=${leagueFontVersion}`;
+
+assert.ok(
+    html.includes("filename='assets/league-gothic.regular.woff2'") && html.includes('type="font/woff2"'),
+    "League Gothic WOFF2 should be preloaded with the matching MIME type"
+);
+assert.ok(
+    sourceCss.includes(`src:url("${leagueFontCssUrl}") format("woff2")`),
+    "source CSS must use the same content version as the preload"
+);
+assert.ok(
+    compiledCss.includes(`league-gothic.regular.woff2?v=${leagueFontVersion}`),
+    "compiled CSS must preserve the versioned WOFF2 URL"
+);
+assert.ok(!html.includes("league-gothic.regular.ttf"));
+assert.ok(!sourceCss.includes("league-gothic.regular.ttf"));
+assert.ok(!compiledCss.includes("league-gothic.regular.ttf"));
 assert.ok(!html.includes("tt-display-font-ready"),"startup font-ready JS/CSS hack should be removed");
 assert.ok(!html.includes("Arial Narrow"),"temporary condensed fallback should be removed");
 

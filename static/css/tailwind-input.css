@@ -20,7 +20,7 @@
 
     @font-face{
         font-family:"League Gothic";
-        src:url("../assets/league-gothic.regular.ttf") format("truetype");
+        src:url("../assets/league-gothic.regular.woff2?v=f51dd3a918cf") format("woff2");
         font-display:swap;
     }
 
@@ -5471,7 +5471,6 @@
     margin-bottom:12px;
 }
 
-}
 /* Phase 6.0.4 detail polish and clean releases */
 .person-silhouette-placeholder{
     display:flex;
