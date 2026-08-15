@@ -11,6 +11,13 @@ on:
 permissions:
   contents: read
 
+env:
+  SECRET_KEY: test-secret-key
+  DB_HOST: test-db
+  DB_NAME: test-db
+  DB_USER: test-user
+  DB_PASSWORD: test-password
+
 jobs:
   destroy-and-fallback:
     runs-on: ubuntu-latest
@@ -38,8 +45,15 @@ jobs:
         run: |
           mv tvmaze_integration.py /tmp/tvmaze_integration.py
           TVMAZE_ENABLED=true TVMAZE_EXACT_ENABLED=true python - <<'PY'
-          import app
-          assert app.app is not None
+          from unittest.mock import MagicMock, patch
+          with patch('psycopg.connect') as connect:
+              connection = MagicMock()
+              cursor = MagicMock()
+              connect.return_value.__enter__.return_value = connection
+              connection.cursor.return_value.__enter__.return_value = cursor
+              cursor.fetchone.return_value = (1,)
+              import app
+              assert app.app is not None
           print('Core app booted without tvmaze_integration.py')
           PY
           mv /tmp/tvmaze_integration.py tvmaze_integration.py
@@ -47,8 +61,15 @@ jobs:
         run: |
           mv release_timing_routes.py /tmp/release_timing_routes.py
           python - <<'PY'
-          import app
-          assert app.app is not None
+          from unittest.mock import MagicMock, patch
+          with patch('psycopg.connect') as connect:
+              connection = MagicMock()
+              cursor = MagicMock()
+              connect.return_value.__enter__.return_value = connection
+              connection.cursor.return_value.__enter__.return_value = cursor
+              cursor.fetchone.return_value = (1,)
+              import app
+              assert app.app is not None
           print('Core app booted without release_timing_routes.py')
           PY
           mv /tmp/release_timing_routes.py release_timing_routes.py
