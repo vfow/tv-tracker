@@ -44,6 +44,12 @@ jobs:
           replacement = '''empty_refresh_anchor = '        if(startBackgroundRefresh){'\nif chunk.count(empty_refresh_anchor) < 1:\n    raise SystemExit('renderUpcoming: empty-state refresh marker missing')\nchunk = chunk.replace(\n    empty_refresh_anchor,\n    ''' + '"""' + '''        if(\n            window.TVTrackerNotifications &&\n            typeof window.TVTrackerNotifications.mountUpcomingBellFallback === "function"\n        ){\n            window.TVTrackerNotifications.mountUpcomingBellFallback(list);\n        }\n\n        if(startBackgroundRefresh){''' + '"""' + ''',\n    1,\n)\n'''
           code = code[:block_start] + replacement + code[block_end:]
 
+          title_old = '''insertion += '\\n        notifications:"Notifications",\\n        "notification-settings":"Notification Settings"' '''.strip()
+          title_new = '''insertion += '\\n        notifications:"Notifications",\\n        "notification-settings":"Notification Settings",' '''.strip()
+          if title_old not in code:
+              raise SystemExit('notification title-map patch marker missing')
+          code = code.replace(title_old,title_new,1)
+
           Path('/tmp/notifications_patch.py').write_text(code)
           compile(code,'notifications_patch.py','exec')
           PY
