@@ -33,6 +33,12 @@ const ui = fs.readFileSync('static/js/ui.js','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
+assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading")'));
+assert(ui.includes('renderTrackerListSkeletonRows(5,"Loading upcoming episodes")'));
+assert(ui.includes('if(startBackgroundRefresh || isRefreshingUpcoming)'));
+assert(historyActivity.includes('appDataReady === false'));
+assert(historyActivity.includes('renderTrackerListSkeletonRows(5,"Loading watch history")'));
+
 assert(router.includes('/app/list/'));
 assert(router.includes('app\\/show'));
 assert(router.includes('function parseAppRoute(pathname,search="")'));

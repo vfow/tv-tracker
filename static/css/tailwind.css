@@ -2125,14 +2125,14 @@
 .notification-row-delete:hover{background:#fff;color:#000}
 .notification-row--removing{opacity:0;transform:translateX(-30px)}
 .notification-settings-header{padding-bottom:8px}
-.notification-settings-list{margin-top:18px;border-top:1px solid #1d1d1d}
+.notification-settings-list{margin-top:18px;overflow:hidden;border:1px solid #1d1d1d;border-radius:12px;background:#050505}
 .notification-setting-row{display:flex;min-height:76px;align-items:center;justify-content:space-between;gap:24px;padding:14px 16px;border-bottom:1px solid #1d1d1d;cursor:pointer;transition:background-color .16s ease,opacity .16s ease}
+.notification-setting-row:last-child{border-bottom:0}
 .notification-setting-row:hover{background:#080808}
 .notification-setting-row--disabled{opacity:.45;cursor:default}
 .notification-setting-copy{display:flex;min-width:0;flex-direction:column;gap:4px}
 .notification-setting-copy strong{color:#ddd;font-size:16px;font-weight:500}
 .notification-setting-description{color:#777;font-size:13px;line-height:1.35}
-.notification-settings-divider{height:16px;border-bottom:1px solid #1d1d1d;background:#050505}
 .notification-switch{position:relative;display:inline-flex;width:48px;height:28px;flex:0 0 48px}
 .notification-switch input{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 .notification-switch-track{display:flex;width:48px;height:28px;align-items:center;padding:3px;border:1px solid #444;border-radius:9999px;background:#222;transition:background-color .16s ease,border-color .16s ease}
@@ -2168,7 +2168,7 @@
 @keyframes notificationToastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes notificationToastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(8px)}}
 .notification-row{overflow:hidden}
-.notification-swipe-delete-reveal{position:absolute;inset:0;display:none;align-items:center;justify-content:flex-end;padding-right:22px;background:radial-gradient(circle at 10% 20%, rgba(120,0,40,.45), transparent 35%),linear-gradient(135deg,#111 0%,#080808 60%,#000 100%);color:#fff;font-size:12px;font-weight:800;letter-spacing:.08em;pointer-events:none}
+.notification-swipe-delete-reveal{position:absolute;inset:0;display:none;align-items:center;justify-content:flex-end;padding-right:22px;background:#780028;color:#fff;font-size:12px;font-weight:800;letter-spacing:.08em;pointer-events:none}
 .notification-swipe-delete-reveal span{transition:transform .14s ease,opacity .14s ease}
 .notification-row--delete-ready .notification-swipe-delete-reveal span{transform:scale(1.06);opacity:1}
 .notification-row-link{position:relative;z-index:1;background:#000;transition:background-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}

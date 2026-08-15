@@ -70,7 +70,7 @@ assert ".notification-setting-description" in css
 assert "mark_notification_read" in backend
 assert '"latestId"' in backend and '"latestCreatedAt"' in backend
 assert "LIVE_NOTIFICATION_POLL_MS = 30 * 1000" in frontend
-assert "LIVE_NOTIFICATION_TOAST_MS = 5 * 1000" in frontend
+assert "LIVE_NOTIFICATION_TOAST_MS = 10 * 1000" in frontend
 assert "MAX_VISIBLE_NOTIFICATION_TOASTS = 3" in frontend
 assert 'document.addEventListener("visibilitychange"' in frontend
 assert 'toast.addEventListener("mouseenter",pauseTimer)' in frontend
@@ -81,7 +81,10 @@ assert "notification-live-toast-stack" in css
 assert "notification-swipe-delete-reveal" in css
 assert ".notification-row-delete{position:absolute;z-index:2" in css
 assert "🗑" not in frontend and "🗑" not in css
-assert "radial-gradient(circle at 10% 20%, rgba(120,0,40,.45), transparent 35%),linear-gradient(135deg,#111 0%,#080808 60%,#000 100%)" in css
+assert "background:#780028" in css
+assert ".notification-settings-list{margin-top:18px;overflow:hidden;border:1px solid #1d1d1d;border-radius:12px;background:#050505}" in css
+assert ".notification-setting-row:last-child{border-bottom:0}" in css
+assert '<div class="notification-settings-divider"></div>' not in frontend
 
 settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
 for internal_wording in ("tracked", "loggable", "14 days"):
