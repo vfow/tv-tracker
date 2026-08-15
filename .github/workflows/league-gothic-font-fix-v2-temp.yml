@@ -1,0 +1,197 @@
+name: League Gothic font repair v2 temporary
+
+on:
+  push:
+    branches:
+      - fix/league-gothic-font-warnings
+
+permissions:
+  contents: write
+
+jobs:
+  repair-build-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/league-gothic-font-warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install validation tooling
+        run: |
+          python -m pip install -r requirements.txt fonttools brotli
+          npm ci
+      - name: Repair font and delivery references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          from fontTools.ttLib import TTFont
+
+          source = Path('static/assets/league-gothic.regular.ttf')
+          repaired = Path('/tmp/league-gothic.repaired.ttf')
+          output = Path('static/assets/league-gothic.regular.woff2')
+
+          def bounds(glyph):
+              return tuple(getattr(glyph, key, None) for key in ('xMin', 'yMin', 'xMax', 'yMax'))
+
+          def nonempty(glyph):
+              return int(getattr(glyph, 'numberOfContours', 0)) != 0
+
+          def mismatches(path):
+              font = TTFont(path, recalcBBoxes=False, recalcTimestamp=False)
+              glyf = font['glyf']
+              order = font.getGlyphOrder()
+              names = [name for name in order if nonempty(glyf[name])]
+              before = {name: bounds(glyf[name]) for name in names}
+              for name in names:
+                  glyf[name].recalcBounds(glyf)
+              after = {name: bounds(glyf[name]) for name in names}
+              result = [
+                  (i, name, before[name], after[name])
+                  for i, name in enumerate(order)
+                  if name in before and before[name] != after[name]
+              ]
+              font.close()
+              return result
+
+          original_bad = mismatches(source)
+          assert {item[0] for item in original_bad} == {34, 94, 96, 103, 113}, original_bad
+          print('Reproduced Firefox bbox warnings:', original_bad)
+
+          font = TTFont(source, recalcBBoxes=False, recalcTimestamp=False)
+          order = font.getGlyphOrder()
+          metrics = (
+              font['head'].unitsPerEm,
+              font['hhea'].ascent,
+              font['hhea'].descent,
+              font['maxp'].numGlyphs,
+              font['OS/2'].usWeightClass,
+              font['OS/2'].usWidthClass,
+          )
+          glyf = font['glyf']
+          for name in order:
+              if nonempty(glyf[name]):
+                  glyf[name].recalcBounds(glyf)
+          font.save(repaired)
+          font.close()
+          assert not mismatches(repaired)
+
+          webfont = TTFont(repaired, recalcBBoxes=False, recalcTimestamp=False)
+          webfont.flavor = 'woff2'
+          webfont.save(output)
+          webfont.close()
+
+          final = TTFont(output, recalcBBoxes=False, recalcTimestamp=False)
+          final_metrics = (
+              final['head'].unitsPerEm,
+              final['hhea'].ascent,
+              final['hhea'].descent,
+              final['maxp'].numGlyphs,
+              final['OS/2'].usWeightClass,
+              final['OS/2'].usWidthClass,
+          )
+          assert final.getGlyphOrder() == order
+          assert final_metrics == metrics
+          final.close()
+          assert not mismatches(output)
+
+          version = hashlib.sha256(output.read_bytes()).hexdigest()[:12]
+          print('League Gothic WOFF2 version:', version)
+
+          css_path = Path('static/css/tailwind-input.css')
+          css = css_path.read_text()
+          stray = '''.movie-crew-department-heading{
+              margin-bottom:12px;
+          }
+
+          }
+          /* Phase 6.0.4 detail polish and clean releases */'''
+          fixed = '''.movie-crew-department-heading{
+              margin-bottom:12px;
+          }
+
+          /* Phase 6.0.4 detail polish and clean releases */'''
+          if stray not in css:
+              raise SystemExit('Expected stray Tailwind closing brace was not found')
+          css = css.replace(stray, fixed, 1)
+          old_font = 'src:url("../assets/league-gothic.regular.ttf") format("truetype");'
+          new_font = f'src:url("../assets/league-gothic.regular.woff2?v={version}") format("woff2");'
+          if old_font not in css:
+              raise SystemExit('Expected League Gothic TTF source was not found')
+          css_path.write_text(css.replace(old_font, new_font, 1))
+
+          template_path = Path('templates/index.html')
+          template = template_path.read_text()
+          old_preload = '<link rel="preload" href="{{ url_for(\'static\', filename=\'assets/league-gothic.regular.ttf\') }}" as="font" type="font/ttf" crossorigin>'
+          new_preload = '<link rel="preload" href="{{ url_for(\'static\', filename=\'assets/league-gothic.regular.woff2\') }}" as="font" type="font/woff2" crossorigin>'
+          if old_preload not in template:
+              raise SystemExit('Expected TTF preload was not found')
+          template_path.write_text(template.replace(old_preload, new_preload, 1))
+
+          test_path = Path('tests/test_nav_font_delivery.js')
+          test = test_path.read_text()
+          test = test.replace(
+              'const assert = require("assert");\n',
+              'const assert = require("assert");\nconst crypto = require("crypto");\n',
+              1,
+          )
+          old_assert = 'assert.ok(html.includes("league-gothic.regular.ttf"),"League Gothic should remain preloaded");'
+          new_assert = '''const leagueFontPath = path.join(root,"static","assets","league-gothic.regular.woff2");
+          const leagueFontVersion = crypto.createHash("sha256")
+              .update(fs.readFileSync(leagueFontPath))
+              .digest("hex")
+              .slice(0,12);
+          const leagueFontCssUrl = `../assets/league-gothic.regular.woff2?v=${leagueFontVersion}`;
+
+          assert.ok(
+              html.includes("filename='assets/league-gothic.regular.woff2'") && html.includes('type="font/woff2"'),
+              "League Gothic WOFF2 should be preloaded with the matching MIME type"
+          );
+          assert.ok(
+              sourceCss.includes(`src:url("${leagueFontCssUrl}") format("woff2")`),
+              "source CSS must use the same content version as the preload"
+          );
+          assert.ok(
+              compiledCss.includes(`league-gothic.regular.woff2?v=${leagueFontVersion}`),
+              "compiled CSS must preserve the versioned WOFF2 URL"
+          );
+          assert.ok(!html.includes("league-gothic.regular.ttf"));
+          assert.ok(!sourceCss.includes("league-gothic.regular.ttf"));
+          assert.ok(!compiledCss.includes("league-gothic.regular.ttf"));'''
+          if old_assert not in test:
+              raise SystemExit('Expected old font regression assertion was not found')
+          test_path.write_text(test.replace(old_assert, new_assert, 1))
+          PY
+      - name: Rebuild Tailwind CSS
+        run: npm run css:build
+      - name: Validate repaired WOFF2
+        run: |
+          python - <<'PY'
+          from fontTools.ttLib import TTFont
+          path = 'static/assets/league-gothic.regular.woff2'
+          font = TTFont(path, recalcBBoxes=False, recalcTimestamp=False)
+          glyf = font['glyf']
+          order = font.getGlyphOrder()
+          names = [name for name in order if int(getattr(glyf[name], 'numberOfContours', 0)) != 0]
+          before = {name: tuple(getattr(glyf[name], k, None) for k in ('xMin','yMin','xMax','yMax')) for name in names}
+          for name in names:
+              glyf[name].recalcBounds(glyf)
+          after = {name: tuple(getattr(glyf[name], k, None) for k in ('xMin','yMin','xMax','yMax')) for name in names}
+          assert all(before[name] == after[name] for name in names)
+          print(f'Validated {len(names)} non-empty glyph bounds.')
+          PY
+      - run: node tests/test_nav_font_delivery.js
+      - run: python -m unittest tests.test_cache_headers
+      - name: Commit tested font fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add static/assets/league-gothic.regular.woff2 static/css/tailwind-input.css static/css/tailwind.css templates/index.html tests/test_nav_font_delivery.js
+          git commit -m "Fix League Gothic font delivery warnings"
+          git push origin HEAD:fix/league-gothic-font-warnings
