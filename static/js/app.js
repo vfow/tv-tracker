@@ -12647,28 +12647,20 @@ function getUpcomingShows(){
 
     return items.sort((a,b)=>{
 
-        /*
-        Official TMDB calendar dates control schedule ordering and grouping.
-        Local-time conversion is only a time display/refinement within the same
-        official date and must never reorder July 28 ahead of July 27.
-        */
-        const dateCompare = compareEpisodeCalendarDates(
-            a.episode.air_date,
-            a.episode,
-            b.episode.air_date,
-            b.episode
-        );
-
-        if(dateCompare !== 0){
-            return dateCompare;
-        }
-
         const aRelease = makeEpisodeReleaseDate(a.episode.air_date,a.episode,a.show);
         const bRelease = makeEpisodeReleaseDate(b.episode.air_date,b.episode,b.show);
 
         if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
             return aRelease - bRelease;
         }
+
+        const dateCompare = compareEpisodeCalendarDates(
+            a.episode.air_date,
+            a.episode,
+            b.episode.air_date,
+            b.episode
+        );
+        if(dateCompare !== 0){ return dateCompare; }
 
         const titleA = String(a.show.title || "");
         const titleB = String(b.show.title || "");
@@ -12879,7 +12871,7 @@ function getFutureScheduleEpisodes(show){
 
         if(isEpisodeAired(airDate,sourceEpisode,show)){
 
-            const dayDifference = getDayDiffFromToday(airDate,sourceEpisode);
+            const dayDifference = getDayDiffFromToday(airDate,sourceEpisode,show);
 
             // Keep a newly released episode visible in its real schedule group
             // even when the user still has older episodes in CATCH UP.
@@ -12969,23 +12961,15 @@ function getFutureScheduleEpisodes(show){
 
     futureEpisodes.sort((a,b)=>{
 
-        const dateCompare = compareEpisodeCalendarDates(
-            a.air_date,
-            a,
-            b.air_date,
-            b
-        );
-
-        if(dateCompare !== 0){
-            return dateCompare;
-        }
-
         const aRelease = makeEpisodeReleaseDate(a.air_date,a,show);
         const bRelease = makeEpisodeReleaseDate(b.air_date,b,show);
 
         if(aRelease && bRelease && aRelease.getTime() !== bRelease.getTime()){
             return aRelease - bRelease;
         }
+
+        const dateCompare = compareEpisodeCalendarDates(a.air_date,a,b.air_date,b);
+        if(dateCompare !== 0){ return dateCompare; }
 
         if(Number(a.season_number) !== Number(b.season_number)){
             return Number(a.season_number) - Number(b.season_number);
@@ -13231,18 +13215,25 @@ function getUpcomingGroup(airDateString,episodeInfo=null,showInfo=null){
         return "This Week";
     }
 
-    const airDate = makeLocalDate(
-        getEpisodeCalendarDateString(airDateString,episodeInfo)
-    );
-
-    const today = new Date();
+    const canonicalDateString = window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.calendarDate === "function"
+        ? window.TVTrackerReleaseTiming.calendarDate(airDateString,episodeInfo,showInfo)
+        : getEpisodeCalendarDateString(airDateString,episodeInfo);
+    const airDate = makeLocalDate(canonicalDateString);
+    const effectiveTimezone = window.TVTrackerReleaseTiming && typeof window.TVTrackerReleaseTiming.getStatus === "function"
+        ? String(window.TVTrackerReleaseTiming.getStatus().timezone || "")
+        : "";
+    let today = new Date();
+    if(effectiveTimezone){
+        try{
+            const todayString = new Intl.DateTimeFormat("en-CA",{timeZone:effectiveTimezone,year:"numeric",month:"2-digit",day:"2-digit"})
+                .formatToParts(today)
+                .reduce((parts,part)=>{ if(part.type !== "literal"){ parts[part.type] = part.value; } return parts; },{});
+            today = makeLocalDate(`${todayString.year}-${todayString.month}-${todayString.day}`) || today;
+        }catch(error){ /* local-device fallback */ }
+    }
     today.setHours(0,0,0,0);
 
-    if(
-        airDate &&
-        airDate.getFullYear() === today.getFullYear() &&
-        airDate.getMonth() === today.getMonth()
-    ){
+    if(airDate && airDate.getFullYear() === today.getFullYear() && airDate.getMonth() === today.getMonth()){
         return "This Month";
     }
 
@@ -13366,7 +13357,7 @@ function isNewUpcomingEpisode(show,episode){
         return false;
     }
 
-    const diffDays = getDayDiffFromToday(episode.air_date,episode);
+    const diffDays = getDayDiffFromToday(episode.air_date,episode,show);
 
     if(diffDays === null || diffDays < 0 || diffDays > 4){
         return false;

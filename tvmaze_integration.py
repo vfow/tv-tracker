@@ -114,6 +114,7 @@ class TVmazeProvider:
         self._schema_ready = False
         self._request_lock = threading.Lock()
         self._inflight: dict[str, threading.Event] = {}
+        self._recent_requests: dict[str, tuple[float, dict[str, Any] | None, Exception | None]] = {}
         self.diagnostics = {
             "requests": 0,
             "cache_hits": 0,
@@ -180,9 +181,7 @@ class TVmazeProvider:
                     pass
         return min(0.75 * (2 ** attempt), 3.0)
 
-    def _request_json(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
-        url = TVMAZE_API_BASE + path + (("?" + query) if query else "")
+    def _request_json_uncached(self, url: str) -> dict[str, Any] | None:
         request = Request(url, headers={"Accept": "application/json", "User-Agent": TVMAZE_USER_AGENT})
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES + 1):
@@ -207,6 +206,50 @@ class TVmazeProvider:
         if last_error:
             raise RuntimeError("TVmaze request failed") from last_error
         return None
+
+    def _request_json(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        url = TVMAZE_API_BASE + path + (("?" + query) if query else "")
+        now = time.monotonic()
+        leader = False
+        with self._request_lock:
+            recent = self._recent_requests.get(url)
+            if recent and now - recent[0] <= 2.0:
+                _, payload, error = recent
+                if error is not None:
+                    raise RuntimeError("TVmaze request failed") from error
+                return payload
+            event = self._inflight.get(url)
+            if event is None:
+                event = threading.Event()
+                self._inflight[url] = event
+                leader = True
+
+        if not leader:
+            event.wait(timeout=(REQUEST_TIMEOUT_SECONDS * (MAX_RETRIES + 1)) + 8.0)
+            with self._request_lock:
+                recent = self._recent_requests.get(url)
+            if recent:
+                _, payload, error = recent
+                if error is not None:
+                    raise RuntimeError("TVmaze request failed") from error
+                return payload
+            raise RuntimeError("TVmaze request deduplication wait expired")
+
+        payload: dict[str, Any] | None = None
+        stored_error: Exception | None = None
+        try:
+            payload = self._request_json_uncached(url)
+            return payload
+        except RuntimeError as error:
+            stored_error = error
+            raise
+        finally:
+            with self._request_lock:
+                self._recent_requests[url] = (time.monotonic(), payload, stored_error)
+                finished = self._inflight.pop(url, None)
+                if finished is not None:
+                    finished.set()
 
     def _lookup_external(self, *, imdb_id: str, tvdb_id: int | None) -> tuple[int | None, str]:
         matches: set[int] = set()

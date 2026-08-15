@@ -1,5 +1,7 @@
 import io
 import json
+import threading
+import time
 import unittest
 from unittest import mock
 from urllib.error import HTTPError
@@ -75,6 +77,28 @@ class TVmazeHttpTests(unittest.TestCase):
         tvmaze_id, reason = provider._lookup_external(imdb_id="tt1",tvdb_id=123)
         self.assertIsNone(tvmaze_id)
         self.assertEqual(reason,"external_id_conflict")
+
+    def test_identical_concurrent_requests_are_deduplicated(self):
+        calls = []
+        started = threading.Event()
+        def opener(*args, **kwargs):
+            calls.append(1)
+            started.set()
+            time.sleep(0.08)
+            return FakeResponse({"id": 77})
+        provider = self.provider(opener)
+        results = []
+        def run():
+            results.append(provider._request_json("/shows/77"))
+        first = threading.Thread(target=run)
+        second = threading.Thread(target=run)
+        first.start()
+        started.wait(timeout=1)
+        second.start()
+        first.join(timeout=2)
+        second.join(timeout=2)
+        self.assertEqual(results, [{"id":77},{"id":77}])
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
