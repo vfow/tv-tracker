@@ -137,6 +137,8 @@ function getTrackerDocumentTitleLabel(){
         search:(typeof searchRouteState !== "undefined" && searchRouteState && searchRouteState.query ? `Search: ${searchRouteState.query}` : "Search"),
         profile:"Profile",
         settings:"Settings",
+        notifications:"Notifications",
+        "notification-settings":"Notification Settings",
         "show-detail":(typeof getShowForDetailPage === "function" && getShowForDetailPage(selectedShowId) ? getShowForDetailPage(selectedShowId).title : "Show"),
         "episode-detail":selectedEpisodeContext
         ? `S${selectedEpisodeContext.season}E${String(selectedEpisodeContext.episode).padStart(2,"0")}`
@@ -3543,6 +3545,13 @@ async function renderUpcoming(startBackgroundRefresh=true){
             </div>
         `;
 
+        if(
+            window.TVTrackerNotifications &&
+            typeof window.TVTrackerNotifications.mountUpcomingBellFallback === "function"
+        ){
+            window.TVTrackerNotifications.mountUpcomingBellFallback(list);
+        }
+
         if(startBackgroundRefresh){
             refreshUpcomingDataInBackground();
         }
@@ -3550,6 +3559,8 @@ async function renderUpcoming(startBackgroundRefresh=true){
         return;
 
     }
+
+    let notificationBellMounted = false;
 
     const groupOrder = [
         "Catch Up",
@@ -3579,6 +3590,15 @@ async function renderUpcoming(startBackgroundRefresh=true){
                 ${escapeHTML(groupName.trim())}
             </div>
         `;
+
+            if(
+                !notificationBellMounted &&
+                window.TVTrackerNotifications &&
+                typeof window.TVTrackerNotifications.mountUpcomingBell === "function"
+            ){
+                const notificationTitle = groupBox.querySelector(".upcoming-group-title");
+                notificationBellMounted = window.TVTrackerNotifications.mountUpcomingBell(notificationTitle);
+            }
 
         const displayItems = prepareUpcomingDisplayItems(groupItems);
 

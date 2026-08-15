@@ -274,6 +274,12 @@
         if(path === "/app/settings"){
             return buildParsedRoute("settings",path,"",{});
         }
+        if(path === "/app/notifications"){
+            return buildParsedRoute("notifications",path,"",{});
+        }
+        if(path === "/app/notifications/settings"){
+            return buildParsedRoute("notification-settings",path,"",{});
+        }
 
         const discoverCategoryMatch = path.match(/^\/app\/discover\/(?:(tv)\/(popular|top-rated|airing-today|on-the-air)|(movie)\/(popular|top-rated|now-playing|upcoming))$/);
         if(discoverCategoryMatch){
@@ -540,6 +546,12 @@
         if(activePage === "settings"){
             return "/app/settings";
         }
+        if(activePage === "notifications"){
+            return "/app/notifications";
+        }
+        if(activePage === "notification-settings"){
+            return "/app/notifications/settings";
+        }
         if(activePage === "shows"){
             if(activeShowsTab === "upcoming"){
                 return "/app/upcoming";
@@ -774,6 +786,18 @@
         }
         if(parsed.type === "upcoming" || parsed.type === "history"){
             setInitialShowsTab(parsed.type);
+            return;
+        }
+        if(parsed.type === "notifications"){
+            activePage = "notifications";
+            setPageActiveWithoutRender("notifications-page","shows");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
+            return;
+        }
+        if(parsed.type === "notification-settings"){
+            activePage = "notification-settings";
+            setPageActiveWithoutRender("notification-settings-page","shows");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
         if(parsed.type === "profile" || parsed.type === "settings"){
@@ -1091,6 +1115,26 @@
                 openDiscoverHomePage({fromRoute:true});
             }else{
                 showPage("discover");
+            }
+            return;
+        }
+        if(parsed.type === "notifications"){
+            clearDetailState();
+            if(
+                window.TVTrackerNotifications &&
+                typeof window.TVTrackerNotifications.openNotificationsPage === "function"
+            ){
+                window.TVTrackerNotifications.openNotificationsPage({fromRoute:true});
+            }
+            return;
+        }
+        if(parsed.type === "notification-settings"){
+            clearDetailState();
+            if(
+                window.TVTrackerNotifications &&
+                typeof window.TVTrackerNotifications.openNotificationSettingsPage === "function"
+            ){
+                window.TVTrackerNotifications.openNotificationSettingsPage({fromRoute:true});
             }
             return;
         }

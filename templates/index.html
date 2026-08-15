@@ -7,6 +7,8 @@
 <meta name="csrf-token" content="{{ csrf_token }}">
 <meta name="app-route" content="{{ initial_app_path }}">
 <meta name="frontend-build" content="2.0-tailwind">
+<meta name="notification-bell-icon" content="{{ url_for('static', filename='assets/icons/notification-bell.svg') }}">
+<meta name="notification-settings-icon" content="{{ url_for('static', filename='assets/icons/notification-settings.svg') }}">
 
 <title>TV Tracker</title>
 
@@ -172,6 +174,20 @@
 </div>
 
 
+<!-- NOTIFICATIONS PAGE -->
+
+<div id="notifications-page" class="page notifications-page">
+    <div id="notifications-content"></div>
+</div>
+
+
+<!-- NOTIFICATION SETTINGS PAGE -->
+
+<div id="notification-settings-page" class="page notification-settings-page">
+    <div id="notification-settings-content"></div>
+</div>
+
+
 
 <!-- SHOW DETAIL PAGE -->
 
@@ -320,6 +336,7 @@
 <script src="{{ url_for('static', filename='js/show-detail-filters.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/show-removal-integrity.js') }}"></script>
