@@ -13,42 +13,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect Upcoming and routing
+      - name: Inspect router and app hooks
         shell: bash
         run: |
           set -eu
-          echo '=== FILES ==='
-          find static/js -maxdepth 1 -type f -printf '%f\n' | sort
-          echo '=== UPCOMING FUNCTIONS ==='
-          grep -n -E 'renderUpcoming|CATCH UP|Catch Up|catch up|TOMORROW|Tomorrow|TODAY|Today|loggable|air_date|aired yesterday' static/js/*.js | head -n 260 || true
-          echo '=== renderUpcoming context ==='
-          line=$(grep -n 'async function renderUpcoming' static/js/ui.js | head -1 | cut -d: -f1 || true)
-          if [ -n "$line" ]; then start=$((line-80)); [ "$start" -lt 1 ] && start=1; end=$((line+330)); sed -n "${start},${end}p" static/js/ui.js; fi
-          echo '=== ROUTER ROUTES ==='
-          grep -n -E '/app/(upcoming|history|settings)|activeShowsTab|showPage\(' static/js/app-router.js | head -n 240 || true
-          echo '=== ROUTER CONTEXT ==='
-          sed -n '1,420p' static/js/app-router.js
-      - name: Inspect settings and TMDB helpers
+          echo '=== ROUTER APPLY CONTEXT ==='
+          sed -n '500,1160p' static/js/app-router.js
+          echo '=== APP BOTTOM ==='
+          tail -n 120 app.py
+          echo '=== APP INIT / DATA READY ==='
+          grep -n -E 'initDatabase|getStoredData|appDataReady|startDataSync|prepareInitial|initialize|DOMContentLoaded' static/js/app.js static/js/db.js | tail -n 160 || true
+      - name: Inspect CSS hooks
         shell: bash
         run: |
           set -eu
-          echo '=== SETTINGS UI ==='
-          grep -n -E 'function renderSettings|toggle|switch|settings-row|setting' static/js/ui.js | head -n 180 || true
-          line=$(grep -n 'function renderSettings' static/js/ui.js | head -1 | cut -d: -f1 || true)
-          if [ -n "$line" ]; then start=$((line-60)); [ "$start" -lt 1 ] && start=1; end=$((line+420)); sed -n "${start},${end}p" static/js/ui.js; fi
-          echo '=== TMDB SERVER ==='
-          grep -n -E 'TMDB|tmdb|fetch_tmdb|api_key|API_KEY' app.py | head -n 260 || true
-          echo '=== APP ROUTES / TEMPLATE ROUTING ==='
-          grep -n -E 'APP_SECTION_PATHS|APP_LIST_PATH_RE|initial_app_path|render_template\("index.html"' app.py | head -n 180 || true
-          echo '=== TEMPLATE SCRIPT ORDER / END ==='
-          tail -n 180 templates/index.html
-      - name: Inspect data shapes and tests
+          echo '=== UPCOMING CSS ==='
+          grep -n -E '^\.upcoming-group|upcoming-group-title|upcoming-entry-card|upcoming-time' static/css/tailwind-input.css | head -n 100 || true
+          for pattern in 'upcoming-group-title' 'settings-inner' 'settings-section' 'settings-action-button'; do
+            line=$(grep -n "$pattern" static/css/tailwind-input.css | head -1 | cut -d: -f1 || true)
+            if [ -n "$line" ]; then start=$((line-30)); [ "$start" -lt 1 ] && start=1; end=$((line+100)); echo "=== CSS CONTEXT $pattern ==="; sed -n "${start},${end}p" static/css/tailwind-input.css; fi
+          done
+          echo '=== CSS COLORS / ROOT ==='
+          sed -n '1,220p' static/css/tailwind-input.css
+      - name: Inspect show metadata and tests
         shell: bash
         run: |
           set -eu
           echo '=== STATUS / HISTORY SHAPES ==='
-          grep -n -E 'status["'"']|\.status|season.*episode|history.*show|history.*season|watched' static/js/app.js static/js/ui.js | head -n 260 || true
-          echo '=== DATE UTIL FILES / TESTS ==='
-          find static/js tests -type f | grep -Ei 'upcoming|date|air|episode' | sort || true
+          grep -n -E 'show\.status|status:|episodes_watched|_episode_list|_season_details|tmdb_status|number_of_seasons|last_episode_to_air|next_episode_to_air' static/js/app.js | head -n 320 || true
+          echo '=== METADATA REFRESH CONTEXT ==='
+          sed -n '6200,6340p' static/js/app.js
+          echo '=== TEST FILES ==='
+          find tests -maxdepth 1 -type f -printf '%f\n' | sort
           echo '=== PACKAGE ==='
           cat package.json
