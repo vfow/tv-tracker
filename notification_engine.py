@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -239,7 +239,6 @@ def season_detail_requests_for_today(
     if normalize_tracker_status(tracker_status) != "watching":
         return set()
     local_today = now.astimezone(notification_zone(timezone_name)).date()
-    yesterday = local_today - timedelta(days=1)
     last_episode = normalize_episode(details.get("last_episode_to_air"))
     if last_episode and parse_calendar_date(last_episode.get("air_date")) == yesterday:
         return {int(last_episode["season_number"])}
@@ -410,6 +409,7 @@ def collect_time_notification_candidates(
     now: datetime,
     timezone_name: str,
     last_checked_at: datetime | None = None,
+    release_lookup: Callable[[int, int, str], datetime | None] | None = None,
 ) -> list[dict[str, Any]]:
     zone = notification_zone(timezone_name)
     local_today = now.astimezone(zone).date()
@@ -455,11 +455,13 @@ def collect_time_notification_candidates(
         )
 
     if tracker_status == "watching":
+        previous_check = None
         last_checked_day = None
         if isinstance(last_checked_at, datetime):
             previous_check = last_checked_at
             if previous_check.tzinfo is None:
                 previous_check = previous_check.replace(tzinfo=timezone.utc)
+            previous_check = previous_check.astimezone(timezone.utc)
             last_checked_day = previous_check.astimezone(zone).date()
 
         for episode in episodes:
@@ -476,7 +478,21 @@ def collect_time_notification_candidates(
             name = str(episode.get("name") or "").strip()
             suffix = f" - {name}" if name else ""
 
-            if air_day == yesterday:
+            available_at = None
+            if callable(release_lookup):
+                try:
+                    available_at = release_lookup(season_number, episode_number, air_date)
+                except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
+                    available_at = None
+            if available_at is None:
+                available_at = datetime.combine(air_day, datetime.min.time(), tzinfo=zone)
+            elif available_at.tzinfo is None:
+                available_at = None
+
+            if available_at is None:
+                continue
+            available_at_utc = available_at.astimezone(timezone.utc)
+            if previous_check is not None and previous_check < available_at_utc <= now.astimezone(timezone.utc):
                 candidates.append(
                     _base_candidate(
                         snapshot,
@@ -484,14 +500,14 @@ def collect_time_notification_candidates(
                         kind="new_episode",
                         event_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}",
                         group_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}",
-                        message=f"{title} {code}{suffix} aired yesterday",
-                        event_date=air_date,
+                        message=f"{title} {code}{suffix} is now available",
+                        event_date=available_at_utc.astimezone(zone).date().isoformat(),
                         episode=episode,
                         payload={"season": season_number, "episode": episode_number},
                     )
                 )
 
-            available_day = air_day + timedelta(days=1)
+            available_day = available_at_utc.astimezone(zone).date()
             reminder_day = available_day + timedelta(days=5)
             reminder_due = (
                 reminder_day == local_today
@@ -531,7 +547,16 @@ def collect_time_notification_candidates(
                     continue
                 air_date = str(episode.get("air_date") or "")
                 air_day = parse_calendar_date(air_date)
-                if air_day != tomorrow:
+                if not air_day:
+                    continue
+                return_at = None
+                if callable(release_lookup):
+                    try:
+                        return_at = release_lookup(season_number, int(episode["episode_number"]), air_date)
+                    except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
+                        return_at = None
+                return_day = return_at.astimezone(zone).date() if return_at and return_at.tzinfo else air_day
+                if return_day != tomorrow:
                     continue
                 previous = season_episodes[index - 1]
                 previous_day = parse_calendar_date(previous.get("air_date"))

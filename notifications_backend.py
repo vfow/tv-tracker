@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from psycopg.types.json import Jsonb
 
+from release_timing import ReleaseTimingResolver, parse_aware_datetime
 from notification_engine import (
     NOTIFICATION_FAMILIES,
     build_stored_notification_snapshot,
@@ -511,6 +512,7 @@ def run_notification_check(
     initialized = settings.get("initialized_at") is not None
     created = 0
     processed = 0
+    timing_resolver = ReleaseTimingResolver()
 
     with connection_factory() as connection:
         with connection.cursor() as cursor:
@@ -565,12 +567,25 @@ def run_notification_check(
                     current_time,
                     timezone_name,
                 )
+                def release_lookup(season_number: int, episode_number: int, air_date: str) -> datetime | None:
+                    timing = timing_resolver.resolve(
+                        tmdb_id=int(show_id),
+                        season_number=season_number,
+                        episode_number=episode_number,
+                        tmdb_air_date=air_date,
+                        timezone_name=timezone_name,
+                    )
+                    if not timing:
+                        return None
+                    return parse_aware_datetime(timing.release_at or timing.eligible_at)
+
                 timed = collect_time_notification_candidates(
                     current,
                     tracker_show,
                     current_time,
                     timezone_name,
                     last_checked_at=settings.get("last_checked_at"),
+                    release_lookup=release_lookup,
                 )
                 for candidate in metadata + timed:
                     processed += 1
