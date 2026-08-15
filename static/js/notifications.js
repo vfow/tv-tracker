@@ -344,12 +344,11 @@
         root.innerHTML = `
             <div class="notifications-shell">
                 <header class="notifications-header">
-                    <div class="notifications-heading">
-                        <div class="notifications-title-row">
-                            <a class="notifications-back-link" href="/app/upcoming" aria-label="Back to Upcoming"><span aria-hidden="true">←</span></a>
-                            <h1>Notifications</h1>
-                        </div>
-                        <p class="notifications-subtitle">Updates from the shows you follow.</p>
+                    <div class="notifications-title-row">
+                        <a class="show-page-back-button notifications-back-button" href="/app/upcoming" aria-label="Back to Upcoming">
+                            <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                        </a>
+                        <h1 class="tw-font-league">Notifications</h1>
                     </div>
                     <a class="notifications-settings-link" href="/app/notifications/settings" aria-label="Notification settings">
                         <img src="${SETTINGS_ICON}" alt="" aria-hidden="true" class="notification-icon notification-icon--light">
@@ -445,12 +444,11 @@
             root.innerHTML = `
                 <div class="notifications-shell notification-settings-shell">
                     <header class="notifications-header notification-settings-header">
-                        <div class="notifications-heading">
-                            <div class="notifications-title-row">
-                                <a class="notifications-back-link" href="/app/notifications" aria-label="Back to Notifications"><span aria-hidden="true">←</span></a>
-                                <h1>Notification Settings</h1>
-                            </div>
-                            <p class="notifications-subtitle">Choose which updates you want to receive.</p>
+                        <div class="notifications-title-row">
+                            <a class="show-page-back-button notifications-back-button" href="/app/notifications" aria-label="Back to Notifications">
+                                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
+                            </a>
+                            <h1 class="tw-font-league">Notification Settings</h1>
                         </div>
                     </header>
                     <section class="notification-settings-list" aria-label="Notification settings">
