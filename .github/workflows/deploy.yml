@@ -1,0 +1,41 @@
+name: Deploy TV Tracker
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci
+      - run: python tests/run_all.py
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        with:
+          host: ${{ secrets.ALWAYSDATA_SSH_HOST }}
+          username: ${{ secrets.ALWAYSDATA_SSH_USER }}
+          key: ${{ secrets.ALWAYSDATA_SSH_KEY }}
+          script: |
+            cd "${{ secrets.ALWAYSDATA_APP_DIR }}"
+            git pull --ff-only origin main
+      - name: Verify public health endpoint
+        env:
+          ALWAYSDATA_HEALTH_URL: ${{ secrets.ALWAYSDATA_HEALTH_URL }}
+          HEALTHZ_SECRET: ${{ secrets.HEALTHZ_SECRET }}
+        run: |
+          curl --fail --silent --show-error \
+            -H "X-Healthcheck-Token: ${HEALTHZ_SECRET}" \
+            "${ALWAYSDATA_HEALTH_URL%/}/healthz"
