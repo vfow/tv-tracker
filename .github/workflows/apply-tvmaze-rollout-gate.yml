@@ -40,3 +40,5 @@ jobs:
           git commit -m "Wire canonical release timing into tracker" || exit 0
           git pull --rebase origin agent/tvmaze-full-rollout
           git push origin HEAD:agent/tvmaze-full-rollout
+
+# This workflow is branch-only rollout scaffolding and is removed before review completion.
