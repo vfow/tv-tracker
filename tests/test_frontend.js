@@ -33,11 +33,21 @@ const ui = fs.readFileSync('static/js/ui.js','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
-assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading")'));
-assert(ui.includes('renderTrackerListSkeletonRows(5,"Loading upcoming episodes")'));
+assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
+assert(ui.includes('function renderTrackerMediaRowSkeletonHTML(index=0,kind="upcoming")'));
+assert(ui.includes('function renderUpcomingSkeletonHTML()'));
+assert(ui.includes('function renderHistorySkeletonHTML()'));
+assert(ui.includes('const count = mobile ? 6 : 8'));
 assert(ui.includes('if(startBackgroundRefresh || isRefreshingUpcoming)'));
-assert(historyActivity.includes('appDataReady === false'));
-assert(historyActivity.includes('renderTrackerListSkeletonRows(5,"Loading watch history")'));
+assert(router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
+assert(router.includes('list.innerHTML = renderHistorySkeletonHTML()'));
+assert(!historyActivity.includes('appDataReady === false'));
+const upcomingSkeletonSource = ui.slice(
+  ui.indexOf('function renderUpcomingSkeletonHTML()'),
+  ui.indexOf('function renderHistorySkeletonHTML()')
+);
+assert(!upcomingSkeletonSource.toLowerCase().includes('bell'));
+assert(!upcomingSkeletonSource.includes('watchlist-skeleton-action'));
 
 assert(router.includes('/app/list/'));
 assert(router.includes('app\\/show'));

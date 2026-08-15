@@ -69,13 +69,17 @@ assert ".notifications-back-button.show-page-back-button" in css
 assert ".notification-setting-description" in css
 assert "mark_notification_read" in backend
 assert '"latestId"' in backend and '"latestCreatedAt"' in backend
+assert "unwatched_episode_reminder" in engine
+assert "You still haven't watched" in engine
+assert "reminder_day = available_day + timedelta(days=5)" in engine
+assert 'last_checked_at=settings.get("last_checked_at")' in backend
 assert "LIVE_NOTIFICATION_POLL_MS = 30 * 1000" in frontend
 assert "LIVE_NOTIFICATION_TOAST_MS = 10 * 1000" in frontend
 assert "MAX_VISIBLE_NOTIFICATION_TOASTS = 3" in frontend
 assert 'document.addEventListener("visibilitychange"' in frontend
 assert 'toast.addEventListener("mouseenter",pauseTimer)' in frontend
 assert 'close.textContent = "×"' in frontend
-assert 'swipeLabel.textContent = "DELETE"' in frontend
+assert 'swipeLabel.textContent = "DELETE"' not in frontend
 assert "notification-swipe-delete-reveal" in frontend
 assert "notification-live-toast-stack" in css
 assert "notification-swipe-delete-reveal" in css

@@ -103,6 +103,113 @@ class NotificationRuleTests(unittest.TestCase):
                     item["family"] == "new_episode" for item in items
                 ))
 
+    def test_unwatched_episode_reminder_fires_five_days_after_loggable_day(self):
+        current = snapshot(episodes=[{
+            "season_number": 1,
+            "episode_number": 4,
+            "name": "The Party",
+            "air_date": "2026-08-17",
+            "still_path": "/still.jpg",
+        }])
+        now = datetime(2026, 8, 23, 0, 5, tzinfo=self.zone)
+        last_checked = datetime(2026, 8, 22, 23, 5, tzinfo=self.zone)
+        reminders = [
+            item
+            for item in collect_time_notification_candidates(
+                current,
+                tracker_show(),
+                now,
+                "Asia/Kuala_Lumpur",
+                last_checked_at=last_checked,
+            )
+            if item["kind"] == "unwatched_episode_reminder"
+        ]
+        self.assertEqual(len(reminders), 1)
+        self.assertEqual(reminders[0]["family"], "new_episode")
+        self.assertEqual(
+            reminders[0]["message"],
+            "You still haven't watched Example Show S01E04",
+        )
+        self.assertEqual(
+            reminders[0]["event_key"],
+            "unwatched-episode-reminder:123:s1:e4:5d",
+        )
+
+        too_early = collect_time_notification_candidates(
+            current,
+            tracker_show(),
+            datetime(2026, 8, 22, 12, 0, tzinfo=self.zone),
+            "Asia/Kuala_Lumpur",
+            last_checked_at=datetime(2026, 8, 21, 12, 0, tzinfo=self.zone),
+        )
+        self.assertFalse(any(
+            item["kind"] == "unwatched_episode_reminder" for item in too_early
+        ))
+
+    def test_unwatched_episode_reminder_skips_watched_and_non_watching(self):
+        current = snapshot(episodes=[{
+            "season_number": 1,
+            "episode_number": 4,
+            "name": "The Party",
+            "air_date": "2026-08-17",
+        }])
+        now = datetime(2026, 8, 23, 12, 0, tzinfo=self.zone)
+        last_checked = datetime(2026, 8, 22, 12, 0, tzinfo=self.zone)
+
+        watched = collect_time_notification_candidates(
+            current,
+            tracker_show(watched={"1": [4]}),
+            now,
+            "Asia/Kuala_Lumpur",
+            last_checked_at=last_checked,
+        )
+        self.assertFalse(any(
+            item["kind"] == "unwatched_episode_reminder" for item in watched
+        ))
+
+        paused = collect_time_notification_candidates(
+            current,
+            tracker_show(status="paused"),
+            now,
+            "Asia/Kuala_Lumpur",
+            last_checked_at=last_checked,
+        )
+        self.assertFalse(any(
+            item["kind"] == "unwatched_episode_reminder" for item in paused
+        ))
+
+    def test_unwatched_reminder_catches_worker_delay_without_historical_backfill(self):
+        current = snapshot(episodes=[{
+            "season_number": 1,
+            "episode_number": 4,
+            "name": "The Party",
+            "air_date": "2026-08-17",
+        }])
+        now = datetime(2026, 8, 24, 9, 0, tzinfo=self.zone)
+
+        delayed = collect_time_notification_candidates(
+            current,
+            tracker_show(),
+            now,
+            "Asia/Kuala_Lumpur",
+            last_checked_at=datetime(2026, 8, 22, 20, 0, tzinfo=self.zone),
+        )
+        self.assertTrue(any(
+            item["kind"] == "unwatched_episode_reminder" for item in delayed
+        ))
+
+        already_checked_after_due = collect_time_notification_candidates(
+            current,
+            tracker_show(),
+            now,
+            "Asia/Kuala_Lumpur",
+            last_checked_at=datetime(2026, 8, 23, 20, 0, tzinfo=self.zone),
+        )
+        self.assertFalse(any(
+            item["kind"] == "unwatched_episode_reminder"
+            for item in already_checked_after_due
+        ))
+
     def test_return_tomorrow_requires_fourteen_day_gap_and_watching(self):
         current = snapshot(episodes=[
             {

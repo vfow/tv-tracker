@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -409,6 +409,7 @@ def collect_time_notification_candidates(
     tracker_show: dict[str, Any],
     now: datetime,
     timezone_name: str,
+    last_checked_at: datetime | None = None,
 ) -> list[dict[str, Any]]:
     zone = notification_zone(timezone_name)
     local_today = now.astimezone(zone).date()
@@ -454,31 +455,75 @@ def collect_time_notification_candidates(
         )
 
     if tracker_status == "watching":
+        last_checked_day = None
+        if isinstance(last_checked_at, datetime):
+            previous_check = last_checked_at
+            if previous_check.tzinfo is None:
+                previous_check = previous_check.replace(tzinfo=timezone.utc)
+            last_checked_day = previous_check.astimezone(zone).date()
+
         for episode in episodes:
             season_number = int(episode["season_number"])
             episode_number = int(episode["episode_number"])
             air_date = str(episode.get("air_date") or "")
             air_day = parse_calendar_date(air_date)
-            if air_day != yesterday:
+            if not air_day:
                 continue
             if _watched_episode(tracker_show, season_number, episode_number):
                 continue
+
             code = f"S{season_number:02d}E{episode_number:02d}"
             name = str(episode.get("name") or "").strip()
             suffix = f" - {name}" if name else ""
-            candidates.append(
-                _base_candidate(
-                    snapshot,
-                    family="new_episode",
-                    kind="new_episode",
-                    event_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
-                    group_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
-                    message=f"{title} {code}{suffix} aired yesterday",
-                    event_date=air_date,
-                    episode=episode,
-                    payload={"season": season_number, "episode": episode_number},
+
+            if air_day == yesterday:
+                candidates.append(
+                    _base_candidate(
+                        snapshot,
+                        family="new_episode",
+                        kind="new_episode",
+                        event_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
+                        group_key=f"new-episode:{show_id}:s{season_number}:e{episode_number}:{air_date}",
+                        message=f"{title} {code}{suffix} aired yesterday",
+                        event_date=air_date,
+                        episode=episode,
+                        payload={"season": season_number, "episode": episode_number},
+                    )
+                )
+
+            available_day = air_day + timedelta(days=1)
+            reminder_day = available_day + timedelta(days=5)
+            reminder_due = (
+                reminder_day == local_today
+                or (
+                    last_checked_day is not None
+                    and last_checked_day < reminder_day <= local_today
                 )
             )
+            if reminder_due:
+                reminder_key = (
+                    f"unwatched-episode-reminder:{show_id}:"
+                    f"s{season_number}:e{episode_number}:5d"
+                )
+                candidates.append(
+                    _base_candidate(
+                        snapshot,
+                        family="new_episode",
+                        kind="unwatched_episode_reminder",
+                        event_key=reminder_key,
+                        group_key=reminder_key,
+                        message=f"You still haven't watched {title} {code}",
+                        event_date=reminder_day.isoformat(),
+                        episode=episode,
+                        payload={
+                            "season": season_number,
+                            "episode": episode_number,
+                            "air_date": air_date,
+                            "available_date": available_day.isoformat(),
+                            "reminder_days": 5,
+                        },
+                    )
+                )
 
         for season_number, season_episodes in by_season.items():
             for index, episode in enumerate(season_episodes):
