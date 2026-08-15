@@ -558,6 +558,7 @@ def run_notification_check(
                     tracker_show,
                     current_time,
                     timezone_name,
+                    last_checked_at=settings.get("last_checked_at"),
                 )
                 for candidate in metadata + timed:
                     processed += 1

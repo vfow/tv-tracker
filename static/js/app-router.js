@@ -676,7 +676,13 @@
         if(activeShowsTab !== "watchlist" && typeof document !== "undefined" && document && typeof document.getElementById === "function"){
             const list = document.getElementById("show-list");
             if(list){
-                list.innerHTML = "";
+                if(activeShowsTab === "upcoming" && typeof renderUpcomingSkeletonHTML === "function"){
+                    list.innerHTML = renderUpcomingSkeletonHTML();
+                }else if(activeShowsTab === "history" && typeof renderHistorySkeletonHTML === "function"){
+                    list.innerHTML = renderHistorySkeletonHTML();
+                }else{
+                    list.innerHTML = "";
+                }
             }
         }
         if(typeof updateShellTitle === "function"){

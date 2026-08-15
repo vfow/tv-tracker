@@ -329,9 +329,6 @@
         const swipeReveal = document.createElement("div");
         swipeReveal.className = "notification-swipe-delete-reveal";
         swipeReveal.setAttribute("aria-hidden","true");
-        const swipeLabel = document.createElement("span");
-        swipeLabel.textContent = "DELETE";
-        swipeReveal.appendChild(swipeLabel);
 
         const link = document.createElement("a");
         link.className = "notification-row-link";

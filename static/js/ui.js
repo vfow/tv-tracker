@@ -370,9 +370,10 @@ function renderDiscoverHub(){
     }
 }
 
-function renderTrackerListSkeletonRows(count=5,label="Loading"){
+function renderTrackerListSkeletonRows(count=5,label="Loading",options={}){
     const safeCount = Math.max(1,Number(count) || 1);
     const safeLabel = escapeHTML(String(label || "Loading"));
+    const showAction = options.showAction !== false;
     const rows = Array.from({length:safeCount}).map((_,index)=>{
         const variant = (index % 5) + 1;
         return `
@@ -383,7 +384,7 @@ function renderTrackerListSkeletonRows(count=5,label="Loading"){
                     <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--${variant}"></div>
                     <div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${variant}"></div>
                 </div>
-                <div class="watchlist-skeleton-block watchlist-skeleton-action"></div>
+                ${showAction ? '<div class="watchlist-skeleton-block watchlist-skeleton-action"></div>' : ""}
             </article>
         `;
     }).join("");
@@ -391,6 +392,62 @@ function renderTrackerListSkeletonRows(count=5,label="Loading"){
         <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="${safeLabel}">
             ${rows}
             <span class="watchlist-skeleton-sr">${safeLabel}…</span>
+        </div>
+    `;
+}
+
+function renderTrackerMediaRowSkeletonHTML(index=0,kind="upcoming"){
+    const variant = (Math.max(0,Number(index) || 0) % 5) + 1;
+    const isHistory = kind === "history";
+    const rowClass = isHistory ? "history-entry-card" : "upcoming-entry-card";
+    const stillClass = isHistory ? "history-still" : "upcoming-still";
+    return `
+        <article class="show ${rowClass}" aria-hidden="true">
+            <div class="${stillClass} watchlist-skeleton-block"></div>
+            <div class="info watchlist-skeleton-content">
+                <div class="watchlist-skeleton-block watchlist-skeleton-title watchlist-skeleton-title--${variant}"></div>
+                <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--${variant}"></div>
+            </div>
+            ${isHistory ? `<div class="history-time"><div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${variant}"></div></div>` : ""}
+        </article>
+    `;
+}
+
+function renderUpcomingSkeletonHTML(){
+    const groups = Array.from({length:2}).map((_,groupIndex)=>{
+        const headingVariant = (groupIndex % 5) + 1;
+        const rows = Array.from({length:3})
+        .map((__,rowIndex)=>renderTrackerMediaRowSkeletonHTML((groupIndex * 3) + rowIndex,"upcoming"))
+        .join("");
+        return `
+            <div class="upcoming-group" aria-hidden="true">
+                <div class="upcoming-group-title">
+                    <div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${headingVariant}"></div>
+                </div>
+                ${rows}
+            </div>
+        `;
+    }).join("");
+    return `
+        <div class="watchlist-initial-skeleton upcoming-initial-skeleton" role="status" aria-live="polite" aria-label="Loading upcoming episodes">
+            ${groups}
+            <span class="watchlist-skeleton-sr">Loading upcoming episodes…</span>
+        </div>
+    `;
+}
+
+function renderHistorySkeletonHTML(){
+    const mobile = typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(max-width: 767.98px)").matches;
+    const count = mobile ? 6 : 8;
+    const rows = Array.from({length:count})
+    .map((_,index)=>renderTrackerMediaRowSkeletonHTML(index,"history"))
+    .join("");
+    return `
+        <div class="watchlist-initial-skeleton history-initial-skeleton" role="status" aria-live="polite" aria-label="Loading watch history">
+            ${rows}
+            <span class="watchlist-skeleton-sr">Loading watch history…</span>
         </div>
     `;
 }
@@ -3564,7 +3621,7 @@ async function renderUpcoming(startBackgroundRefresh=true){
     if(upcoming.length === 0){
 
         if(startBackgroundRefresh || isRefreshingUpcoming){
-            list.innerHTML = renderTrackerListSkeletonRows(5,"Loading upcoming episodes");
+            list.innerHTML = renderUpcomingSkeletonHTML();
 
             if(startBackgroundRefresh && !isRefreshingUpcoming){
                 refreshUpcomingDataInBackground();
