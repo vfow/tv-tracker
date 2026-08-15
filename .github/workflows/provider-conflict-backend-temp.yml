@@ -26,30 +26,26 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path('app.py')
           text = path.read_text()
-          old = '''                if conflicting:
-                    return jsonify({
-                        "ok": False,
-                        "error": "The same tracker data changed on another device",
-                        "revision": revision_before,
-                        "reset": False,
-                        "conflict": True,
-                        "changes": serialize_change_rows(concurrent_rows),
-                    }), 409
-          '''
-          new = '''                if conflicting:
-                    return jsonify({
-                        "ok": False,
-                        "error": "The same tracker data changed on another device",
-                        "revision": revision_before,
-                        "reset": True,
-                        "conflict": True,
-                    }), 409
-          '''
-          if old not in text:
+          marker = '                if conflicting:'
+          end_marker = '                logical_history_delete:'
+          start = text.find(marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
               raise SystemExit('Expected conflict response block not found')
-          path.write_text(text.replace(old, new, 1))
+
+          block = text[start:end]
+          if '"reset": False' not in block or '"changes": serialize_change_rows(concurrent_rows),' not in block:
+              raise SystemExit('Expected conflict payload fields not found')
+          block = block.replace('"reset": False', '"reset": True', 1)
+          block = block.replace(
+              '                        "changes": serialize_change_rows(concurrent_rows),\n',
+              '',
+              1,
+          )
+          path.write_text(text[:start] + block + text[end:])
           PY
       - name: Add conflict response regression
         run: |
