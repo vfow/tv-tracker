@@ -3475,9 +3475,8 @@ def create_app() -> Flask:
                         "ok": False,
                         "error": "The same tracker data changed on another device",
                         "revision": revision_before,
-                        "reset": False,
+                        "reset": True,
                         "conflict": True,
-                        "changes": serialize_change_rows(concurrent_rows),
                     }), 409
 
                 logical_history_delete: list[str] = []
