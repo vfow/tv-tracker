@@ -40,18 +40,22 @@ jobs:
           def bounds(glyph):
               return tuple(getattr(glyph, key, None) for key in ('xMin', 'yMin', 'xMax', 'yMax'))
 
+          def nonempty_glyph(glyph):
+              return int(getattr(glyph, 'numberOfContours', 0)) != 0
+
           def bbox_mismatches(path):
               font = TTFont(path, recalcBBoxes=False, recalcTimestamp=False)
               glyf = font['glyf']
               order = font.getGlyphOrder()
-              before = {name: bounds(glyf[name]) for name in order}
-              for name in order:
+              names = [name for name in order if nonempty_glyph(glyf[name])]
+              before = {name: bounds(glyf[name]) for name in names}
+              for name in names:
                   glyf[name].recalcBounds(glyf)
-              after = {name: bounds(glyf[name]) for name in order}
+              after = {name: bounds(glyf[name]) for name in names}
               mismatches = [
                   (index, name, before[name], after[name])
                   for index, name in enumerate(order)
-                  if before[name] != after[name]
+                  if name in before and before[name] != after[name]
               ]
               font.close()
               return mismatches
@@ -59,12 +63,12 @@ jobs:
           source_mismatches = bbox_mismatches(source)
           source_ids = {item[0] for item in source_mismatches}
           expected_firefox_ids = {34, 94, 96, 103, 113}
-          print('Original bbox mismatches:', source_mismatches)
-          assert expected_firefox_ids.issubset(source_ids), (
-              f'Firefox warning glyphs were not all reproduced: {expected_firefox_ids - source_ids}'
+          print('Original non-empty bbox mismatches:', source_mismatches)
+          assert source_ids == expected_firefox_ids, (
+              f'Expected Firefox warning glyphs {expected_firefox_ids}, got {source_ids}'
           )
 
-          original = TTFont(source, recalcBBoxes=True, recalcTimestamp=False)
+          original = TTFont(source, recalcBBoxes=False, recalcTimestamp=False)
           original_metrics = (
               original['head'].unitsPerEm,
               original['hhea'].ascent,
@@ -74,6 +78,11 @@ jobs:
               original['OS/2'].usWidthClass,
           )
           original_order = original.getGlyphOrder()
+          original_glyf = original['glyf']
+          for name in original_order:
+              glyph = original_glyf[name]
+              if nonempty_glyph(glyph):
+                  glyph.recalcBounds(original_glyf)
           original.save(repaired)
           original.close()
 
@@ -167,19 +176,23 @@ jobs:
           font = TTFont(path, recalcBBoxes=False, recalcTimestamp=False)
           glyf = font['glyf']
           order = font.getGlyphOrder()
+          names = [
+              name for name in order
+              if int(getattr(glyf[name], 'numberOfContours', 0)) != 0
+          ]
           before = {
               name: tuple(getattr(glyf[name], key, None) for key in ('xMin', 'yMin', 'xMax', 'yMax'))
-              for name in order
+              for name in names
           }
-          for name in order:
+          for name in names:
               glyf[name].recalcBounds(glyf)
           after = {
               name: tuple(getattr(glyf[name], key, None) for key in ('xMin', 'yMin', 'xMax', 'yMax'))
-              for name in order
+              for name in names
           }
-          mismatches = [index for index, name in enumerate(order) if before[name] != after[name]]
+          mismatches = [name for name in names if before[name] != after[name]]
           assert not mismatches, f'Final WOFF2 glyph bounds are inconsistent: {mismatches}'
-          print(f'Validated {len(order)} League Gothic glyphs with no bbox mismatches.')
+          print(f'Validated {len(names)} non-empty League Gothic glyphs with no bbox mismatches.')
           PY
       - run: node tests/test_nav_font_delivery.js
       - run: python -m unittest tests.test_cache_headers
