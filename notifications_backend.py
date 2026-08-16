@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from psycopg.types.json import Jsonb
 
+from release_timing import ReleaseTimingResolver, parse_aware_datetime, provider_flags
 from notification_engine import (
     NOTIFICATION_FAMILIES,
     build_stored_notification_snapshot,
@@ -26,6 +27,7 @@ DEFAULT_NOTIFICATION_SETTINGS = {
     "canceled_ended": True,
     "premiere_date_updates": True,
     "timezone": "",
+    "timezone_mode": "automatic",
 }
 
 SETTING_API_TO_DB = {
@@ -41,6 +43,7 @@ SETTING_API_TO_DB = {
 SETTINGS_COLUMNS = (
     "enabled",
     "timezone",
+    "timezone_mode",
     "new_season",
     "season_premiere_tomorrow",
     "new_episode",
@@ -73,6 +76,7 @@ def _settings_from_row(row: Any) -> dict[str, Any]:
         result[family] = bool(result.get(family, True))
     result["enabled"] = bool(result.get("enabled", True))
     result["timezone"] = str(result.get("timezone") or "")
+    result["timezone_mode"] = "manual" if str(result.get("timezone_mode") or "automatic") == "manual" else "automatic"
     return result
 
 
@@ -80,6 +84,7 @@ def serialize_notification_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return {
         "enabled": bool(settings.get("enabled", True)),
         "timezone": str(settings.get("timezone") or ""),
+        "timezoneMode": str(settings.get("timezone_mode") or "automatic"),
         "newSeason": bool(settings.get("new_season", True)),
         "seasonPremiereTomorrow": bool(settings.get("season_premiere_tomorrow", True)),
         "newEpisode": bool(settings.get("new_episode", True)),
@@ -125,6 +130,13 @@ def update_notification_settings(
         timezone_value = str(payload.get("timezone") or "").strip()
         notification_zone(timezone_value)
 
+    timezone_mode = None
+    if "timezoneMode" in payload:
+        timezone_mode = str(payload.get("timezoneMode") or "").strip().lower()
+        if timezone_mode not in {"automatic", "manual"}:
+            raise ValueError("timezoneMode must be automatic or manual")
+        updates["timezone_mode"] = timezone_mode
+
     timezone_if_unset = payload.get("timezoneIfUnset") is True
 
     with connection_factory() as connection:
@@ -163,6 +175,7 @@ def notification_status(connection_factory: Callable[[], Any]) -> dict[str, Any]
     return {
         "unread": unread,
         "timezone": str(settings.get("timezone") or ""),
+        "timezoneMode": str(settings.get("timezone_mode") or "automatic"),
         "enabled": bool(settings.get("enabled", True)),
         "latestId": int(latest[0]) if latest else 0,
         "latestCreatedAt": latest[1].isoformat() if latest and latest[1] else "",
@@ -499,6 +512,13 @@ def run_notification_check(
     initialized = settings.get("initialized_at") is not None
     created = 0
     processed = 0
+    flags = provider_flags()
+    timing_resolver = ReleaseTimingResolver(
+        provider_enabled=flags["master_enabled"],
+        query_enabled=flags["shadow_enabled"] or flags["notifications_enabled"],
+        exact_enabled=flags["notifications_enabled"],
+        date_only_enabled=flags["notifications_enabled"],
+    )
 
     with connection_factory() as connection:
         with connection.cursor() as cursor:
@@ -553,12 +573,25 @@ def run_notification_check(
                     current_time,
                     timezone_name,
                 )
+                def release_lookup(season_number: int, episode_number: int, air_date: str) -> datetime | None:
+                    timing = timing_resolver.resolve(
+                        tmdb_id=int(show_id),
+                        season_number=season_number,
+                        episode_number=episode_number,
+                        tmdb_air_date=air_date,
+                        timezone_name=timezone_name,
+                    )
+                    if not timing:
+                        return None
+                    return parse_aware_datetime(timing.release_at or timing.eligible_at)
+
                 timed = collect_time_notification_candidates(
                     current,
                     tracker_show,
                     current_time,
                     timezone_name,
                     last_checked_at=settings.get("last_checked_at"),
+                    release_lookup=release_lookup,
                 )
                 for candidate in metadata + timed:
                     processed += 1

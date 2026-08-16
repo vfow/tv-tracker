@@ -380,7 +380,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('broghgf7', workflow)
         self.assertNotIn('ssh-broghgf7', workflow)
         self.assertIn('/healthz', readme)
-        self.assertIn('test_sync_reliability.js', run_all)
+        self.assertIn('.glob("test_*.js")', run_all)
 
     def test_phase51_search_routing_polish_exists(self):
         app_js = self.read('static/js/app.js')
@@ -955,7 +955,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")', ui)
         self.assertIn('renderFavoriteHeartButtonHTML(state.favorite,`data-movie-tracking-action="favorite"`)', ui)
         self.assertIn('data-show-favorite-button="true"', ui)
-        self.assertIn('ALLOWED_STATE_KEYS = {"profile", "movies",', backend)
+        self.assertIn('ALLOWED_STATE_KEYS = {', backend)
+        self.assertIn('"movies",', backend)
         self.assertIn('def validate_movie_tracking_state(raw_value: Any)', backend)
         self.assertIn('entry["media_type"] = "movie"', backend)
         self.assertIn('movie-watched-', backend)

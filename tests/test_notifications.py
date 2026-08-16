@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from notification_engine import (
     collect_metadata_notification_candidates,
     collect_time_notification_candidates,
+    season_detail_requests_for_today,
 )
 
 
@@ -33,39 +34,44 @@ def tracker_show(status="watching", watched=None):
 class NotificationRuleTests(unittest.TestCase):
     zone = ZoneInfo("Asia/Kuala_Lumpur")
 
-    def test_episode_becomes_notification_eligible_next_local_day(self):
-        current = snapshot(
-            seasons={"1": {"season_number": 1, "air_date": "2026-08-01"}},
-            episodes=[{
-                "season_number": 1,
+    def test_watching_show_requests_yesterdays_season_detail_without_crashing(self):
+        details = {
+            "last_episode_to_air": {
+                "season_number": 2,
                 "episode_number": 4,
-                "name": "The Party",
-                "air_date": "2026-08-17",
-                "still_path": "/still.jpg",
-            }],
-        )
-        before = datetime(2026, 8, 17, 23, 59, tzinfo=self.zone)
-        after = datetime(2026, 8, 18, 0, 1, tzinfo=self.zone)
-
-        self.assertFalse(any(
-            item["family"] == "new_episode"
-            for item in collect_time_notification_candidates(
-                current, tracker_show(), before, "Asia/Kuala_Lumpur"
-            )
-        ))
-
-        ready = [
-            item
-            for item in collect_time_notification_candidates(
-                current, tracker_show(), after, "Asia/Kuala_Lumpur"
-            )
-            if item["family"] == "new_episode"
-        ]
-        self.assertEqual(len(ready), 1)
+                "air_date": "2026-08-16",
+            }
+        }
+        now = datetime(2026, 8, 17, 10, 0, tzinfo=self.zone)
         self.assertEqual(
-            ready[0]["message"],
-            "Example Show S01E04 - The Party aired yesterday",
+            season_detail_requests_for_today(details, now, "Asia/Kuala_Lumpur", "watching"),
+            {2},
         )
+        self.assertEqual(
+            season_detail_requests_for_today(details, now, "Asia/Kuala_Lumpur", "paused"),
+            set(),
+        )
+
+    def test_episode_notifies_when_canonical_release_boundary_is_crossed(self):
+        current = snapshot(episodes=[{
+            "season_number": 1, "episode_number": 4, "name": "The Party",
+            "air_date": "2026-08-17", "still_path": "/still.jpg",
+        }])
+        release_at = datetime(2026, 8, 17, 21, 0, tzinfo=self.zone)
+        before = datetime(2026, 8, 17, 20, 59, tzinfo=self.zone)
+        after = datetime(2026, 8, 17, 21, 1, tzinfo=self.zone)
+        lookup = lambda *_: release_at
+
+        self.assertFalse(any(item["kind"] == "new_episode" for item in
+            collect_time_notification_candidates(current, tracker_show(), before, "Asia/Kuala_Lumpur",
+                last_checked_at=datetime(2026, 8, 17, 20, 0, tzinfo=self.zone), release_lookup=lookup)))
+        ready = [item for item in collect_time_notification_candidates(
+            current, tracker_show(), after, "Asia/Kuala_Lumpur",
+            last_checked_at=datetime(2026, 8, 17, 20, 0, tzinfo=self.zone), release_lookup=lookup
+        ) if item["kind"] == "new_episode"]
+        self.assertEqual(len(ready), 1)
+        self.assertEqual(ready[0]["message"], "Example Show S01E04 - The Party is now available")
+        self.assertEqual(ready[0]["event_key"], "new-episode:123:s1:e4")
 
     def test_logged_episode_does_not_notify(self):
         current = snapshot(episodes=[{
@@ -111,8 +117,8 @@ class NotificationRuleTests(unittest.TestCase):
             "air_date": "2026-08-17",
             "still_path": "/still.jpg",
         }])
-        now = datetime(2026, 8, 23, 0, 5, tzinfo=self.zone)
-        last_checked = datetime(2026, 8, 22, 23, 5, tzinfo=self.zone)
+        now = datetime(2026, 8, 22, 0, 5, tzinfo=self.zone)
+        last_checked = datetime(2026, 8, 21, 23, 5, tzinfo=self.zone)
         reminders = [
             item
             for item in collect_time_notification_candidates(
@@ -138,7 +144,7 @@ class NotificationRuleTests(unittest.TestCase):
         too_early = collect_time_notification_candidates(
             current,
             tracker_show(),
-            datetime(2026, 8, 22, 12, 0, tzinfo=self.zone),
+            datetime(2026, 8, 20, 12, 0, tzinfo=self.zone),
             "Asia/Kuala_Lumpur",
             last_checked_at=datetime(2026, 8, 21, 12, 0, tzinfo=self.zone),
         )
@@ -153,8 +159,8 @@ class NotificationRuleTests(unittest.TestCase):
             "name": "The Party",
             "air_date": "2026-08-17",
         }])
-        now = datetime(2026, 8, 23, 12, 0, tzinfo=self.zone)
-        last_checked = datetime(2026, 8, 22, 12, 0, tzinfo=self.zone)
+        now = datetime(2026, 8, 22, 12, 0, tzinfo=self.zone)
+        last_checked = datetime(2026, 8, 21, 12, 0, tzinfo=self.zone)
 
         watched = collect_time_notification_candidates(
             current,
@@ -185,14 +191,14 @@ class NotificationRuleTests(unittest.TestCase):
             "name": "The Party",
             "air_date": "2026-08-17",
         }])
-        now = datetime(2026, 8, 24, 9, 0, tzinfo=self.zone)
+        now = datetime(2026, 8, 23, 9, 0, tzinfo=self.zone)
 
         delayed = collect_time_notification_candidates(
             current,
             tracker_show(),
             now,
             "Asia/Kuala_Lumpur",
-            last_checked_at=datetime(2026, 8, 22, 20, 0, tzinfo=self.zone),
+            last_checked_at=datetime(2026, 8, 21, 20, 0, tzinfo=self.zone),
         )
         self.assertTrue(any(
             item["kind"] == "unwatched_episode_reminder" for item in delayed
@@ -203,7 +209,7 @@ class NotificationRuleTests(unittest.TestCase):
             tracker_show(),
             now,
             "Asia/Kuala_Lumpur",
-            last_checked_at=datetime(2026, 8, 23, 20, 0, tzinfo=self.zone),
+            last_checked_at=datetime(2026, 8, 22, 20, 0, tzinfo=self.zone),
         )
         self.assertFalse(any(
             item["kind"] == "unwatched_episode_reminder"
