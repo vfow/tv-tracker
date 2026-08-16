@@ -23,7 +23,7 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         self.assertIn("makeEpisodeReleaseDate(a.episode.air_date,a.episode,a.show)", self.app)
         self.assertIn("getUpcomingGroup(missedEpisode.air_date,missedEpisode,show)", self.app)
         self.assertIn("getUpcomingTimeLabel(ep.air_date,ep,show)", self.app)
-        self.assertIn("isEpisodeAired(airDate,episodeInfo,showInfo)", self.app)
+        self.assertIn("isEpisodeAired(airDate,timingEpisode,showInfo)", self.app)
 
     def test_watching_has_no_future_release_metadata(self):
         self.assertNotIn("const releaseMeta = nextEpisodeFuture", self.ui)
