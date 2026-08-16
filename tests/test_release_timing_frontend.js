@@ -60,20 +60,26 @@ assert.strictEqual(
     "canonical timing must replace the displayed calendar date when local timezone shifts the episode"
 );
 
-const mainHost = {
-    children:[],
-    appendChild(node){ this.children.push(node); }
-};
-global.document = {
-    body:{children:[],appendChild(node){ this.children.push(node); }},
-    getElementById(){ return null; },
-    querySelector(selector){ return selector === ".main" ? mainHost : null; },
-    createElement(){ return {style:{}}; }
-};
-const attributionRoot = timing._attributionContainer();
-assert.ok(attributionRoot,"attribution root must be created when a document is available");
-assert.strictEqual(attributionRoot.style.position,"fixed","attribution must be out of the app flex layout immediately");
-assert.strictEqual(mainHost.children[0],attributionRoot,"attribution must attach to the existing main app surface");
-delete global.document;
+timing._cache.set("123:1:2",{
+    precision:"date",
+    releaseAt:null,
+    eligibleAt:"2023-10-05T00:00:00Z",
+    releaseDate:"2023-10-05",
+    displayDate:"2023-10-05",
+    confidence:"verified",
+    providerUsed:true
+});
+const conflicting = timing.getReleaseInfo(
+    "2026-10-23",
+    {season_number:1,episode_number:2},
+    {tmdb_id:123}
+);
+assert.strictEqual(conflicting.source,"fallback","clearly conflicting provider dates must fall back to TMDB");
+assert.strictEqual(conflicting.releaseDate,"2026-10-23");
+assert.strictEqual(
+    timing.calendarDate("2026-10-23",{season_number:1,episode_number:2},{tmdb_id:123}),
+    "2026-10-23",
+    "conflicting cached provider dates must not change the displayed day"
+);
 
 console.log("Release timing frontend tests passed.");

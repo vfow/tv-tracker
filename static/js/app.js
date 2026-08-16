@@ -11927,6 +11927,11 @@ function getNextEpisode(show){
                 continue;
             }
 
+            const canonicalDayDifference = getDayDiffFromToday(ep.air_date,ep,show);
+            if(canonicalDayDifference !== null && canonicalDayDifference < 0){
+                continue;
+            }
+
             const episodeNumber = ep.episode_number;
 
             const watchedEpisodes = watched[String(season)] || [];

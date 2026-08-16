@@ -3361,18 +3361,6 @@ function createWatchlistCard(show,options={}){
     ? `“${escapeHTML(nextEp.name)}”`
     : "";
 
-    const nextEpisodeFuture = Boolean(
-        nextEp &&
-        nextEp.air_date &&
-        !isEpisodeAired(nextEp.air_date,nextEp,show)
-    );
-
-    const releaseMeta = nextEpisodeFuture
-    ? [
-        formatAirDate(nextEp.air_date,nextEp,show),
-        getCountdownText(nextEp.air_date,nextEp,show)
-    ].filter(Boolean).join(" • ")
-    : "";
 
     const action = getWatchlistActionConfig(show,displayFilter,nextEp);
 
@@ -3415,8 +3403,6 @@ function createWatchlistCard(show,options={}){
             ${episodeTitle ? `<div class="episode-title">${episodeTitle}</div>` : ""}
 
             ${showNewBadge ? `<div class="watchlist-new-badge-row"><span class="new-badge watchlist-new-badge">NEW</span></div>` : ""}
-
-            ${releaseMeta ? `<div class="watchlist-release-meta">${escapeHTML(releaseMeta)}</div>` : ""}
 
             </div>
         </a>

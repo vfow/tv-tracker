@@ -6,7 +6,7 @@
     "use strict";
 
     const cache = new Map();
-    let status = {timezone:"UTC",timezoneMode:"automatic",capability:{},attribution:{required:false}};
+    let status = {timezone:"UTC",timezoneMode:"automatic",capability:{}};
     let initialized = false;
     let boundaryTimer = null;
     let refreshCallback = null;
@@ -67,9 +67,16 @@
         return identity ? (cache.get(identity) || null) : null;
     }
 
+    function timingMatchesTMDBDate(item,airDateString){
+        const tmdbDay = dayNumber(String(airDateString || ""));
+        const providerDay = dayNumber(String(item && item.releaseDate || ""));
+        if(tmdbDay === null || providerDay === null){ return true; }
+        return Math.abs(providerDay - tmdbDay) <= 1;
+    }
+
     function getReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
         const item = getCached(episodeInfo,showInfo);
-        if(item){
+        if(item && timingMatchesTMDBDate(item,airDateString)){
             const raw = item.precision === "exact" ? item.releaseAt : item.eligibleAt;
             const parsed = raw ? new Date(raw) : null;
             if(parsed && Number.isFinite(parsed.getTime())){
@@ -89,7 +96,7 @@
 
     function calendarDate(airDateString,episodeInfo=null,showInfo=null){
         const item = getCached(episodeInfo,showInfo);
-        if(item && item.displayDate){ return String(item.displayDate); }
+        if(item && timingMatchesTMDBDate(item,airDateString) && item.displayDate){ return String(item.displayDate); }
         return String(airDateString || "");
     }
 
@@ -182,32 +189,6 @@
         }catch(error){ return false; }
     }
 
-    function ensureAttributionStylesheet(){
-        if(typeof document === "undefined"){ return false; }
-        if(document.querySelector('link[data-release-timing-style="true"]')){ return true; }
-        const target = document.head || document.documentElement;
-        if(!target){ return false; }
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "/static/css/release-timing.css";
-        link.dataset.releaseTimingStyle = "true";
-        target.appendChild(link);
-        return true;
-    }
-
-    function attributionContainer(){
-        if(typeof document === "undefined"){ return null; }
-        let container = document.getElementById("release-timing-attribution-root");
-        if(container){ return container; }
-        container = document.createElement("div");
-        container.id = "release-timing-attribution-root";
-        container.className = "release-timing-attribution-root";
-        container.style.position = "fixed";
-        const host = document.querySelector(".main") || document.body;
-        if(!host){ return null; }
-        host.appendChild(container);
-        return container;
-    }
 
     async function prefetchShows(shows){
         lastPrefetchShows = shows || lastPrefetchShows;
@@ -225,12 +206,6 @@
                     cache.set(identity,item);
                     cacheUpdated = true;
                 });
-                if(payload.attribution && payload.attribution.required){
-                    status.attribution = payload.attribution;
-                    if(typeof document !== "undefined"){
-                        mountAttribution(attributionContainer());
-                    }
-                }
             }
             scheduleBoundary();
             if(cacheUpdated && typeof refreshCallback === "function"){
@@ -241,18 +216,6 @@
         }finally{ prefetchBusy = false; }
     }
 
-    function mountAttribution(container){
-        if(typeof document === "undefined" || !container || !status.attribution || !status.attribution.required){ return false; }
-        ensureAttributionStylesheet();
-        if(container.querySelector && container.querySelector(".release-timing-attribution")){ return true; }
-        const node = document.createElement("div");
-        node.className = "release-timing-attribution";
-        const link = document.createElement("a");
-        link.href = String(status.attribution.url || "https://www.tvmaze.com");
-        link.target = "_blank"; link.rel = "noopener noreferrer";
-        link.textContent = "Release timing data by " + String(status.attribution.name || "TVmaze");
-        node.appendChild(link); container.appendChild(node); return true;
-    }
 
     async function initialize(options={}){
         if(typeof options.onRefresh === "function"){ refreshCallback = options.onRefresh; }
@@ -271,12 +234,11 @@
     }
 
     return {
-        initialize,prefetchShows,getReleaseInfo,calendarDate,getDayDiff,mountAttribution,syncAutomaticTimezone,
+        initialize,prefetchShows,getReleaseInfo,calendarDate,getDayDiff,syncAutomaticTimezone,
         getStatus:()=>Object.assign({},status),
         isInitialized:()=>initialized,
         _cache:cache,
         _collectEpisodes:collectEpisodes,
-        _attributionContainer:attributionContainer,
         _key:key
     };
 });

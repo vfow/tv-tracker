@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.error import HTTPError
 
+import tvmaze_integration
 from tvmaze_integration import (
     EPISODE_NEGATIVE_TTL,
     EPISODE_NEAR_TERM_EXACT_TTL,
@@ -155,6 +156,57 @@ class TVmazeHttpTests(unittest.TestCase):
         tvmaze_id, reason = provider._lookup_external(imdb_id="tt1",tvdb_id=123)
         self.assertIsNone(tvmaze_id)
         self.assertEqual(reason,"external_id_conflict")
+
+    def test_large_tmdb_airdate_conflict_is_rejected(self):
+        provider = self.provider(lambda *args, **kwargs: FakeResponse({}))
+        provider._mapping = mock.Mock(return_value=(77, "verified_external_id"))
+        provider._cached_episode = mock.Mock(return_value=tvmaze_integration._CACHE_MISS)
+        provider._request_json = mock.Mock(side_effect=[
+            {
+                "id": 1001,
+                "season": 3,
+                "number": 1,
+                "airdate": "2023-10-05",
+                "airtime": "03:00",
+                "airstamp": "2023-10-05T03:00:00+00:00",
+            },
+            {"id": 77, "network": None, "webChannel": {"name": "Netflix", "country": None}},
+        ])
+        provider._store_episode = mock.Mock()
+
+        result = provider.resolve_episode(
+            tmdb_id=123,
+            season_number=3,
+            episode_number=1,
+            tmdb_air_date="2026-10-23",
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(provider.diagnostics["episode_mismatches"], 1)
+        self.assertEqual(provider._store_episode.call_args.args[-1], "provider_date_conflict")
+
+    def test_cached_large_airdate_conflict_is_rejected(self):
+        provider = self.provider(lambda *args, **kwargs: FakeResponse({}))
+        provider._mapping = mock.Mock(return_value=(77, "verified_external_id"))
+        provider._cached_episode = mock.Mock(return_value={
+            "precision": "date_only",
+            "release_at": "",
+            "release_date": "2023-10-05",
+            "trusted": True,
+            "reason": "cached",
+        })
+        provider._request_json = mock.Mock()
+
+        result = provider.resolve_episode(
+            tmdb_id=123,
+            season_number=3,
+            episode_number=1,
+            tmdb_air_date="2026-10-23",
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(provider.diagnostics["episode_mismatches"], 1)
+        provider._request_json.assert_not_called()
 
     def test_identical_concurrent_requests_are_deduplicated(self):
         calls = []

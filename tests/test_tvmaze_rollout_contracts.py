@@ -15,12 +15,12 @@ class TVmazeRolloutContractTests(unittest.TestCase):
         self.assertIn('value="manual"', ui)
         self.assertIn("visibilitychange", ui)
 
-    def test_provider_prefetch_is_bounded_and_attributed(self):
+    def test_provider_prefetch_is_bounded_and_background_only(self):
         runtime = self.read("static/js/release-timing.js")
         self.assertIn("14 * 86400000", runtime)
         self.assertIn("366 * 86400000", runtime)
-        self.assertIn("Release timing data by", runtime)
-        self.assertIn("mountAttribution", runtime)
+        self.assertNotIn("Release timing data by", runtime)
+        self.assertFalse((ROOT / "static/css/release-timing.css").exists())
 
     def test_provider_database_errors_are_fallback_errors(self):
         resolver = self.read("release_timing.py")

@@ -59,7 +59,6 @@ def install_release_timing_routes(
             "capability": provider_capability(),
             "timezone": timezone_name,
             "timezoneMode": timezone_mode,
-            "attribution": {"required": False, "name": "TVmaze", "url": "https://www.tvmaze.com"},
         })
 
     @app.post("/api/release-timing/batch")
@@ -80,7 +79,6 @@ def install_release_timing_routes(
             date_only_enabled=flags["upcoming_enabled"],
         )
         results: dict[str, Any] = {}
-        provider_used = False
         for raw in raw_episodes:
             if not isinstance(raw, dict):
                 continue
@@ -102,15 +100,9 @@ def install_release_timing_routes(
             )
             if timing:
                 serialized = timing.to_api(timezone_name)
-                provider_used = provider_used or bool(serialized.get("providerUsed"))
                 results[key] = serialized
         return jsonify({
             "results": results,
             "timezone": timezone_name,
             "timezoneMode": timezone_mode,
-            "attribution": {
-                "required": provider_used,
-                "name": "TVmaze",
-                "url": "https://www.tvmaze.com",
-            },
         })
