@@ -1,9 +1,13 @@
-.release-timing-attribution-root{
+.release-timing-attribution-root,
+body > .release-timing-attribution{
     position:fixed;
     right:16px;
     bottom:16px;
     z-index:130;
     max-width:calc(100vw - 32px);
+}
+
+.release-timing-attribution-root{
     pointer-events:none;
 }
 
@@ -30,7 +34,8 @@
 }
 
 @media (max-width:991.98px){
-    .release-timing-attribution-root{
+    .release-timing-attribution-root,
+    body > .release-timing-attribution{
         right:10px;
         bottom:calc(74px + env(safe-area-inset-bottom));
         max-width:calc(100vw - 20px);
