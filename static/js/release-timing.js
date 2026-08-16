@@ -182,6 +182,32 @@
         }catch(error){ return false; }
     }
 
+    function ensureAttributionStylesheet(){
+        if(typeof document === "undefined"){ return false; }
+        if(document.querySelector('link[data-release-timing-style="true"]')){ return true; }
+        const target = document.head || document.documentElement;
+        if(!target){ return false; }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/static/css/release-timing.css";
+        link.dataset.releaseTimingStyle = "true";
+        target.appendChild(link);
+        return true;
+    }
+
+    function attributionContainer(){
+        if(typeof document === "undefined"){ return null; }
+        let container = document.getElementById("release-timing-attribution-root");
+        if(container){ return container; }
+        container = document.createElement("div");
+        container.id = "release-timing-attribution-root";
+        container.className = "release-timing-attribution-root";
+        const host = document.querySelector(".main") || document.body;
+        if(!host){ return null; }
+        host.appendChild(container);
+        return container;
+    }
+
     async function prefetchShows(shows){
         lastPrefetchShows = shows || lastPrefetchShows;
         if(prefetchBusy || !lastPrefetchShows){ return; }
@@ -197,7 +223,7 @@
                 if(payload.attribution && payload.attribution.required){
                     status.attribution = payload.attribution;
                     if(typeof document !== "undefined"){
-                        mountAttribution(document.getElementById("app") || document.body);
+                        mountAttribution(attributionContainer());
                     }
                 }
             }
@@ -209,6 +235,7 @@
 
     function mountAttribution(container){
         if(typeof document === "undefined" || !container || !status.attribution || !status.attribution.required){ return false; }
+        ensureAttributionStylesheet();
         if(container.querySelector && container.querySelector(".release-timing-attribution")){ return true; }
         const node = document.createElement("div");
         node.className = "release-timing-attribution";
