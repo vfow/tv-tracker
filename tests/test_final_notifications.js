@@ -37,9 +37,9 @@ assert(!backend.includes('event_type, "renewed"'));
 const swStart = backend.indexOf("def _service_worker_source");
 const swEnd = backend.indexOf("def install_final_notifications",swStart);
 const swSource = backend.slice(swStart,swEnd);
-assert(swSource.includes('addEventListener(\\"push\\"'));
-assert(swSource.includes('addEventListener(\\"notificationclick\\"'));
-assert(!swSource.includes('addEventListener(\\"fetch\\"'));
+assert(swSource.includes('addEventListener("push"'));
+assert(swSource.includes('addEventListener("notificationclick"'));
+assert(!swSource.includes('addEventListener("fetch"'));
 
 assert(worker.includes("run_final_notification_worker"));
 assert(wsgi.includes("install_final_notifications"));
