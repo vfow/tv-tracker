@@ -38,18 +38,42 @@ timing._cache.set("123:1:1",{
     releaseAt:"2026-08-16T12:30:00Z",
     eligibleAt:"2026-08-16T12:30:00Z",
     releaseDate:"2026-08-16",
-    displayDate:"2026-08-16",
+    displayDate:"2026-08-17",
     confidence:"verified",
     providerUsed:true
 });
+const exactEpisode = {season_number:1,episode_number:1};
+const exactShow = {tmdb_id:123};
 const exact = timing.getReleaseInfo(
     "2026-08-16",
-    {season_number:1,episode_number:1},
-    {tmdb_id:123}
+    exactEpisode,
+    exactShow
 );
 assert.strictEqual(exact.hasTime,true);
 assert.strictEqual(exact.precision,"exact");
 assert.strictEqual(exact.releaseDate,"2026-08-16");
+assert.strictEqual(exact.displayDate,"2026-08-17");
 assert.strictEqual(exact.date.toISOString(),"2026-08-16T12:30:00.000Z");
+assert.strictEqual(
+    timing.calendarDate("2026-08-16",exactEpisode,exactShow),
+    "2026-08-17",
+    "canonical timing must replace the displayed calendar date when local timezone shifts the episode"
+);
+
+const mainHost = {
+    children:[],
+    appendChild(node){ this.children.push(node); }
+};
+global.document = {
+    body:{children:[],appendChild(node){ this.children.push(node); }},
+    getElementById(){ return null; },
+    querySelector(selector){ return selector === ".main" ? mainHost : null; },
+    createElement(){ return {style:{}}; }
+};
+const attributionRoot = timing._attributionContainer();
+assert.ok(attributionRoot,"attribution root must be created when a document is available");
+assert.strictEqual(attributionRoot.style.position,"fixed","attribution must be out of the app flex layout immediately");
+assert.strictEqual(mainHost.children[0],attributionRoot,"attribution must attach to the existing main app surface");
+delete global.document;
 
 console.log("Release timing frontend tests passed.");

@@ -182,10 +182,38 @@
         }catch(error){ return false; }
     }
 
+    function ensureAttributionStylesheet(){
+        if(typeof document === "undefined"){ return false; }
+        if(document.querySelector('link[data-release-timing-style="true"]')){ return true; }
+        const target = document.head || document.documentElement;
+        if(!target){ return false; }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/static/css/release-timing.css";
+        link.dataset.releaseTimingStyle = "true";
+        target.appendChild(link);
+        return true;
+    }
+
+    function attributionContainer(){
+        if(typeof document === "undefined"){ return null; }
+        let container = document.getElementById("release-timing-attribution-root");
+        if(container){ return container; }
+        container = document.createElement("div");
+        container.id = "release-timing-attribution-root";
+        container.className = "release-timing-attribution-root";
+        container.style.position = "fixed";
+        const host = document.querySelector(".main") || document.body;
+        if(!host){ return null; }
+        host.appendChild(container);
+        return container;
+    }
+
     async function prefetchShows(shows){
         lastPrefetchShows = shows || lastPrefetchShows;
         if(prefetchBusy || !lastPrefetchShows){ return; }
         prefetchBusy = true;
+        let cacheUpdated = false;
         try{
             await syncAutomaticTimezone();
             const episodes = collectEpisodes(lastPrefetchShows);
@@ -193,15 +221,21 @@
                 const payload = await requestJSON("/api/release-timing/batch",{method:"POST",body:{episodes:episodes.slice(offset,offset+100)}});
                 status.timezone = String(payload.timezone || status.timezone || "UTC");
                 status.timezoneMode = String(payload.timezoneMode || status.timezoneMode || "automatic");
-                Object.entries(payload.results || {}).forEach(([identity,item])=>cache.set(identity,item));
+                Object.entries(payload.results || {}).forEach(([identity,item])=>{
+                    cache.set(identity,item);
+                    cacheUpdated = true;
+                });
                 if(payload.attribution && payload.attribution.required){
                     status.attribution = payload.attribution;
                     if(typeof document !== "undefined"){
-                        mountAttribution(document.getElementById("app") || document.body);
+                        mountAttribution(attributionContainer());
                     }
                 }
             }
             scheduleBoundary();
+            if(cacheUpdated && typeof refreshCallback === "function"){
+                refreshCallback("timing");
+            }
         }catch(error){
             // Optional enrichment failures intentionally preserve core fallback.
         }finally{ prefetchBusy = false; }
@@ -209,6 +243,7 @@
 
     function mountAttribution(container){
         if(typeof document === "undefined" || !container || !status.attribution || !status.attribution.required){ return false; }
+        ensureAttributionStylesheet();
         if(container.querySelector && container.querySelector(".release-timing-attribution")){ return true; }
         const node = document.createElement("div");
         node.className = "release-timing-attribution";
@@ -241,6 +276,7 @@
         isInitialized:()=>initialized,
         _cache:cache,
         _collectEpisodes:collectEpisodes,
+        _attributionContainer:attributionContainer,
         _key:key
     };
 });
