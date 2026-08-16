@@ -1,0 +1,115 @@
+name: TVmaze final destruction acceptance
+
+on:
+  push:
+    branches:
+      - agent/tvmaze-full-rollout
+    paths:
+      - .github/workflows/tvmaze-final-destruction.yml
+
+permissions:
+  contents: read
+
+env:
+  SECRET_KEY: test-secret-key
+  DB_HOST: test-db
+  DB_NAME: test-db
+  DB_USER: test-user
+  DB_PASSWORD: test-password
+
+jobs:
+  destroy-and-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/tvmaze-full-rollout
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci
+
+      - name: Full suite with TVmaze master disabled
+        env:
+          TVMAZE_ENABLED: 'false'
+          TVMAZE_SHADOW_ENABLED: 'true'
+          TVMAZE_UPCOMING_ENABLED: 'true'
+          TVMAZE_NOTIFICATIONS_ENABLED: 'true'
+        run: python tests/run_all.py
+
+      - name: Core app boots with provider module physically absent
+        run: |
+          mv tvmaze_integration.py /tmp/tvmaze_integration.py
+          TVMAZE_ENABLED=true \
+          TVMAZE_SHADOW_ENABLED=true \
+          TVMAZE_UPCOMING_ENABLED=true \
+          TVMAZE_NOTIFICATIONS_ENABLED=true \
+          python - <<'PY'
+          from unittest.mock import MagicMock, patch
+          with patch('psycopg.connect') as connect:
+              connection = MagicMock()
+              cursor = MagicMock()
+              connect.return_value.__enter__.return_value = connection
+              connection.cursor.return_value.__enter__.return_value = cursor
+              cursor.fetchone.return_value = (1,)
+              import app
+              assert app.app is not None
+          print('Core app booted without tvmaze_integration.py')
+          PY
+          mv /tmp/tvmaze_integration.py tvmaze_integration.py
+
+      - name: Resolver falls back with provider module physically absent
+        run: |
+          mv tvmaze_integration.py /tmp/tvmaze_integration.py
+          TVMAZE_ENABLED=true TVMAZE_UPCOMING_ENABLED=true python - <<'PY'
+          from release_timing import ReleaseTimingResolver
+          result = ReleaseTimingResolver(
+              provider_enabled=True,
+              query_enabled=True,
+              exact_enabled=True,
+              date_only_enabled=True,
+          ).resolve(
+              tmdb_id=123,
+              season_number=1,
+              episode_number=1,
+              tmdb_air_date='2026-08-16',
+              timezone_name='Asia/Kuala_Lumpur',
+          )
+          assert result is not None
+          assert result.provider_used is False
+          assert result.reason == 'tmdb_date_fallback'
+          print('Resolver returned TMDB fallback without TVmaze module')
+          PY
+          mv /tmp/tvmaze_integration.py tvmaze_integration.py
+
+      - name: Core app boots with optional timing route boundary absent
+        run: |
+          mv release_timing_routes.py /tmp/release_timing_routes.py
+          python - <<'PY'
+          from unittest.mock import MagicMock, patch
+          with patch('psycopg.connect') as connect:
+              connection = MagicMock()
+              cursor = MagicMock()
+              connect.return_value.__enter__.return_value = connection
+              connection.cursor.return_value.__enter__.return_value = cursor
+              cursor.fetchone.return_value = (1,)
+              import app
+              assert app.app is not None
+          print('Core app booted without release_timing_routes.py')
+          PY
+          mv /tmp/release_timing_routes.py release_timing_routes.py
+
+      - name: Provider failure, gating, and remapping tests
+        run: |
+          python -m unittest \
+            tests.test_tvmaze_destruction \
+            tests.test_release_timing \
+            tests.test_tvmaze_integration \
+            tests.test_tvmaze_architecture \
+            tests.test_notifications -v
