@@ -202,6 +202,7 @@
         container = document.createElement("div");
         container.id = "release-timing-attribution-root";
         container.className = "release-timing-attribution-root";
+        container.style.position = "fixed";
         const host = document.querySelector(".main") || document.body;
         if(!host){ return null; }
         host.appendChild(container);
@@ -212,6 +213,7 @@
         lastPrefetchShows = shows || lastPrefetchShows;
         if(prefetchBusy || !lastPrefetchShows){ return; }
         prefetchBusy = true;
+        let cacheUpdated = false;
         try{
             await syncAutomaticTimezone();
             const episodes = collectEpisodes(lastPrefetchShows);
@@ -219,7 +221,10 @@
                 const payload = await requestJSON("/api/release-timing/batch",{method:"POST",body:{episodes:episodes.slice(offset,offset+100)}});
                 status.timezone = String(payload.timezone || status.timezone || "UTC");
                 status.timezoneMode = String(payload.timezoneMode || status.timezoneMode || "automatic");
-                Object.entries(payload.results || {}).forEach(([identity,item])=>cache.set(identity,item));
+                Object.entries(payload.results || {}).forEach(([identity,item])=>{
+                    cache.set(identity,item);
+                    cacheUpdated = true;
+                });
                 if(payload.attribution && payload.attribution.required){
                     status.attribution = payload.attribution;
                     if(typeof document !== "undefined"){
@@ -228,6 +233,9 @@
                 }
             }
             scheduleBoundary();
+            if(cacheUpdated && typeof refreshCallback === "function"){
+                refreshCallback("timing");
+            }
         }catch(error){
             // Optional enrichment failures intentionally preserve core fallback.
         }finally{ prefetchBusy = false; }
@@ -268,6 +276,7 @@
         isInitialized:()=>initialized,
         _cache:cache,
         _collectEpisodes:collectEpisodes,
+        _attributionContainer:attributionContainer,
         _key:key
     };
 });
