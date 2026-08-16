@@ -3294,7 +3294,7 @@ function getWatchlistActionConfig(show,displayFilter,nextEp){
 
     const isAvailable = Boolean(
         nextEp.air_date &&
-        isEpisodeAired(nextEp.air_date,nextEp,show)
+        isEpisodeLoggable(nextEp,show,nextEp.season)
     );
 
     const releaseDate = nextEp.air_date
@@ -3702,7 +3702,7 @@ async function renderUpcoming(startBackgroundRefresh=true){
 
             // A row can cross from future to available while it is already
             // displayed as a Today schedule item. Do not rely only on ep.type.
-            const canLog = isEpisodeAired(ep.air_date,ep,show);
+            const canLog = isEpisodeLoggable(ep,show,ep.season_number);
 
             const displayIsNew =
             canLog &&

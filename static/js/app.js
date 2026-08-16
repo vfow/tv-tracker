@@ -11912,6 +11912,8 @@ function getNextEpisode(show){
             return {
                 season:season,
                 episode:1,
+                season_number:season,
+                episode_number:1,
                 name:"",
                 air_date:"",
                 needsLoad:true
@@ -11923,12 +11925,7 @@ function getNextEpisode(show){
 
             const ep = episodeList[i];
 
-            if(!isEpisodeAired(ep.air_date,ep,show)){
-                continue;
-            }
-
-            const canonicalDayDifference = getDayDiffFromToday(ep.air_date,ep,show);
-            if(canonicalDayDifference !== null && canonicalDayDifference < 0){
+            if(!isEpisodeLoggable(ep,show,season)){
                 continue;
             }
 
@@ -11943,6 +11940,8 @@ function getNextEpisode(show){
                 return {
                     season:season,
                     episode:episodeNumber,
+                    season_number:season,
+                    episode_number:episodeNumber,
                     name:detail.name || "",
                     air_date:detail.air_date || "",
                     air_time:detail.air_time || "",
@@ -11959,8 +11958,6 @@ function getNextEpisode(show){
     return null;
 
 }
-
-
 
 
 
@@ -12430,6 +12427,37 @@ function getEpisodeNumberFromInfo(episodeInfo){
     );
 }
 
+function getEpisodeTimingInfo(episodeInfo=null,seasonNumber=null){
+    if(!episodeInfo || typeof episodeInfo !== "object"){
+        return episodeInfo;
+    }
+
+    const season = Number(
+        episodeInfo.season_number !== undefined
+        ? episodeInfo.season_number
+        : episodeInfo.season !== undefined
+        ? episodeInfo.season
+        : seasonNumber
+    );
+    const episode = getEpisodeNumberFromInfo(episodeInfo);
+
+    if(!Number.isFinite(season) || !Number.isFinite(episode)){
+        return episodeInfo;
+    }
+
+    if(
+        Number(episodeInfo.season_number) === season &&
+        Number(episodeInfo.episode_number) === episode
+    ){
+        return episodeInfo;
+    }
+
+    return Object.assign({},episodeInfo,{
+        season_number:season,
+        episode_number:episode
+    });
+}
+
 function isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo=null){
     if(!showInfo || !Number.isFinite(Number(seasonNumber))){
         return false;
@@ -12474,11 +12502,12 @@ function isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo=
 }
 
 function isEpisodeLoggable(episodeInfo=null,showInfo=null,seasonNumber=null){
-    const airDate = episodeInfo && typeof episodeInfo === "object"
-    ? episodeInfo.air_date
+    const timingEpisode = getEpisodeTimingInfo(episodeInfo,seasonNumber);
+    const airDate = timingEpisode && typeof timingEpisode === "object"
+    ? timingEpisode.air_date
     : "";
 
-    if(isEpisodeAired(airDate,episodeInfo,showInfo)){
+    if(isEpisodeAired(airDate,timingEpisode,showInfo)){
         return true;
     }
 
@@ -12486,7 +12515,7 @@ function isEpisodeLoggable(episodeInfo=null,showInfo=null,seasonNumber=null){
         return false;
     }
 
-    return isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo);
+    return isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,timingEpisode);
 }
 
 
@@ -12820,7 +12849,7 @@ function getNextMissedAiredEpisode(show){
                 continue;
             }
 
-            if(!isEpisodeAired(ep.air_date,ep,show)){
+            if(!isEpisodeLoggable(ep,show,season)){
                 continue;
             }
 
