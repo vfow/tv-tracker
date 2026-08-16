@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from psycopg.types.json import Jsonb
 
-from release_timing import ReleaseTimingResolver, parse_aware_datetime
+from release_timing import ReleaseTimingResolver, parse_aware_datetime, provider_flags
 from notification_engine import (
     NOTIFICATION_FAMILIES,
     build_stored_notification_snapshot,
@@ -512,7 +512,13 @@ def run_notification_check(
     initialized = settings.get("initialized_at") is not None
     created = 0
     processed = 0
-    timing_resolver = ReleaseTimingResolver()
+    flags = provider_flags()
+    timing_resolver = ReleaseTimingResolver(
+        provider_enabled=flags["master_enabled"],
+        query_enabled=flags["shadow_enabled"] or flags["notifications_enabled"],
+        exact_enabled=flags["notifications_enabled"],
+        date_only_enabled=flags["notifications_enabled"],
+    )
 
     with connection_factory() as connection:
         with connection.cursor() as cursor:

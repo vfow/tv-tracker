@@ -40,6 +40,44 @@ class ReleaseTimingTests(unittest.TestCase):
         self.assertEqual(provider.calls, 0)
         self.assertFalse(result.provider_used)
 
+    def test_query_gate_prevents_provider_call(self):
+        provider = StubProvider({"precision":"exact","release_at":"2026-08-16T00:00:00Z","release_date":"2026-08-16","trusted":True})
+        resolver = ReleaseTimingResolver(
+            provider=provider, provider_enabled=True, query_enabled=False, exact_enabled=True
+        )
+        result = resolver.resolve(
+            tmdb_id=1, season_number=1, episode_number=1,
+            tmdb_air_date="2026-08-16", timezone_name="UTC",
+        )
+        self.assertEqual(provider.calls, 0)
+        self.assertFalse(result.provider_used)
+
+    def test_master_disabled_capability_does_not_import_provider(self):
+        with mock.patch.dict(release_timing.os.environ, {
+            "TVMAZE_ENABLED": "false",
+            "TVMAZE_SHADOW_ENABLED": "true",
+            "TVMAZE_UPCOMING_ENABLED": "true",
+            "TVMAZE_NOTIFICATIONS_ENABLED": "true",
+        }, clear=False):
+            with mock.patch.object(release_timing.importlib, "import_module") as importer:
+                capability = release_timing.provider_capability()
+        importer.assert_not_called()
+        self.assertFalse(capability["enabled"])
+        self.assertFalse(capability["upcomingAuthority"])
+        self.assertFalse(capability["notificationsAuthority"])
+
+    def test_child_capabilities_are_independent(self):
+        with mock.patch.dict(release_timing.os.environ, {
+            "TVMAZE_ENABLED": "true",
+            "TVMAZE_SHADOW_ENABLED": "false",
+            "TVMAZE_UPCOMING_ENABLED": "true",
+            "TVMAZE_NOTIFICATIONS_ENABLED": "false",
+        }, clear=False):
+            flags = release_timing.provider_flags()
+        self.assertTrue(flags["master_enabled"])
+        self.assertTrue(flags["upcoming_enabled"])
+        self.assertFalse(flags["notifications_enabled"])
+
     def test_provider_exception_falls_back(self):
         provider = StubProvider(error=RuntimeError("down"))
         resolver = ReleaseTimingResolver(provider=provider, provider_enabled=True, exact_enabled=True)

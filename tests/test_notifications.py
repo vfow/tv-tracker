@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from notification_engine import (
     collect_metadata_notification_candidates,
     collect_time_notification_candidates,
+    season_detail_requests_for_today,
 )
 
 
@@ -32,6 +33,24 @@ def tracker_show(status="watching", watched=None):
 
 class NotificationRuleTests(unittest.TestCase):
     zone = ZoneInfo("Asia/Kuala_Lumpur")
+
+    def test_watching_show_requests_yesterdays_season_detail_without_crashing(self):
+        details = {
+            "last_episode_to_air": {
+                "season_number": 2,
+                "episode_number": 4,
+                "air_date": "2026-08-16",
+            }
+        }
+        now = datetime(2026, 8, 17, 10, 0, tzinfo=self.zone)
+        self.assertEqual(
+            season_detail_requests_for_today(details, now, "Asia/Kuala_Lumpur", "watching"),
+            {2},
+        )
+        self.assertEqual(
+            season_detail_requests_for_today(details, now, "Asia/Kuala_Lumpur", "paused"),
+            set(),
+        )
 
     def test_episode_notifies_when_canonical_release_boundary_is_crossed(self):
         current = snapshot(episodes=[{

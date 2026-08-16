@@ -23,6 +23,7 @@ EPISODE_SUCCESS_TTL = timedelta(hours=6)
 EPISODE_NEGATIVE_TTL = timedelta(hours=2)
 MAX_RETRIES = 2
 REQUEST_TIMEOUT_SECONDS = 4.0
+EXTERNAL_ID_RECHECK_SECONDS = 900.0
 
 _DEFAULT_PROVIDER: "TVmazeProvider | None" = None
 _DEFAULT_PROVIDER_LOCK = threading.Lock()
@@ -115,6 +116,7 @@ class TVmazeProvider:
         self._request_lock = threading.Lock()
         self._inflight: dict[str, threading.Event] = {}
         self._recent_requests: dict[str, tuple[float, dict[str, Any] | None, Exception | None]] = {}
+        self._external_id_cache: dict[int, tuple[float, str, int | None]] = {}
         self.diagnostics = {
             "requests": 0,
             "cache_hits": 0,
@@ -268,17 +270,44 @@ class TVmazeProvider:
             return None, "not_mapped"
         return next(iter(matches)), "verified_external_id"
 
-    def _cached_mapping(self, tmdb_id: int) -> tuple[int | None, str] | None:
+    def _tmdb_external_ids(self, tmdb_id: int) -> tuple[str, int | None]:
+        now = time.monotonic()
+        cached = self._external_id_cache.get(int(tmdb_id))
+        if cached and now - cached[0] <= EXTERNAL_ID_RECHECK_SECONDS:
+            return cached[1], cached[2]
+        external = self.tmdb_fetcher(f"tv/{int(tmdb_id)}/external_ids", None)
+        imdb_id = str(external.get("imdb_id") or "").strip()
+        raw_tvdb = external.get("tvdb_id")
+        try:
+            tvdb_id = int(raw_tvdb) if raw_tvdb else None
+        except (TypeError, ValueError):
+            tvdb_id = None
+        self._external_id_cache[int(tmdb_id)] = (now, imdb_id, tvdb_id)
+        return imdb_id, tvdb_id
+
+    def _cached_mapping(
+        self,
+        tmdb_id: int,
+        imdb_id: str,
+        tvdb_id: int | None,
+    ) -> tuple[int | None, str] | None:
         self.ensure_provider_schema()
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT tvmaze_id, status, reason FROM tv_tracker_tvmaze_mapping "
+                    "SELECT tvmaze_id, status, reason, imdb_id, tvdb_id FROM tv_tracker_tvmaze_mapping "
                     "WHERE tmdb_id = %s AND validator_version = %s AND expires_at > NOW()",
                     (int(tmdb_id), VALIDATOR_VERSION),
                 )
                 row = cursor.fetchone()
         if not row:
+            return None
+        stored_imdb = str(row[3] or "").strip()
+        try:
+            stored_tvdb = int(row[4]) if row[4] else None
+        except (TypeError, ValueError):
+            stored_tvdb = None
+        if stored_imdb != str(imdb_id or "").strip() or stored_tvdb != tvdb_id:
             return None
         self.diagnostics["cache_hits"] += 1
         return (int(row[0]) if row[0] else None, str(row[2] or row[1] or ""))
@@ -311,16 +340,10 @@ class TVmazeProvider:
             connection.commit()
 
     def _mapping(self, tmdb_id: int) -> tuple[int | None, str]:
-        cached = self._cached_mapping(tmdb_id)
+        imdb_id, tvdb_id = self._tmdb_external_ids(tmdb_id)
+        cached = self._cached_mapping(tmdb_id, imdb_id, tvdb_id)
         if cached is not None:
             return cached
-        external = self.tmdb_fetcher(f"tv/{int(tmdb_id)}/external_ids", None)
-        imdb_id = str(external.get("imdb_id") or "").strip()
-        raw_tvdb = external.get("tvdb_id")
-        try:
-            tvdb_id = int(raw_tvdb) if raw_tvdb else None
-        except (TypeError, ValueError):
-            tvdb_id = None
         tvmaze_id, reason = self._lookup_external(imdb_id=imdb_id, tvdb_id=tvdb_id)
         status = "verified" if tvmaze_id else ("conflict" if reason == "external_id_conflict" else "missing")
         self._store_mapping(tmdb_id, tvmaze_id, imdb_id, tvdb_id, status, reason)

@@ -33,6 +33,17 @@ def env_flag(name: str, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def provider_flags() -> dict[str, bool]:
+    """Return the centralized, master-gated TVmaze rollout capabilities."""
+    master_enabled = env_flag("TVMAZE_ENABLED")
+    return {
+        "master_enabled": master_enabled,
+        "shadow_enabled": master_enabled and env_flag("TVMAZE_SHADOW_ENABLED"),
+        "upcoming_enabled": master_enabled and env_flag("TVMAZE_UPCOMING_ENABLED"),
+        "notifications_enabled": master_enabled and env_flag("TVMAZE_NOTIFICATIONS_ENABLED"),
+    }
+
+
 def parse_date(value: Any) -> date | None:
     clean = str(value or "").strip()
     if not clean:
@@ -109,17 +120,19 @@ class ReleaseTimingResolver:
         *,
         provider: ReleaseTimingProvider | None = None,
         provider_enabled: bool | None = None,
+        query_enabled: bool | None = None,
         exact_enabled: bool | None = None,
         date_only_enabled: bool | None = None,
     ) -> None:
         self.provider_enabled = env_flag("TVMAZE_ENABLED") if provider_enabled is None else bool(provider_enabled)
+        self.query_enabled = True if query_enabled is None else bool(query_enabled)
         self.exact_enabled = env_flag("TVMAZE_EXACT_ENABLED") if exact_enabled is None else bool(exact_enabled)
         self.date_only_enabled = env_flag("TVMAZE_DATE_ONLY_ENABLED") if date_only_enabled is None else bool(date_only_enabled)
         self._provider = provider
         self._provider_load_attempted = provider is not None
 
     def _load_provider(self) -> ReleaseTimingProvider | None:
-        if not self.provider_enabled:
+        if not self.provider_enabled or not self.query_enabled:
             return None
         if self._provider_load_attempted:
             return self._provider
@@ -202,17 +215,27 @@ class ReleaseTimingResolver:
 
 
 def provider_capability() -> dict[str, Any]:
-    enabled = env_flag("TVMAZE_ENABLED")
+    flags = provider_flags()
     available = False
-    if enabled:
+    should_load = any((
+        flags["shadow_enabled"],
+        flags["upcoming_enabled"],
+        flags["notifications_enabled"],
+    ))
+    if should_load:
         try:
             module = importlib.import_module("tvmaze_integration")
             available = callable(getattr(module, "get_default_provider", None))
         except (ImportError, OSError, RuntimeError):
             available = False
     return {
-        "enabled": enabled,
+        "enabled": flags["master_enabled"],
         "available": available,
-        "exactAuthority": enabled and available and env_flag("TVMAZE_EXACT_ENABLED"),
-        "dateOnlyAuthority": enabled and available and env_flag("TVMAZE_DATE_ONLY_ENABLED"),
+        "shadowEnabled": flags["shadow_enabled"],
+        "upcomingAuthority": available and flags["upcoming_enabled"],
+        "notificationsAuthority": available and flags["notifications_enabled"],
+        # Preserve the existing frontend capability keys; they now describe
+        # Upcoming/loggability authority rather than global provider authority.
+        "exactAuthority": available and flags["upcoming_enabled"],
+        "dateOnlyAuthority": available and flags["upcoming_enabled"],
     }

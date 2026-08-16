@@ -39,6 +39,21 @@ class TVmazeArchitectureTests(unittest.TestCase):
         self.assertNotIn("request.args", provider)
         self.assertNotIn("request.get_json", provider)
 
+    def test_master_and_context_kill_switches_are_centralized(self):
+        resolver = self.text("release_timing.py")
+        routes = self.text("release_timing_routes.py")
+        notifications = self.text("notifications_backend.py")
+        for flag in (
+            "TVMAZE_ENABLED",
+            "TVMAZE_SHADOW_ENABLED",
+            "TVMAZE_UPCOMING_ENABLED",
+            "TVMAZE_NOTIFICATIONS_ENABLED",
+        ):
+            self.assertIn(flag, resolver)
+        self.assertIn('if flags["master_enabled"] and any((', routes)
+        self.assertIn('query_enabled=flags["shadow_enabled"] or flags["upcoming_enabled"]', routes)
+        self.assertIn('query_enabled=flags["shadow_enabled"] or flags["notifications_enabled"]', notifications)
+
     def test_release_timing_is_loaded_before_app(self):
         template = self.text("templates/index.html")
         self.assertLess(template.index("js/release-timing.js"), template.index("js/app.js"))

@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 from flask import abort, jsonify, request
 
-from release_timing import ReleaseTimingResolver, provider_capability, valid_timezone
+from release_timing import ReleaseTimingResolver, provider_capability, provider_flags, valid_timezone
 
 
 MAX_BATCH_EPISODES = 200
@@ -38,12 +38,18 @@ def install_release_timing_routes(
     connection_factory: Callable[[], Any],
     tmdb_fetcher: Callable[[str, dict[str, Any] | None], dict[str, Any]],
 ) -> None:
-    try:
-        from tvmaze_integration import configure_default_provider
-        configure_default_provider(connection_factory=connection_factory, tmdb_fetcher=tmdb_fetcher)
-    except (ImportError, OSError, RuntimeError):
-        # Optional integration must never prevent TV Tracker from booting.
-        pass
+    flags = provider_flags()
+    if flags["master_enabled"] and any((
+        flags["shadow_enabled"],
+        flags["upcoming_enabled"],
+        flags["notifications_enabled"],
+    )):
+        try:
+            from tvmaze_integration import configure_default_provider
+            configure_default_provider(connection_factory=connection_factory, tmdb_fetcher=tmdb_fetcher)
+        except (ImportError, OSError, RuntimeError):
+            # Optional integration must never prevent TV Tracker from booting.
+            pass
 
     @app.get("/api/release-timing/status")
     @login_required
@@ -66,7 +72,13 @@ def install_release_timing_routes(
         if not isinstance(raw_episodes, list) or len(raw_episodes) > MAX_BATCH_EPISODES:
             abort(400)
         timezone_name, timezone_mode = _effective_timezone(connection_factory)
-        resolver = ReleaseTimingResolver()
+        flags = provider_flags()
+        resolver = ReleaseTimingResolver(
+            provider_enabled=flags["master_enabled"],
+            query_enabled=flags["shadow_enabled"] or flags["upcoming_enabled"],
+            exact_enabled=flags["upcoming_enabled"],
+            date_only_enabled=flags["upcoming_enabled"],
+        )
         results: dict[str, Any] = {}
         provider_used = False
         for raw in raw_episodes:

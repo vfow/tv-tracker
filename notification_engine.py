@@ -239,6 +239,7 @@ def season_detail_requests_for_today(
     if normalize_tracker_status(tracker_status) != "watching":
         return set()
     local_today = now.astimezone(notification_zone(timezone_name)).date()
+    yesterday = local_today - timedelta(days=1)
     last_episode = normalize_episode(details.get("last_episode_to_air"))
     if last_episode and parse_calendar_date(last_episode.get("air_date")) == yesterday:
         return {int(last_episode["season_number"])}

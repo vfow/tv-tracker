@@ -71,6 +71,30 @@ class TVmazeHttpTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             provider._request_json("/shows/1")
 
+    def test_mapping_cache_is_checked_against_current_tmdb_external_ids(self):
+        tmdb_fetcher = mock.Mock(return_value={"imdb_id": "tt-new", "tvdb_id": 456})
+        provider = TVmazeProvider(
+            connection_factory=lambda: None,
+            tmdb_fetcher=tmdb_fetcher,
+            opener=lambda *args, **kwargs: FakeResponse({}),
+        )
+        provider._cached_mapping = mock.Mock(return_value=(77, "verified_external_id"))
+        provider._lookup_external = mock.Mock()
+        self.assertEqual(provider._mapping(123), (77, "verified_external_id"))
+        provider._cached_mapping.assert_called_once_with(123, "tt-new", 456)
+        provider._lookup_external.assert_not_called()
+
+    def test_external_id_fetch_is_bounded_per_show(self):
+        tmdb_fetcher = mock.Mock(return_value={"imdb_id": "tt1", "tvdb_id": 123})
+        provider = TVmazeProvider(
+            connection_factory=lambda: None,
+            tmdb_fetcher=tmdb_fetcher,
+            opener=lambda *args, **kwargs: FakeResponse({}),
+        )
+        self.assertEqual(provider._tmdb_external_ids(42), ("tt1", 123))
+        self.assertEqual(provider._tmdb_external_ids(42), ("tt1", 123))
+        self.assertEqual(tmdb_fetcher.call_count, 1)
+
     def test_external_id_conflict_is_rejected(self):
         provider = self.provider(lambda *args,**kwargs: FakeResponse({}))
         provider._request_json = mock.Mock(side_effect=[{"id":10},{"id":11}])
