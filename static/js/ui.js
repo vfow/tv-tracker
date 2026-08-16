@@ -3298,7 +3298,7 @@ function getWatchlistActionConfig(show,displayFilter,nextEp){
     );
 
     const releaseDate = nextEp.air_date
-    ? formatAirDate(nextEp.air_date,nextEp)
+    ? formatAirDate(nextEp.air_date,nextEp,show)
     : "";
 
     return {
@@ -3369,8 +3369,8 @@ function createWatchlistCard(show,options={}){
 
     const releaseMeta = nextEpisodeFuture
     ? [
-        formatAirDate(nextEp.air_date,nextEp),
-        getCountdownText(nextEp.air_date,nextEp)
+        formatAirDate(nextEp.air_date,nextEp,show),
+        getCountdownText(nextEp.air_date,nextEp,show)
     ].filter(Boolean).join(" • ")
     : "";
 
@@ -6516,7 +6516,7 @@ function renderDiscoverPreviewEpisodesHTML(show,seasonNumber,episodeList){
                     E${ep.episode_number} — "${escapeHTML(ep.name || "Untitled Episode")}"
                 </div>
                 <div class="episode-date">
-                    ${ep.air_date ? escapeHTML(formatAirDate(ep.air_date,ep)) : "Unknown"}
+                    ${ep.air_date ? escapeHTML(formatAirDate(ep.air_date,ep,show)) : "Unknown"}
                 </div>
                 <button
                 type="button"
@@ -7356,7 +7356,7 @@ function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
     : `linear-gradient(to top, #080808 0%, #141414 100%)`;
 
     const airDateText = episodeData.air_date
-    ? formatAirDate(episodeData.air_date,episodeData)
+    ? formatAirDate(episodeData.air_date,episodeData,show)
     : "Unknown";
     const runtimeText = episodeData.runtime ? `${episodeData.runtime} min` : "";
     const episodeRating = Number(episodeData.vote_average || 0);
