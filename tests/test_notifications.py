@@ -252,6 +252,58 @@ class NotificationRuleTests(unittest.TestCase):
             item["family"] == "returns_tomorrow" for item in paused
         ))
 
+    def test_return_tomorrow_uses_canonical_gap_for_both_episodes(self):
+        current = snapshot(episodes=[
+            {
+                "season_number": 1,
+                "episode_number": 5,
+                "name": "Five",
+                "air_date": "2026-08-05",
+            },
+            {
+                "season_number": 1,
+                "episode_number": 6,
+                "name": "Six",
+                "air_date": "2026-08-18",
+            },
+        ])
+        now = datetime(2026, 8, 17, 12, 0, tzinfo=self.zone)
+
+        def canonical_lookup(season, episode, air_date):
+            if episode == 5:
+                return datetime(2026, 8, 3, 21, 0, tzinfo=self.zone)
+            return datetime(2026, 8, 18, 21, 0, tzinfo=self.zone)
+
+        returns = [
+            item for item in collect_time_notification_candidates(
+                current,
+                tracker_show(),
+                now,
+                "Asia/Kuala_Lumpur",
+                release_lookup=canonical_lookup,
+            )
+            if item["family"] == "returns_tomorrow"
+        ]
+        self.assertEqual(len(returns), 1)
+        self.assertEqual(returns[0]["event_date"], "2026-08-18")
+
+        def shortened_gap_lookup(season, episode, air_date):
+            if episode == 5:
+                return datetime(2026, 8, 5, 21, 0, tzinfo=self.zone)
+            return datetime(2026, 8, 18, 21, 0, tzinfo=self.zone)
+
+        blocked = collect_time_notification_candidates(
+            snapshot(episodes=[
+                {"season_number": 1, "episode_number": 5, "name": "Five", "air_date": "2026-08-03"},
+                {"season_number": 1, "episode_number": 6, "name": "Six", "air_date": "2026-08-18"},
+            ]),
+            tracker_show(),
+            now,
+            "Asia/Kuala_Lumpur",
+            release_lookup=shortened_gap_lookup,
+        )
+        self.assertFalse(any(item["family"] == "returns_tomorrow" for item in blocked))
+
     def test_new_season_excludes_specials_and_combines_tomorrow_copy(self):
         previous = snapshot(
             seasons={"1": {"season_number": 1, "air_date": "2025-01-01"}}
@@ -276,6 +328,42 @@ class NotificationRuleTests(unittest.TestCase):
             new_seasons[0]["combined_message"],
             "Example Show Season 2 premieres tomorrow",
         )
+
+    def test_new_season_combined_copy_uses_canonical_premiere_day(self):
+        previous = snapshot(
+            seasons={"1": {"season_number": 1, "air_date": "2025-01-01"}}
+        )
+        current = snapshot(seasons={
+            "1": {"season_number": 1, "air_date": "2025-01-01"},
+            "2": {"season_number": 2, "air_date": "2026-08-18"},
+        })
+        now = datetime(2026, 8, 17, 12, 0, tzinfo=self.zone)
+
+        shifted = collect_metadata_notification_candidates(
+            previous,
+            current,
+            "finished",
+            now,
+            "Asia/Kuala_Lumpur",
+            release_lookup=lambda *_: datetime(2026, 8, 19, 21, 0, tzinfo=self.zone),
+        )
+        candidate = next(item for item in shifted if item["family"] == "new_season")
+        self.assertNotIn("combined_message", candidate)
+
+        canonical_tomorrow = collect_metadata_notification_candidates(
+            previous,
+            snapshot(seasons={
+                "1": {"season_number": 1, "air_date": "2025-01-01"},
+                "2": {"season_number": 2, "air_date": "2026-08-19"},
+            }),
+            "finished",
+            now,
+            "Asia/Kuala_Lumpur",
+            release_lookup=lambda *_: datetime(2026, 8, 18, 21, 0, tzinfo=self.zone),
+        )
+        candidate = next(item for item in canonical_tomorrow if item["family"] == "new_season")
+        self.assertEqual(candidate["combined_message"], "Example Show Season 2 premieres tomorrow")
+        self.assertEqual(candidate["event_date"], "2026-08-18")
 
     def test_dropped_show_does_not_get_new_season(self):
         previous = snapshot(
@@ -322,6 +410,34 @@ class NotificationRuleTests(unittest.TestCase):
         self.assertFalse(any(
             item["family"] == "season_premiere_tomorrow" for item in dropped
         ))
+
+    def test_season_premiere_tomorrow_uses_canonical_episode_one_day(self):
+        now = datetime(2026, 8, 17, 12, 0, tzinfo=self.zone)
+        raw_tomorrow = snapshot(
+            seasons={"2": {"season_number": 2, "air_date": "2026-08-18"}}
+        )
+        shifted = collect_time_notification_candidates(
+            raw_tomorrow,
+            tracker_show(status="finished"),
+            now,
+            "Asia/Kuala_Lumpur",
+            release_lookup=lambda season, episode, air_date: datetime(2026, 8, 19, 1, 0, tzinfo=self.zone),
+        )
+        self.assertFalse(any(item["family"] == "season_premiere_tomorrow" for item in shifted))
+
+        raw_day_after = snapshot(
+            seasons={"2": {"season_number": 2, "air_date": "2026-08-19"}}
+        )
+        canonical = collect_time_notification_candidates(
+            raw_day_after,
+            tracker_show(status="finished"),
+            now,
+            "Asia/Kuala_Lumpur",
+            release_lookup=lambda season, episode, air_date: datetime(2026, 8, 18, 21, 0, tzinfo=self.zone),
+        )
+        premiere = [item for item in canonical if item["family"] == "season_premiere_tomorrow"]
+        self.assertEqual(len(premiere), 1)
+        self.assertEqual(premiere[0]["event_date"], "2026-08-18")
 
     def test_status_and_premiere_date_updates(self):
         previous = snapshot(
