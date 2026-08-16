@@ -94,7 +94,6 @@ class ReleaseTiming:
     precision: str
     confidence: str
     provider_used: bool
-    attribution_required: bool
     reason: str
 
     def to_api(self, timezone_name: str) -> dict[str, Any]:
@@ -115,7 +114,6 @@ class ReleaseTiming:
             "precision": "exact" if self.precision == PRECISION_EXACT else "date",
             "confidence": self.confidence,
             "providerUsed": self.provider_used,
-            "attributionRequired": self.attribution_required,
             "reason": self.reason,
             "displayDate": display_date,
         }
@@ -198,7 +196,6 @@ class ReleaseTimingResolver:
                     precision=PRECISION_EXACT,
                     confidence="verified",
                     provider_used=True,
-                    attribution_required=True,
                     reason=str(candidate.get("reason") or "verified_exact"),
                 )
             if precision == PRECISION_DATE_ONLY and trusted and provider_day and self.date_only_enabled:
@@ -210,7 +207,6 @@ class ReleaseTimingResolver:
                     precision=PRECISION_DATE_ONLY,
                     confidence="verified",
                     provider_used=True,
-                    attribution_required=True,
                     reason=str(candidate.get("reason") or "verified_date_only"),
                 )
 
@@ -224,7 +220,6 @@ class ReleaseTimingResolver:
             precision=PRECISION_DATE_ONLY,
             confidence="fallback",
             provider_used=False,
-            attribution_required=False,
             reason="tmdb_date_fallback",
         )
 

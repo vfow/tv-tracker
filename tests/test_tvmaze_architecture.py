@@ -64,8 +64,9 @@ class TVmazeArchitectureTests(unittest.TestCase):
             self.assertIn(field, resolver)
         for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate"):
             self.assertIn(field, runtime)
-        self.assertIn('serialized.get("providerUsed")', routes)
         self.assertNotIn('serialized.get("provider_used")', routes)
+        self.assertNotIn("Release timing data by", runtime)
+        self.assertFalse((ROOT / "static/css/release-timing.css").exists())
 
     def test_release_timing_is_loaded_before_app(self):
         template = self.text("templates/index.html")

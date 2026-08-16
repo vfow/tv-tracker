@@ -17,7 +17,8 @@ from psycopg.types.json import Jsonb
 
 TVMAZE_API_BASE = "https://api.tvmaze.com"
 TVMAZE_USER_AGENT = "TVTracker/2.0 (optional TVmaze release timing; github.com/vfow/tv-tracker)"
-VALIDATOR_VERSION = 2
+VALIDATOR_VERSION = 3
+MAX_PROVIDER_AIRDATE_DRIFT_DAYS = 1
 MAPPING_SUCCESS_TTL = timedelta(days=30)
 MAPPING_NEGATIVE_TTL = timedelta(hours=12)
 EPISODE_SUCCESS_TTL = timedelta(hours=6)
@@ -42,6 +43,14 @@ def _date(value: Any) -> date | None:
     except ValueError:
         return None
     return parsed if parsed.isoformat() == clean else None
+
+
+def _release_date_matches_tmdb(tmdb_air_date: Any, provider_release_date: Any) -> bool:
+    tmdb_day = _date(tmdb_air_date)
+    provider_day = _date(provider_release_date)
+    if tmdb_day is None or provider_day is None:
+        return True
+    return abs((provider_day - tmdb_day).days) <= MAX_PROVIDER_AIRDATE_DRIFT_DAYS
 
 
 def _aware_datetime(value: Any) -> datetime | None:
@@ -448,6 +457,9 @@ class TVmazeProvider:
             return None
         cached = self._cached_episode(tvmaze_id, int(season_number), int(episode_number))
         if cached is not _CACHE_MISS:
+            if cached and not _release_date_matches_tmdb(tmdb_air_date, cached.get("release_date")):
+                self.diagnostics["episode_mismatches"] += 1
+                return None
             return cached  # type: ignore[return-value]
 
         episode = self._request_json(
@@ -465,8 +477,20 @@ class TVmazeProvider:
         show = self._request_json(f"/shows/{tvmaze_id}") or {}
         result = classify_episode_timing(show, episode)
         if result and tmdb_air_date and result.get("release_date"):
-            # Date disagreements are valid shadow/audit evidence. Do not silently
-            # upgrade to exact authority when identities agree but dates do not.
+            if not _release_date_matches_tmdb(tmdb_air_date, result.get("release_date")):
+                self.diagnostics["episode_mismatches"] += 1
+                self._store_episode(
+                    tvmaze_id,
+                    int(season_number),
+                    int(episode_number),
+                    episode,
+                    None,
+                    "provider_date_conflict",
+                )
+                return None
+
+            # A one-day disagreement is tolerated for identity, but exact authority
+            # remains conservative until the provider and TMDB calendar dates agree.
             if str(tmdb_air_date) != str(result["release_date"]) and result.get("precision") == "exact":
                 result = dict(result)
                 result["precision"] = "date_only"
