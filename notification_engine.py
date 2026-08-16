@@ -282,15 +282,42 @@ def premiere_tomorrow_event_key(show_id: str, season_number: int, air_date: str 
     return f"season-premiere-tomorrow:{show_id}:s{season_number}"
 
 
+def _resolved_available_at(
+    release_lookup: Callable[[int, int, str], datetime | None] | None,
+    season_number: int,
+    episode_number: int,
+    air_date: str,
+    zone: ZoneInfo,
+) -> datetime | None:
+    air_day = parse_calendar_date(air_date)
+    if not air_day:
+        return None
+
+    available_at = None
+    if callable(release_lookup):
+        try:
+            available_at = release_lookup(season_number, episode_number, air_date)
+        except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
+            available_at = None
+
+    if available_at is None:
+        return datetime.combine(air_day, datetime.min.time(), tzinfo=zone)
+    if available_at.tzinfo is None:
+        return None
+    return available_at
+
+
 def collect_metadata_notification_candidates(
     previous: dict[str, Any],
     current: dict[str, Any],
     tracker_status: str,
     now: datetime,
     timezone_name: str,
+    release_lookup: Callable[[int, int, str], datetime | None] | None = None,
 ) -> list[dict[str, Any]]:
     tracker_status = normalize_tracker_status(tracker_status)
-    local_today = now.astimezone(notification_zone(timezone_name)).date()
+    zone = notification_zone(timezone_name)
+    local_today = now.astimezone(zone).date()
     tomorrow = local_today + timedelta(days=1)
     show_id = str(current.get("show_id") or previous.get("show_id") or "")
     title = str(current.get("title") or previous.get("title") or "Untitled")
@@ -308,7 +335,14 @@ def collect_metadata_notification_candidates(
         for season_number in added_seasons:
             season = new_seasons.get(str(season_number)) or {}
             air_date = str(season.get("air_date") or "")
-            air_day = parse_calendar_date(air_date)
+            premiere_at = _resolved_available_at(
+                release_lookup,
+                season_number,
+                1,
+                air_date,
+                zone,
+            )
+            premiere_day = premiere_at.astimezone(zone).date() if premiere_at else None
             message = f"{title} Season {season_number} has been added"
             candidate = _base_candidate(
                 current,
@@ -320,10 +354,12 @@ def collect_metadata_notification_candidates(
                 event_date=air_date,
                 payload={"season": season_number},
             )
-            if air_day == tomorrow:
+            if premiere_day == tomorrow:
+                canonical_date = premiere_day.isoformat()
                 candidate["combined_message"] = f"{title} Season {season_number} premieres tomorrow"
+                candidate["event_date"] = canonical_date
                 candidate["premiere_event_key"] = premiere_tomorrow_event_key(
-                    show_id, season_number, air_date
+                    show_id, season_number, canonical_date
                 )
             candidates.append(candidate)
 
@@ -428,17 +464,26 @@ def collect_time_notification_candidates(
             if not season_number or not isinstance(season, dict):
                 continue
             air_date = str(season.get("air_date") or "")
-            if parse_calendar_date(air_date) != tomorrow:
+            premiere_at = _resolved_available_at(
+                release_lookup,
+                season_number,
+                1,
+                air_date,
+                zone,
+            )
+            premiere_day = premiere_at.astimezone(zone).date() if premiere_at else None
+            if premiere_day != tomorrow:
                 continue
+            canonical_date = premiere_day.isoformat()
             candidates.append(
                 _base_candidate(
                     snapshot,
                     family="season_premiere_tomorrow",
                     kind="season_premiere_tomorrow",
-                    event_key=premiere_tomorrow_event_key(show_id, season_number, air_date),
+                    event_key=premiere_tomorrow_event_key(show_id, season_number, canonical_date),
                     group_key=f"season-premiere:{show_id}:s{season_number}",
                     message=f"{title} Season {season_number} premieres tomorrow",
-                    event_date=air_date,
+                    event_date=canonical_date,
                     payload={"season": season_number},
                 )
             )
@@ -448,12 +493,7 @@ def collect_time_notification_candidates(
     for episode in episodes:
         by_season.setdefault(int(episode["season_number"]), []).append(episode)
     for season_episodes in by_season.values():
-        season_episodes.sort(
-            key=lambda item: (
-                parse_calendar_date(item.get("air_date")) or date.max,
-                int(item["episode_number"]),
-            )
-        )
+        season_episodes.sort(key=lambda item: int(item["episode_number"]))
 
     if tracker_status == "watching":
         previous_check = None
@@ -469,8 +509,7 @@ def collect_time_notification_candidates(
             season_number = int(episode["season_number"])
             episode_number = int(episode["episode_number"])
             air_date = str(episode.get("air_date") or "")
-            air_day = parse_calendar_date(air_date)
-            if not air_day:
+            if not parse_calendar_date(air_date):
                 continue
             if _watched_episode(tracker_show, season_number, episode_number):
                 continue
@@ -479,17 +518,13 @@ def collect_time_notification_candidates(
             name = str(episode.get("name") or "").strip()
             suffix = f" - {name}" if name else ""
 
-            available_at = None
-            if callable(release_lookup):
-                try:
-                    available_at = release_lookup(season_number, episode_number, air_date)
-                except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
-                    available_at = None
-            if available_at is None:
-                available_at = datetime.combine(air_day, datetime.min.time(), tzinfo=zone)
-            elif available_at.tzinfo is None:
-                available_at = None
-
+            available_at = _resolved_available_at(
+                release_lookup,
+                season_number,
+                episode_number,
+                air_date,
+                zone,
+            )
             if available_at is None:
                 continue
             available_at_utc = available_at.astimezone(timezone.utc)
@@ -544,26 +579,40 @@ def collect_time_notification_candidates(
 
         for season_number, season_episodes in by_season.items():
             for index, episode in enumerate(season_episodes):
-                if index == 0 or int(episode["episode_number"]) <= 1:
+                episode_number = int(episode["episode_number"])
+                if index == 0 or episode_number <= 1:
                     continue
                 air_date = str(episode.get("air_date") or "")
-                air_day = parse_calendar_date(air_date)
-                if not air_day:
+                return_at = _resolved_available_at(
+                    release_lookup,
+                    season_number,
+                    episode_number,
+                    air_date,
+                    zone,
+                )
+                if not return_at:
                     continue
-                return_at = None
-                if callable(release_lookup):
-                    try:
-                        return_at = release_lookup(season_number, int(episode["episode_number"]), air_date)
-                    except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
-                        return_at = None
-                return_day = return_at.astimezone(zone).date() if return_at and return_at.tzinfo else air_day
+                return_day = return_at.astimezone(zone).date()
                 if return_day != tomorrow:
                     continue
+
                 previous = season_episodes[index - 1]
-                previous_day = parse_calendar_date(previous.get("air_date"))
-                if not previous_day or (air_day - previous_day).days < 14:
+                previous_number = int(previous["episode_number"])
+                previous_air_date = str(previous.get("air_date") or "")
+                previous_at = _resolved_available_at(
+                    release_lookup,
+                    season_number,
+                    previous_number,
+                    previous_air_date,
+                    zone,
+                )
+                if not previous_at:
                     continue
-                code = f"S{season_number:02d}E{int(episode['episode_number']):02d}"
+                previous_day = previous_at.astimezone(zone).date()
+                if (return_day - previous_day).days < 14:
+                    continue
+
+                code = f"S{season_number:02d}E{episode_number:02d}"
                 name = str(episode.get("name") or "").strip()
                 suffix = f" - {name}" if name else ""
                 candidates.append(
@@ -573,16 +622,16 @@ def collect_time_notification_candidates(
                         kind="returns_tomorrow",
                         event_key=(
                             f"returns-tomorrow:{show_id}:s{season_number}:"
-                            f"e{int(episode['episode_number'])}"
+                            f"e{episode_number}"
                         ),
                         group_key=(
                             f"returns-tomorrow:{show_id}:s{season_number}:"
-                            f"e{int(episode['episode_number'])}"
+                            f"e{episode_number}"
                         ),
                         message=f"{title} returns tomorrow with {code}{suffix}",
-                        event_date=air_date,
+                        event_date=return_day.isoformat(),
                         episode=episode,
-                        payload={"season": season_number, "episode": int(episode["episode_number"])},
+                        payload={"season": season_number, "episode": episode_number},
                     )
                 )
 

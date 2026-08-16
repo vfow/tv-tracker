@@ -566,13 +566,6 @@ def run_notification_check(
                 if current is None:
                     continue
 
-                metadata = collect_metadata_notification_candidates(
-                    previous,
-                    current,
-                    str(tracker_show.get("status") or ""),
-                    current_time,
-                    timezone_name,
-                )
                 def release_lookup(season_number: int, episode_number: int, air_date: str) -> datetime | None:
                     timing = timing_resolver.resolve(
                         tmdb_id=int(show_id),
@@ -585,6 +578,14 @@ def run_notification_check(
                         return None
                     return parse_aware_datetime(timing.release_at or timing.eligible_at)
 
+                metadata = collect_metadata_notification_candidates(
+                    previous,
+                    current,
+                    str(tracker_show.get("status") or ""),
+                    current_time,
+                    timezone_name,
+                    release_lookup=release_lookup,
+                )
                 timed = collect_time_notification_candidates(
                     current,
                     tracker_show,
