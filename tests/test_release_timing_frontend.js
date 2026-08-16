@@ -30,14 +30,17 @@ const fallback = timing.getReleaseInfo(
 );
 assert.ok(fallback && fallback.date instanceof Date);
 assert.strictEqual(fallback.hasTime,false);
+assert.strictEqual(fallback.precision,"date");
 assert.strictEqual(fallback.date.getDate(),16,"date-only fallback must not add one day");
 
 timing._cache.set("123:1:1",{
     precision:"exact",
-    release_at:"2026-08-16T12:30:00Z",
-    eligible_at:"2026-08-16T12:30:00Z",
-    release_date:"2026-08-16",
-    display_date:"2026-08-16"
+    releaseAt:"2026-08-16T12:30:00Z",
+    eligibleAt:"2026-08-16T12:30:00Z",
+    releaseDate:"2026-08-16",
+    displayDate:"2026-08-16",
+    confidence:"verified",
+    providerUsed:true
 });
 const exact = timing.getReleaseInfo(
     "2026-08-16",
@@ -45,6 +48,8 @@ const exact = timing.getReleaseInfo(
     {tmdb_id:123}
 );
 assert.strictEqual(exact.hasTime,true);
+assert.strictEqual(exact.precision,"exact");
+assert.strictEqual(exact.releaseDate,"2026-08-16");
 assert.strictEqual(exact.date.toISOString(),"2026-08-16T12:30:00.000Z");
 
 console.log("Release timing frontend tests passed.");

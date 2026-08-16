@@ -10,17 +10,21 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from psycopg.types.json import Jsonb
 
 
 TVMAZE_API_BASE = "https://api.tvmaze.com"
 TVMAZE_USER_AGENT = "TVTracker/2.0 (optional TVmaze release timing; github.com/vfow/tv-tracker)"
-VALIDATOR_VERSION = 1
+VALIDATOR_VERSION = 2
 MAPPING_SUCCESS_TTL = timedelta(days=30)
 MAPPING_NEGATIVE_TTL = timedelta(hours=12)
 EPISODE_SUCCESS_TTL = timedelta(hours=6)
+EPISODE_NEAR_TERM_EXACT_TTL = timedelta(hours=1)
 EPISODE_NEGATIVE_TTL = timedelta(hours=2)
+EPISODE_NEAR_TERM_PAST_WINDOW = timedelta(hours=24)
+EPISODE_NEAR_TERM_FUTURE_WINDOW = timedelta(hours=48)
 MAX_RETRIES = 2
 REQUEST_TIMEOUT_SECONDS = 4.0
 EXTERNAL_ID_RECHECK_SECONDS = 900.0
@@ -55,18 +59,48 @@ def _aware_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _announced_airtime(value: Any) -> tuple[int, int] | None:
+    """Parse TVmaze's announced local wall-clock time without guessing."""
+    clean = str(value or "").strip()
+    parts = clean.split(":")
+    if len(parts) != 2 or any(len(part) != 2 or not part.isdigit() for part in parts):
+        return None
+    hour, minute = (int(part) for part in parts)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return hour, minute
+
+
+def _episode_ttl(result: dict[str, Any] | None, now: datetime | None = None) -> timedelta:
+    """Refresh imminent exact releases hourly; keep farther results at six hours."""
+    if not result:
+        return EPISODE_NEGATIVE_TTL
+    if str(result.get("precision") or "") == "exact":
+        release_at = _aware_datetime(result.get("release_at"))
+        if release_at:
+            current = now or datetime.now(timezone.utc)
+            if current.tzinfo is None or current.utcoffset() is None:
+                current = current.replace(tzinfo=timezone.utc)
+            current = current.astimezone(timezone.utc)
+            delta = release_at - current
+            if -EPISODE_NEAR_TERM_PAST_WINDOW <= delta <= EPISODE_NEAR_TERM_FUTURE_WINDOW:
+                return EPISODE_NEAR_TERM_EXACT_TTL
+    return EPISODE_SUCCESS_TTL
+
+
 def classify_episode_timing(show: dict[str, Any], episode: dict[str, Any]) -> dict[str, Any] | None:
     """Conservatively classify one already identity-validated TVmaze episode.
 
     Global web channels intentionally do not gain exact authority merely because
     TVmaze emits an airstamp. Exact authority requires a country-backed schedule,
-    a declared airtime, a timezone-aware airstamp, and local-date consistency.
+    a valid declared airtime, a timezone-aware airstamp, and agreement between
+    the declared wall-clock time/date and that timestamp in the channel timezone.
     """
     air_day = _date(episode.get("airdate"))
     if not air_day:
         return None
     stamp = _aware_datetime(episode.get("airstamp"))
-    airtime = str(episode.get("airtime") or "").strip()
+    airtime = _announced_airtime(episode.get("airtime"))
     network = show.get("network") if isinstance(show.get("network"), dict) else None
     web_channel = show.get("webChannel") if isinstance(show.get("webChannel"), dict) else None
     channel = network or web_channel or {}
@@ -76,11 +110,14 @@ def classify_episode_timing(show: dict[str, Any], episode: dict[str, Any]) -> di
 
     if stamp and airtime and timezone_name and not is_global_web:
         try:
-            from zoneinfo import ZoneInfo
-            local_day = stamp.astimezone(ZoneInfo(timezone_name)).date()
-        except Exception:
-            local_day = None
-        if local_day == air_day:
+            local_stamp = stamp.astimezone(ZoneInfo(timezone_name))
+        except (ZoneInfoNotFoundError, ValueError):
+            local_stamp = None
+        if (
+            local_stamp is not None
+            and local_stamp.date() == air_day
+            and (local_stamp.hour, local_stamp.minute) == airtime
+        ):
             return {
                 "precision": "exact",
                 "release_at": stamp.isoformat(),
@@ -374,7 +411,7 @@ class TVmazeProvider:
         }
 
     def _store_episode(self, tvmaze_id: int, season: int, episode: int, raw: dict[str, Any], result: dict[str, Any] | None, reason: str) -> None:
-        ttl = EPISODE_SUCCESS_TTL if result else EPISODE_NEGATIVE_TTL
+        ttl = _episode_ttl(result)
         release_at = _aware_datetime((result or {}).get("release_at"))
         release_date = _date((result or {}).get("release_date"))
         with self.connection_factory() as connection:

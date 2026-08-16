@@ -3,10 +3,18 @@ import json
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.error import HTTPError
 
-from tvmaze_integration import TVmazeProvider, classify_episode_timing
+from tvmaze_integration import (
+    EPISODE_NEGATIVE_TTL,
+    EPISODE_NEAR_TERM_EXACT_TTL,
+    EPISODE_SUCCESS_TTL,
+    TVmazeProvider,
+    _episode_ttl,
+    classify_episode_timing,
+)
 
 
 class FakeResponse:
@@ -25,6 +33,25 @@ class TVmazeClassificationTests(unittest.TestCase):
         self.assertEqual(result["precision"], "exact")
         self.assertTrue(result["trusted"])
 
+    def test_announced_airtime_must_match_airstamp_wall_clock(self):
+        show = {"network":{"country":{"timezone":"America/New_York"}},"webChannel":None}
+        episode = {"airdate":"2026-08-16","airtime":"20:30","airstamp":"2026-08-17T01:00:00+00:00"}
+        result = classify_episode_timing(show, episode)
+        self.assertEqual(result["precision"], "date_only")
+        self.assertEqual(result["reason"], "unverified_time_date_only")
+
+    def test_malformed_announced_airtime_is_never_exact(self):
+        show = {"network":{"country":{"timezone":"America/New_York"}},"webChannel":None}
+        episode = {"airdate":"2026-08-16","airtime":"25:00","airstamp":"2026-08-17T01:00:00+00:00"}
+        result = classify_episode_timing(show, episode)
+        self.assertEqual(result["precision"], "date_only")
+
+    def test_after_midnight_date_mismatch_is_conservatively_date_only(self):
+        show = {"network":{"country":{"timezone":"America/New_York"}},"webChannel":None}
+        episode = {"airdate":"2026-08-16","airtime":"01:00","airstamp":"2026-08-17T05:00:00+00:00"}
+        result = classify_episode_timing(show, episode)
+        self.assertEqual(result["precision"], "date_only")
+
     def test_global_web_channel_stays_date_only(self):
         show = {"network":None,"webChannel":{"name":"Netflix","country":None}}
         episode = {"airdate":"2026-08-16","airtime":"03:00","airstamp":"2026-08-16T03:00:00+00:00"}
@@ -40,6 +67,33 @@ class TVmazeClassificationTests(unittest.TestCase):
 
     def test_missing_airdate_is_unusable(self):
         self.assertIsNone(classify_episode_timing({}, {"airstamp":"2026-08-16T21:00:00Z"}))
+
+
+class TVmazeCachePolicyTests(unittest.TestCase):
+    def test_imminent_exact_release_refreshes_hourly(self):
+        now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+        result = {
+            "precision": "exact",
+            "release_at": (now + timedelta(hours=2)).isoformat(),
+            "release_date": "2026-08-16",
+        }
+        self.assertEqual(_episode_ttl(result, now), EPISODE_NEAR_TERM_EXACT_TTL)
+
+    def test_far_exact_release_uses_six_hour_cache(self):
+        now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+        result = {
+            "precision": "exact",
+            "release_at": (now + timedelta(days=3)).isoformat(),
+            "release_date": "2026-08-19",
+        }
+        self.assertEqual(_episode_ttl(result, now), EPISODE_SUCCESS_TTL)
+
+    def test_date_only_success_uses_six_hour_cache(self):
+        result = {"precision": "date_only", "release_at": "", "release_date": "2026-08-16"}
+        self.assertEqual(_episode_ttl(result), EPISODE_SUCCESS_TTL)
+
+    def test_negative_result_is_temporarily_cached(self):
+        self.assertEqual(_episode_ttl(None), EPISODE_NEGATIVE_TTL)
 
 
 class TVmazeHttpTests(unittest.TestCase):

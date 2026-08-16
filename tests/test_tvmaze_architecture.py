@@ -50,9 +50,21 @@ class TVmazeArchitectureTests(unittest.TestCase):
             "TVMAZE_NOTIFICATIONS_ENABLED",
         ):
             self.assertIn(flag, resolver)
+        self.assertNotIn('env_flag("TVMAZE_EXACT_ENABLED")', resolver)
+        self.assertNotIn('env_flag("TVMAZE_DATE_ONLY_ENABLED")', resolver)
         self.assertIn('if flags["master_enabled"] and any((', routes)
         self.assertIn('query_enabled=flags["shadow_enabled"] or flags["upcoming_enabled"]', routes)
         self.assertIn('query_enabled=flags["shadow_enabled"] or flags["notifications_enabled"]', notifications)
+
+    def test_public_release_contract_is_provider_neutral(self):
+        resolver = self.text("release_timing.py")
+        runtime = self.text("static/js/release-timing.js")
+        routes = self.text("release_timing_routes.py")
+        for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate", "providerUsed"):
+            self.assertIn(field, resolver)
+            self.assertIn(field, runtime)
+        self.assertIn('serialized.get("providerUsed")', routes)
+        self.assertNotIn('serialized.get("provider_used")', routes)
 
     def test_release_timing_is_loaded_before_app(self):
         template = self.text("templates/index.html")

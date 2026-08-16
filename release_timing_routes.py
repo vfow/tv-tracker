@@ -102,7 +102,7 @@ def install_release_timing_routes(
             )
             if timing:
                 serialized = timing.to_api(timezone_name)
-                provider_used = provider_used or bool(serialized.get("provider_used"))
+                provider_used = provider_used or bool(serialized.get("providerUsed"))
                 results[key] = serialized
         return jsonify({
             "results": results,

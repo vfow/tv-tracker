@@ -70,26 +70,26 @@
     function getReleaseInfo(airDateString,episodeInfo=null,showInfo=null){
         const item = getCached(episodeInfo,showInfo);
         if(item){
-            const raw = item.precision === "exact" ? item.release_at : item.eligible_at;
+            const raw = item.precision === "exact" ? item.releaseAt : item.eligibleAt;
             const parsed = raw ? new Date(raw) : null;
             if(parsed && Number.isFinite(parsed.getTime())){
                 return {
                     date:parsed,
                     hasTime:item.precision === "exact",
                     precision:item.precision,
-                    releaseDate:item.release_date || "",
-                    displayDate:item.display_date || item.release_date || "",
+                    releaseDate:item.releaseDate || "",
+                    displayDate:item.displayDate || item.releaseDate || "",
                     source:"canonical"
                 };
             }
         }
         const fallback = fallbackDate(String(airDateString || ""));
-        return fallback ? {date:fallback,hasTime:false,precision:"date_only",releaseDate:String(airDateString || ""),displayDate:String(airDateString || ""),source:"fallback"} : null;
+        return fallback ? {date:fallback,hasTime:false,precision:"date",releaseDate:String(airDateString || ""),displayDate:String(airDateString || ""),source:"fallback"} : null;
     }
 
     function calendarDate(airDateString,episodeInfo=null,showInfo=null){
         const item = getCached(episodeInfo,showInfo);
-        if(item && item.display_date){ return String(item.display_date); }
+        if(item && item.displayDate){ return String(item.displayDate); }
         return String(airDateString || "");
     }
 
@@ -153,7 +153,7 @@
         if(boundaryTimer){ clearTimeout(boundaryTimer); boundaryTimer = null; }
         const now = Date.now(); let next = Infinity;
         cache.forEach(item=>{
-            const raw = item.precision === "exact" ? item.release_at : item.eligible_at;
+            const raw = item.precision === "exact" ? item.releaseAt : item.eligibleAt;
             const value = Date.parse(raw || "");
             if(Number.isFinite(value) && value > now){ next = Math.min(next,value); }
         });

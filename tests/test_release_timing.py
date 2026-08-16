@@ -1,6 +1,4 @@
-import builtins
 import unittest
-from datetime import datetime, timezone
 from unittest import mock
 
 import release_timing
@@ -32,6 +30,42 @@ class ReleaseTimingTests(unittest.TestCase):
         self.assertEqual(result.precision, "date_only")
         self.assertFalse(result.provider_used)
         self.assertTrue(result.eligible_at.startswith("2026-08-15T16:00:00+00:00"))
+
+    def test_public_api_contract_is_canonical(self):
+        fallback = ReleaseTimingResolver(provider_enabled=False).resolve(
+            tmdb_id=1, season_number=1, episode_number=1,
+            tmdb_air_date="2026-08-16", timezone_name="Asia/Kuala_Lumpur",
+        )
+        payload = fallback.to_api("Asia/Kuala_Lumpur")
+        self.assertIsNone(payload["releaseAt"])
+        self.assertEqual(payload["releaseDate"], "2026-08-16")
+        self.assertEqual(payload["precision"], "date")
+        self.assertEqual(payload["confidence"], "fallback")
+        self.assertFalse(payload["providerUsed"])
+        self.assertIn("eligibleAt", payload)
+        self.assertIn("displayDate", payload)
+        self.assertNotIn("release_at", payload)
+        self.assertNotIn("release_date", payload)
+
+        provider = StubProvider({
+            "precision": "exact",
+            "release_at": "2026-08-16T03:30:00+02:00",
+            "release_date": "2026-08-16",
+            "trusted": True,
+        })
+        exact = ReleaseTimingResolver(
+            provider=provider,
+            provider_enabled=True,
+            exact_enabled=True,
+        ).resolve(
+            tmdb_id=1, season_number=1, episode_number=1,
+            tmdb_air_date="2026-08-16", timezone_name="UTC",
+        )
+        exact_payload = exact.to_api("UTC")
+        self.assertEqual(exact_payload["precision"], "exact")
+        self.assertEqual(exact_payload["confidence"], "verified")
+        self.assertEqual(exact_payload["releaseAt"], "2026-08-16T01:30:00+00:00")
+        self.assertTrue(exact_payload["providerUsed"])
 
     def test_provider_disabled_is_never_called(self):
         provider = StubProvider({"precision":"exact","release_at":"2026-08-16T00:00:00Z","release_date":"2026-08-16","trusted":True})
@@ -78,6 +112,27 @@ class ReleaseTimingTests(unittest.TestCase):
         self.assertTrue(flags["upcoming_enabled"])
         self.assertFalse(flags["notifications_enabled"])
 
+    def test_legacy_environment_flags_cannot_grant_authority(self):
+        provider = StubProvider({
+            "precision": "exact",
+            "release_at": "2026-08-16T00:00:00Z",
+            "release_date": "2026-08-16",
+            "trusted": True,
+        })
+        with mock.patch.dict(release_timing.os.environ, {
+            "TVMAZE_ENABLED": "true",
+            "TVMAZE_EXACT_ENABLED": "true",
+            "TVMAZE_DATE_ONLY_ENABLED": "true",
+        }, clear=False):
+            resolver = ReleaseTimingResolver(provider=provider, provider_enabled=True)
+            result = resolver.resolve(
+                tmdb_id=1, season_number=1, episode_number=1,
+                tmdb_air_date="2026-08-16", timezone_name="UTC",
+            )
+        self.assertEqual(provider.calls, 1)
+        self.assertFalse(result.provider_used)
+        self.assertEqual(result.reason, "tmdb_date_fallback")
+
     def test_provider_exception_falls_back(self):
         provider = StubProvider(error=RuntimeError("down"))
         resolver = ReleaseTimingResolver(provider=provider, provider_enabled=True, exact_enabled=True)
@@ -95,6 +150,7 @@ class ReleaseTimingTests(unittest.TestCase):
         self.assertTrue(exact.provider_used)
         self.assertEqual(exact.precision, "exact")
         self.assertEqual(exact.release_at, "2026-08-16T01:30:00+00:00")
+        self.assertEqual(exact.confidence, "verified")
 
     def test_timezone_less_timestamp_is_not_exact(self):
         candidate = {"precision":"exact","release_at":"2026-08-16T03:30:00","release_date":"2026-08-16","trusted":True}
@@ -110,6 +166,7 @@ class ReleaseTimingTests(unittest.TestCase):
         result = resolver.resolve(tmdb_id=1, season_number=1, episode_number=1, tmdb_air_date="2026-08-16", timezone_name="UTC")
         self.assertTrue(result.provider_used)
         self.assertEqual(result.release_date, "2026-08-17")
+        self.assertEqual(result.confidence, "verified")
 
     def test_missing_optional_module_does_not_break_fallback(self):
         resolver = ReleaseTimingResolver(provider_enabled=True, exact_enabled=True)

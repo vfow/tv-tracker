@@ -4,7 +4,7 @@ import importlib
 import os
 
 import psycopg
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import Any, Callable, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -98,21 +98,36 @@ class ReleaseTiming:
     reason: str
 
     def to_api(self, timezone_name: str) -> dict[str, Any]:
-        payload = asdict(self)
+        """Serialize the provider-neutral public contract.
+
+        Provider internals deliberately stay private. API consumers see stable
+        camelCase fields, `exact|date` precision, and `verified|fallback`
+        confidence regardless of which optional provider supplied a candidate.
+        """
         display_date = self.release_date
         instant = parse_aware_datetime(self.release_at or self.eligible_at)
         if instant:
             display_date = instant.astimezone(ZoneInfo(valid_timezone(timezone_name))).date().isoformat()
-        payload["display_date"] = display_date
-        return payload
+        return {
+            "releaseAt": self.release_at or None,
+            "releaseDate": self.release_date,
+            "eligibleAt": self.eligible_at,
+            "precision": "exact" if self.precision == PRECISION_EXACT else "date",
+            "confidence": self.confidence,
+            "providerUsed": self.provider_used,
+            "attributionRequired": self.attribution_required,
+            "reason": self.reason,
+            "displayDate": display_date,
+        }
 
 
 class ReleaseTimingResolver:
     """TV Tracker-owned timing policy with an optional enrichment provider.
 
     Provider failures are contained here. Core fallback behavior never imports or
-    persists provider-specific data. A provider candidate can only become
-    authoritative when the corresponding explicit authority flag is enabled.
+    persists provider-specific data. The `exact_enabled` and `date_only_enabled`
+    arguments are internal authority gates supplied by the approved Upcoming or
+    Notifications capability; they are not environment/configuration switches.
     """
 
     def __init__(
@@ -126,8 +141,8 @@ class ReleaseTimingResolver:
     ) -> None:
         self.provider_enabled = env_flag("TVMAZE_ENABLED") if provider_enabled is None else bool(provider_enabled)
         self.query_enabled = True if query_enabled is None else bool(query_enabled)
-        self.exact_enabled = env_flag("TVMAZE_EXACT_ENABLED") if exact_enabled is None else bool(exact_enabled)
-        self.date_only_enabled = env_flag("TVMAZE_DATE_ONLY_ENABLED") if date_only_enabled is None else bool(date_only_enabled)
+        self.exact_enabled = False if exact_enabled is None else bool(exact_enabled)
+        self.date_only_enabled = False if date_only_enabled is None else bool(date_only_enabled)
         self._provider = provider
         self._provider_load_attempted = provider is not None
 
@@ -181,7 +196,7 @@ class ReleaseTimingResolver:
                     release_at=provider_exact.isoformat(),
                     eligible_at=provider_exact.isoformat(),
                     precision=PRECISION_EXACT,
-                    confidence="trusted",
+                    confidence="verified",
                     provider_used=True,
                     attribution_required=True,
                     reason=str(candidate.get("reason") or "verified_exact"),
@@ -193,7 +208,7 @@ class ReleaseTimingResolver:
                     release_at="",
                     eligible_at=eligible.isoformat(),
                     precision=PRECISION_DATE_ONLY,
-                    confidence="trusted",
+                    confidence="verified",
                     provider_used=True,
                     attribution_required=True,
                     reason=str(candidate.get("reason") or "verified_date_only"),
@@ -234,8 +249,8 @@ def provider_capability() -> dict[str, Any]:
         "shadowEnabled": flags["shadow_enabled"],
         "upcomingAuthority": available and flags["upcoming_enabled"],
         "notificationsAuthority": available and flags["notifications_enabled"],
-        # Preserve the existing frontend capability keys; they now describe
-        # Upcoming/loggability authority rather than global provider authority.
+        # Preserve the existing frontend capability keys; they describe
+        # Upcoming/loggability authority rather than additional feature flags.
         "exactAuthority": available and flags["upcoming_enabled"],
         "dateOnlyAuthority": available and flags["upcoming_enabled"],
     }
