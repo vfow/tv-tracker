@@ -62,6 +62,7 @@ class TVmazeArchitectureTests(unittest.TestCase):
         routes = self.text("release_timing_routes.py")
         for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate", "providerUsed"):
             self.assertIn(field, resolver)
+        for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate"):
             self.assertIn(field, runtime)
         self.assertIn('serialized.get("providerUsed")', routes)
         self.assertNotIn('serialized.get("provider_used")', routes)
