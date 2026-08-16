@@ -282,6 +282,35 @@ def premiere_tomorrow_event_key(show_id: str, season_number: int, air_date: str 
     return f"season-premiere-tomorrow:{show_id}:s{season_number}"
 
 
+def _episode_air_date(
+    snapshot: dict[str, Any],
+    season_number: int,
+    episode_number: int,
+) -> str:
+    for raw in snapshot.get("episodes") or []:
+        episode = normalize_episode(raw)
+        if not episode:
+            continue
+        if (
+            int(episode["season_number"]) == int(season_number)
+            and int(episode["episode_number"]) == int(episode_number)
+        ):
+            air_date = str(episode.get("air_date") or "").strip()
+            return air_date if parse_calendar_date(air_date) else ""
+    return ""
+
+
+def _season_premiere_air_date(
+    snapshot: dict[str, Any],
+    season_number: int,
+    season: dict[str, Any],
+) -> str:
+    episode_air_date = _episode_air_date(snapshot, season_number, 1)
+    if episode_air_date:
+        return episode_air_date
+    return str(season.get("air_date") or "").strip()
+
+
 def _resolved_available_at(
     release_lookup: Callable[[int, int, str], datetime | None] | None,
     season_number: int,
@@ -290,9 +319,6 @@ def _resolved_available_at(
     zone: ZoneInfo,
 ) -> datetime | None:
     air_day = parse_calendar_date(air_date)
-    if not air_day:
-        return None
-
     available_at = None
     if callable(release_lookup):
         try:
@@ -300,11 +326,13 @@ def _resolved_available_at(
         except (TimeoutError, ConnectionError, OSError, RuntimeError, ValueError):
             available_at = None
 
-    if available_at is None:
-        return datetime.combine(air_day, datetime.min.time(), tzinfo=zone)
-    if available_at.tzinfo is None:
+    if available_at is not None:
+        if available_at.tzinfo is None:
+            return None
+        return available_at
+    if not air_day:
         return None
-    return available_at
+    return datetime.combine(air_day, datetime.min.time(), tzinfo=zone)
 
 
 def collect_metadata_notification_candidates(
@@ -334,12 +362,13 @@ def collect_metadata_notification_candidates(
     if tracker_status != "dropped":
         for season_number in added_seasons:
             season = new_seasons.get(str(season_number)) or {}
-            air_date = str(season.get("air_date") or "")
+            season_air_date = str(season.get("air_date") or "")
+            premiere_air_date = _season_premiere_air_date(current, season_number, season)
             premiere_at = _resolved_available_at(
                 release_lookup,
                 season_number,
                 1,
-                air_date,
+                premiere_air_date,
                 zone,
             )
             premiere_day = premiere_at.astimezone(zone).date() if premiere_at else None
@@ -351,7 +380,7 @@ def collect_metadata_notification_candidates(
                 event_key=f"new-season:{show_id}:s{season_number}",
                 group_key=f"new-season:{show_id}:s{season_number}",
                 message=message,
-                event_date=air_date,
+                event_date=season_air_date,
                 payload={"season": season_number},
             )
             if premiere_day == tomorrow:
@@ -463,7 +492,7 @@ def collect_time_notification_candidates(
             season_number = _clean_season_number(raw_number)
             if not season_number or not isinstance(season, dict):
                 continue
-            air_date = str(season.get("air_date") or "")
+            air_date = _season_premiere_air_date(snapshot, season_number, season)
             premiere_at = _resolved_available_at(
                 release_lookup,
                 season_number,
@@ -509,8 +538,6 @@ def collect_time_notification_candidates(
             season_number = int(episode["season_number"])
             episode_number = int(episode["episode_number"])
             air_date = str(episode.get("air_date") or "")
-            if not parse_calendar_date(air_date):
-                continue
             if _watched_episode(tracker_show, season_number, episode_number):
                 continue
 
