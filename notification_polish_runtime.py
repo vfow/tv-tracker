@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -9,6 +10,14 @@ from flask import Response, request
 
 
 _B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+={0,2}$")
+_VALIDATION_CODES = {
+    "invalid VAPID subject": "invalid_subject",
+    "VAPID crypto validation unavailable": "validation_unavailable",
+    "invalid VAPID public key": "invalid_public_key",
+    "invalid VAPID private key": "invalid_private_key",
+    "invalid VAPID keypair": "invalid_keypair",
+    "VAPID public/private keys do not match": "keypair_mismatch",
+}
 
 
 def _decode_base64url(value: str) -> bytes:
@@ -86,6 +95,20 @@ def validate_vapid_configuration(public_key: str, private_key: str, subject: str
     return True, ""
 
 
+def _missing_configuration_code(config: dict[str, Any]) -> str:
+    if not str(config.get("publicKey") or "").strip():
+        return "missing_public_key"
+    if not str(config.get("privateKey") or "").strip():
+        return "missing_private_key"
+    if not str(config.get("subject") or "").strip():
+        return "missing_subject"
+    return "missing_configuration"
+
+
+def _validation_code(error: str) -> str:
+    return _VALIDATION_CODES.get(str(error or ""), "invalid_configuration" if error else "")
+
+
 def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str, Any]]:
     original = final_notifications_module.push_config
 
@@ -95,9 +118,11 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
     def validated_push_config() -> dict[str, Any]:
         config = dict(original())
         config.setdefault("validationError", "")
+        config.setdefault("validationCode", "")
 
         if not config.get("keysConfigured"):
             config["configured"] = False
+            config["validationCode"] = _missing_configuration_code(config)
             return config
 
         valid, error = validate_vapid_configuration(
@@ -106,7 +131,11 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
             str(config.get("subject") or ""),
         )
         config["validationError"] = error
+        config["validationCode"] = _validation_code(error)
         config["configured"] = bool(valid and config.get("dependencyAvailable"))
+
+        if valid and not config.get("dependencyAvailable"):
+            config["validationCode"] = "dependency_unavailable"
 
         if not valid:
             # Never expose or attempt to use malformed key material downstream.
@@ -120,12 +149,31 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
     return validated_push_config
 
 
+def _inject_push_diagnostic(response: Response, final_notifications_module: Any) -> Response:
+    if request.path != "/api/push/config" or response.mimetype != "application/json" or response.status_code != 200:
+        return response
+    payload = response.get_json(silent=True)
+    if not isinstance(payload, dict) or payload.get("configured") is True:
+        return response
+
+    config = final_notifications_module.push_config()
+    diagnostic = str(config.get("validationCode") or "").strip()
+    if not diagnostic:
+        return response
+
+    payload["diagnostic"] = diagnostic
+    response.set_data(json.dumps(payload, separators=(",", ":")))
+    response.headers["Content-Length"] = str(len(response.get_data()))
+    return response
+
+
 def install_notification_polish(app: Any, final_notifications_module: Any) -> None:
     """Install Push validation and load the browser polish layer after notifications-final.js."""
     harden_push_config(final_notifications_module)
 
     @app.after_request
     def inject_notification_polish_asset(response: Response) -> Response:
+        response = _inject_push_diagnostic(response, final_notifications_module)
         if not request.path.startswith("/app") or response.mimetype != "text/html" or response.direct_passthrough:
             return response
         body = response.get_data(as_text=True)

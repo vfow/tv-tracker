@@ -100,6 +100,95 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         self.assertEqual(config["publicKey"], "")
         self.assertEqual(config["privateKey"], "")
         self.assertEqual(config["validationError"], "invalid VAPID public key")
+        self.assertEqual(config["validationCode"], "invalid_public_key")
+
+    def test_hardened_push_config_reports_missing_private_key_without_exposing_material(self) -> None:
+        public_key, _ = _vapid_pair(1)
+
+        class Module:
+            @staticmethod
+            def push_config():
+                return {
+                    "configured": False,
+                    "keysConfigured": False,
+                    "dependencyAvailable": True,
+                    "publicKey": public_key,
+                    "privateKey": "",
+                    "subject": "mailto:push@example.com",
+                }
+
+        config = harden_push_config(Module)()
+        self.assertFalse(config["configured"])
+        self.assertEqual(config["validationCode"], "missing_private_key")
+
+    def test_push_config_response_exposes_only_safe_mismatch_diagnostic(self) -> None:
+        public_key, _ = _vapid_pair(1)
+        _, private_key = _vapid_pair(2)
+
+        class Module:
+            @staticmethod
+            def push_config():
+                return {
+                    "configured": True,
+                    "keysConfigured": True,
+                    "dependencyAvailable": True,
+                    "publicKey": public_key,
+                    "privateKey": private_key,
+                    "subject": "mailto:push@example.com",
+                }
+
+        app = Flask(__name__)
+        install_notification_polish(app, Module)
+
+        @app.get("/api/push/config")
+        def push_config_route():
+            config = Module.push_config()
+            return {
+                "ok": True,
+                "configured": config["configured"],
+                "publicKey": config["publicKey"] if config["configured"] else "",
+                "dependencyAvailable": config["dependencyAvailable"],
+            }
+
+        payload = app.test_client().get("/api/push/config").get_json()
+        self.assertFalse(payload["configured"])
+        self.assertEqual(payload["publicKey"], "")
+        self.assertEqual(payload["diagnostic"], "keypair_mismatch")
+        self.assertNotIn("privateKey", payload)
+        self.assertNotIn("validationError", payload)
+
+    def test_valid_push_config_response_has_no_diagnostic(self) -> None:
+        public_key, private_key = _vapid_pair(1)
+
+        class Module:
+            @staticmethod
+            def push_config():
+                return {
+                    "configured": True,
+                    "keysConfigured": True,
+                    "dependencyAvailable": True,
+                    "publicKey": public_key,
+                    "privateKey": private_key,
+                    "subject": "mailto:push@example.com",
+                }
+
+        app = Flask(__name__)
+        install_notification_polish(app, Module)
+
+        @app.get("/api/push/config")
+        def push_config_route():
+            config = Module.push_config()
+            return {
+                "ok": True,
+                "configured": config["configured"],
+                "publicKey": config["publicKey"] if config["configured"] else "",
+                "dependencyAvailable": config["dependencyAvailable"],
+            }
+
+        payload = app.test_client().get("/api/push/config").get_json()
+        self.assertTrue(payload["configured"])
+        self.assertEqual(payload["publicKey"], public_key)
+        self.assertNotIn("diagnostic", payload)
 
     def test_polish_asset_is_injected_after_final_asset(self) -> None:
         public_key, private_key = _vapid_pair(1)
