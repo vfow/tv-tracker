@@ -5,11 +5,13 @@ from app import (
     fetch_tmdb_notification_json,
     login_required,
 )
-from final_notifications import install_final_notifications
+import final_notifications as final_notifications_module
+from final_notifications_runtime import prepare_final_notification_runtime
 from static_asset_versioning import install_static_asset_versioning
 
+prepare_final_notification_runtime(database_connection)
 install_static_asset_versioning(app)
-install_final_notifications(
+final_notifications_module.install_final_notifications(
     app,
     login_required=login_required,
     check_csrf=check_csrf,
