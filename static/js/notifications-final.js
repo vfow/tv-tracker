@@ -719,8 +719,7 @@
     }
 
     async function boot(){
-        observeSettings();
-        installNotificationSettingsNavigation();
+        // Settings UI and its navigation are owned by notifications-polish.js.
         installServiceWorkerMessages();
         syncAutomaticTimezone();
         try{ await serviceWorkerRegistration(); }catch(error){ console.warn("TV Tracker service worker unavailable",error); }
@@ -746,8 +745,18 @@
     global.TVTrackerFinalNotifications = Object.freeze({
         deviceId,
         clientId,
-        mountSettingsNotifications,
-        navigateToNotificationSettings,
+        mountSettingsNotifications:(...args)=>{
+            const polish = global.TVTrackerNotificationPolish;
+            if(polish && typeof polish.adoptMainSettingsSurface === "function"){
+                return polish.adoptMainSettingsSurface(...args);
+            }
+        },
+        navigateToNotificationSettings:replace=>{
+            const polish = global.TVTrackerNotificationPolish;
+            if(polish && typeof polish.openDedicatedSettingsPage === "function"){
+                return polish.openDedicatedSettingsPage({fromRoute:!!replace});
+            }
+        },
         pushState,
         enablePush,
         disablePush,
