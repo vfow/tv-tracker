@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import types
 import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
@@ -116,6 +117,47 @@ class FinalNotificationDestructionTests(unittest.TestCase):
         ):
             result = final.deliver_push_outbox(lambda: FakeConnection())
         self.assertEqual(result, {"configured": False, "delivered": 0, "failed": 0, "dead": 0})
+
+    def test_one_device_push_failure_does_not_block_next_device(self):
+        calls = []
+
+        class FakeWebPushException(Exception):
+            def __init__(self, message):
+                super().__init__(message)
+                self.response = None
+
+        def fake_webpush(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise FakeWebPushException("first device failed")
+            return object()
+
+        module = types.ModuleType("pywebpush")
+        module.WebPushException = FakeWebPushException
+        module.webpush = fake_webpush
+        rows = [
+            ("d1", 1, 11, {"title": "One"}, 1, "https://push/1", "p1", "a1"),
+            ("d2", 2, 12, {"title": "Two"}, 1, "https://push/2", "p2", "a2"),
+        ]
+        config = {
+            "configured": True,
+            "publicKey": "public",
+            "privateKey": "private",
+            "subject": "mailto:test@example.com",
+        }
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(final, "ensure_final_schema"))
+            stack.enter_context(patch.object(final, "push_config", return_value=config))
+            stack.enter_context(patch.object(final, "read_notification_settings", return_value={"enabled": True}))
+            stack.enter_context(patch.object(final, "_claim_push_batch", return_value=rows))
+            stack.enter_context(patch.object(final, "prune_push_state"))
+            stack.enter_context(patch.dict(sys.modules, {"pywebpush": module}))
+            result = final.deliver_push_outbox(lambda: FakeConnection())
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["delivered"], 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["timeout"], final.PUSH_REQUEST_TIMEOUT_SECONDS)
+        self.assertEqual(calls[1]["timeout"], final.PUSH_REQUEST_TIMEOUT_SECONDS)
 
     def test_push_failure_result_does_not_replace_successful_core_results(self):
         core = {"ok": True, "status": "checked", "created": 2}
