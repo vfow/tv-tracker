@@ -5,6 +5,7 @@ const assert = require("assert");
 const ROOT = path.resolve(__dirname,"..");
 const source = fs.readFileSync(path.join(ROOT,"static/js/notifications-final.js"),"utf8");
 const backend = fs.readFileSync(path.join(ROOT,"final_notifications.py"),"utf8");
+const runtime = fs.readFileSync(path.join(ROOT,"final_notifications_runtime.py"),"utf8");
 const worker = fs.readFileSync(path.join(ROOT,"notification_worker.py"),"utf8");
 const wsgi = fs.readFileSync(path.join(ROOT,"wsgi.py"),"utf8");
 const deploy = fs.readFileSync(path.join(ROOT,".github/workflows/deploy.yml"),"utf8");
@@ -12,8 +13,7 @@ const deploy = fs.readFileSync(path.join(ROOT,".github/workflows/deploy.yml"),"u
 assert(source.includes('"Movie Released"'));
 assert(source.includes('"Movie Release Updates"'));
 assert(source.includes('"Push Notifications"'));
-assert(source.includes('NotificationApi.requestPermission()'));
-assert(source.includes('pushManager.subscribe'));
+assert(source.includes('registration.pushManager.subscribe'));
 assert(source.includes('pushManager.getSubscription'));
 assert(source.includes('subscription.unsubscribe()'));
 assert(source.includes('tvtracker-consume-push-clicks'));
@@ -22,7 +22,17 @@ assert(source.includes('/api/push/presence'));
 assert(source.includes('dataset.intrinsicDisabled'));
 assert(source.includes('notificationApi()'));
 assert(source.includes('updateViaCache:"none"'));
+assert(source.includes('add TV Tracker to your Home Screen'));
+assert(source.includes('isStandaloneDisplay'));
+assert(!source.includes('NotificationApi.requestPermission()'));
 assert(!source.includes('pushNotification='));
+
+const enableStart = source.indexOf("async function enablePush");
+const enableEnd = source.indexOf("async function disablePush",enableStart);
+const enableSource = source.slice(enableStart,enableEnd);
+const subscribePosition = enableSource.indexOf("registration.pushManager.subscribe");
+assert(subscribePosition > 0);
+assert(!enableSource.slice(0,subscribePosition).includes("await "));
 
 assert(backend.includes('MEANINGFUL_MOVIE_RELEASE_TYPES = {2, 3, 4, 6}'));
 assert(backend.includes('return f"movie:{movie_id}:{region}:released"'));
@@ -60,8 +70,15 @@ assert(swSource.includes('indexedDB.open'));
 assert(!swSource.includes('visibilityState'));
 assert(!swSource.includes('addEventListener("fetch"'));
 
-assert(worker.includes("run_final_notification_worker"));
-assert(wsgi.includes("install_final_notifications"));
+assert(runtime.includes("_ORIGINAL_ENSURE_FINAL_SCHEMA"));
+assert(runtime.includes("final.ensure_final_schema = _schema_already_prepared"));
+assert(runtime.includes("DELETE FROM tv_tracker_movie_notification_baseline"));
+assert(runtime.includes("d.status IN ('pending', 'retry')"));
+assert(runtime.includes("attempts >= %s"));
+assert(runtime.includes("status = 'failed'"));
+assert(runtime.includes("device active before delivery"));
+assert(worker.includes("prepare_final_notification_runtime"));
+assert(wsgi.includes("prepare_final_notification_runtime"));
 assert(deploy.includes('pip install $PIP_SCOPE -r requirements.txt'));
 assert(deploy.includes('import pywebpush'));
 
