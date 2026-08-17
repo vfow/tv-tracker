@@ -20,7 +20,10 @@ jobs:
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
-      - run: npm ci
+      # The npm tree is build-only (Tailwind/DaisyUI). Audit production/runtime deps separately.
+      - run: npm ci --audit=false
+      - name: Verify production npm dependency security
+        run: npm audit --omit=dev --audit-level=high
       - run: python tests/run_all.py
       - name: Deploy over SSH
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
@@ -42,16 +45,31 @@ jobs:
               PYTHON_BIN="env/bin/python"
               PIP_SCOPE=""
             else
-              PYTHON_BIN="python3"
+              PYTHON_BIN="python"
               PIP_SCOPE="--user"
             fi
             "$PYTHON_BIN" -m pip install $PIP_SCOPE -r requirements.txt
             "$PYTHON_BIN" -c "import pywebpush"
+      - name: Restart AlwaysData site
+        env:
+          ALWAYSDATA_API_KEY: ${{ secrets.ALWAYSDATA_API_KEY }}
+          ALWAYSDATA_ACCOUNT: ${{ secrets.ALWAYSDATA_ACCOUNT }}
+          ALWAYSDATA_SITE_ID: ${{ secrets.ALWAYSDATA_SITE_ID }}
+        run: |
+          set -eu
+          test -n "$ALWAYSDATA_API_KEY"
+          test -n "$ALWAYSDATA_ACCOUNT"
+          test -n "$ALWAYSDATA_SITE_ID"
+          curl --fail --silent --show-error \
+            -X POST --basic \
+            --user "${ALWAYSDATA_API_KEY} account=${ALWAYSDATA_ACCOUNT}:" \
+            "https://api.alwaysdata.com/v1/site/${ALWAYSDATA_SITE_ID}/restart/"
       - name: Verify public health endpoint
         env:
           ALWAYSDATA_HEALTH_URL: ${{ secrets.ALWAYSDATA_HEALTH_URL }}
           HEALTHZ_SECRET: ${{ secrets.HEALTHZ_SECRET }}
         run: |
           curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
             -H "X-Healthcheck-Token: ${HEALTHZ_SECRET}" \
             "${ALWAYSDATA_HEALTH_URL%/}/healthz"

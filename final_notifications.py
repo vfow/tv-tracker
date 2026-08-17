@@ -1085,22 +1085,44 @@ async function storePendingClick(notificationId,route){
   db.close();
 }
 
-async function takePendingClicks(){
+async function readPendingClicks(){
   const db = await openPendingDb();
   const items = await new Promise((resolve,reject)=>{
     const tx = db.transaction(STORE_NAME,"readwrite");
     const store = tx.objectStore(STORE_NAME);
     const request = store.getAll();
+    let valid = [];
     request.onsuccess = ()=>{
       const now = Date.now();
-      const valid = (request.result || []).filter(item=>item && Number(item.id) > 0 && now - Number(item.at || 0) <= MAX_AGE_MS);
-      store.clear();
-      resolve(valid);
+      valid = (request.result || []).filter(item=>{
+        const id = Number(item && item.id || 0);
+        const fresh = id > 0 && now - Number(item && item.at || 0) <= MAX_AGE_MS;
+        if(!fresh && id > 0) store.delete(id);
+        return fresh;
+      });
     };
     request.onerror = ()=>reject(request.error);
+    tx.oncomplete = ()=>resolve(valid);
+    tx.onerror = ()=>reject(tx.error);
   });
   db.close();
   return items;
+}
+
+async function acknowledgePendingClicks(ids){
+  const clean = Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map(value=>Number(value || 0))
+    .filter(value=>Number.isInteger(value) && value > 0)));
+  if(!clean.length) return;
+  const db = await openPendingDb();
+  await new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE_NAME,"readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    clean.forEach(id=>store.delete(id));
+    tx.oncomplete = resolve;
+    tx.onerror = ()=>reject(tx.error);
+  });
+  db.close();
 }
 
 self.addEventListener("push", event => {
@@ -1142,13 +1164,19 @@ self.addEventListener("notificationclick", event => {
 });
 
 self.addEventListener("message", event => {
-  if(!event.data || event.data.type !== "tvtracker-consume-push-clicks") return;
-  event.waitUntil((async ()=>{
-    const items = await takePendingClicks();
-    if(event.source && "postMessage" in event.source){
-      event.source.postMessage({type:"tvtracker-push-clicks",items});
-    }
-  })());
+  if(!event.data) return;
+  if(event.data.type === "tvtracker-consume-push-clicks"){
+    event.waitUntil((async ()=>{
+      const items = await readPendingClicks();
+      if(event.source && "postMessage" in event.source){
+        event.source.postMessage({type:"tvtracker-push-clicks",items});
+      }
+    })());
+    return;
+  }
+  if(event.data.type === "tvtracker-ack-push-clicks"){
+    event.waitUntil(acknowledgePendingClicks(event.data.ids));
+  }
 });
 '''
 

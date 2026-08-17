@@ -370,14 +370,33 @@
     }
 
     async function markPushClickRead(id){
-        if(!Number.isInteger(id) || id <= 0) return;
+        if(!Number.isInteger(id) || id <= 0) return false;
         try{
-            await requestJSON("/api/notifications/" + encodeURIComponent(String(id)) + "/read",{method:"POST"});
+            const payload = await requestJSON("/api/notifications/" + encodeURIComponent(String(id)) + "/read",{method:"POST"});
+            if(!payload || payload.ok !== true) return false;
             if(global.TVTrackerNotifications && typeof global.TVTrackerNotifications.refreshBellState === "function"){
                 global.TVTrackerNotifications.refreshBellState();
             }
+            return true;
         }catch(error){
+            // A deleted notification is terminal: there is nothing left to mark read.
+            if(error && error.status === 404) return true;
             console.warn("TV Tracker could not mark push notification read",error);
+            return false;
+        }
+    }
+
+    async function acknowledgePushClicks(ids){
+        const clean = Array.from(new Set((Array.isArray(ids) ? ids : [])
+            .map(value=>Number(value || 0))
+            .filter(value=>Number.isInteger(value) && value > 0)));
+        if(!clean.length || !("serviceWorker" in navigator)) return;
+        try{
+            const registration = await navigator.serviceWorker.ready;
+            const worker = navigator.serviceWorker.controller || registration.active;
+            if(worker) worker.postMessage({type:"tvtracker-ack-push-clicks",ids:clean});
+        }catch(error){
+            console.warn("TV Tracker could not acknowledge push notification clicks",error);
         }
     }
 
@@ -387,7 +406,13 @@
             if(!event.data) return;
             if(event.data.type === "tvtracker-push-clicks"){
                 const items = Array.isArray(event.data.items) ? event.data.items : [];
-                items.forEach(item=>markPushClickRead(Number(item && item.id || 0)));
+                Promise.all(items.map(async item=>{
+                    const id = Number(item && item.id || 0);
+                    const marked = await markPushClickRead(id);
+                    return marked ? id : 0;
+                })).then(ids=>acknowledgePushClicks(ids.filter(id=>id > 0))).catch(error=>{
+                    console.warn("TV Tracker could not process pending push notification clicks",error);
+                });
                 return;
             }
         });
