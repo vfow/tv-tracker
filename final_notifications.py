@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import logging
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -17,14 +19,21 @@ from notifications_backend import (
     update_notification_settings,
 )
 
+LOGGER = logging.getLogger(__name__)
 MEANINGFUL_MOVIE_RELEASE_TYPES = {2, 3, 4, 6}
 DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
+CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
 FINAL_SETTING_MAP = {
     "movieReleased": "movie_released",
     "movieReleaseUpdates": "movie_release_updates",
 }
 MAX_PUSH_ATTEMPTS = 5
 MAX_PUSHES_PER_BATCH = 3
+PUSH_REQUEST_TIMEOUT_SECONDS = 10
+PUSH_ACTIVE_WINDOW_SECONDS = 75
+PUSH_DELIVERY_RETENTION_DAYS = 30
+PUSH_PRESENCE_RETENTION_DAYS = 1
+PUSH_DEVICE_COOKIE = "tv_tracker_push_device"
 
 
 def _utc_now(value: datetime | None = None) -> datetime:
@@ -64,14 +73,29 @@ def ensure_final_schema(connection_factory: Callable[[], Any]) -> None:
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL,
         user_agent TEXT NOT NULL DEFAULT '',
+        session_version BIGINT NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_success_at TIMESTAMPTZ,
         failure_count INTEGER NOT NULL DEFAULT 0
     );
 
+    ALTER TABLE tv_tracker_push_subscriptions
+    ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 0;
+
     CREATE UNIQUE INDEX IF NOT EXISTS tv_tracker_push_subscriptions_device_idx
     ON tv_tracker_push_subscriptions (device_id);
+
+    CREATE TABLE IF NOT EXISTS tv_tracker_push_presence (
+        device_id TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        visible BOOLEAN NOT NULL DEFAULT FALSE,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (device_id, client_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS tv_tracker_push_presence_active_idx
+    ON tv_tracker_push_presence (device_id, visible, last_seen_at);
 
     CREATE TABLE IF NOT EXISTS tv_tracker_push_deliveries (
         delivery_key TEXT PRIMARY KEY,
@@ -164,7 +188,7 @@ def update_combined_settings(
             with connection.cursor() as cursor:
                 cursor.execute(
                     "UPDATE tv_tracker_push_deliveries SET status = 'suppressed', updated_at = NOW() "
-                    "WHERE status IN ('pending', 'retry')"
+                    "WHERE status IN ('pending', 'retry', 'sending')"
                 )
             connection.commit()
 
@@ -218,7 +242,8 @@ def _meaningful_release_date(payload: dict[str, Any], region: str) -> str:
     for item in results if isinstance(results, list) else []:
         if not isinstance(item, dict) or str(item.get("iso_3166_1") or "").upper() != region:
             continue
-        for release in item.get("release_dates") if isinstance(item.get("release_dates"), list) else []:
+        releases = item.get("release_dates") if isinstance(item.get("release_dates"), list) else []
+        for release in releases:
             if not isinstance(release, dict):
                 continue
             try:
@@ -267,6 +292,16 @@ def _claim_event(cursor: Any, event_key: str, media_id: str, event_type: str) ->
         (event_key, media_id, event_type),
     )
     return cursor.fetchone() is not None
+
+
+def _movie_release_event_key(movie_id: str, region: str) -> str:
+    return f"movie:{movie_id}:{region}:released"
+
+
+def _movie_baseline_action(current_date: str, today: str) -> str:
+    if current_date and current_date <= today:
+        return "silent_release_claim"
+    return "baseline_only"
 
 
 def _write_movie_notification(
@@ -374,6 +409,7 @@ def run_movie_notification_check(
     except ZoneInfoNotFoundError:
         local_now = current
     today = local_now.date().isoformat()
+
     with connection_factory() as connection:
         with connection.cursor() as cursor:
             active_ids = set(movies)
@@ -382,7 +418,12 @@ def run_movie_notification_check(
                 if snapshot is None:
                     continue
                 previous_record = baselines.get(movie_id)
+                current_date = _parse_release_date(snapshot.get("release_date"))
+                release_key = _movie_release_event_key(movie_id, region)
+
                 if previous_record is None or previous_record.get("region") != region:
+                    if _movie_baseline_action(current_date, today) == "silent_release_claim":
+                        _claim_event(cursor, release_key, movie_id, "movie_released")
                     cursor.execute(
                         """
                         INSERT INTO tv_tracker_movie_notification_baseline (movie_id, region, snapshot, updated_at)
@@ -396,13 +437,11 @@ def run_movie_notification_check(
 
                 previous = previous_record.get("snapshot") if isinstance(previous_record.get("snapshot"), dict) else {}
                 previous_date = _parse_release_date(previous.get("release_date"))
-                current_date = _parse_release_date(snapshot.get("release_date"))
                 title = str(snapshot.get("title") or tracker_movie.get("title") or "Movie")
                 poster = str(snapshot.get("poster_path") or "")
                 release_due = bool(current_date and current_date <= today)
 
                 if release_due:
-                    release_key = f"movie:{movie_id}:{region}:released:{current_date}"
                     claimed = _claim_event(cursor, release_key, movie_id, "movie_released")
                     if claimed and bool(base_settings.get("enabled", True)) and final_settings["movie_released"]:
                         _write_movie_notification(
@@ -546,16 +585,33 @@ def _changed_notifications(
     return changed
 
 
+def _pywebpush_available() -> bool:
+    try:
+        return importlib.util.find_spec("pywebpush") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def push_config() -> dict[str, Any]:
     public_key = str(os.environ.get("VAPID_PUBLIC_KEY") or "").strip()
     private_key = str(os.environ.get("VAPID_PRIVATE_KEY") or "").strip()
     subject = str(os.environ.get("VAPID_SUBJECT") or "").strip()
+    dependency_available = _pywebpush_available()
+    keys_configured = bool(public_key and private_key and subject)
     return {
-        "configured": bool(public_key and private_key and subject),
+        "configured": bool(keys_configured and dependency_available),
+        "keysConfigured": keys_configured,
+        "dependencyAvailable": dependency_available,
         "publicKey": public_key,
         "privateKey": private_key,
         "subject": subject,
     }
+
+
+def _current_session_version_cursor(cursor: Any) -> int:
+    cursor.execute("SELECT session_version FROM tv_tracker_admin WHERE singleton_id = 1")
+    row = cursor.fetchone()
+    return int(row[0]) if row else 0
 
 
 def subscribe_device(
@@ -579,6 +635,9 @@ def subscribe_device(
 
     with connection_factory() as connection:
         with connection.cursor() as cursor:
+            session_version = _current_session_version_cursor(cursor)
+            if session_version <= 0:
+                raise RuntimeError("Admin session version is unavailable")
             cursor.execute(
                 "DELETE FROM tv_tracker_push_subscriptions WHERE device_id = %s AND endpoint <> %s",
                 (device, endpoint),
@@ -586,17 +645,18 @@ def subscribe_device(
             cursor.execute(
                 """
                 INSERT INTO tv_tracker_push_subscriptions
-                (device_id, endpoint, p256dh, auth, user_agent, updated_at, failure_count)
-                VALUES (%s, %s, %s, %s, %s, NOW(), 0)
+                (device_id, endpoint, p256dh, auth, user_agent, session_version, updated_at, failure_count)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), 0)
                 ON CONFLICT (endpoint) DO UPDATE
                 SET device_id = EXCLUDED.device_id,
                     p256dh = EXCLUDED.p256dh,
                     auth = EXCLUDED.auth,
                     user_agent = EXCLUDED.user_agent,
+                    session_version = EXCLUDED.session_version,
                     updated_at = NOW(),
                     failure_count = 0
                 """,
-                (device, endpoint, p256dh, auth, str(user_agent or "")[:500]),
+                (device, endpoint, p256dh, auth, str(user_agent or "")[:500], session_version),
             )
         connection.commit()
 
@@ -610,6 +670,7 @@ def unsubscribe_device(connection_factory: Callable[[], Any], device_id: str) ->
         with connection.cursor() as cursor:
             cursor.execute("DELETE FROM tv_tracker_push_subscriptions WHERE device_id = %s", (device,))
             deleted = int(cursor.rowcount or 0)
+            cursor.execute("DELETE FROM tv_tracker_push_presence WHERE device_id = %s", (device,))
         connection.commit()
     return deleted
 
@@ -620,6 +681,7 @@ def unsubscribe_all_devices(connection_factory: Callable[[], Any]) -> int:
         with connection.cursor() as cursor:
             cursor.execute("DELETE FROM tv_tracker_push_subscriptions")
             deleted = int(cursor.rowcount or 0)
+            cursor.execute("DELETE FROM tv_tracker_push_presence")
         connection.commit()
     return deleted
 
@@ -632,7 +694,12 @@ def device_subscription_status(connection_factory: Callable[[], Any], device_id:
     with connection_factory() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT subscription_id, updated_at FROM tv_tracker_push_subscriptions WHERE device_id = %s",
+                """
+                SELECT s.subscription_id, s.updated_at
+                FROM tv_tracker_push_subscriptions s
+                JOIN tv_tracker_admin a ON a.singleton_id = 1
+                WHERE s.device_id = %s AND s.session_version = a.session_version
+                """,
                 (device,),
             )
             row = cursor.fetchone()
@@ -640,6 +707,48 @@ def device_subscription_status(connection_factory: Callable[[], Any], device_id:
         "subscribed": bool(row),
         "updatedAt": row[1].isoformat() if row and row[1] else "",
     }
+
+
+def update_device_presence(
+    connection_factory: Callable[[], Any],
+    device_id: str,
+    client_id: str,
+    visible: bool,
+) -> bool:
+    ensure_final_schema(connection_factory)
+    device = str(device_id or "").strip()
+    client = str(client_id or "").strip()
+    if not DEVICE_ID_RE.fullmatch(device) or not CLIENT_ID_RE.fullmatch(client):
+        raise ValueError("Invalid push presence identifier")
+    if not isinstance(visible, bool):
+        raise ValueError("visible must be true or false")
+
+    with connection_factory() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM tv_tracker_push_subscriptions s
+                JOIN tv_tracker_admin a ON a.singleton_id = 1
+                WHERE s.device_id = %s AND s.session_version = a.session_version
+                """,
+                (device,),
+            )
+            if cursor.fetchone() is None:
+                cursor.execute("DELETE FROM tv_tracker_push_presence WHERE device_id = %s", (device,))
+                connection.commit()
+                return False
+            cursor.execute(
+                """
+                INSERT INTO tv_tracker_push_presence (device_id, client_id, visible, last_seen_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (device_id, client_id) DO UPDATE
+                SET visible = EXCLUDED.visible, last_seen_at = NOW()
+                """,
+                (device, client, visible),
+            )
+        connection.commit()
+    return True
 
 
 def _notification_push_payload(item: dict[str, Any]) -> dict[str, Any]:
@@ -670,10 +779,26 @@ def enqueue_push_deliveries(
 
     with connection_factory() as connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT subscription_id FROM tv_tracker_push_subscriptions ORDER BY subscription_id")
-            subscriptions = [int(row[0]) for row in cursor.fetchall()]
+            cursor.execute(
+                f"""
+                SELECT s.subscription_id,
+                       EXISTS (
+                           SELECT 1 FROM tv_tracker_push_presence p
+                           WHERE p.device_id = s.device_id
+                             AND p.visible = TRUE
+                             AND p.last_seen_at > NOW() - INTERVAL '{PUSH_ACTIVE_WINDOW_SECONDS} seconds'
+                       ) AS active
+                FROM tv_tracker_push_subscriptions s
+                JOIN tv_tracker_admin a ON a.singleton_id = 1
+                WHERE s.session_version = a.session_version
+                ORDER BY s.subscription_id
+                """
+            )
+            subscriptions = [(int(row[0]), bool(row[1])) for row in cursor.fetchall()]
             queued = 0
-            for subscription_id in subscriptions:
+            for subscription_id, active in subscriptions:
+                if active:
+                    continue
                 individual = notifications[:MAX_PUSHES_PER_BATCH]
                 extras = notifications[MAX_PUSHES_PER_BATCH:]
                 for item in individual:
@@ -722,6 +847,67 @@ def _retry_delay(attempt: int) -> timedelta:
     return timedelta(minutes=minutes)
 
 
+def _claim_push_batch(connection_factory: Callable[[], Any], current: datetime) -> list[tuple[Any, ...]]:
+    with connection_factory() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tv_tracker_push_deliveries
+                SET status = 'retry', updated_at = NOW()
+                WHERE status = 'sending'
+                  AND updated_at < NOW() - INTERVAL '10 minutes'
+                  AND attempts < %s
+                """,
+                (MAX_PUSH_ATTEMPTS,),
+            )
+            cursor.execute(
+                """
+                WITH picked AS (
+                    SELECT d.delivery_key, s.endpoint, s.p256dh, s.auth
+                    FROM tv_tracker_push_deliveries d
+                    JOIN tv_tracker_push_subscriptions s ON s.subscription_id = d.subscription_id
+                    JOIN tv_tracker_admin a ON a.singleton_id = 1
+                    WHERE d.status IN ('pending', 'retry')
+                      AND d.next_attempt_at <= %s
+                      AND d.attempts < %s
+                      AND s.session_version = a.session_version
+                    ORDER BY d.created_at, d.delivery_key
+                    LIMIT 100
+                    FOR UPDATE OF d SKIP LOCKED
+                )
+                UPDATE tv_tracker_push_deliveries d
+                SET status = 'sending', attempts = d.attempts + 1, updated_at = NOW()
+                FROM picked
+                WHERE d.delivery_key = picked.delivery_key
+                RETURNING d.delivery_key, d.subscription_id, d.notification_id, d.payload,
+                          d.attempts, picked.endpoint, picked.p256dh, picked.auth
+                """,
+                (current, MAX_PUSH_ATTEMPTS),
+            )
+            rows = cursor.fetchall()
+        connection.commit()
+    return rows
+
+
+def prune_push_state(connection_factory: Callable[[], Any]) -> None:
+    with connection_factory() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                DELETE FROM tv_tracker_push_deliveries
+                WHERE status IN ('delivered', 'suppressed', 'failed')
+                  AND updated_at < NOW() - INTERVAL '{PUSH_DELIVERY_RETENTION_DAYS} days'
+                """
+            )
+            cursor.execute(
+                f"""
+                DELETE FROM tv_tracker_push_presence
+                WHERE last_seen_at < NOW() - INTERVAL '{PUSH_PRESENCE_RETENTION_DAYS} day'
+                """
+            )
+        connection.commit()
+
+
 def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | None = None) -> dict[str, Any]:
     ensure_final_schema(connection_factory)
     config = push_config()
@@ -736,30 +922,14 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
         return {"configured": False, "delivered": 0, "failed": 0, "dead": 0, "error": "pywebpush unavailable"}
 
     current = _utc_now(now)
-    with connection_factory() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT d.delivery_key, d.subscription_id, d.notification_id, d.payload,
-                       d.attempts, s.endpoint, s.p256dh, s.auth
-                FROM tv_tracker_push_deliveries d
-                JOIN tv_tracker_push_subscriptions s ON s.subscription_id = d.subscription_id
-                WHERE d.status IN ('pending', 'retry')
-                  AND d.next_attempt_at <= %s
-                  AND d.attempts < %s
-                ORDER BY d.created_at, d.delivery_key
-                LIMIT 100
-                """,
-                (current, MAX_PUSH_ATTEMPTS),
-            )
-            rows = cursor.fetchall()
-
+    rows = _claim_push_batch(connection_factory, current)
     delivered = failed = dead = 0
+
     for row in rows:
         delivery_key = str(row[0])
         subscription_id = int(row[1])
         payload = row[3] if isinstance(row[3], dict) else {}
-        attempts = int(row[4] or 0) + 1
+        attempts = int(row[4] or 0)
         subscription_info = {
             "endpoint": str(row[5] or ""),
             "keys": {"p256dh": str(row[6] or ""), "auth": str(row[7] or "")},
@@ -771,6 +941,7 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
                 vapid_private_key=config["privateKey"],
                 vapid_claims={"sub": config["subject"]},
                 ttl=86400,
+                timeout=PUSH_REQUEST_TIMEOUT_SECONDS,
             )
         except WebPushException as error:
             status_code = getattr(getattr(error, "response", None), "status_code", None)
@@ -789,11 +960,11 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
                     cursor.execute(
                         """
                         UPDATE tv_tracker_push_deliveries
-                        SET status = %s, attempts = %s, next_attempt_at = %s,
+                        SET status = %s, next_attempt_at = %s,
                             last_error = %s, updated_at = NOW()
                         WHERE delivery_key = %s
                         """,
-                        ("retry" if retry else "failed", attempts, next_attempt, message, delivery_key),
+                        ("retry" if retry else "failed", next_attempt, message, delivery_key),
                     )
                     cursor.execute(
                         "UPDATE tv_tracker_push_subscriptions SET failure_count = failure_count + 1, updated_at = NOW() "
@@ -810,11 +981,11 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
                     cursor.execute(
                         """
                         UPDATE tv_tracker_push_deliveries
-                        SET status = %s, attempts = %s, next_attempt_at = %s,
+                        SET status = %s, next_attempt_at = %s,
                             last_error = %s, updated_at = NOW()
                         WHERE delivery_key = %s
                         """,
-                        ("retry" if retry else "failed", attempts, next_attempt, str(error)[:1000], delivery_key),
+                        ("retry" if retry else "failed", next_attempt, str(error)[:1000], delivery_key),
                     )
                 connection.commit()
             failed += 1
@@ -824,10 +995,10 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
                     cursor.execute(
                         """
                         UPDATE tv_tracker_push_deliveries
-                        SET status = 'delivered', attempts = %s, last_error = '', updated_at = NOW()
+                        SET status = 'delivered', last_error = '', updated_at = NOW()
                         WHERE delivery_key = %s
                         """,
-                        (attempts, delivery_key),
+                        (delivery_key,),
                     )
                     cursor.execute(
                         """
@@ -840,6 +1011,7 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
                 connection.commit()
             delivered += 1
 
+    prune_push_state(connection_factory)
     return {"configured": True, "delivered": delivered, "failed": failed, "dead": dead}
 
 
@@ -876,32 +1048,69 @@ def _manifest_payload() -> dict[str, Any]:
         "background_color": "#000000",
         "theme_color": "#000000",
         "icons": [
-            {
-                "src": "/static/assets/icons/app-icon.svg",
-                "sizes": "any",
-                "type": "image/svg+xml",
-                "purpose": "any maskable",
-            }
+            {"src": "/static/assets/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/assets/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/assets/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"},
         ],
     }
 
 
 def _service_worker_source() -> str:
     return r'''"use strict";
+const DB_NAME = "tv-tracker-push-clicks";
+const STORE_NAME = "pending";
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function openPendingDb(){
+  return new Promise((resolve,reject)=>{
+    const request = indexedDB.open(DB_NAME,1);
+    request.onupgradeneeded = ()=>{
+      const db = request.result;
+      if(!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME,{keyPath:"id"});
+    };
+    request.onsuccess = ()=>resolve(request.result);
+    request.onerror = ()=>reject(request.error);
+  });
+}
+
+async function storePendingClick(notificationId,route){
+  if(!notificationId) return;
+  const db = await openPendingDb();
+  await new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE_NAME,"readwrite");
+    tx.objectStore(STORE_NAME).put({id:Number(notificationId),route:String(route || "/app/notifications"),at:Date.now()});
+    tx.oncomplete = resolve;
+    tx.onerror = ()=>reject(tx.error);
+  });
+  db.close();
+}
+
+async function takePendingClicks(){
+  const db = await openPendingDb();
+  const items = await new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE_NAME,"readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = ()=>{
+      const now = Date.now();
+      const valid = (request.result || []).filter(item=>item && Number(item.id) > 0 && now - Number(item.at || 0) <= MAX_AGE_MS);
+      store.clear();
+      resolve(valid);
+    };
+    request.onerror = ()=>reject(request.error);
+  });
+  db.close();
+  return items;
+}
+
 self.addEventListener("push", event => {
   event.waitUntil((async () => {
     let payload = {};
     try { payload = event.data ? event.data.json() : {}; } catch (_) { payload = {}; }
-    const windows = await self.clients.matchAll({type: "window", includeUncontrolled: true});
-    const visible = windows.filter(client => client.visibilityState === "visible");
-    if (visible.length) {
-      visible.forEach(client => client.postMessage({type: "tvtracker-notification-refresh"}));
-      return;
-    }
     const options = {
       body: String(payload.body || "New TV Tracker notification"),
-      icon: "/static/assets/icons/app-icon.svg",
-      badge: "/static/assets/icons/app-icon.svg",
+      icon: "/static/assets/icons/app-icon-192.png",
+      badge: "/static/assets/icons/app-icon-192.png",
       tag: String(payload.tag || "tv-tracker-notification"),
       renotify: true,
       data: {
@@ -918,21 +1127,37 @@ self.addEventListener("notificationclick", event => {
   event.notification.close();
   event.waitUntil((async () => {
     const data = event.notification.data || {};
-    const baseRoute = String(data.route || "/app/notifications");
+    const route = String(data.route || "/app/notifications");
     const notificationId = Number(data.notificationId || 0);
-    const separator = baseRoute.includes("?") ? "&" : "?";
-    const target = notificationId ? baseRoute + separator + "pushNotification=" + encodeURIComponent(String(notificationId)) : baseRoute;
-    const windows = await self.clients.matchAll({type: "window", includeUncontrolled: true});
-    for (const client of windows) {
-      if ("navigate" in client) {
-        await client.navigate(target);
+    if(notificationId) await storePendingClick(notificationId,route);
+    const windows = await self.clients.matchAll({type:"window",includeUncontrolled:true});
+    for(const client of windows){
+      if("navigate" in client){
+        await client.navigate(route);
         return client.focus();
       }
     }
-    return self.clients.openWindow(target);
+    return self.clients.openWindow(route);
+  })());
+});
+
+self.addEventListener("message", event => {
+  if(!event.data || event.data.type !== "tvtracker-consume-push-clicks") return;
+  event.waitUntil((async ()=>{
+    const items = await takePendingClicks();
+    if(event.source && "postMessage" in event.source){
+      event.source.postMessage({type:"tvtracker-push-clicks",items});
+    }
   })());
 });
 '''
+
+
+def _best_effort(action: Callable[[], Any], label: str) -> None:
+    try:
+        action()
+    except Exception:
+        LOGGER.exception("TV Tracker %s failed", label)
 
 
 def install_final_notifications(
@@ -989,7 +1214,12 @@ def install_final_notifications(
     @login_required
     def push_config_api():
         config = push_config()
-        return jsonify({"ok": True, "configured": config["configured"], "publicKey": config["publicKey"]})
+        return jsonify({
+            "ok": True,
+            "configured": config["configured"],
+            "publicKey": config["publicKey"] if config["configured"] else "",
+            "dependencyAvailable": config["dependencyAvailable"],
+        })
 
     @app.get("/api/push/device")
     @login_required
@@ -1008,10 +1238,19 @@ def install_final_notifications(
         subscription = payload.get("subscription") if isinstance(payload.get("subscription"), dict) else {}
         try:
             subscribe_device(connection_factory, device_id, subscription, request.headers.get("User-Agent", ""))
-        except ValueError as error:
+        except (ValueError, RuntimeError) as error:
             return jsonify({"ok": False, "error": str(error)}), 400
-        session["push_device_id"] = device_id
-        return jsonify({"ok": True, "subscribed": True})
+        response = jsonify({"ok": True, "subscribed": True})
+        response.set_cookie(
+            PUSH_DEVICE_COOKIE,
+            device_id,
+            max_age=365 * 24 * 60 * 60,
+            httponly=True,
+            secure=request.is_secure,
+            samesite="Lax",
+            path="/",
+        )
+        return response
 
     @app.post("/api/push/unsubscribe")
     @login_required
@@ -1022,32 +1261,45 @@ def install_final_notifications(
             return jsonify({"ok": False, "error": "Invalid push request"}), 400
         device_id = str(payload.get("deviceId") or "")
         deleted = unsubscribe_device(connection_factory, device_id)
-        if session.get("push_device_id") == device_id:
-            session.pop("push_device_id", None)
-        return jsonify({"ok": True, "subscribed": False, "deleted": deleted})
+        response = jsonify({"ok": True, "subscribed": False, "deleted": deleted})
+        response.delete_cookie(PUSH_DEVICE_COOKIE, path="/")
+        return response
+
+    @app.post("/api/push/presence")
+    @login_required
+    def push_presence_api():
+        check_csrf()
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"ok": False, "error": "Invalid push presence"}), 400
+        try:
+            active = update_device_presence(
+                connection_factory,
+                str(payload.get("deviceId") or ""),
+                str(payload.get("clientId") or ""),
+                payload.get("visible"),
+            )
+        except ValueError as error:
+            return jsonify({"ok": False, "error": str(error)}), 400
+        return jsonify({"ok": True, "active": active})
 
     original_logout = app.view_functions.get("logout")
     if original_logout:
         def logout_with_push_cleanup(*args: Any, **kwargs: Any):
-            device_id = str(session.get("push_device_id") or "")
-            response = original_logout(*args, **kwargs)
-            status_code = getattr(response, "status_code", None)
-            if status_code is None and isinstance(response, tuple) and len(response) > 1:
-                status_code = int(response[1])
-            if device_id and (status_code is None or int(status_code) < 400):
-                unsubscribe_device(connection_factory, device_id)
+            device_id = str(request.cookies.get(PUSH_DEVICE_COOKIE) or "")
+            response = app.make_response(original_logout(*args, **kwargs))
+            if response.status_code < 400 and device_id:
+                _best_effort(lambda: unsubscribe_device(connection_factory, device_id), "logout push cleanup")
+            response.delete_cookie(PUSH_DEVICE_COOKIE, path="/")
             return response
         app.view_functions["logout"] = logout_with_push_cleanup
 
     original_account_update = app.view_functions.get("update_admin_account")
     if original_account_update:
         def account_update_with_push_cleanup(*args: Any, **kwargs: Any):
-            response = original_account_update(*args, **kwargs)
-            status_code = getattr(response, "status_code", None)
-            if status_code is None and isinstance(response, tuple) and len(response) > 1:
-                status_code = int(response[1])
-            if status_code is None or int(status_code) < 400:
-                unsubscribe_all_devices(connection_factory)
+            response = app.make_response(original_account_update(*args, **kwargs))
+            if response.status_code < 400:
+                _best_effort(lambda: unsubscribe_all_devices(connection_factory), "credential-change push cleanup")
             return response
         app.view_functions["update_admin_account"] = account_update_with_push_cleanup
 
@@ -1059,7 +1311,7 @@ def install_final_notifications(
         if "notifications-final.js" not in body:
             body = body.replace(
                 "</head>",
-                '<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#000000">\n</head>',
+                '<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#000000">\n<link rel="apple-touch-icon" href="/static/assets/icons/app-icon-192.png">\n</head>',
             )
             body = body.replace(
                 "</body>",
