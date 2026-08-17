@@ -141,6 +141,9 @@ function createSandbox(){
     assert(!source.includes('data-timezone-setting'),'polished notification settings must not expose a timezone control');
     assert(source.includes('renderNotificationControls(root.querySelector(".notification-settings-list"))'),'dedicated settings page must use the shared controls renderer');
     assert(source.includes('renderNotificationControls(list);'),'main Settings must use the same shared controls renderer');
+    assert(source.includes('if(input && key === "enabled") input.disabled = false;'),'master Notifications toggle must be re-enabled after save');
+    assert(!source.includes('header.innerHTML = "<h2>NOTIFICATIONS</h2>"'),'Settings observer must not replace the header on every mutation');
+    assert(source.includes('if(subtitle) subtitle.remove();'),'redundant subtitle removal must be idempotent');
 
     console.log('Notification settings and Upcoming polish regression tests passed.');
 })().catch(error=>{
