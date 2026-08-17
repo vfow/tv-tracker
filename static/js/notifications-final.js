@@ -8,6 +8,7 @@
     let settingsObserver = null;
     let presenceTimer = null;
     let currentDeviceSubscribed = false;
+    let pushRegistration = null;
 
     function csrfToken(){
         const meta = document.querySelector('meta[name="csrf-token"]');
@@ -64,6 +65,17 @@
         return typeof global.Notification !== "undefined" ? global.Notification : null;
     }
 
+    function isIosLike(){
+        const ua = String(navigator.userAgent || "");
+        const platform = String(navigator.platform || "");
+        return /iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && Number(navigator.maxTouchPoints || 0) > 1);
+    }
+
+    function isStandaloneDisplay(){
+        const displayMode = !!(global.matchMedia && global.matchMedia("(display-mode: standalone)").matches);
+        return displayMode || navigator.standalone === true;
+    }
+
     function applicationServerKey(value){
         const padding = "=".repeat((4 - String(value || "").length % 4) % 4);
         const base64 = (String(value || "") + padding).replace(/-/g,"+").replace(/_/g,"/");
@@ -72,8 +84,10 @@
     }
 
     async function serviceWorkerRegistration(){
+        if(pushRegistration) return pushRegistration;
         if(!("serviceWorker" in navigator)) return null;
-        return navigator.serviceWorker.register("/service-worker.js",{scope:"/",updateViaCache:"none"});
+        pushRegistration = await navigator.serviceWorker.register("/service-worker.js",{scope:"/",updateViaCache:"none"});
+        return pushRegistration;
     }
 
     function switchRow(key,label,checked,disabled,description){
@@ -132,7 +146,21 @@
 
     async function pushState(){
         const NotificationApi = notificationApi();
-        const supported = !!NotificationApi && "PushManager" in global && "serviceWorker" in navigator;
+        const hasServiceWorker = "serviceWorker" in navigator;
+
+        if(isIosLike() && !isStandaloneDisplay() && hasServiceWorker){
+            currentDeviceSubscribed = false;
+            return {
+                supported:true,
+                installRequired:true,
+                checked:false,
+                disabled:true,
+                description:"On iPhone/iPad, add TV Tracker to your Home Screen and open it there to enable Push.",
+                publicKey:""
+            };
+        }
+
+        const supported = !!NotificationApi && "PushManager" in global && hasServiceWorker;
         if(!supported){
             currentDeviceSubscribed = false;
             return {supported:false,checked:false,disabled:true,description:"Push notifications are not supported by this browser.",publicKey:""};
@@ -172,22 +200,41 @@
     async function enablePush(publicKey){
         const NotificationApi = notificationApi();
         if(!NotificationApi) throw new Error("Notifications are unavailable");
-        const registration = await serviceWorkerRegistration();
-        if(!registration) throw new Error("Service workers are unavailable");
-        let permission = NotificationApi.permission;
-        if(permission === "default") permission = await NotificationApi.requestPermission();
-        if(permission !== "granted"){
-            const error = new Error(permission === "denied" ? "Push blocked by this browser" : "Push permission was not granted");
+        if(NotificationApi.permission === "denied"){
+            const error = new Error("Push blocked by this browser");
             error.code = "PUSH_PERMISSION";
             throw error;
         }
-        let subscription = await registration.pushManager.getSubscription();
-        if(!subscription){
+
+        // The settings row is mounted only after pushState() has registered the worker.
+        // Calling subscribe() before any await keeps the subscription/permission request
+        // directly attached to the user's toggle gesture (required by WebKit).
+        const registration = pushRegistration;
+        if(!registration || !registration.pushManager){
+            throw new Error("Push setup is still loading. Try again.");
+        }
+
+        let subscription;
+        try{
             subscription = await registration.pushManager.subscribe({
                 userVisibleOnly:true,
                 applicationServerKey:applicationServerKey(publicKey)
             });
+        }catch(error){
+            if(NotificationApi.permission !== "granted"){
+                const permissionError = new Error(NotificationApi.permission === "denied" ? "Push blocked by this browser" : "Push permission was not granted");
+                permissionError.code = "PUSH_PERMISSION";
+                throw permissionError;
+            }
+            throw error;
         }
+
+        if(NotificationApi.permission !== "granted"){
+            const error = new Error("Push permission was not granted");
+            error.code = "PUSH_PERMISSION";
+            throw error;
+        }
+
         await requestJSON("/api/push/subscribe",{
             method:"POST",
             body:{deviceId:deviceId(),subscription:subscription.toJSON()}
