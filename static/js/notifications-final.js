@@ -444,6 +444,7 @@
             console.error("TV Tracker could not save notification setting",error);
         }finally{
             syncSettingsDisabledStates(section);
+            if(input && key === "enabled") input.disabled = false;
         }
     }
 
@@ -576,11 +577,11 @@
             }catch(error){
                 state = {
                     checked:false,
-                    disabled:false,
-                    description:"Enable alerts on this device.",
+                    disabled:true,
+                    description:"Push settings are temporarily unavailable.",
                     publicKey:"",
                     localSubscription:null,
-                    error:"Push settings are temporarily unavailable. Try again."
+                    error:"Reload this page and try again."
                 };
                 console.warn("TV Tracker push status unavailable",error);
             }
