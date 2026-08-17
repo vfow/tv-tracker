@@ -30,9 +30,11 @@ assert(!source.includes('pushNotification='));
 const enableStart = source.indexOf("async function enablePush");
 const enableEnd = source.indexOf("async function disablePush",enableStart);
 const enableSource = source.slice(enableStart,enableEnd);
-const subscribePosition = enableSource.indexOf("registration.pushManager.subscribe");
+const subscribeStatement = "subscription = await registration.pushManager.subscribe";
+const subscribePosition = enableSource.indexOf(subscribeStatement);
 assert(subscribePosition > 0);
-assert(!enableSource.slice(0,subscribePosition).includes("await "));
+const beforeSubscribe = enableSource.slice(0,subscribePosition).replace(/\/\/.*$/gm,"");
+assert(!beforeSubscribe.includes("await "));
 
 assert(backend.includes('MEANINGFUL_MOVIE_RELEASE_TYPES = {2, 3, 4, 6}'));
 assert(backend.includes('return f"movie:{movie_id}:{region}:released"'));
