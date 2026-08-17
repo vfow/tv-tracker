@@ -74,12 +74,15 @@ assert(!swSource.includes('addEventListener("fetch"'));
 
 assert(runtime.includes("_ORIGINAL_ENSURE_FINAL_SCHEMA"));
 assert(runtime.includes("final.ensure_final_schema = _schema_already_prepared"));
+assert(!runtime.includes("final.run_movie_notification_check ="));
+assert(!runtime.includes("final._claim_push_batch ="));
+assert(runtime.includes("run_final_notification_worker_hardened"));
 assert(runtime.includes("DELETE FROM tv_tracker_movie_notification_baseline"));
 assert(runtime.includes("d.status IN ('pending', 'retry')"));
 assert(runtime.includes("attempts >= %s"));
 assert(runtime.includes("status = 'failed'"));
 assert(runtime.includes("device active before delivery"));
-assert(worker.includes("prepare_final_notification_runtime"));
+assert(worker.includes("run_final_notification_worker_hardened"));
 assert(wsgi.includes("prepare_final_notification_runtime"));
 assert(deploy.includes('pip install $PIP_SCOPE -r requirements.txt'));
 assert(deploy.includes('import pywebpush'));
