@@ -125,6 +125,7 @@
             if(input) input.checked = !value;
             console.error("TV Tracker could not save notification setting",error);
         }finally{
+            if(input && key === "enabled") input.disabled = false;
             syncDisabledStates(list);
         }
     }
@@ -245,7 +246,12 @@
         const section = document.getElementById("settings-notifications");
         if(!section) return false;
         const header = section.querySelector(".settings-section-header");
-        if(header) header.innerHTML = "<h2>NOTIFICATIONS</h2>";
+        if(header){
+            const subtitle = header.querySelector("p");
+            if(subtitle) subtitle.remove();
+            const heading = header.querySelector("h2");
+            if(heading && heading.textContent !== "NOTIFICATIONS") heading.textContent = "NOTIFICATIONS";
+        }
         const list = section.querySelector(".notification-settings-list");
         if(!list) return false;
         if(!list.querySelector('[data-polish-control="1"]')) renderNotificationControls(list);
