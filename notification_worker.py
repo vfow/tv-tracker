@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import json
 
-from app import run_notification_check
+from app import database_connection, fetch_tmdb_notification_json, run_notification_check
+from final_notifications_runtime import run_final_notification_worker_hardened
 
 
 if __name__ == "__main__":
-    print(json.dumps(run_notification_check(), sort_keys=True))
+    result = run_final_notification_worker_hardened(
+        database_connection,
+        fetch_tmdb_notification_json,
+        run_notification_check,
+    )
+    print(json.dumps(result, sort_keys=True))
