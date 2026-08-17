@@ -7,10 +7,14 @@ from app import (
 )
 import final_notifications as final_notifications_module
 from final_notifications_runtime import prepare_final_notification_runtime
+from notification_polish_runtime import install_notification_polish
 from static_asset_versioning import install_static_asset_versioning
 
 prepare_final_notification_runtime(database_connection)
 install_static_asset_versioning(app)
+# Register before final_notifications so Flask's reverse after_request order
+# injects notifications-final.js first and notifications-polish.js after it.
+install_notification_polish(app, final_notifications_module)
 final_notifications_module.install_final_notifications(
     app,
     login_required=login_required,
