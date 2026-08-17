@@ -14,6 +14,20 @@
         ["movieReleased","Movie Released","When a movie you plan to watch is released."],
         ["movieReleaseUpdates","Movie Release Updates","When a movie you plan to watch gets a release date or the date changes."]
     ];
+    const PUSH_DIAGNOSTIC_MESSAGES = Object.freeze({
+        missing_public_key:"Server setup is missing the VAPID public key.",
+        missing_private_key:"Server setup is missing the VAPID private key.",
+        missing_subject:"Server setup is missing the VAPID contact subject.",
+        missing_configuration:"Push server setup is incomplete.",
+        invalid_public_key:"Server setup has an invalid VAPID public key.",
+        invalid_private_key:"Server setup has an invalid VAPID private key.",
+        invalid_subject:"Server setup has an invalid VAPID contact subject.",
+        invalid_keypair:"Server setup has an invalid VAPID key pair.",
+        keypair_mismatch:"The VAPID public and private keys do not match.",
+        dependency_unavailable:"Push support is unavailable on the server.",
+        validation_unavailable:"Push configuration validation is unavailable on the server.",
+        invalid_configuration:"Push server configuration is invalid."
+    });
 
     const initialDedicatedSettingsRoute = String(global.location && global.location.pathname || "") === DEDICATED_SETTINGS_ROUTE;
     const settingsRenderBusy = new WeakSet();
@@ -117,6 +131,22 @@
         return "TV Tracker couldn't enable Push on this device. Try again.";
     }
 
+    function pushDiagnosticMessage(code){
+        return PUSH_DIAGNOSTIC_MESSAGES[String(code || "").trim()] || "";
+    }
+
+    async function enrichUnavailablePushState(state){
+        if(!state || state.configured !== false) return state;
+        try{
+            const config = await requestJSON("/api/push/config");
+            const diagnostic = pushDiagnosticMessage(config.diagnostic);
+            if(!diagnostic) return state;
+            return Object.assign({},state,{error:diagnostic});
+        }catch(error){
+            return state;
+        }
+    }
+
     async function saveSetting(key,value,input,list){
         if(input) input.disabled = true;
         try{
@@ -199,6 +229,7 @@
             let state;
             try{
                 state = api ? await api.pushState() : null;
+                state = await enrichUnavailablePushState(state);
             }catch(error){
                 state = null;
                 console.warn("TV Tracker push status unavailable",error);
@@ -242,8 +273,31 @@
         }
     }
 
+    function ensureMainSettingsSection(){
+        const root = document.getElementById("settings-content");
+        if(!root) return null;
+        const existing = root.querySelector("#settings-notifications");
+        if(existing) return existing;
+        const profile = root.querySelector(".profile-settings-section");
+        if(!profile) return null;
+
+        const section = document.createElement("div");
+        section.className = "settings-section notification-settings-section";
+        section.id = "settings-notifications";
+        section.innerHTML = `
+            <div class="settings-section-header">
+                <h2>NOTIFICATIONS</h2>
+            </div>
+            <div class="notification-settings-list" aria-label="Notification settings">
+                <div class="notifications-loading">Loading notification settings…</div>
+            </div>
+        `;
+        profile.insertAdjacentElement("afterend",section);
+        return section;
+    }
+
     function adoptMainSettingsSurface(){
-        const section = document.getElementById("settings-notifications");
+        const section = ensureMainSettingsSection();
         if(!section) return false;
         const header = section.querySelector(".settings-section-header");
         if(header){
@@ -477,7 +531,9 @@
         renderNotificationControls,
         renderDedicatedSettingsPage,
         openDedicatedSettingsPage,
+        ensureMainSettingsSection,
         adoptMainSettingsSurface,
+        pushDiagnosticMessage,
         shouldRepairWatchingShow,
         repairMissingWatchingSchedules
     });
