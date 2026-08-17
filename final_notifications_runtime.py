@@ -10,8 +10,6 @@ import final_notifications as final
 _PREPARE_LOCK = threading.Lock()
 _PREPARED = False
 _ORIGINAL_ENSURE_FINAL_SCHEMA = final.ensure_final_schema
-_ORIGINAL_RUN_MOVIE_NOTIFICATION_CHECK = final.run_movie_notification_check
-_ORIGINAL_CLAIM_PUSH_BATCH = final._claim_push_batch
 
 
 def _schema_already_prepared(_connection_factory: Callable[[], Any]) -> None:
@@ -32,7 +30,7 @@ def run_movie_notification_check_hardened(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Clear region-scoped baselines when no region exists, then use canonical movie rules."""
-    movies, region = final._read_tracker_movies_and_region(connection_factory)
+    _movies, region = final._read_tracker_movies_and_region(connection_factory)
     if not region:
         _clear_movie_baselines(connection_factory)
         return {
@@ -42,11 +40,11 @@ def run_movie_notification_check_hardened(
             "created": 0,
             "fetchFailures": 0,
         }
-    return _ORIGINAL_RUN_MOVIE_NOTIFICATION_CHECK(connection_factory, tmdb_fetcher, now)
+    return final.run_movie_notification_check(connection_factory, tmdb_fetcher, now)
 
 
 def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
-    """Resolve stale security/session state before the normal SKIP LOCKED claim."""
+    """Resolve stale security/session and active-device state before actual delivery."""
     with connection_factory() as connection:
         with connection.cursor() as cursor:
             # Credential changes invalidate old subscriptions even when best-effort cleanup failed.
@@ -71,8 +69,7 @@ def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
                 """
             )
 
-            # If the app became visible after a push was queued (including a retry),
-            # permanently suppress that OS delivery. The in-app row remains the source of truth.
+            # A queued or retrying push can become obsolete when that same device opens TV Tracker.
             cursor.execute(
                 f"""
                 UPDATE tv_tracker_push_deliveries d
@@ -94,8 +91,8 @@ def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
                 """
             )
 
-            # A worker can die after claiming a row. If that stale row belongs to a now-active
-            # device, suppress it instead of resurrecting an OS notification later.
+            # A worker can die after claiming a row. If the device is now active, suppress the
+            # stale send rather than resurrecting an OS notification on recovery.
             cursor.execute(
                 f"""
                 UPDATE tv_tracker_push_deliveries d
@@ -137,20 +134,12 @@ def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
         connection.commit()
 
 
-def claim_push_batch_hardened(
-    connection_factory: Callable[[], Any],
-    current: datetime,
-) -> list[tuple[Any, ...]]:
-    _prepare_push_outbox_state(connection_factory)
-    return _ORIGINAL_CLAIM_PUSH_BATCH(connection_factory, current)
-
-
 def prepare_final_notification_runtime(connection_factory: Callable[[], Any]) -> None:
-    """Run final schema DDL once at process startup and install runtime safeguards.
+    """Run final schema DDL once per process, before requests or worker work begin.
 
-    The WSGI process and the scheduled notification worker call this before serving requests
-    or processing notifications. After the schema is prepared, request-time helpers see a
-    no-op schema function so polling/list/settings routes cannot acquire DDL locks.
+    `final_notifications` predates this hardening and defensively calls its schema helper from
+    multiple public helpers. After the startup migration succeeds we replace only that schema
+    helper with a no-op. Business logic is not replaced or load-order patched.
     """
     global _PREPARED
     if _PREPARED:
@@ -160,9 +149,36 @@ def prepare_final_notification_runtime(connection_factory: Callable[[], Any]) ->
             return
         _ORIGINAL_ENSURE_FINAL_SCHEMA(connection_factory)
         final.ensure_final_schema = _schema_already_prepared
-        final.run_movie_notification_check = run_movie_notification_check_hardened
-        final._claim_push_batch = claim_push_batch_hardened
         _PREPARED = True
+
+
+def run_final_notification_worker_hardened(
+    connection_factory: Callable[[], Any],
+    tmdb_fetcher: Callable[[str, dict[str, Any] | None], dict[str, Any]],
+    core_runner: Callable[[datetime | None], dict[str, Any]],
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Explicit final worker orchestration with second-audit safeguards."""
+    prepare_final_notification_runtime(connection_factory)
+    before = final._notification_versions(connection_factory)
+
+    # Core TV and movie notifications persist first.
+    core_result = core_runner(now)
+    movie_result = run_movie_notification_check_hardened(connection_factory, tmdb_fetcher, now)
+    changed = final._changed_notifications(connection_factory, before)
+
+    # Push remains a post-persistence delivery layer.
+    queued = final.enqueue_push_deliveries(connection_factory, changed)
+    _prepare_push_outbox_state(connection_factory)
+    push_result = final.deliver_push_outbox(connection_factory, now)
+
+    return {
+        "ok": True,
+        "core": core_result,
+        "movies": movie_result,
+        "push": {"queued": queued, **push_result},
+        "changedNotifications": len(changed),
+    }
 
 
 def runtime_is_prepared() -> bool:
