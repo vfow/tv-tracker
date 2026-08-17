@@ -202,7 +202,7 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
         self.assertIn("status = 'failed'", sql)
         self.assertIn("s.session_version <> a.session_version", sql)
 
-    def test_runtime_preparation_runs_schema_once_then_disables_request_ddl(self):
+    def test_runtime_preparation_runs_schema_once_without_replacing_business_logic(self):
         factory = RecordingFactory()
         original_ensure = final.ensure_final_schema
         original_movie = final.run_movie_notification_check
@@ -216,13 +216,61 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
                 runtime.prepare_final_notification_runtime(factory)
             ensure.assert_called_once_with(factory)
             self.assertIs(final.ensure_final_schema, runtime._schema_already_prepared)
+            self.assertIs(final.run_movie_notification_check, original_movie)
+            self.assertIs(final._claim_push_batch, original_claim)
             final.ensure_final_schema(factory)
             ensure.assert_called_once_with(factory)
         finally:
             final.ensure_final_schema = original_ensure
-            final.run_movie_notification_check = original_movie
-            final._claim_push_batch = original_claim
             runtime._PREPARED = original_prepared
+
+    def test_hardened_worker_orders_persistence_preflight_and_delivery(self):
+        order: list[str] = []
+        core_result = {"ok": True, "created": 2}
+        movie_result = {"ok": True, "created": 1}
+        push_result = {"configured": True, "delivered": 1, "failed": 0, "dead": 0}
+
+        def core_runner(_now):
+            order.append("core")
+            return core_result
+
+        def movie_runner(*_args, **_kwargs):
+            order.append("movies")
+            return movie_result
+
+        def changed(*_args, **_kwargs):
+            order.append("changed")
+            return [{"id": 1, "eventKey": "event-1"}]
+
+        def enqueue(*_args, **_kwargs):
+            order.append("enqueue")
+            return 1
+
+        def preflight(*_args, **_kwargs):
+            order.append("preflight")
+
+        def deliver(*_args, **_kwargs):
+            order.append("deliver")
+            return push_result
+
+        with patch.object(runtime, "prepare_final_notification_runtime"), \
+             patch.object(final, "_notification_versions", return_value={}), \
+             patch.object(runtime, "run_movie_notification_check_hardened", side_effect=movie_runner), \
+             patch.object(final, "_changed_notifications", side_effect=changed), \
+             patch.object(final, "enqueue_push_deliveries", side_effect=enqueue), \
+             patch.object(runtime, "_prepare_push_outbox_state", side_effect=preflight), \
+             patch.object(final, "deliver_push_outbox", side_effect=deliver):
+            result = runtime.run_final_notification_worker_hardened(
+                RecordingFactory(),
+                Mock(),
+                core_runner,
+            )
+
+        self.assertEqual(order, ["core", "movies", "changed", "enqueue", "preflight", "deliver"])
+        self.assertEqual(result["core"], core_result)
+        self.assertEqual(result["movies"], movie_result)
+        self.assertEqual(result["push"]["queued"], 1)
+        self.assertEqual(result["push"]["delivered"], 1)
 
 
 if __name__ == "__main__":
