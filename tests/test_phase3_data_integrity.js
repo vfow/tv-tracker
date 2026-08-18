@@ -167,16 +167,18 @@ function createContext(options={}){
   }
 
   {
-    const context = createContext({searchResults:[
+    const sameTitleCandidates = [
       {id:1,name:"Monster",first_air_date:"2004-04-07"},
       {id:2,name:"Monster",first_air_date:"2022-09-21"}
-    ]});
+    ];
+    const context = createContext({searchResults:sameTitleCandidates});
     const api = context.TVTrackerDataIntegrity;
-    assert.strictEqual(api.selectStrictTMDBCandidate(context.searchResults || [],"Monster"),null);
-    const selected = api.selectStrictTMDBCandidate([
-      {id:1,name:"Monster",first_air_date:"2004-04-07"},
-      {id:2,name:"Monster",first_air_date:"2022-09-21"}
-    ],"Monster (2022)");
+    assert.strictEqual(
+      api.selectStrictTMDBCandidate(sameTitleCandidates,"Monster"),
+      null,
+      "same-title imports without a disambiguating year must remain unresolved instead of guessing"
+    );
+    const selected = api.selectStrictTMDBCandidate(sameTitleCandidates,"Monster (2022)");
     assert.strictEqual(selected.id,2,"year-qualified imports must not collapse onto another same-title series");
     assert.strictEqual(
       api.selectStrictTMDBCandidate([{id:1,name:"Monsters",first_air_date:"2022-01-01"}],"Monster (2022)"),
@@ -251,7 +253,7 @@ function createContext(options={}){
     };
     const before = JSON.stringify(data);
     const findings = context.TVTrackerDataIntegrity.suspiciousHistoryReferences(data);
-    assert.deepStrictEqual(findings.map(item=>item.id),["suspect"]);
+    assert.deepStrictEqual(Array.from(findings,item=>item.id),["suspect"]);
     assert.strictEqual(JSON.stringify(data),before,"integrity audit helpers must never silently repair or delete user history");
   }
 
