@@ -14,6 +14,47 @@ SETTINGS_PATHS = {
 }
 
 
+def patch_stale_contracts() -> None:
+    """Move regression assertions to the canonical Wave 2 owners/contracts."""
+    notification_path = ROOT / "tests/test_notification_contract.py"
+    notification = notification_path.read_text(encoding="utf-8")
+    notification = notification.replace(
+        "assert 'id=\"notification-settings-page\"' in template\n",
+        "assert 'id=\"notification-settings-page\"' not in template\n"
+        "assert '/app/settings/notifications' in router\n",
+    )
+    notification_path.write_text(notification, encoding="utf-8")
+
+    source_path = ROOT / "tests/test_source_contracts.py"
+    source = source_path.read_text(encoding="utf-8")
+    source = source.replace(
+        "        ui = self.read('static/js/ui.js')\n"
+        "        self.assertIn('profile-header-${preset}', ui)\n",
+        "        settings = self.read('static/js/settings.js')\n"
+        "        self.assertIn('profile-header-${preset}', settings)\n",
+    )
+    source_path.write_text(source, encoding="utf-8")
+
+    runtime_path = ROOT / "tests/test_notification_polish_runtime.py"
+    runtime = runtime_path.read_text(encoding="utf-8")
+    runtime = runtime.replace(
+        "    def test_push_config_response_exposes_only_safe_mismatch_diagnostic(self) -> None:\n",
+        "    def test_push_config_response_hides_mismatch_diagnostics(self) -> None:\n",
+    )
+    runtime = runtime.replace(
+        '        self.assertEqual(payload["diagnostic"], "keypair_mismatch")\n'
+        '        self.assertNotIn("privateKey", payload)\n'
+        '        self.assertNotIn("validationError", payload)\n',
+        '        self.assertTrue(payload["unavailable"])\n'
+        '        self.assertNotIn("diagnostic", payload)\n'
+        '        self.assertNotIn("privateKey", payload)\n'
+        '        self.assertNotIn("validationError", payload)\n'
+        '        self.assertNotIn("validationCode", payload)\n'
+        '        self.assertNotIn("dependencyAvailable", payload)\n',
+    )
+    runtime_path.write_text(runtime, encoding="utf-8")
+
+
 def main() -> None:
     text = APP.read_text(encoding="utf-8")
 
@@ -54,6 +95,7 @@ def main() -> None:
         raise RuntimeError("Canonical Settings route set was not installed")
 
     APP.write_text(text, encoding="utf-8")
+    patch_stale_contracts()
 
 
 if __name__ == "__main__":
