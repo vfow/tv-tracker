@@ -1,8 +1,8 @@
 from pathlib import Path
 
 app = Path("app.py").read_text()
-backend = Path("notifications_backend.py").read_text()
-engine = Path("notification_engine.py").read_text()
+backend = Path("tvtracker/notifications/backend.py").read_text()
+engine = Path("tvtracker/notifications/engine.py").read_text()
 frontend = Path("static/js/notifications.js").read_text()
 router = Path("static/js/app-router.js").read_text()
 ui = Path("static/js/ui.js").read_text()

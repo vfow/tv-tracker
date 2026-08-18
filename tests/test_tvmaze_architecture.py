@@ -15,7 +15,7 @@ class TVmazeArchitectureTests(unittest.TestCase):
         ensure_end = app.index("\ndef current_revision", ensure_start)
         ensure_body = app[ensure_start:ensure_end]
         self.assertNotIn("tv_tracker_tvmaze_", ensure_body)
-        provider = self.text("tvmaze_integration.py")
+        provider = self.text("tvtracker/integrations/tvmaze.py")
         self.assertIn("tv_tracker_tvmaze_mapping", provider)
         self.assertIn("tv_tracker_tvmaze_episode_cache", provider)
 
@@ -28,21 +28,21 @@ class TVmazeArchitectureTests(unittest.TestCase):
         self.assertNotIn("DATA.history", timing_js)
 
     def test_provider_routes_do_not_replace_tmdb_identity_routes(self):
-        routes = self.text("release_timing_routes.py")
+        routes = self.text("tvtracker/release_timing/routes.py")
         self.assertNotIn('/app/show/', routes)
         router = self.text("static/js/app-router.js")
         self.assertNotIn("tvmaze", router.lower())
 
     def test_provider_module_has_fixed_upstream_base(self):
-        provider = self.text("tvmaze_integration.py")
+        provider = self.text("tvtracker/integrations/tvmaze.py")
         self.assertIn('TVMAZE_API_BASE = "https://api.tvmaze.com"', provider)
         self.assertNotIn("request.args", provider)
         self.assertNotIn("request.get_json", provider)
 
     def test_master_and_context_kill_switches_are_centralized(self):
-        resolver = self.text("release_timing.py")
-        routes = self.text("release_timing_routes.py")
-        notifications = self.text("notifications_backend.py")
+        resolver = self.text("tvtracker/release_timing/service.py")
+        routes = self.text("tvtracker/release_timing/routes.py")
+        notifications = self.text("tvtracker/notifications/backend.py")
         for flag in (
             "TVMAZE_ENABLED",
             "TVMAZE_SHADOW_ENABLED",
@@ -57,9 +57,9 @@ class TVmazeArchitectureTests(unittest.TestCase):
         self.assertIn('query_enabled=flags["shadow_enabled"] or flags["notifications_enabled"]', notifications)
 
     def test_public_release_contract_is_provider_neutral(self):
-        resolver = self.text("release_timing.py")
+        resolver = self.text("tvtracker/release_timing/service.py")
         runtime = self.text("static/js/release-timing.js")
-        routes = self.text("release_timing_routes.py")
+        routes = self.text("tvtracker/release_timing/routes.py")
         for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate", "providerUsed"):
             self.assertIn(field, resolver)
         for field in ("releaseAt", "releaseDate", "eligibleAt", "displayDate"):

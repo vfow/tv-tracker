@@ -12,7 +12,7 @@ class TVmazeFinalContracts(unittest.TestCase):
         self.assertLess(body.index("const aRelease = makeEpisodeReleaseDate"), body.index("const dateCompare = compareEpisodeCalendarDates"))
 
     def test_http_request_deduplication_is_real(self):
-        source = (ROOT / "tvmaze_integration.py").read_text(encoding="utf-8")
+        source = (ROOT / "tvtracker/integrations/tvmaze.py").read_text(encoding="utf-8")
         self.assertIn("self._recent_requests", source)
         self.assertIn("event.wait", source)
         self.assertIn("finished.set()", source)
