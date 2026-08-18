@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import re
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -40,7 +39,7 @@ def _valid_vapid_subject(subject: str) -> bool:
 
 
 def validate_vapid_configuration(public_key: str, private_key: str, subject: str) -> tuple[bool, str]:
-    """Validate the configured VAPID keypair without making Push a startup dependency."""
+    """Validate VAPID material without making Push a startup dependency."""
     if not _valid_vapid_subject(subject):
         return False, "invalid VAPID subject"
 
@@ -117,6 +116,8 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
 
     def validated_push_config() -> dict[str, Any]:
         config = dict(original())
+        # These diagnostics are for server logging/admin inspection only. They are
+        # deliberately not added to the normal browser Push configuration API.
         config.setdefault("validationError", "")
         config.setdefault("validationCode", "")
 
@@ -149,31 +150,12 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
     return validated_push_config
 
 
-def _inject_push_diagnostic(response: Response, final_notifications_module: Any) -> Response:
-    if request.path != "/api/push/config" or response.mimetype != "application/json" or response.status_code != 200:
-        return response
-    payload = response.get_json(silent=True)
-    if not isinstance(payload, dict) or payload.get("configured") is True:
-        return response
-
-    config = final_notifications_module.push_config()
-    diagnostic = str(config.get("validationCode") or "").strip()
-    if not diagnostic:
-        return response
-
-    payload["diagnostic"] = diagnostic
-    response.set_data(json.dumps(payload, separators=(",", ":")))
-    response.headers["Content-Length"] = str(len(response.get_data()))
-    return response
-
-
 def install_notification_polish(app: Any, final_notifications_module: Any) -> None:
-    """Install Push validation and load the browser polish layer after notifications-final.js."""
+    """Install server-side Push validation and the transitional browser module."""
     harden_push_config(final_notifications_module)
 
     @app.after_request
     def inject_notification_polish_asset(response: Response) -> Response:
-        response = _inject_push_diagnostic(response, final_notifications_module)
         if not request.path.startswith("/app") or response.mimetype != "text/html" or response.direct_passthrough:
             return response
         body = response.get_data(as_text=True)
