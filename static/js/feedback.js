@@ -25,6 +25,14 @@
         /-----BEGIN [A-Z ]+PRIVATE KEY-----/i
     ]);
 
+    function removeLegacyToastSurface(){
+        if(!global.document){ return; }
+        const legacy = global.document.getElementById("toast");
+        if(legacy && legacy.parentNode){
+            legacy.parentNode.removeChild(legacy);
+        }
+    }
+
     function ensureRoot(){
         if(!global.document){ return null; }
         let root = global.document.getElementById("tv-feedback-root");
@@ -316,11 +324,13 @@
 
     if(global.document && global.document.readyState === "loading"){
         global.document.addEventListener("DOMContentLoaded",()=>{
+            removeLegacyToastSurface();
             ensureRoot();
             ensureOfflineBanner();
             installNetworkState();
         },{once:true});
     }else{
+        removeLegacyToastSurface();
         ensureRoot();
         ensureOfflineBanner();
         installNetworkState();
