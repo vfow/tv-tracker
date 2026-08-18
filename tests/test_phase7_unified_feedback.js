@@ -77,6 +77,10 @@ class FakeDocument{
 
 function loadFeedback({online=true}={}){
     const document = new FakeDocument();
+    const legacyToast = document.createElement("div");
+    legacyToast.id = "toast";
+    legacyToast.className = "app-toast";
+    document.body.appendChild(legacyToast);
     const events = {};
     const logs = [];
     let timerId = 0;
@@ -101,6 +105,7 @@ function loadFeedback({online=true}={}){
     const root = document.getElementById("tv-feedback-root");
 
     assert(root,"Unified feedback root must be created once");
+    assert.strictEqual(document.getElementById("toast"),null,"Legacy toast DOM must be retired when unified feedback boots");
     assert.strictEqual(root.children.length,3,"At most three feedback cards may be visible");
     assert.strictEqual(api.notify("B",{severity:"error"}),ids[1],"Duplicate feedback must reuse the existing card");
     assert.strictEqual(root.children.length,3,"Deduplication must not add another visible card");
