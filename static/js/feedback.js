@@ -3,9 +3,27 @@
 
     const MAX_VISIBLE = 3;
     const DEFAULT_DURATION = {success:3000,info:4500};
+    const GENERIC_ERROR_MESSAGE = "Something went wrong. Try again.";
+    const GENERIC_REQUEST_ERROR_MESSAGE = "Couldn’t complete that request. Try again.";
+    const OFFLINE_MESSAGE = "You’re offline. Some changes may not sync yet.";
     const queue = [];
     const visible = new Map();
     let sequence = 0;
+
+    const TECHNICAL_MESSAGE_PATTERNS = Object.freeze([
+        /\b(?:traceback|stack trace|typeerror|referenceerror|syntaxerror|rangeerror|evalerror)\b/i,
+        /(?:^|\n)\s*at\s+\S+/,
+        /\b(?:vapid|pywebpush|psycopg|postgres(?:ql)?|sqlite|sqlstate)\b/i,
+        /\b(?:database_url|secret_key|private[_ -]?key|api[_ -]?key|environment variable)\b/i,
+        /\b(?:dependencyavailable|validationcode|validationerror)\b/i,
+        /\b(?:econnreset|econnrefused|enotfound|etimedout|fetch failed|failed to fetch)\b/i,
+        /networkerror when attempting/i,
+        /\bhttp(?: status)?\s*\d{3}\b/i,
+        /server request failed\s*\(\d{3}\)/i,
+        /\bstatus_message\b/i,
+        /\b(?:tmdb|tvmaze)\b.*\b(?:error|failed|request)\b/i,
+        /-----BEGIN [A-Z ]+PRIVATE KEY-----/i
+    ]);
 
     function ensureRoot(){
         if(!global.document){ return null; }
@@ -30,7 +48,7 @@
             banner.className = "tv-offline-banner";
             banner.setAttribute("role","status");
             banner.hidden = true;
-            banner.textContent = "You’re offline. Some changes may not sync yet.";
+            banner.textContent = OFFLINE_MESSAGE;
             global.document.body.appendChild(banner);
         }
         return banner;
@@ -41,8 +59,53 @@
         return ["success","info","warning","error"].includes(clean) ? clean : "info";
     }
 
+    function looksTechnical(message){
+        const text = String(message || "").trim();
+        return !!text && TECHNICAL_MESSAGE_PATTERNS.some(pattern=>pattern.test(text));
+    }
+
+    function sanitizeUserMessage(message,fallback=GENERIC_ERROR_MESSAGE){
+        const text = String(message || "").trim();
+        if(!text){ return String(fallback || GENERIC_ERROR_MESSAGE); }
+        return looksTechnical(text) ? String(fallback || GENERIC_ERROR_MESSAGE) : text;
+    }
+
+    function redactDiagnosticText(value){
+        let text = String(value || "");
+        text = text.replace(/((?:api[_ -]?key|token|secret|password|private[_ -]?key)\s*[=:]\s*)[^\s,&;]+/ig,"$1[redacted]");
+        text = text.replace(/([?&](?:api_key|token|key|secret|password)=)[^&#\s]+/ig,"$1[redacted]");
+        text = text.replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/ig,"[redacted private key]");
+        return text.length > 500 ? text.slice(0,500) + "…" : text;
+    }
+
+    function logTechnical(context,error){
+        if(!global.console || typeof global.console.error !== "function"){ return; }
+        const source = error && typeof error === "object" ? error : {message:error};
+        const diagnostic = {
+            name:redactDiagnosticText(source && source.name || "Error"),
+            message:redactDiagnosticText(source && source.message || error || ""),
+            status:Number.isFinite(Number(source && source.status)) ? Number(source.status) : undefined,
+            code:redactDiagnosticText(source && source.code || (source && source.payload && source.payload.code) || "")
+        };
+        Object.keys(diagnostic).forEach(key=>{
+            if(diagnostic[key] === "" || diagnostic[key] === undefined){ delete diagnostic[key]; }
+        });
+        global.console.error("[TV Tracker] " + String(context || "operation failed"),diagnostic);
+    }
+
     function messageKey(message,severity,key){
         return String(key || (severity + ":" + String(message || "").trim()));
+    }
+
+    function restartTimer(item){
+        if(!item){ return; }
+        if(item.timer){
+            global.clearTimeout(item.timer);
+            item.timer = null;
+        }
+        if(item.duration > 0){
+            item.timer = global.setTimeout(()=>remove(item.id),item.duration);
+        }
     }
 
     function remove(id){
@@ -83,6 +146,7 @@
                     await item.onAction();
                     remove(item.id);
                 }catch(error){
+                    logTechnical("feedback action failed",error);
                     action.disabled = false;
                 }
             });
@@ -107,9 +171,7 @@
         item.element = buildElement(item);
         root.appendChild(item.element);
         visible.set(item.id,item);
-        if(item.duration > 0){
-            item.timer = global.setTimeout(()=>remove(item.id),item.duration);
-        }
+        restartTimer(item);
     }
 
     function pump(){
@@ -119,9 +181,15 @@
     }
 
     function notify(message,options={}){
-        const text = String(message || "").trim();
-        if(!text){ return null; }
         const severity = normalizeSeverity(options.severity);
+        const fallback = String(options.fallbackMessage || (severity === "error" ? GENERIC_ERROR_MESSAGE : GENERIC_REQUEST_ERROR_MESSAGE));
+        const original = String(message || "").trim();
+        const text = sanitizeUserMessage(original,fallback);
+        if(!text){ return null; }
+        if(original && original !== text){
+            logTechnical("suppressed technical feedback",{message:original});
+        }
+
         const key = messageKey(text,severity,options.key);
         const duplicate = findByKey(key);
         if(duplicate){
@@ -129,6 +197,7 @@
             if(duplicate.element){
                 const copy = duplicate.element.querySelector(".tv-feedback-message");
                 if(copy){ copy.textContent = text; }
+                restartTimer(duplicate);
             }
             return duplicate.id;
         }
@@ -154,6 +223,16 @@
         return item.id;
     }
 
+    function reportError(error,userMessage=GENERIC_ERROR_MESSAGE,options={}){
+        logTechnical(String(options.context || "operation failed"),error);
+        const normalized = Object.assign({},options,{
+            severity:"error",
+            fallbackMessage:GENERIC_ERROR_MESSAGE
+        });
+        delete normalized.context;
+        return notify(sanitizeUserMessage(userMessage,GENERIC_ERROR_MESSAGE),normalized);
+    }
+
     function dismissByKey(key){
         const clean = String(key || "");
         const active = findByKey(clean);
@@ -169,7 +248,11 @@
     function setOffline(offline){
         const banner = ensureOfflineBanner();
         if(!banner){ return; }
-        banner.hidden = !offline;
+        const isOffline = offline === true;
+        banner.hidden = !isOffline;
+        if(global.document && global.document.body && global.document.body.classList){
+            global.document.body.classList.toggle("tv-feedback-is-offline",isOffline);
+        }
     }
 
     function installNetworkState(){
@@ -180,17 +263,27 @@
         sync();
     }
 
-    const api = Object.freeze({notify,dismissByKey,setOffline});
+    const api = Object.freeze({
+        notify,
+        reportError,
+        dismissByKey,
+        setOffline,
+        sanitizeUserMessage,
+        looksTechnical
+    });
     global.TVTrackerFeedback = api;
 
-    // Compatibility for existing callers. New code should call TVTrackerFeedback.notify.
+    // Compatibility bridge for old callers. This is intentionally routed through
+    // the same queue/sanitizer so legacy code cannot create a second feedback UI
+    // or expose raw provider/backend details.
     global.showToast = function(message,options={}){
         const normalized = Object.assign({},options);
-        if(options.actionLabel && typeof options.onAction === "function"){
-            normalized.actionLabel = options.actionLabel;
-            normalized.onAction = options.onAction;
+        const original = String(message || "").trim();
+        if(looksTechnical(original)){
+            normalized.severity = "error";
+            normalized.fallbackMessage = GENERIC_REQUEST_ERROR_MESSAGE;
         }
-        return notify(message,normalized);
+        return notify(original,normalized);
     };
 
     if(global.document && global.document.readyState === "loading"){
