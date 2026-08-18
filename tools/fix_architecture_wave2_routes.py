@@ -54,6 +54,18 @@ def patch_stale_contracts() -> None:
     )
     runtime_path.write_text(runtime, encoding="utf-8")
 
+    router_path = ROOT / "tests/test_router.js"
+    router = router_path.read_text(encoding="utf-8")
+    notifications_stub = """  context.window.TVTrackerNotifications={\n    openNotificationsPage(options){ context.activePage='notifications'; calls.push(['openNotificationsPage',options]); },\n    openNotificationSettingsPage(options){ context.activePage='notification-settings'; calls.push(['openNotificationSettingsPage',options]); }\n  };\n"""
+    settings_stub = notifications_stub + """  context.window.TVTrackerSettings={\n    open(section,options){ context.activePage='settings'; calls.push(['openSettings',section,options]); }\n  };\n"""
+    if "context.window.TVTrackerSettings=" not in router:
+        router = router.replace(notifications_stub, settings_stub)
+
+    legacy_block = """{\n  const {calls,router}=createRouter('/app/notifications/settings');\n  assert.strictEqual(router.currentRoute(),'/app/notifications/settings');\n  const call=calls.find(item=>item[0]==='openNotificationSettingsPage');\n  assert(call,'notification settings route should open settings page');\n  assert.strictEqual(call[1].fromRoute,true);\n}\n"""
+    canonical_block = """{\n  const {calls,router}=createRouter('/app/notifications/settings');\n  assert.strictEqual(router.currentRoute(),'/app/settings/notifications');\n  const call=calls.find(item=>item[0]==='openSettings');\n  assert(call,'legacy notification settings route should canonicalize into Account Settings');\n  assert.strictEqual(call[1],'notifications');\n  assert.strictEqual(call[2].fromRoute,true);\n}\n\n{\n  const {calls,router}=createRouter('/app/settings/data');\n  assert.strictEqual(router.currentRoute(),'/app/settings/data');\n  const call=calls.find(item=>item[0]==='openSettings');\n  assert(call,'canonical settings subsection should open the Settings owner');\n  assert.strictEqual(call[1],'data');\n  assert.strictEqual(call[2].fromRoute,true);\n}\n"""
+    router = router.replace(legacy_block, canonical_block)
+    router_path.write_text(router, encoding="utf-8")
+
 
 def main() -> None:
     text = APP.read_text(encoding="utf-8")
