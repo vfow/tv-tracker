@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -26,4 +29,21 @@ jobs:
       - run: npm ci --audit=false
       - name: Verify production npm dependency security
         run: npm audit --omit=dev --audit-level=high
+      - name: Apply guarded architecture wave 2
+        run: python tools/apply_architecture_wave2.py
       - run: python tests/run_all.py
+      - name: Check transformed diff
+        run: git diff --check
+      - name: Commit guarded transform after tests pass
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -eu
+          if git diff --quiet; then
+            echo "Wave 2 already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply Account Settings architecture wave 2"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
