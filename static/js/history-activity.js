@@ -4,24 +4,10 @@ function getActivityHistoryEntries(){
         DATA.history = [];
     }
 
+    // Persisted watch history is user-owned historical truth. Release metadata
+    // may move later, be renumbered, or be temporarily wrong after the user
+    // logged an episode; those provider changes must never hide the saved event.
     return DATA.history
-    .filter(entry=>{
-
-        if(isMovieHistoryEntry(entry)){
-            return true;
-        }
-
-        if(!entry.air_date){
-            return true;
-        }
-
-        return isEpisodeAired(
-            entry.air_date,
-            entry,
-            DATA.shows[String(entry.tmdb_id)] || null
-        );
-
-    })
     .slice()
     .sort((a,b)=>{
 
