@@ -5,7 +5,7 @@ import re
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from flask import Response, request
+from flask import Response, jsonify, request
 
 
 _B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+={0,2}$")
@@ -16,6 +16,12 @@ _VALIDATION_CODES = {
     "invalid VAPID private key": "invalid_private_key",
     "invalid VAPID keypair": "invalid_keypair",
     "VAPID public/private keys do not match": "keypair_mismatch",
+}
+PUSH_USER_MESSAGES = {
+    "unavailable": "Push notifications are temporarily unavailable.",
+    "enable_failed": "TV Tracker couldn’t enable Push on this device. Try again later.",
+    "blocked": "Push notifications are blocked in your browser settings.",
+    "permission_denied": "Push permission wasn’t granted.",
 }
 
 
@@ -108,6 +114,28 @@ def _validation_code(error: str) -> str:
     return _VALIDATION_CODES.get(str(error or ""), "invalid_configuration" if error else "")
 
 
+def browser_push_config_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the minimal, non-technical Push capability contract for browsers."""
+    source = payload if isinstance(payload, dict) else {}
+    configured = bool(source.get("configured"))
+    public_key = str(source.get("publicKey") or "").strip() if configured else ""
+    return {
+        "ok": bool(source.get("ok", True)),
+        "configured": configured,
+        "publicKey": public_key,
+        "unavailable": not configured,
+    }
+
+
+def browser_push_enable_error() -> dict[str, Any]:
+    """Return the only generic server-side enable failure exposed to browsers."""
+    return {
+        "ok": False,
+        "error": PUSH_USER_MESSAGES["enable_failed"],
+        "code": "push_enable_failed",
+    }
+
+
 def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str, Any]]:
     original = final_notifications_module.push_config
 
@@ -116,8 +144,8 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
 
     def validated_push_config() -> dict[str, Any]:
         config = dict(original())
-        # These diagnostics are for server logging/admin inspection only. They are
-        # deliberately not added to the normal browser Push configuration API.
+        # Diagnostics remain available to server logging/admin inspection only.
+        # They are deliberately stripped from the browser Push configuration API.
         config.setdefault("validationError", "")
         config.setdefault("validationCode", "")
 
@@ -151,8 +179,37 @@ def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str
 
 
 def install_notification_polish(app: Any, final_notifications_module: Any) -> None:
-    """Install server-side Push validation and the transitional browser module."""
+    """Install server-side Push validation and browser-safe Push responses."""
     harden_push_config(final_notifications_module)
+
+    # Preserve the route's existing login decorator by calling the installed view,
+    # then reduce a successful config response to the public capability contract.
+    original_config_view = app.view_functions.get("push_config_api")
+    if original_config_view and not getattr(original_config_view, "_tvtracker_push_sanitized", False):
+        def safe_push_config_api(*args: Any, **kwargs: Any):
+            response = app.make_response(original_config_view(*args, **kwargs))
+            if response.status_code >= 400:
+                return response
+            return jsonify(browser_push_config_payload(response.get_json(silent=True)))
+
+        safe_push_config_api._tvtracker_push_sanitized = True  # type: ignore[attr-defined]
+        app.view_functions["push_config_api"] = safe_push_config_api
+
+    # Subscribe validation/runtime failures can contain implementation detail such
+    # as device-id, session-version, endpoint, or server configuration internals.
+    # Preserve auth/CSRF behavior and only replace the route's own 400 response.
+    original_subscribe_view = app.view_functions.get("push_subscribe_api")
+    if original_subscribe_view and not getattr(original_subscribe_view, "_tvtracker_push_sanitized", False):
+        def safe_push_subscribe_api(*args: Any, **kwargs: Any):
+            response = app.make_response(original_subscribe_view(*args, **kwargs))
+            if response.status_code == 400:
+                payload = response.get_json(silent=True)
+                if isinstance(payload, dict) and payload.get("ok") is False:
+                    return jsonify(browser_push_enable_error()), 400
+            return response
+
+        safe_push_subscribe_api._tvtracker_push_sanitized = True  # type: ignore[attr-defined]
+        app.view_functions["push_subscribe_api"] = safe_push_subscribe_api
 
     @app.after_request
     def inject_notification_polish_asset(response: Response) -> Response:
