@@ -30,7 +30,9 @@ jobs:
       - name: Verify production npm dependency security
         run: npm audit --omit=dev --audit-level=high
       - name: Apply guarded architecture wave 2
-        run: python tools/apply_architecture_wave2.py
+        run: |
+          python tools/apply_architecture_wave2.py
+          python tools/fix_architecture_wave2_routes.py
       - run: python tests/run_all.py
       - name: Check transformed diff
         run: git diff --check
