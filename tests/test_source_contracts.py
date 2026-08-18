@@ -11,11 +11,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_source_section_removed(self):
         ui = self.read('static/js/ui.js')
-        self.assertNotIn('Metadata ' + 'Source', ui)
+        settings = self.read('static/js/settings.js')
+        self.assertNotIn('Metadata ' + 'Source', settings)
         self.assertNotIn('Artwork ' + 'Source', ui)
         self.assertNotIn('<h2>SOURCE</h2>', ui)
-        self.assertIn('Export or import a full backup.', ui)
-        self.assertNotIn('Export or import a full backup of this tracker.', ui)
+        self.assertIn('Export, import, or create a readable report', settings)
+        self.assertNotIn('Simkl / Trakt', settings)
 
     def test_episode_logging_auto_completion_rules_exist(self):
         app_js = self.read('static/js/app.js')
@@ -144,6 +145,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@app.get("/app/search", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/settings/<settings_section>", strict_slashes=False)', app_py)
+        self.assertIn('/app/settings/notifications', router)
         self.assertIn('@app.get("/app/show/<show_key>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/genre/<genre_media>/<genre_slug>", strict_slashes=False)', app_py)
         self.assertNotIn('@app.get("/app/genre/<genre_slug>", strict_slashes=False)', app_py)
@@ -317,8 +320,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         config = self.read('tailwind.config.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        ui = self.read('static/js/ui.js')
-        self.assertIn('profile-header-${preset}', ui)
+        settings = self.read('static/js/settings.js')
+        self.assertIn('profile-header-${preset}', settings)
         for class_name in (
             'profile-header-default',
             'profile-header-blue',

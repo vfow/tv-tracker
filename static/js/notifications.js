@@ -405,7 +405,7 @@
                         </a>
                         <h1 class="tw-font-league">Notifications</h1>
                     </div>
-                    <a class="notifications-settings-link" href="/app/notifications/settings" aria-label="Notification settings">
+                    <a class="notifications-settings-link" href="/app/settings/notifications" aria-label="Notification settings">
                         <img src="${SETTINGS_ICON}" alt="" aria-hidden="true" class="notification-icon notification-icon--light">
                     </a>
                 </header>
@@ -857,7 +857,7 @@
 
     function openNotificationSettingsPage(options={}){
         if(!options.fromRoute && global.TVTrackerRouter){
-            global.TVTrackerRouter.setPathRoute("/app/notifications/settings",false);
+            global.TVTrackerRouter.setPathRoute("/app/settings/notifications",false);
             global.TVTrackerRouter.applyRoute();
             return;
         }

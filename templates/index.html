@@ -15,6 +15,8 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
 <link rel="preload" href="{{ url_for('static', filename='assets/league-gothic.regular.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings-v2.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}">
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
@@ -181,12 +183,6 @@
 </div>
 
 
-<!-- NOTIFICATION SETTINGS PAGE -->
-
-<div id="notification-settings-page" class="page notification-settings-page">
-    <div id="notification-settings-content"></div>
-</div>
-
 
 
 <!-- SHOW DETAIL PAGE -->
@@ -335,16 +331,19 @@
 <script src="{{ url_for('static', filename='js/tmdb.js') }}"></script>
 <script src="{{ url_for('static', filename='js/show-detail-filters.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/feedback.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
 <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='js/release-timing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/adult-filter.js') }}"></script>
 <script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/show-removal-integrity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/history-activity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/episode-crew.js') }}"></script>
 <script src="{{ url_for('static', filename='js/trending.js') }}"></script>
 <script src="{{ url_for('static', filename='js/streaming-region.js') }}"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/provider-freshness.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-stability.js') }}"></script>
 <script src="{{ url_for('static', filename='js/search-navigation-fix.js') }}"></script>

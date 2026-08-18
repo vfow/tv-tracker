@@ -37,7 +37,8 @@ assert "filename='assets/icons/notification-bell.svg'" in template
 assert "filename='assets/icons/notification-settings.svg'" in template
 assert "filename='js/notifications.js'" in template
 assert 'id="notifications-page"' in template
-assert 'id="notification-settings-page"' in template
+assert 'id="notification-settings-page"' not in template
+assert '/app/settings/notifications' in router
 assert "mountUpcomingBell" in ui
 assert "mountUpcomingBellFallback" in ui
 assert 'path === "/app/notifications"' in router

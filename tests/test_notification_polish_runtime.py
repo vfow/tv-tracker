@@ -121,7 +121,7 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         self.assertFalse(config["configured"])
         self.assertEqual(config["validationCode"], "missing_private_key")
 
-    def test_push_config_response_exposes_only_safe_mismatch_diagnostic(self) -> None:
+    def test_push_config_response_hides_mismatch_diagnostics(self) -> None:
         public_key, _ = _vapid_pair(1)
         _, private_key = _vapid_pair(2)
 
@@ -153,9 +153,12 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         payload = app.test_client().get("/api/push/config").get_json()
         self.assertFalse(payload["configured"])
         self.assertEqual(payload["publicKey"], "")
-        self.assertEqual(payload["diagnostic"], "keypair_mismatch")
+        self.assertTrue(payload["unavailable"])
+        self.assertNotIn("diagnostic", payload)
         self.assertNotIn("privateKey", payload)
         self.assertNotIn("validationError", payload)
+        self.assertNotIn("validationCode", payload)
+        self.assertNotIn("dependencyAvailable", payload)
 
     def test_valid_push_config_response_has_no_diagnostic(self) -> None:
         public_key, private_key = _vapid_pair(1)

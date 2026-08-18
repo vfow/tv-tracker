@@ -2,6 +2,7 @@
     "use strict";
 
     const SHOW_TABS = new Set(["watchlist","upcoming","history"]);
+    const SETTINGS_SECTIONS = new Set(["profile","auth","notifications","streaming","data","danger-zone"]);
     const LIST_ROUTE_TO_FILTER = {
         "watching":"watching",
         "paused":"paused",
@@ -272,13 +273,17 @@
             return buildParsedRoute("profile",path,"",{});
         }
         if(path === "/app/settings"){
-            return buildParsedRoute("settings",path,"",{});
+            return buildParsedRoute("settings","/app/settings/profile","",{section:"profile"});
+        }
+        const settingsMatch = path.match(/^\/app\/settings\/(profile|auth|notifications|streaming|data|danger-zone)$/);
+        if(settingsMatch && SETTINGS_SECTIONS.has(settingsMatch[1])){
+            return buildParsedRoute("settings",path,"",{section:settingsMatch[1]});
         }
         if(path === "/app/notifications"){
             return buildParsedRoute("notifications",path,"",{});
         }
         if(path === "/app/notifications/settings"){
-            return buildParsedRoute("notification-settings",path,"",{});
+            return buildParsedRoute("settings","/app/settings/notifications","",{section:"notifications",legacy:true});
         }
 
         const discoverCategoryMatch = path.match(/^\/app\/discover\/(?:(tv)\/(popular|top-rated|airing-today|on-the-air)|(movie)\/(popular|top-rated|now-playing|upcoming))$/);
@@ -800,18 +805,19 @@
             if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
-        if(parsed.type === "notification-settings"){
-            activePage = "notification-settings";
-            setPageActiveWithoutRender("notification-settings-page","shows");
+        if(parsed.type === "profile"){
+            activePage = "profile";
+            setPageActiveWithoutRender("profile-page","profile");
             if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
-        if(parsed.type === "profile" || parsed.type === "settings"){
-            activePage = parsed.type;
-            setPageActiveWithoutRender(parsed.type + "-page",parsed.type);
-            if(typeof updateShellTitle === "function"){
-                updateShellTitle();
+        if(parsed.type === "settings"){
+            activePage = "settings";
+            setPageActiveWithoutRender("settings-page","settings");
+            if(globalThis.TVTrackerSettings && typeof globalThis.TVTrackerSettings.open === "function"){
+                globalThis.TVTrackerSettings.open(params.section || "profile",{fromRoute:true,skipShowPage:true});
             }
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
         if(parsed.type === "show"){
@@ -1134,16 +1140,6 @@
             }
             return;
         }
-        if(parsed.type === "notification-settings"){
-            clearDetailState();
-            if(
-                window.TVTrackerNotifications &&
-                typeof window.TVTrackerNotifications.openNotificationSettingsPage === "function"
-            ){
-                window.TVTrackerNotifications.openNotificationSettingsPage({fromRoute:true});
-            }
-            return;
-        }
         if(parsed.type === "profile"){
             clearDetailState();
             showPage("profile");
@@ -1151,7 +1147,11 @@
         }
         if(parsed.type === "settings"){
             clearDetailState();
-            showPage("settings");
+            if(window.TVTrackerSettings && typeof window.TVTrackerSettings.open === "function"){
+                window.TVTrackerSettings.open(params.section || "profile",{fromRoute:true});
+            }else{
+                showPage("settings");
+            }
             return;
         }
         if(parsed.type === "upcoming"){

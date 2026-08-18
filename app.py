@@ -123,7 +123,15 @@ APP_SECTION_PATHS = {
     "/app/profile",
     "/app/settings",
     "/app/notifications",
-    "/app/notifications/settings",
+}
+
+SETTINGS_SECTION_PATHS = {
+    "/app/settings/auth",
+    "/app/settings/danger-zone",
+    "/app/settings/data",
+    "/app/settings/notifications",
+    "/app/settings/profile",
+    "/app/settings/streaming",
 }
 ERROR_PAGE_MESSAGES = {
     404: ("Are you lost?", ""),
@@ -476,6 +484,7 @@ def read_tracker_data() -> tuple[dict[str, Any], int]:
                 "avatar_type": "initial",
                 "avatar_preset": "silhouette-1",
                 "avatar_data": "",
+                "adult_filter": True,
             },
         ),
     }
@@ -1236,7 +1245,7 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
 
     allowed_fields = {
         "username", "favorite_shows", "favorite_movies", "avatar_type", "avatar_preset",
-        "avatar_data", "header_type", "header_preset", "header_image", "streaming_region",
+        "avatar_data", "header_type", "header_preset", "header_image", "streaming_region", "adult_filter",
     }
     unknown = set(profile) - allowed_fields
     if unknown:
@@ -1308,6 +1317,11 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
     if streaming_region and re.fullmatch(r"[A-Z]{2}", streaming_region) is None:
         raise BackupValidationError("Profile field streaming_region is invalid")
     profile["streaming_region"] = streaming_region
+
+    adult_filter = profile.get("adult_filter", True)
+    if not isinstance(adult_filter, bool):
+        raise BackupValidationError("Profile field adult_filter is invalid")
+    profile["adult_filter"] = adult_filter
 
     if profile.get("avatar_type") not in (None, "", "initial", "preset", "upload"):
         raise BackupValidationError("Profile field avatar_type is invalid")
@@ -2999,15 +3013,31 @@ def create_app() -> Flask:
     @app.get("/app/profile", strict_slashes=False)
     @app.get("/app/settings", strict_slashes=False)
     @app.get("/app/notifications", strict_slashes=False)
-    @app.get("/app/notifications/settings", strict_slashes=False)
     @login_required
     def app_section_page():
         requested_path = request.path.rstrip("/")
         if requested_path not in APP_SECTION_PATHS:
             abort(404)
+        if requested_path == "/app/settings":
+            return redirect_app_path_preserving_query("/app/settings/profile")
         if request.path != requested_path:
             return redirect_app_path_preserving_query(requested_path)
         return render_app_shell(requested_path)
+
+    @app.get("/app/settings/<settings_section>", strict_slashes=False)
+    @login_required
+    def app_settings_section_page(settings_section: str):
+        requested_path = request.path.rstrip("/")
+        if requested_path not in SETTINGS_SECTION_PATHS:
+            abort(404)
+        if request.path != requested_path:
+            return redirect_app_path_preserving_query(requested_path)
+        return render_app_shell(requested_path)
+
+    @app.get("/app/notifications/settings", strict_slashes=False)
+    @login_required
+    def legacy_notification_settings_page():
+        return redirect_app_path_preserving_query("/app/settings/notifications")
 
 
     @app.get("/app/discover/<media_type>/<category_slug>", strict_slashes=False)

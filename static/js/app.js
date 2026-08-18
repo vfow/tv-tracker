@@ -8,7 +8,8 @@ var DATA = {
         favorite_movies:[],
         avatar_type:"initial",
         avatar_preset:"silhouette-1",
-        avatar_data:""
+        avatar_data:"",
+        adult_filter:true
     },
     network_sync:{
         active:false,
