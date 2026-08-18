@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from urllib.error import HTTPError
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from tvtracker.integrations.tvmaze import TVmazeProvider
 from tvtracker.notifications import push_validation
@@ -57,11 +57,11 @@ class Phase4ExternalServiceTests(unittest.TestCase):
         calls = []
         sleeps = []
 
-        def opener(request, timeout):
-            calls.append((request.full_url, timeout))
+        def opener(request_object, timeout):
+            calls.append((request_object.full_url, timeout))
             if len(calls) == 1:
                 raise HTTPError(
-                    request.full_url,
+                    request_object.full_url,
                     429,
                     "Too Many Requests",
                     {"Retry-After": "30"},
@@ -107,12 +107,27 @@ class Phase4ExternalServiceTests(unittest.TestCase):
         self.assertNotIn("private", serialized.lower())
         self.assertNotIn("subject", serialized.lower())
 
-    def test_push_installer_preserves_route_guards_and_sanitizes_responses(self):
+    def test_push_installer_matches_wsgi_order_and_preserves_auth_errors(self):
         app = Flask(__name__)
         app.config.update(TESTING=True, SECRET_KEY="phase4-test")
+        module = SimpleNamespace(
+            push_config=lambda: {
+                "configured": False,
+                "keysConfigured": False,
+                "dependencyAvailable": False,
+                "publicKey": "",
+                "privateKey": "",
+                "subject": "",
+            }
+        )
+
+        # Production wsgi.py installs Push validation before final Push routes.
+        push_validation.install_notification_polish(app, module)
 
         @app.get("/api/push/config", endpoint="push_config_api")
         def raw_config():
+            if request.headers.get("X-Test-Auth") != "yes":
+                return jsonify({"ok": False, "error": "Unauthorized"}), 401
             return jsonify({
                 "ok": True,
                 "configured": False,
@@ -125,20 +140,13 @@ class Phase4ExternalServiceTests(unittest.TestCase):
         def raw_subscribe():
             return jsonify({"ok": False, "error": "Admin session version is unavailable"}), 400
 
-        module = SimpleNamespace(
-            push_config=lambda: {
-                "configured": False,
-                "keysConfigured": False,
-                "dependencyAvailable": False,
-                "publicKey": "",
-                "privateKey": "",
-                "subject": "",
-            }
-        )
-        push_validation.install_notification_polish(app, module)
-
         client = app.test_client()
-        config_response = client.get("/api/push/config")
+
+        unauthorized = client.get("/api/push/config")
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(unauthorized.get_json(), {"ok": False, "error": "Unauthorized"})
+
+        config_response = client.get("/api/push/config", headers={"X-Test-Auth": "yes"})
         self.assertEqual(config_response.status_code, 200)
         self.assertEqual(config_response.get_json(), {
             "ok": True,
