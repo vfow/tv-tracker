@@ -178,9 +178,10 @@
         const add = (kind,record,stateKey)=>{
             if(!record || typeof record !== "object" || typeof record.adult === "boolean") return;
             const id = mediaId(record);
-            if(!id) return;
+            const query = String(record.title || record.name || "").trim();
+            if(!id || !query) return;
             const key = kind + ":" + id;
-            if(!candidates.has(key)) candidates.set(key,{kind,id,targets:[],stateKeys:new Set()});
+            if(!candidates.has(key)) candidates.set(key,{kind,id,query,targets:[],stateKeys:new Set()});
             const candidate = candidates.get(key);
             candidate.targets.push(record);
             candidate.stateKeys.add(stateKey);
@@ -202,12 +203,17 @@
     async function fetchClassification(candidate){
         if(!candidate || typeof global.tmdbFetchJSON !== "function") return null;
         try{
-            const details = await global.tmdbFetchJSON(
-                candidate.kind + "/" + encodeURIComponent(candidate.id),
-                {},
+            // Search TV/Movie is the classification boundary because those TMDB
+            // response contracts expose `adult`. Never infer from ratings and never
+            // accept a same-title result unless its TMDB id is the tracked id.
+            const payload = await global.tmdbFetchJSON(
+                "search/" + candidate.kind,
+                {query:candidate.query,include_adult:"true",page:1},
                 {adultPolicyClassification:true}
             );
-            return details && typeof details.adult === "boolean" ? details.adult : null;
+            const results = payload && Array.isArray(payload.results) ? payload.results : [];
+            const exact = results.find(item=>String(item && item.id || "") === candidate.id);
+            return exact && typeof exact.adult === "boolean" ? exact.adult : null;
         }catch(error){
             return null;
         }
@@ -306,17 +312,20 @@
     // Central TMDB request policy. Search/discover requests opt out of adult
     // results while the preference is enabled, and result arrays are filtered a
     // second time so stale browser caches cannot leak TMDB-labelled adult titles.
+    // Internal classification requests are the sole exception: they request the
+    // complete search set, then accept only the exact tracked TMDB id.
     const originalTMDBFetch = global.tmdbFetchJSON;
     if(typeof originalTMDBFetch === "function" && !originalTMDBFetch[WRAPPER_MARK]){
         const wrapped = async function(path,params={},options={}){
             const cleanPath = String(path || "").replace(/^\/+/,"").toLowerCase();
             const nextParams = Object.assign({},params || {});
+            const classificationRequest = !!(options && options.adultPolicyClassification === true);
             if(/^search\/(movie|tv)$/.test(cleanPath) || /^discover\/(movie|tv)$/.test(cleanPath)){
                 const media = cleanPath.endsWith("movie") ? "movie" : "tv";
-                nextParams.include_adult = includeAdultParam(media);
+                nextParams.include_adult = classificationRequest ? "true" : includeAdultParam(media);
             }
             const payload = await originalTMDBFetch.call(this,path,nextParams,options);
-            return filterPayload(payload);
+            return classificationRequest ? payload : filterPayload(payload);
         };
         wrapped[WRAPPER_MARK] = true;
         wrapped._tvtrackerOriginal = originalTMDBFetch;
