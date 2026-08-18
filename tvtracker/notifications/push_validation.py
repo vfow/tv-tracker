@@ -128,12 +128,21 @@ def browser_push_config_payload(payload: dict[str, Any] | None) -> dict[str, Any
 
 
 def browser_push_enable_error() -> dict[str, Any]:
-    """Return the only generic server-side enable failure exposed to browsers."""
+    """Return the generic server-side Push enable failure exposed to browsers."""
     return {
         "ok": False,
         "error": PUSH_USER_MESSAGES["enable_failed"],
         "code": "push_enable_failed",
     }
+
+
+def _replace_json_body(response: Response, payload: dict[str, Any]) -> Response:
+    """Replace only a response JSON body while retaining auth/security headers."""
+    safe = jsonify(payload)
+    response.set_data(safe.get_data())
+    response.content_type = safe.content_type
+    response.headers["Content-Length"] = str(len(response.get_data()))
+    return response
 
 
 def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str, Any]]:
@@ -182,34 +191,22 @@ def install_notification_polish(app: Any, final_notifications_module: Any) -> No
     """Install server-side Push validation and browser-safe Push responses."""
     harden_push_config(final_notifications_module)
 
-    # Preserve the route's existing login decorator by calling the installed view,
-    # then reduce a successful config response to the public capability contract.
-    original_config_view = app.view_functions.get("push_config_api")
-    if original_config_view and not getattr(original_config_view, "_tvtracker_push_sanitized", False):
-        def safe_push_config_api(*args: Any, **kwargs: Any):
-            response = app.make_response(original_config_view(*args, **kwargs))
-            if response.status_code >= 400:
-                return response
-            return jsonify(browser_push_config_payload(response.get_json(silent=True)))
+    @app.after_request
+    def sanitize_push_api(response: Response) -> Response:
+        # This hook is intentionally path-based rather than endpoint-wrapping.
+        # WSGI installs this module before final Push routes are registered, so the
+        # sanitizer must remain effective regardless of registration order.
+        if request.path == "/api/push/config" and response.status_code < 400 and response.is_json:
+            payload = response.get_json(silent=True)
+            if isinstance(payload, dict):
+                return _replace_json_body(response, browser_push_config_payload(payload))
 
-        safe_push_config_api._tvtracker_push_sanitized = True  # type: ignore[attr-defined]
-        app.view_functions["push_config_api"] = safe_push_config_api
+        if request.path == "/api/push/subscribe" and response.status_code == 400 and response.is_json:
+            payload = response.get_json(silent=True)
+            if isinstance(payload, dict) and payload.get("ok") is False:
+                return _replace_json_body(response, browser_push_enable_error())
 
-    # Subscribe validation/runtime failures can contain implementation detail such
-    # as device-id, session-version, endpoint, or server configuration internals.
-    # Preserve auth/CSRF behavior and only replace the route's own 400 response.
-    original_subscribe_view = app.view_functions.get("push_subscribe_api")
-    if original_subscribe_view and not getattr(original_subscribe_view, "_tvtracker_push_sanitized", False):
-        def safe_push_subscribe_api(*args: Any, **kwargs: Any):
-            response = app.make_response(original_subscribe_view(*args, **kwargs))
-            if response.status_code == 400:
-                payload = response.get_json(silent=True)
-                if isinstance(payload, dict) and payload.get("ok") is False:
-                    return jsonify(browser_push_enable_error()), 400
-            return response
-
-        safe_push_subscribe_api._tvtracker_push_sanitized = True  # type: ignore[attr-defined]
-        app.view_functions["push_subscribe_api"] = safe_push_subscribe_api
+        return response
 
     @app.after_request
     def inject_notification_polish_asset(response: Response) -> Response:
