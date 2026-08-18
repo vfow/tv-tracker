@@ -7,9 +7,15 @@ const ROOT = path.resolve(__dirname,"..");
 const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"static/js/notifications-final.js");
 const source = fs.readFileSync(sourcePath,"utf8");
 const polish = fs.readFileSync(path.join(ROOT,"static/js/notifications-polish.js"),"utf8");
+const settings = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
 
-assert(polish.includes('section.id = "settings-notifications"'));
-assert(polish.includes('profile.insertAdjacentElement("afterend",section)'));
+// Account Settings is now the sole owner of the Notifications settings surface.
+assert(settings.includes('function renderNotifications()'));
+assert(settings.includes('id="settings-v2-notification-list"'));
+assert(settings.includes('global.TVTrackerNotificationPolish'));
+assert(!polish.includes('section.id = "settings-notifications"'));
+assert(!polish.includes('insertAdjacentElement'));
+assert(!polish.includes('MutationObserver'));
 assert(polish.includes('"When a movie you plan to watch is released."'));
 assert(polish.includes('"When a movie you plan to watch gets a release date or the date changes."'));
 assert(polish.includes('"Enable alerts on this device."'));
@@ -17,16 +23,18 @@ assert(!polish.includes('Enable browser or phone alerts on this device.'));
 assert(!polish.includes('first meaningful release in your selected region'));
 assert(source.includes('body:{timezone,timezoneMode:"automatic"}'));
 assert(!source.includes('timezoneMode:"manual"'));
-assert(polish.includes('DEDICATED_SETTINGS_ROUTE = "/app/notifications/settings"'));
+assert(polish.includes('const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";'));
 assert(polish.includes('global.TVTrackerNotifications.openNotificationSettingsPage = openDedicatedSettingsPage'));
 assert(polish.includes('data-push-error'));
+assert(!polish.includes('pushDiagnosticMessage'));
+assert(!polish.includes('The VAPID public and private keys do not match.'));
 assert(source.includes('registerSubscriptionWithServer(localSubscription)'));
 assert(source.includes('subscriptionMatchesPublicKey'));
 assert(!source.includes('NotificationApi.requestPermission()'));
 
 // Regression for the duplicate Push row: notifications-final.js may keep its
 // legacy renderer functions for compatibility, but its runtime boot must never
-// start them. notifications-polish.js is the sole active Settings renderer.
+// start them. notifications-polish.js renders into the first-class Settings owner.
 const bootStart = source.indexOf("async function boot()");
 const bootEnd = source.indexOf('document.addEventListener("visibilitychange"',bootStart);
 const bootSource = source.slice(bootStart,bootEnd);
@@ -38,8 +46,9 @@ assert(source.includes('const polish = global.TVTrackerNotificationPolish;'));
 assert(source.includes('return polish.adoptMainSettingsSurface(...args);'));
 assert(source.includes('return polish.openDedicatedSettingsPage({fromRoute:!!replace});'));
 assert(polish.includes('function ensureMainSettingsSection()'));
+assert(polish.includes('document.getElementById("settings-v2-notification-list")'));
 assert(polish.includes('renderNotificationControls(list);'));
-assert(polish.includes('renderNotificationControls(root.querySelector(".notification-settings-list"))'));
+assert(polish.indexOf('list.appendChild(pushRow);') < polish.indexOf('list.appendChild(masterRow);'));
 
 const enableStart = source.indexOf("async function enablePush");
 const enableEnd = source.indexOf("async function disablePush",enableStart);
