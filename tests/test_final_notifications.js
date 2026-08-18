@@ -4,8 +4,8 @@ const assert = require("assert");
 
 const ROOT = path.resolve(__dirname,"..");
 const source = fs.readFileSync(path.join(ROOT,"static/js/notifications-final.js"),"utf8");
-const backend = fs.readFileSync(path.join(ROOT,"final_notifications.py"),"utf8");
-const runtime = fs.readFileSync(path.join(ROOT,"final_notifications_runtime.py"),"utf8");
+const backend = fs.readFileSync(path.join(ROOT,"tvtracker/notifications/push_and_movies.py"),"utf8");
+const runtime = fs.readFileSync(path.join(ROOT,"tvtracker/notifications/runtime.py"),"utf8");
 const worker = fs.readFileSync(path.join(ROOT,"notification_worker.py"),"utf8");
 const wsgi = fs.readFileSync(path.join(ROOT,"wsgi.py"),"utf8");
 const deploy = fs.readFileSync(path.join(ROOT,".github/workflows/deploy.yml"),"utf8");
