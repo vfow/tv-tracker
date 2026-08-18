@@ -51,7 +51,7 @@
             const selected = item.id === activeSection;
             return `<a class="settings-v2-tab" href="${routeFor(item.id)}" data-settings-section="${item.id}" ${selected ? 'aria-current="page"' : ""}>${item.label}</a>`;
         }).join("");
-        return `<div class="settings-v2"><header class="settings-v2-header"><h1 class="settings-v2-title">Account Settings</h1><nav class="settings-v2-tabs" aria-label="Account Settings sections">${tabs}</nav></header><div class="settings-v2-body" data-settings-body>${body}</div><nav class="settings-v2-legal-links" aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a></nav></div>`;
+        return `<div class="settings-v2"><header class="settings-v2-header"><h1 class="settings-v2-title">Account Settings</h1><nav class="settings-v2-tabs" aria-label="Account Settings sections">${tabs}</nav></header><div class="settings-v2-body" data-settings-body>${body}</div></div>`;
     }
 
     function loading(){ return '<div class="settings-v2-loading" role="status" aria-label="Loading settings"><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div></div>'; }
@@ -112,14 +112,19 @@
         if(save) save.addEventListener("click",async()=>{
             draft.username = username ? username.value : draft.username;
             draft.adult_filter = adult ? adult.checked : true;
+            const profile = ensureProfile();
+            const previousAdultFilter = profile.adult_filter !== false;
+            // The legacy profile owner performs the one persistence write. Set the
+            // Adult Filter value before invoking it so the same profile snapshot is
+            // saved once instead of issuing a second Settings-owned save.
+            profile.adult_filter = draft.adult_filter !== false;
             save.disabled = true;
             try{
-                if(typeof global.saveProfileSettings === "function") await global.saveProfileSettings(draft);
-                ensureProfile().adult_filter = draft.adult_filter !== false;
-                if(typeof global.saveData === "function") await global.saveData({stateKeys:["profile"]});
+                if(typeof global.saveProfileSettings !== "function") throw new Error("Profile settings owner unavailable");
+                await global.saveProfileSettings(draft);
                 if(global.TVTrackerAdultPolicy && typeof global.TVTrackerAdultPolicy.refresh === "function") global.TVTrackerAdultPolicy.refresh();
-                notify("Settings saved",{severity:"success"});
             }catch(error){
+                profile.adult_filter = previousAdultFilter;
                 notify("Couldn’t save your changes.",{severity:"error",actionLabel:"Retry",onAction:()=>save.click()});
             }finally{ if(save.isConnected) save.disabled = false; }
         });
