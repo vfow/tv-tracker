@@ -268,6 +268,10 @@
         }
         classificationTimer = global.setTimeout(()=>{
             classificationTimer = null;
+            if(global.appDataReady === false){
+                scheduleClassification(1000);
+                return;
+            }
             classifyTrackedMedia().catch(()=>{});
         },Math.max(0,Number(delay) || 0));
     }
