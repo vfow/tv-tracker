@@ -78,13 +78,41 @@
         return text.length > 500 ? text.slice(0,500) + "…" : text;
     }
 
+    function boundedDiagnosticMessage(value){
+        const text = redactDiagnosticText(value).trim();
+        if(!text){ return ""; }
+        if(/\b(?:vapid|private[_ -]?key|api[_ -]?key|secret_key|database_url|environment variable)\b/i.test(text)){
+            return "Sensitive configuration error";
+        }
+        if(/\b(?:tmdb|tvmaze)\b/i.test(text)){
+            return "External provider request failed";
+        }
+        if(/\b(?:econnreset|econnrefused|enotfound|etimedout|fetch failed|failed to fetch|networkerror when attempting)\b/i.test(text)){
+            return "Network request failed";
+        }
+        if(/server request failed|\bhttp(?: status)?\s*\d{3}\b/i.test(text)){
+            return "Server request failed";
+        }
+        if(/\b(?:traceback|stack trace|typeerror|referenceerror|syntaxerror|rangeerror|evalerror)\b/i.test(text) || /(?:^|\n)\s*at\s+\S+/.test(text)){
+            return "Browser runtime error";
+        }
+        return text;
+    }
+
+    function statusFromDiagnostic(source,message){
+        if(Number.isFinite(Number(source && source.status))){ return Number(source.status); }
+        const match = String(message || "").match(/(?:http(?: status)?\s*|server request failed\s*\()(\d{3})/i);
+        return match ? Number(match[1]) : undefined;
+    }
+
     function logTechnical(context,error){
         if(!global.console || typeof global.console.error !== "function"){ return; }
         const source = error && typeof error === "object" ? error : {message:error};
+        const rawMessage = source && source.message || error || "";
         const diagnostic = {
             name:redactDiagnosticText(source && source.name || "Error"),
-            message:redactDiagnosticText(source && source.message || error || ""),
-            status:Number.isFinite(Number(source && source.status)) ? Number(source.status) : undefined,
+            message:boundedDiagnosticMessage(rawMessage),
+            status:statusFromDiagnostic(source,rawMessage),
             code:redactDiagnosticText(source && source.code || (source && source.payload && source.payload.code) || "")
         };
         Object.keys(diagnostic).forEach(key=>{
