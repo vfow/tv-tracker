@@ -2813,19 +2813,76 @@ function Za(e, t = {}) {
 	});
 }
 //#endregion
+//#region src/domains/settings/index.ts
+var Qa = [
+	"profile",
+	"auth",
+	"notifications",
+	"streaming",
+	"data",
+	"danger-zone"
+], $a = {
+	profile: "PROFILE",
+	auth: "AUTH",
+	notifications: "NOTIFICATIONS",
+	streaming: "STREAMING",
+	data: "DATA",
+	"danger-zone": "DANGER ZONE"
+}, eo = new Set(Qa);
+function to(e) {
+	let t = String(e || "profile").trim().toLowerCase();
+	return eo.has(t) ? t : "profile";
+}
+function no(e) {
+	return to(String(e || "").match(/^\/app\/settings(?:\/([^/?#]+))?\/?$/)?.[1]);
+}
+function ro(e) {
+	return `/app/settings/${to(e)}`;
+}
+function io() {
+	let e = document.getElementById("settings-content");
+	e && (e.dataset.settingsOwner = "modern");
+}
+function ao() {
+	let e = window.TVTrackerSettings;
+	if (!e || e.__modernOwner === !0) return e;
+	let t = Object.freeze(Qa.map((e) => Object.freeze({
+		id: e,
+		label: $a[e]
+	}))), n = Object.freeze({
+		__modernOwner: !0,
+		sections: t,
+		render() {
+			io(), e.render(), io();
+		},
+		open(t = "profile", n = {}) {
+			let r = to(t);
+			io(), e.open(r, n), io();
+		},
+		current() {
+			return to(e.current());
+		},
+		normalizeSection: to,
+		routeFor: ro,
+		sectionFromPath: no
+	});
+	return window.TVTrackerSettings = n, io(), n;
+}
+//#endregion
 //#region src/main.ts
-var Qa = Object.freeze({
-	version: "phase13-v1",
+var oo = ao(), so = Object.freeze({
+	version: "phase14-v1",
 	api: Xa,
 	classifyError: Wa,
-	presentError: Za
+	presentError: Za,
+	settings: oo
 });
 window.TVTrackerModern || Object.defineProperty(window, "TVTrackerModern", {
-	value: Qa,
+	value: so,
 	writable: !1,
 	configurable: !1,
 	enumerable: !1
 });
-var $a = document.querySelector("[data-tv-modern-root]");
-$a && $a.dataset.tvModernMounted !== "true" && (Ia(za).mount($a), $a.dataset.tvModernMounted = "true");
+var co = document.querySelector("[data-tv-modern-root]");
+co && co.dataset.tvModernMounted !== "true" && (Ia(za).mount(co), co.dataset.tvModernMounted = "true");
 //#endregion
