@@ -38,7 +38,7 @@ from flask import (
 from psycopg.types.json import Jsonb
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from notifications_backend import (
+from tvtracker.notifications.backend import (
     delete_notification as delete_notification_record,
     list_notifications as get_notification_records,
     mark_all_notifications_read as mark_notifications_read,
@@ -4102,7 +4102,7 @@ app = create_app()
 # Optional release-timing integration is installed after the core app exists so
 # deleting its modules can never prevent Flask from constructing TV Tracker.
 try:
-    from release_timing_routes import install_release_timing_routes
+    from tvtracker.release_timing.routes import install_release_timing_routes
     install_release_timing_routes(
         app,
         login_required=login_required,

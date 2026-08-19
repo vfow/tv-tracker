@@ -8,7 +8,7 @@ from app import (
 from tvtracker.notifications import push_and_movies as notifications_module
 from tvtracker.notifications.runtime import prepare_final_notification_runtime
 from tvtracker.notifications.push_validation import install_notification_polish
-from static_asset_versioning import install_static_asset_versioning
+from tvtracker.infrastructure.static_assets import install_static_asset_versioning
 from tvtracker.data_integrity import install_backup_summary_hardening
 
 prepare_final_notification_runtime(database_connection)

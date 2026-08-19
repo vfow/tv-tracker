@@ -151,7 +151,7 @@ class ReleaseTimingResolver:
             return self._provider
         self._provider_load_attempted = True
         try:
-            module = importlib.import_module("tvmaze_integration")
+            module = importlib.import_module("tvtracker.integrations.tvmaze")
             factory = getattr(module, "get_default_provider", None)
             self._provider = factory() if callable(factory) else None
         except (ImportError, OSError, RuntimeError):
@@ -234,7 +234,7 @@ def provider_capability() -> dict[str, Any]:
     ))
     if should_load:
         try:
-            module = importlib.import_module("tvmaze_integration")
+            module = importlib.import_module("tvtracker.integrations.tvmaze")
             available = callable(getattr(module, "get_default_provider", None))
         except (ImportError, OSError, RuntimeError):
             available = False
