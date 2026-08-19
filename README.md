@@ -212,3 +212,10 @@ Deployment checklist:
 6. Restart the WSGI application.
 7. Hard-refresh the browser to clear older cached frontend assets.
 8. Test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
+
+## Architecture and policy documents
+
+- `docs/DEPLOYMENT.md`
+- `docs/PRIVACY.md`
+- `docs/TERMS.md`
+- `docs/CREDITS.md`

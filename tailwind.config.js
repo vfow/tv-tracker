@@ -60,7 +60,7 @@ module.exports = {
       },
       fontFamily: {
         league: ['"League Gothic"', 'Arial', 'sans-serif'],
-        sans: ['"Graphik"', 'Arial', 'Helvetica', 'sans-serif']
+        sans: ['Arial', 'Helvetica', 'sans-serif']
       },
       spacing: {
         sidebar: '160px',
