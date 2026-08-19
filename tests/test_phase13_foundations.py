@@ -1133,7 +1133,15 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
             name: self.fetchone(query)
             for name, query in preserved_queries.items()
         }
-        self.assertEqual(rows_after_adoption, rows_before_adoption)
+        schema_meta_before = rows_before_adoption["schema_meta"]
+        schema_meta_after = rows_after_adoption["schema_meta"]
+        self.assertEqual(
+            {name: row for name, row in rows_after_adoption.items() if name != "schema_meta"},
+            {name: row for name, row in rows_before_adoption.items() if name != "schema_meta"},
+        )
+        self.assertEqual(schema_meta_after[0], 1)
+        self.assertEqual(schema_meta_after[1], DATABASE_SCHEMA_VERSION)
+        self.assertGreaterEqual(schema_meta_after[2], schema_meta_before[2])
         self.assertEqual(
             self.fetchone(
                 "SELECT COUNT(*), COUNT(DISTINCT migration_id) "
