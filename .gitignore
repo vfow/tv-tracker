@@ -235,3 +235,20 @@ Desktop.ini
 *.swo
 *.bak
 *.tmp
+
+# User-data backups must never be committed (repo is public)
+tv-tracker-app-backup*
+*app-backup*.json
+*app-backup*.html
+backups/
+
+# SQL dumps / database exports
+*.sql
+*.dump
+*.pg_dump
+
+# Local AI session exports and helper files (never part of the repo)
+Chat history *.html
+chat history *.html
+TV-Tracker-Original-24-Phase-Roadmap-for-Codex.md
+opencode.cmd

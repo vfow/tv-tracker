@@ -157,3 +157,27 @@ This ledger itself is current when all of the following remain true:
 - architecture statements use the four evidence categories above;
 - unresolved blockers have objective closure conditions;
 - no deployment, Phase 24, merge, secret disclosure, or private-data commit is implied.
+
+## Addendum 2026-08-19 (Batch 2 Step 0, head e137e7b1)
+
+**Observed state:** PR #29 head advanced `75dc45f...` → `e137e7b1ffd8686043f4a57a85306433a90aea22` (commits `d6fb73c`, `e137e7b`). The `test` check passed in run `32262721884`: Python + JavaScript regression, 295 tests, OK, against a PostgreSQL 16 service; Tailwind build-equality and diff-hygiene steps also passed. This is the first green full-suite gate on the branch and the new recovery base for Phase 1-11 evidence.
+
+**Native App Backup — verified evidence (was owner-confirmed only):**
+
+| Item | Value |
+|---|---|
+| File | `tv-tracker-app-backup-2026-08-18--- fresh copy.json` (owner-held, outside the repo) |
+| Location | Owner's documents folder, outside the Git worktree |
+| SHA-256 | `A1126EFB942B3D1D85C9EC0F9BC6B8DABC535CF78E0216AD6E6B5BC67E7944CB` |
+| schemaVersion | 4 |
+| exportTimestamp | 2026-08-18T08:28:43.653Z |
+| Content counts | 328 shows; movies and History present |
+| Companion HTML export | `tv-tracker-app-backup-2026-08-18--- fresh copy.html`, same folder |
+
+Contents are recorded at count level only; no private content is reproduced here. Restoreability remains unproved (blocker B-11): an isolated restore drill is still required before Phase 22/24.
+
+**PostgreSQL backup:** owner re-confirmed a fresh PostgreSQL backup exists outside Git at AlwaysData on 2026-08-19. Restoreability/retention/encryption remain unverified (B-11).
+
+**Private material exclusion — hardened:** `.gitignore` now excludes `tv-tracker-app-backup*`, `*app-backup*.json`, `*app-backup*.html`, `backups/`, `*.sql`, `*.dump`, `*.pg_dump`, `Chat history *.html`, `chat history *.html`, `TV-Tracker-Original-24-Phase-Roadmap-for-Codex.md`, and `opencode.cmd`. `git status` at this addendum is clean of all private/chat/helper material.
+
+**Phase 1 gate update:** baseline SHA + deployed SHA + backup existence are now evidenced (code SHAs `d524c905...`/`e137e7b1...`, verified backup record above, PG backup owner-confirmed). The remaining Phase 1 open item is the restore drill (B-11), which the roadmap schedules at the Phase 22 boundary.

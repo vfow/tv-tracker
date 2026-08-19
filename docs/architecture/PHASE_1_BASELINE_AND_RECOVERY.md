@@ -137,11 +137,11 @@ The native App Backup drill must use an isolated database, validate before mutat
 | Exact known-good code SHA is recorded | Met |
 | Known-good PR check and deploy workflow are recorded | Met |
 | Owner confirms known-good behavior | Met |
-| Fresh native and PostgreSQL backups exist outside Git | Met by owner confirmation; not inspected |
+| Fresh native and PostgreSQL backups exist outside Git | Met — native backup verified 2026-08-19 (schemaVersion 4, 328 shows; SHA-256 + counts recorded in the recovery ledger addendum, file outside the worktree); PostgreSQL backup owner-confirmed |
 | Recovery behavior and rollback ordering are documented | Met |
 | Current production SHA can be independently identified | Open |
 | PostgreSQL restore succeeds in isolation | Open |
 | Native App Backup restore succeeds in isolation | Open |
 | Critical recovery checks pass after a timed drill | Open |
 
-Phase 1 provides a usable code and recovery baseline. The broader disaster-recovery gate remains open and is a release blocker, not a reason to expose or commit private recovery material.
+Phase 1 provides a usable code and recovery baseline. The broader disaster-recovery gate remains open and is a release blocker, not a reason to expose or commit private recovery material. The candidate head for all Phase 1-11 evidence advanced to `e137e7b1...` (CI green, 295 tests) on 2026-08-19; see the ledger addendum.
