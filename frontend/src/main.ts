@@ -3,12 +3,14 @@ import CompatibilityBoundary from "./CompatibilityBoundary";
 import { apiClient } from "./core/api";
 import { classifyError } from "./core/errors";
 import { presentError } from "./core/feedback";
+import { installSettingsDomain, type SettingsController } from "./domains/settings";
 
 export interface TVTrackerModernBridge {
-  readonly version: "phase13-v1";
+  readonly version: "phase14-v1";
   readonly api: typeof apiClient;
   readonly classifyError: typeof classifyError;
   readonly presentError: typeof presentError;
+  readonly settings?: SettingsController;
 }
 
 declare global {
@@ -17,11 +19,13 @@ declare global {
   }
 }
 
+const settings = installSettingsDomain();
 const bridge: TVTrackerModernBridge = Object.freeze({
-  version: "phase13-v1",
+  version: "phase14-v1",
   api: apiClient,
   classifyError,
-  presentError
+  presentError,
+  settings
 });
 
 if (!window.TVTrackerModern) {
