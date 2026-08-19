@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 
 from flask import Flask, jsonify
 
-import final_notifications as final
-import final_notifications_runtime as runtime
+from tvtracker.notifications import push_and_movies as final
+from tvtracker.notifications import runtime as runtime
 
 
 class RecordingCursor:

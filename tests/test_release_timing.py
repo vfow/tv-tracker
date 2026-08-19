@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 import release_timing
-from release_timing import ReleaseTimingResolver
+from tvtracker.release_timing.service import ReleaseTimingResolver
 
 
 class StubProvider:

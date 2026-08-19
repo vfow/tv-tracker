@@ -6,7 +6,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
-import final_notifications as final
+from tvtracker.notifications import push_and_movies as final
 
 
 class FakeCursor:

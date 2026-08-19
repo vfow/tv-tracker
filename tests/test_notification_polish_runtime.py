@@ -5,7 +5,7 @@ import unittest
 
 from flask import Flask, Response
 
-from notification_polish_runtime import (
+from tvtracker.notifications.push_validation import (
     harden_push_config,
     install_notification_polish,
     validate_vapid_configuration,

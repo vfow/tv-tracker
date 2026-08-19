@@ -4,7 +4,7 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-from static_asset_versioning import install_static_asset_versioning, static_asset_version
+from tvtracker.infrastructure.static_assets import install_static_asset_versioning, static_asset_version
 
 try:
     import psycopg  # noqa: F401

@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
-import final_notifications as final
+from tvtracker.notifications import push_and_movies as final
 
 
 ROOT = Path(__file__).resolve().parents[1]

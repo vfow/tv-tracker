@@ -118,8 +118,8 @@ function createContext(options={}){
   {
     const appIndex = template.indexOf("filename='js/app.js'");
     const integrityIndex = template.indexOf("filename='js/data-integrity.js'");
-    const firstDuplicate = template.indexOf("filename='js/duplicate-show-integrity.js'");
-    const secondDuplicate = template.indexOf("filename='js/duplicate-show-integrity.js'",firstDuplicate + 1);
+    const firstDuplicate = template.indexOf("filename='js/tracker-integrity.js'");
+    const secondDuplicate = template.indexOf("filename='js/tracker-integrity.js'",firstDuplicate + 1);
     assert.ok(appIndex >= 0 && integrityIndex > appIndex,"data-integrity.js must load after app.js so it can take ownership of legacy functions");
     assert.ok(secondDuplicate > integrityIndex,"data-integrity.js must load before startup data is released by the second duplicate integrity hook");
   }

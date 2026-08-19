@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from static_asset_versioning import static_asset_version
+from tvtracker.infrastructure.static_assets import static_asset_version
 
 
 class StaticAssetVersionTests(unittest.TestCase):

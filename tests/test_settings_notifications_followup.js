@@ -4,9 +4,9 @@ const vm = require("vm");
 const assert = require("assert");
 
 const ROOT = path.resolve(__dirname,"..");
-const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"static/js/notifications-final.js");
+const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"static/js/notifications-runtime.js");
 const source = fs.readFileSync(sourcePath,"utf8");
-const polish = fs.readFileSync(path.join(ROOT,"static/js/notifications-polish.js"),"utf8");
+const polish = fs.readFileSync(path.join(ROOT,"static/js/notifications-runtime.js"),"utf8");
 const settings = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
 
 // Account Settings is now the sole owner of the Notifications settings surface.
@@ -32,9 +32,9 @@ assert(source.includes('registerSubscriptionWithServer(localSubscription)'));
 assert(source.includes('subscriptionMatchesPublicKey'));
 assert(!source.includes('NotificationApi.requestPermission()'));
 
-// Regression for the duplicate Push row: notifications-final.js may keep its
+// Regression for the duplicate Push row: notifications-runtime.js may keep its
 // legacy renderer functions for compatibility, but its runtime boot must never
-// start them. notifications-polish.js renders into the first-class Settings owner.
+// start them. notifications-runtime.js renders into the first-class Settings owner.
 const bootStart = source.indexOf("async function boot()");
 const bootEnd = source.indexOf('document.addEventListener("visibilitychange"',bootStart);
 const bootSource = source.slice(bootStart,bootEnd);
@@ -192,7 +192,7 @@ async function runtimePushRecoveryTest(){
         encodeURIComponent,
         console
     });
-    vm.runInContext(source,context,{filename:"notifications-final.js"});
+    vm.runInContext(source,context,{filename:"notifications-runtime.js"});
     assert(domListeners.DOMContentLoaded);
     await domListeners.DOMContentLoaded();
 

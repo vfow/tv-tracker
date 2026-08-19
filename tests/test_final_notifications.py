@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-import final_notifications as final
+from tvtracker.notifications import push_and_movies as final
 
 
 class FinalNotificationPureTests(unittest.TestCase):
