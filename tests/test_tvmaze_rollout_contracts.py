@@ -8,7 +8,7 @@ class TVmazeRolloutContractTests(unittest.TestCase):
 
     def test_timezone_has_automatic_and_manual_modes(self):
         backend = self.read("tvtracker/notifications/backend.py")
-        ui = self.read("static/js/notifications.js")
+        ui = self.read("static/js/notifications-runtime.js")
         self.assertIn("timezone_mode", backend)
         self.assertIn("timezoneMode", backend)
         self.assertIn('value="automatic"', ui)

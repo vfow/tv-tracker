@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 from flask import abort, jsonify, request
 
-from release_timing import ReleaseTimingResolver, provider_capability, provider_flags, valid_timezone
+from tvtracker.release_timing.service import ReleaseTimingResolver, provider_capability, provider_flags, valid_timezone
 
 
 MAX_BATCH_EPISODES = 200
@@ -45,7 +45,7 @@ def install_release_timing_routes(
         flags["notifications_enabled"],
     )):
         try:
-            from tvmaze_integration import configure_default_provider
+            from tvtracker.integrations.tvmaze import configure_default_provider
             configure_default_provider(connection_factory=connection_factory, tmdb_fetcher=tmdb_fetcher)
         except (ImportError, OSError, RuntimeError):
             # Optional integration must never prevent TV Tracker from booting.

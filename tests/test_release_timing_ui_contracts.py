@@ -11,8 +11,8 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         cls.app = (ROOT / "static/js/app.js").read_text()
         cls.ui = (ROOT / "static/js/ui.js").read_text()
         cls.release = (ROOT / "static/js/release-timing.js").read_text()
-        cls.routes = (ROOT / "release_timing_routes.py").read_text()
-        cls.resolver = (ROOT / "release_timing.py").read_text()
+        cls.routes = (ROOT / "tvtracker/release_timing/routes.py").read_text()
+        cls.resolver = (ROOT / "tvtracker/release_timing/service.py").read_text()
 
     def test_provider_has_no_extra_credit_ui(self):
         combined = "\n".join((self.release, self.routes, self.resolver))

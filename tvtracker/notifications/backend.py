@@ -6,8 +6,8 @@ from typing import Any, Callable
 
 from psycopg.types.json import Jsonb
 
-from release_timing import ReleaseTimingResolver, parse_aware_datetime, provider_flags
-from notification_engine import (
+from tvtracker.release_timing.service import ReleaseTimingResolver, parse_aware_datetime, provider_flags
+from tvtracker.notifications.engine import (
     NOTIFICATION_FAMILIES,
     build_stored_notification_snapshot,
     build_tmdb_notification_snapshot,

@@ -193,7 +193,7 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         self.assertEqual(payload["publicKey"], public_key)
         self.assertNotIn("diagnostic", payload)
 
-    def test_polish_asset_is_injected_after_final_asset(self) -> None:
+    def test_polish_does_not_inject_retired_browser_assets(self) -> None:
         public_key, private_key = _vapid_pair(1)
 
         class Module:
@@ -211,25 +211,14 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         app = Flask(__name__)
         install_notification_polish(app, Module)
 
-        # Registered after the polish hook so Flask's reverse after_request order
-        # models final_notifications.install_final_notifications().
-        @app.after_request
-        def inject_final(response: Response) -> Response:
-            if response.mimetype == "text/html":
-                body = response.get_data(as_text=True).replace(
-                    "</body>",
-                    '<script src="/static/js/notifications-final.js"></script></body>',
-                )
-                response.set_data(body)
-            return response
-
         @app.get("/app/test")
         def page() -> Response:
             return Response("<html><body>ok</body></html>", mimetype="text/html")
 
-        response = app.test_client().get("/app/test")
-        body = response.get_data(as_text=True)
-        self.assertLess(body.index("notifications-final.js"), body.index("notifications-polish.js"))
+        body = app.test_client().get("/app/test").get_data(as_text=True)
+        self.assertNotIn("notifications-final.js", body)
+        self.assertNotIn("notifications-polish.js", body)
+        self.assertEqual(body, "<html><body>ok</body></html>")
 
 
 if __name__ == "__main__":

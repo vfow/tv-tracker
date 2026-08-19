@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import Response, jsonify, request, session
 from psycopg.types.json import Jsonb
 
-from notifications_backend import (
+from tvtracker.notifications.backend import (
     read_notification_settings,
     serialize_notification_settings,
     update_notification_settings,

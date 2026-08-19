@@ -3,7 +3,7 @@ from pathlib import Path
 app = Path("app.py").read_text()
 backend = Path("tvtracker/notifications/backend.py").read_text()
 engine = Path("tvtracker/notifications/engine.py").read_text()
-frontend = Path("static/js/notifications.js").read_text()
+frontend = Path("static/js/notifications-runtime.js").read_text()
 router = Path("static/js/app-router.js").read_text()
 ui = Path("static/js/ui.js").read_text()
 template = Path("templates/index.html").read_text()
@@ -35,7 +35,8 @@ assert "tv_tracker_state" not in backend
 assert "tvmaze" not in (backend + engine + frontend).lower()
 assert "filename='assets/icons/notification-bell.svg'" in template
 assert "filename='assets/icons/notification-settings.svg'" in template
-assert "filename='js/notifications.js'" in template
+assert "filename='js/notifications-runtime.js'" in template
+assert "filename='js/notifications.js'" not in template
 assert 'id="notifications-page"' in template
 assert 'id="notification-settings-page"' not in template
 assert '/app/settings/notifications' in router
