@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 # Temporary continuation bootstrap for the explicitly authorized Phase 14–23
-# cleanup batch. The bootstrap script removes this write permission and this
-# step before it pushes its phase commits.
+# cleanup batch. The connector restores the normal read-only CI after the
+# one-shot continuation has pushed its phase commits.
 permissions:
   contents: write
 
@@ -31,7 +31,7 @@ jobs:
       - run: npm --prefix frontend ci --audit=false
       - name: Continue authorized Phase 14–23 cleanup
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: python tools/phase14_23_batch.py
+        run: python tools/phase14_23_batch_v2.py
       - name: Verify production npm dependency security
         run: |
           npm audit --omit=dev --audit-level=high
