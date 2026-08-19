@@ -22,10 +22,16 @@ jobs:
           node-version: '22'
           cache: npm
       - run: python -m pip install -r requirements.txt
-      # The npm tree is build-only (Tailwind/DaisyUI). Audit production/runtime deps separately.
       - run: npm ci --audit=false
+      - run: npm --prefix frontend ci --audit=false
       - name: Verify production npm dependency security
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix frontend audit --omit=dev --audit-level=high
+      - name: Build and verify committed modern frontend
+        run: |
+          npm run frontend:build
+          git diff --exit-code -- static/modern
       - name: Run full regression suite
         run: python tests/run_all.py
       - name: Check repository diff hygiene

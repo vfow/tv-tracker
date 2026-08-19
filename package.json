@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "css:build": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --minify",
-    "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch"
+    "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch",
+    "frontend:install": "npm --prefix frontend ci --audit=false",
+    "frontend:typecheck": "npm --prefix frontend run typecheck",
+    "frontend:build": "npm --prefix frontend run build"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17",
