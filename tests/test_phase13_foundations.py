@@ -1752,8 +1752,12 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
     def test_ci_and_deploy_build_tailwind_and_run_migrations(self):
         ci_path = ROOT / ".github/workflows/ci.yml"
         deploy_path = ROOT / ".github/workflows/deploy.yml"
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
         ci_commands = workflow_run_commands(ci_path)
         deploy_commands = workflow_run_commands(deploy_path)
+
+        self.assertIn("static/css/tailwind-input.css text eol=lf", attributes)
+        self.assertIn("static/css/tailwind.css text eol=lf", attributes)
 
         for workflow, path, commands in (
             ("CI", ci_path, ci_commands),
