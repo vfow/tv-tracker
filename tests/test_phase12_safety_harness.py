@@ -47,7 +47,16 @@ class BackupAndMigrationSafetyTests(unittest.TestCase):
         )
 
         self.assertEqual(v1_data, v2_data)
-        self.assertEqual(v1_summary, v2_summary)
+        for key in ("shows", "historyEntries", "favorites"):
+            self.assertEqual(v1_summary[key], v2_summary[key])
+        self.assertEqual(
+            (v1_summary["backupVersion"], v1_summary["schemaVersion"]),
+            (1, 4),
+        )
+        self.assertEqual(
+            (v2_summary["backupVersion"], v2_summary["schemaVersion"]),
+            (2, 5),
+        )
         self.assertEqual(v2_data["shows"]["123"]["title"], "Fixture Show")
         self.assertEqual(v2_data["history"][0]["id"], "history-fixture-0001")
 
