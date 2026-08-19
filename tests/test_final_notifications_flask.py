@@ -202,6 +202,14 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
         self.assertIn("status = 'failed'", sql)
         self.assertIn("s.session_version <> a.session_version", sql)
 
+    def test_direct_schema_preparation_uses_canonical_migration_runner(self):
+        factory = RecordingFactory()
+        with patch.object(final, "run_migrations") as run_migrations:
+            final.ensure_final_schema(factory)
+
+        run_migrations.assert_called_once_with(factory, final.MIGRATIONS)
+        self.assertEqual(factory.connections, [])
+
     def test_runtime_preparation_runs_schema_once_without_replacing_business_logic(self):
         factory = RecordingFactory()
         original_ensure = final.ensure_final_schema

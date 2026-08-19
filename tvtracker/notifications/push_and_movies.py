@@ -18,6 +18,7 @@ from tvtracker.notifications.backend import (
     serialize_notification_settings,
     update_notification_settings,
 )
+from tvtracker.migrations import MIGRATIONS, run_migrations
 
 LOGGER = logging.getLogger(__name__)
 MEANINGFUL_MOVIE_RELEASE_TYPES = {2, 3, 4, 6}
@@ -44,82 +45,7 @@ def _utc_now(value: datetime | None = None) -> datetime:
 
 
 def ensure_final_schema(connection_factory: Callable[[], Any]) -> None:
-    statements = """
-    ALTER TABLE tv_tracker_notifications
-    ADD COLUMN IF NOT EXISTS media_type TEXT NOT NULL DEFAULT 'tv';
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_final_notification_settings (
-        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
-        movie_released BOOLEAN NOT NULL DEFAULT TRUE,
-        movie_release_updates BOOLEAN NOT NULL DEFAULT TRUE,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    INSERT INTO tv_tracker_final_notification_settings (singleton_id)
-    VALUES (1)
-    ON CONFLICT (singleton_id) DO NOTHING;
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_movie_notification_baseline (
-        movie_id TEXT PRIMARY KEY,
-        region TEXT NOT NULL,
-        snapshot JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_push_subscriptions (
-        subscription_id BIGSERIAL PRIMARY KEY,
-        device_id TEXT NOT NULL,
-        endpoint TEXT NOT NULL UNIQUE,
-        p256dh TEXT NOT NULL,
-        auth TEXT NOT NULL,
-        user_agent TEXT NOT NULL DEFAULT '',
-        session_version BIGINT NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_success_at TIMESTAMPTZ,
-        failure_count INTEGER NOT NULL DEFAULT 0
-    );
-
-    ALTER TABLE tv_tracker_push_subscriptions
-    ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 0;
-
-    CREATE UNIQUE INDEX IF NOT EXISTS tv_tracker_push_subscriptions_device_idx
-    ON tv_tracker_push_subscriptions (device_id);
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_push_presence (
-        device_id TEXT NOT NULL,
-        client_id TEXT NOT NULL,
-        visible BOOLEAN NOT NULL DEFAULT FALSE,
-        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (device_id, client_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_push_presence_active_idx
-    ON tv_tracker_push_presence (device_id, visible, last_seen_at);
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_push_deliveries (
-        delivery_key TEXT PRIMARY KEY,
-        subscription_id BIGINT NOT NULL REFERENCES tv_tracker_push_subscriptions(subscription_id) ON DELETE CASCADE,
-        notification_id BIGINT,
-        payload JSONB NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        attempts INTEGER NOT NULL DEFAULT 0,
-        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_error TEXT NOT NULL DEFAULT '',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_push_deliveries_pending_idx
-    ON tv_tracker_push_deliveries (status, next_attempt_at);
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_push_deliveries_notification_idx
-    ON tv_tracker_push_deliveries (notification_id);
-    """
-    with connection_factory() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(statements)
-        connection.commit()
+    run_migrations(connection_factory, MIGRATIONS)
 
 
 def _read_final_settings_cursor(cursor: Any) -> dict[str, bool]:

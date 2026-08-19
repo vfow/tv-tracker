@@ -49,11 +49,35 @@ from tvtracker.notifications.backend import (
     serialize_notification_settings,
     update_notification_settings as patch_notification_settings,
 )
+from tvtracker.migrations import (
+    DATABASE_SCHEMA_VERSION,
+    MIGRATIONS,
+    run_migrations,
+)
 
 
 APP_NAME = "TV Tracker"
 BACKUP_VERSION = 2
+# Native backup payload compatibility. Database DDL has its own version.
 SCHEMA_VERSION = 5
+RELEASE_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+def load_release_sha(marker_path: Path | None = None) -> str | None:
+    configured = os.environ.get("TVTRACKER_RELEASE_SHA")
+    if configured is not None:
+        candidate = configured.strip()
+    else:
+        path = marker_path or Path(__file__).with_name(".tvtracker-release-sha")
+        try:
+            candidate = path.read_text(encoding="ascii").strip()
+        except (OSError, UnicodeError):
+            return None
+    return candidate.lower() if RELEASE_SHA_PATTERN.fullmatch(candidate) else None
+
+
+# Captured once so an old process cannot report a marker written for a new release.
+RELEASE_SHA = load_release_sha()
 SUPPORTED_BACKUP_VERSIONS = {1, BACKUP_VERSION}
 MAX_BODY_BYTES = 40 * 1024 * 1024
 TMDB_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+$")
@@ -242,135 +266,9 @@ def database_connection() -> psycopg.Connection[Any]:
     )
 
 
-def ensure_schema() -> None:
-    statements = """
-    CREATE TABLE IF NOT EXISTS tv_tracker_shows (
-        show_id TEXT PRIMARY KEY,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_history (
-        entry_id TEXT PRIMARY KEY,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_state (
-        state_key TEXT PRIMARY KEY,
-        data JSONB,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_meta (
-        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
-        revision BIGINT NOT NULL DEFAULT 0,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_changes (
-        revision BIGINT PRIMARY KEY,
-        operation_id TEXT NOT NULL UNIQUE,
-        delta JSONB NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_admin (
-        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
-        username TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        session_version BIGINT NOT NULL DEFAULT 1,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_security_events (
-        event_id BIGSERIAL PRIMARY KEY,
-        event_type TEXT NOT NULL,
-        client_key TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_schema_meta (
-        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
-        schema_version INTEGER NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_settings (
-        singleton_id SMALLINT PRIMARY KEY CHECK (singleton_id = 1),
-        enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        timezone TEXT NOT NULL DEFAULT '',
-        timezone_mode TEXT NOT NULL DEFAULT 'automatic',
-        new_season BOOLEAN NOT NULL DEFAULT TRUE,
-        season_premiere_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,
-        new_episode BOOLEAN NOT NULL DEFAULT TRUE,
-        returns_tomorrow BOOLEAN NOT NULL DEFAULT TRUE,
-        canceled_ended BOOLEAN NOT NULL DEFAULT TRUE,
-        premiere_date_updates BOOLEAN NOT NULL DEFAULT TRUE,
-        initialized_at TIMESTAMPTZ,
-        last_checked_at TIMESTAMPTZ,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    ALTER TABLE tv_tracker_notification_settings
-    ADD COLUMN IF NOT EXISTS timezone_mode TEXT NOT NULL DEFAULT 'automatic';
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline (
-        show_id TEXT PRIMARY KEY,
-        snapshot JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_events (
-        event_key TEXT PRIMARY KEY,
-        show_id TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS tv_tracker_notifications (
-        notification_id BIGSERIAL PRIMARY KEY,
-        group_key TEXT NOT NULL UNIQUE,
-        event_key TEXT NOT NULL,
-        notification_type TEXT NOT NULL,
-        show_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        image_path TEXT NOT NULL DEFAULT '',
-        event_date DATE,
-        is_read BOOLEAN NOT NULL DEFAULT FALSE,
-        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_created_at_idx
-    ON tv_tracker_notifications (created_at DESC);
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_notifications_unread_idx
-    ON tv_tracker_notifications (is_read, created_at DESC);
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_notification_events_observed_idx
-    ON tv_tracker_notification_events (observed_at);
-
-    INSERT INTO tv_tracker_notification_settings (singleton_id)
-    VALUES (1)
-    ON CONFLICT (singleton_id) DO NOTHING;
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_changes_created_at_idx
-    ON tv_tracker_changes (created_at);
-
-    CREATE INDEX IF NOT EXISTS tv_tracker_security_events_lookup_idx
-    ON tv_tracker_security_events (event_type, client_key, created_at);
-
-    INSERT INTO tv_tracker_meta (singleton_id, revision)
-    VALUES (1, 0)
-    ON CONFLICT (singleton_id) DO NOTHING;
-    """
-
+def _ensure_admin_account() -> None:
     with database_connection() as connection:
         with connection.cursor() as cursor:
-            cursor.execute(statements)
             bootstrap_username, bootstrap_password_hash = bootstrap_admin_credentials()
             if bootstrap_username and bootstrap_password_hash:
                 cursor.execute(
@@ -394,18 +292,19 @@ def ensure_schema() -> None:
                     "over SSH to recreate the missing singleton account."
                 )
 
-            cursor.execute(
-                """
-                INSERT INTO tv_tracker_schema_meta
-                (singleton_id, schema_version, updated_at)
-                VALUES (1, %s, NOW())
-                ON CONFLICT (singleton_id) DO UPDATE
-                SET schema_version = EXCLUDED.schema_version,
-                    updated_at = NOW()
-                """,
-                (SCHEMA_VERSION,),
-            )
-        connection.commit()
+
+def ensure_schema() -> None:
+    """Apply migration-owned core DDL, then preserve admin startup validation.
+
+    Migration-owned notification declarations include:
+    CREATE TABLE IF NOT EXISTS tv_tracker_notifications
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_settings
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline
+    CREATE TABLE IF NOT EXISTS tv_tracker_notification_events
+    """
+
+    run_migrations(database_connection, MIGRATIONS)
+    _ensure_admin_account()
 
 
 def current_revision(cursor: psycopg.Cursor[Any]) -> int:
@@ -436,7 +335,7 @@ def tracker_health_status() -> dict[str, Any]:
         schema_version = 0
 
     return {
-        "ok": database_ok and schema_version == SCHEMA_VERSION,
+        "ok": database_ok and schema_version == DATABASE_SCHEMA_VERSION,
         "database": database_ok,
         "schemaVersion": schema_version,
     }
@@ -1113,12 +1012,25 @@ def validate_history_record(
             minimum=0,
             maximum=100000,
         )
-        for text_field in ("title", "episode_name"):
+        for text_field in ("title", "episode_name", "episode_title"):
             if text_field in entry and entry[text_field] is not None:
                 if not isinstance(entry[text_field], str) or len(entry[text_field]) > 500:
                     raise BackupValidationError(
                         f"History entry {index + 1} has invalid {text_field}"
                     )
+        source_episode_id = entry.get("source_tvdb_episode_id")
+        if source_episode_id not in (None, ""):
+            if isinstance(source_episode_id, bool) or not isinstance(
+                source_episode_id, (str, int)
+            ):
+                raise BackupValidationError(
+                    f"History entry {index + 1} has invalid source episode identifier"
+                )
+            entry["source_tvdb_episode_id"] = normalized_identifier(
+                source_episode_id,
+                f"History entry {index + 1} source episode identifier",
+                maximum=160,
+            )
 
     if entry.get("date") is not None:
         if not isinstance(entry["date"], str):
@@ -1150,17 +1062,51 @@ def validate_history_record(
     entry["id"] = entry_id
     return entry_id, entry
 
-def history_episode_identity(entry: dict[str, Any]) -> tuple[str, int, int] | None:
+def history_episode_identity(entry: dict[str, Any]) -> tuple[Any, ...] | None:
     if str(entry.get("media_type") or "").lower() == "movie" or entry.get("movie_id"):
         return None
-    try:
-        return (
-            str(entry.get("tmdb_id", "")),
-            int(entry.get("season")),
-            int(entry.get("episode")),
-        )
-    except (TypeError, ValueError):
+
+    raw_show_id = entry.get("tmdb_id") or entry.get("show_id")
+    if isinstance(raw_show_id, (dict, list, bool)):
         return None
+    show_id = str(raw_show_id or "").strip()
+    if not show_id or len(show_id) > 160:
+        return None
+
+    try:
+        season = backup_int(
+            entry.get("season"), "History season", minimum=0, maximum=10000
+        )
+        episode = backup_int(
+            entry.get("episode"), "History episode", minimum=0, maximum=100000
+        )
+    except BackupValidationError:
+        return None
+
+    special = entry.get("special")
+    if "special" in entry and not isinstance(special, bool):
+        return None
+    if special is True or season == 0:
+        source_episode_id = entry.get("source_tvdb_episode_id")
+        if source_episode_id not in (None, ""):
+            if isinstance(source_episode_id, bool) or not isinstance(
+                source_episode_id, (str, int)
+            ):
+                return None
+            source_id = str(source_episode_id).strip()
+            if not source_id or len(source_id) > 160:
+                return None
+            return (show_id, "special", "tvdb", source_id)
+
+        title = entry.get("episode_title") or entry.get("title") or "special"
+        if not isinstance(title, str):
+            return None
+        normalized_title = re.sub(
+            r"[^a-z0-9]+", "-", title.strip().lower().replace("&", "and")
+        ).strip("-")
+        return (show_id, "special", season, episode, normalized_title)
+
+    return (show_id, season, episode)
 
 
 def history_timestamp_value(entry: dict[str, Any]) -> float:
@@ -1175,7 +1121,7 @@ def history_timestamp_value(entry: dict[str, Any]) -> float:
 
 
 def dedupe_history_by_episode(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_episode: dict[tuple[str, int, int], dict[str, Any]] = {}
+    by_episode: dict[tuple[Any, ...], dict[str, Any]] = {}
     passthrough: list[dict[str, Any]] = []
 
     for entry in history:
@@ -1202,19 +1148,26 @@ def find_logical_duplicate_history_ids(
     if identity is None or not identity[0]:
         return []
 
-    show_id, season, episode = identity
+    show_id = str(identity[0])
     cursor.execute(
         """
-        SELECT entry_id
+        SELECT entry_id, data
         FROM tv_tracker_history
         WHERE entry_id <> %s
-          AND data->>'tmdb_id' = %s
-          AND data->>'season' = %s
-          AND data->>'episode' = %s
+          AND (
+              data->>'tmdb_id' = %s
+              OR data->>'show_id' = %s
+          )
         """,
-        (str(entry_id), show_id, str(season), str(episode)),
+        (str(entry_id), show_id, show_id),
     )
-    return [str(row[0]) for row in cursor.fetchall()]
+    duplicate_ids: list[str] = []
+    for row in cursor.fetchall():
+        if len(row) < 2 or not isinstance(row[1], dict):
+            continue
+        if history_episode_identity(row[1]) == identity:
+            duplicate_ids.append(str(row[0]))
+    return duplicate_ids
 
 
 def validate_profile_image_data_url(value: Any, field: str, maximum: int) -> str:
@@ -3264,7 +3217,10 @@ def create_app() -> Flask:
             return jsonify({"ok": False}), 404
 
         status = tracker_health_status()
-        return jsonify({"ok": status["ok"]}), 200 if status["ok"] else 503
+        payload = {"ok": status["ok"]}
+        if RELEASE_SHA is not None:
+            payload["releaseSha"] = RELEASE_SHA
+        return jsonify(payload), 200 if status["ok"] else 503
 
     @app.get("/api/health")
     @login_required
@@ -3275,6 +3231,7 @@ def create_app() -> Flask:
             "app": APP_NAME,
             "database": status["database"],
             "schemaVersion": status["schemaVersion"],
+            "releaseSha": RELEASE_SHA,
         })
         return (response, 200 if status["ok"] else 503)
 

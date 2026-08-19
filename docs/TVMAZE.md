@@ -6,14 +6,14 @@ TVmaze is optional enrichment. TMDB remains the canonical TV Tracker identity an
 
 All switches default to `false` and `TVMAZE_ENABLED` is the master gate.
 
-- `TVMAZE_ENABLED` — permits the optional provider boundary to exist at runtime. When false, TV Tracker does not import/configure `tvmaze_integration.py`.
+- `TVMAZE_ENABLED` — permits the optional provider boundary to exist at runtime. When false, TV Tracker does not import/configure `tvtracker.integrations.tvmaze`.
 - `TVMAZE_SHADOW_ENABLED` — allows provider lookups/cache warming without granting visible timing authority.
 - `TVMAZE_UPCOMING_ENABLED` — allows trusted TVmaze candidates to affect Upcoming and episode loggability.
 - `TVMAZE_NOTIFICATIONS_ENABLED` — independently allows trusted TVmaze candidates to affect notification release boundaries.
 
 There are no additional TVmaze environment switches. Exact/date authority inside the resolver is derived from the approved Upcoming or Notifications capability rather than from hidden provider flags.
 
-Disabling `TVMAZE_ENABLED`, or removing `tvmaze_integration.py`, must immediately return the application to TMDB-only timing without changing routes, tracker identity, watched state, or history.
+Disabling `TVMAZE_ENABLED`, or removing `tvtracker.integrations.tvmaze`, must immediately return the application to TMDB-only timing without changing routes, tracker identity, watched state, or history.
 
 ## Canonical release contract
 

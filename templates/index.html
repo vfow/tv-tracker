@@ -53,6 +53,8 @@
 
 <section class="main">
 
+<div id="tv-tracker-startup-status" role="alert" hidden></div>
+
 <!-- SHOWS PAGE -->
 <div id="shows-page" class="page">
     <nav class="top-tabs">
@@ -191,10 +193,12 @@
 <script src="{{ url_for('static', filename='js/show-detail-filters.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/feedback.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/foundation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
 <script src="{{ url_for('static', filename='js/notifications-runtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/release-timing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/upcoming-schedule-repair.js') }}"></script>
 <script src="{{ url_for('static', filename='js/adult-filter.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data-integrity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tracker-removal.js') }}"></script>
@@ -207,9 +211,7 @@
 <script src="{{ url_for('static', filename='js/discover-runtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/search-navigation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
-
-<div id="tv-modern-root" data-tv-modern-root hidden aria-hidden="true"></div>
-<script type="module" src="{{ url_for('static', filename='modern/tvtracker-modern.js') }}"></script>
+<script src="{{ url_for('static', filename='js/startup.js') }}"></script>
 
 </body>
 </html>

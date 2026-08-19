@@ -5,7 +5,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from tvtracker.notifications import backend as backend
-import release_timing
+from tvtracker.release_timing import service as release_timing
 
 
 class StubProvider:

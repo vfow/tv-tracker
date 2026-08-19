@@ -14,8 +14,6 @@ from tvtracker.data_integrity import install_backup_summary_hardening
 prepare_final_notification_runtime(database_connection)
 install_static_asset_versioning(app)
 install_backup_summary_hardening(app)
-# Register before final_notifications so Flask's reverse after_request order
-# injects notifications-final.js first and notifications-polish.js after it.
 install_notification_polish(app, notifications_module)
 notifications_module.install_final_notifications(
     app,

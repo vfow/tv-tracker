@@ -175,43 +175,38 @@ The suite checks backend contracts, route protection, source contracts, JavaScri
 
 ## Deployment
 
-Pushing to `main` triggers `.github/workflows/deploy.yml`. The workflow installs Python and frontend dependencies, builds Tailwind CSS, confirms the generated CSS is committed, runs `python tests/run_all.py`, connects to Alwaysdata with repository secrets, pulls the latest code, and verifies the live health endpoint.
+Pushing an accepted commit to `main` triggers `.github/workflows/deploy.yml`. Manual runs are also restricted to `main`. The workflow tests the exact commit with PostgreSQL, verifies the committed Tailwind build, stages that commit on Alwaysdata, runs additive migrations from the staged tree, and only then checks out the same commit in the live worktree. After restart, `/healthz` must report both database health and the exact process release SHA.
+
+The fixed production concurrency group and current-`main` checks prevent queued jobs from silently deploying a superseded commit. The live checkout is intentionally delayed until migration succeeds, but it is not a symlink-based atomic release mechanism.
 
 Configure these GitHub Actions **Secrets**:
 
 ```text
-ALWAYSDATA_HOST
-ALWAYSDATA_USER
+ALWAYSDATA_SSH_HOST
+ALWAYSDATA_SSH_USER
 ALWAYSDATA_SSH_KEY
-ALWAYSDATA_HEALTH_TOKEN    # Only required if HEALTHZ_SECRET is set in production.
+ALWAYSDATA_APP_DIR         # Absolute host path, for example /home/account/www/tv-tracker
+ALWAYSDATA_API_KEY
+ALWAYSDATA_ACCOUNT
+ALWAYSDATA_SITE_ID
+ALWAYSDATA_HEALTH_URL      # Base URL only, for example https://your-site.alwaysdata.net
+HEALTHZ_SECRET             # Must match HEALTHZ_SECRET on the host when configured.
 ```
 
-Configure these GitHub Actions **Variables**:
-
-```text
-ALWAYSDATA_APP_DIR         # Example: ~/www/tv-tracker
-ALWAYSDATA_HEALTH_URL      # Example: https://your-site.alwaysdata.net/healthz
-```
-
-The SSH deploy step runs:
-
-```text
-cd "$ALWAYSDATA_APP_DIR"
-git pull --ff-only origin main
-```
-
-Use the same `git pull --ff-only origin main` command manually over SSH if the workflow is unavailable. After a manual pull, open `/healthz` to confirm the health check returns `{"ok":true}`. If `HEALTHZ_SECRET` is set, include the `X-Healthcheck-Token` header. Then sign in and open `/api/health` for the detailed private check.
+Do not substitute a moving `git pull` for the workflow. An emergency manual rollout must identify an accepted 40-character commit SHA, confirm it is still `origin/main`, run `python -m tvtracker.migrations` from a detached staged checkout before changing the live worktree, write that SHA to `.tvtracker-release-sha`, restart, and verify the authenticated `/healthz` response reports the same `releaseSha`. Prefer rerunning the workflow so these checks remain executable and auditable.
 
 Deployment checklist:
 
 1. Export a fresh App Backup JSON from the currently deployed tracker.
 2. Keep the existing environment variables and PostgreSQL database.
-3. Pull or deploy the latest source.
-4. Install dependencies from `requirements.txt` if needed.
-5. Rebuild and commit Tailwind CSS before deployment if frontend classes changed.
-6. Restart the WSGI application.
-7. Hard-refresh the browser to clear older cached frontend assets.
-8. Test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
+3. Select an accepted exact SHA that is still the tip of `main`; never deploy a moving branch name.
+4. Install dependencies and run migrations from a staged checkout of that SHA.
+5. Activate the exact SHA only after migration succeeds, then record its release marker.
+6. Restart the WSGI application and verify `/healthz` returns `ok: true` and the exact `releaseSha`.
+7. Hard-refresh the browser and test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
+8. Roll source back only to a known accepted SHA. Because migrations are additive, database restoration is a separate incident decision and must use the private backup rather than an automatic workflow action.
+
+These instructions do not authorize a merge or production deployment; both remain separate owner decisions.
 
 ## Architecture and policy documents
 

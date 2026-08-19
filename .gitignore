@@ -159,6 +159,7 @@ activemq-data/
 !.env.example
 !.env.sample
 .envrc
+.tvtracker-release-sha
 .venv
 env/
 venv/

@@ -886,24 +886,7 @@
     const DEVICE_KEY = "tv-tracker-push-device:v1";
     const CLIENT_KEY = "tv-tracker-push-client:v1";
     const PRESENCE_INTERVAL_MS = 25 * 1000;
-    const SETTINGS_ROUTE = "/app/settings";
-    const SETTINGS_HASH = "#notifications";
-    const BASE_SETTING_OPTIONS = [
-        ["newSeason","New Season","When a new season is added to a show."],
-        ["seasonPremiereTomorrow","Season Premiere Tomorrow","When a show's new season begins tomorrow."],
-        ["newEpisode","New Episode","When a new episode becomes available."],
-        ["returnsTomorrow","Returns Tomorrow","When a Watching show returns."],
-        ["canceledEnded","Canceled / Ended","When a show is canceled or ended."],
-        ["premiereDateUpdates","Premiere Date Updates","When a season premiere date is announced, changed, or delayed."],
-        ["movieReleased","Movie Released","When a movie you plan to watch is released."],
-        ["movieReleaseUpdates","Movie Release Updates","When a movie you plan to watch gets a release date or the date changes."]
-    ];
 
-    let settingsObserver = null;
-    let notificationLinksObserver = null;
-    let settingsMountBusy = false;
-    let settingsScrollPending = String(global.location && global.location.pathname || "") === SETTINGS_ROUTE &&
-        String(global.location && global.location.hash || "") === SETTINGS_HASH;
     let presenceTimer = null;
     let currentDeviceSubscribed = false;
     let pushRegistration = null;
@@ -1256,280 +1239,6 @@
         if(markHidden) sendPresence(false,true);
     }
 
-    function switchRow(key,label,checked,disabled,description,errorText=""){
-        const row = document.createElement("label");
-        row.className = "notification-setting-row" + (disabled ? " notification-setting-row--disabled" : "");
-        row.dataset.settingRow = key;
-        row.innerHTML = `
-            <span class="notification-setting-copy">
-                <strong>${label}</strong>
-                <span class="notification-setting-description">${description}</span>
-                ${key === "pushNotifications" ? `<span class="notification-setting-description warning-note" data-push-error role="status" ${errorText ? "" : "hidden"}>${errorText}</span>` : ""}
-            </span>
-            <span class="notification-switch">
-                <input type="checkbox" data-notification-setting="${key}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
-                <span class="notification-switch-track" aria-hidden="true"><span class="notification-switch-thumb"></span></span>
-            </span>
-        `;
-        return row;
-    }
-
-    function settingsSection(){
-        return document.getElementById("settings-notifications");
-    }
-
-    function masterEnabled(section=settingsSection()){
-        const master = section && section.querySelector('[data-notification-setting="enabled"]');
-        return !(master && !master.checked);
-    }
-
-    function syncSettingsDisabledStates(section=settingsSection()){
-        if(!section) return;
-        const enabled = masterEnabled(section);
-        section.querySelectorAll("[data-setting-row]").forEach(row=>{
-            const key = row.dataset.settingRow;
-            if(key === "enabled") return;
-            const input = row.querySelector("input");
-            const intrinsic = key === "pushNotifications" && row.dataset.intrinsicDisabled === "1";
-            const disabled = !enabled || intrinsic;
-            if(input) input.disabled = disabled;
-            row.classList.toggle("notification-setting-row--disabled",disabled);
-        });
-    }
-
-    function setPushError(row,message){
-        const error = row && row.querySelector("[data-push-error]");
-        if(!error) return;
-        error.textContent = String(message || "");
-        error.hidden = !message;
-    }
-
-    function pushErrorMessage(error){
-        const NotificationApi = notificationApi();
-        if(error && error.code === "PUSH_PERMISSION"){
-            return NotificationApi && NotificationApi.permission === "denied"
-                ? "Push is blocked in your browser settings."
-                : "Push permission wasn't granted.";
-        }
-        const message = String(error && error.message || "").trim();
-        if(/server key/i.test(message)) return "Push configuration is invalid. Please try again later.";
-        if(/verify Push/i.test(message)) return "TV Tracker couldn't finish enabling Push. Try again.";
-        return "TV Tracker couldn't enable Push on this device. Try again.";
-    }
-
-    async function saveNotificationSetting(key,value,input,section){
-        if(input) input.disabled = true;
-        try{
-            await requestJSON("/api/notifications/settings",{method:"PATCH",body:{[key]:value}});
-        }catch(error){
-            if(input) input.checked = !value;
-            console.error("TV Tracker could not save notification setting",error);
-        }finally{
-            syncSettingsDisabledStates(section);
-            if(input && key === "enabled") input.disabled = false;
-        }
-    }
-
-    async function bindPushRow(row,state,section){
-        const input = row.querySelector("input");
-        const description = row.querySelector(".notification-setting-description");
-        if(!input) return;
-        let currentState = state;
-        row.dataset.intrinsicDisabled = state.disabled ? "1" : "0";
-        setPushError(row,state.error || "");
-
-        input.addEventListener("change",async()=>{
-            const next = input.checked;
-            input.disabled = true;
-            setPushError(row,"");
-            try{
-                if(next){
-                    await enablePush(currentState.publicKey,currentState.localSubscription || null);
-                    currentState = await pushState({reconcile:false});
-                    if(!currentState.checked){
-                        throw new Error("TV Tracker couldn't verify Push on this device.");
-                    }
-                    input.checked = true;
-                    row.dataset.intrinsicDisabled = "0";
-                    if(description) description.textContent = "Push is enabled on this device.";
-                }else{
-                    await disablePush();
-                    currentState = await pushState({reconcile:false});
-                    input.checked = false;
-                    if(description) description.textContent = "Enable alerts on this device.";
-                }
-            }catch(error){
-                console.error("TV Tracker could not update push notifications",error);
-                try{
-                    currentState = await pushState({reconcile:false});
-                    input.checked = currentState.checked === true;
-                    row.dataset.intrinsicDisabled = currentState.disabled ? "1" : "0";
-                    if(description) description.textContent = currentState.description || "Enable alerts on this device.";
-                }catch(refreshError){
-                    input.checked = false;
-                }
-                setPushError(row,pushErrorMessage(error));
-            }finally{
-                syncSettingsDisabledStates(section);
-            }
-        });
-    }
-
-    function scrollToNotificationSettings(){
-        const section = settingsSection();
-        if(!section) return false;
-        section.scrollIntoView({behavior:"smooth",block:"start"});
-        settingsScrollPending = false;
-        return true;
-    }
-
-    function markSettingsUrl(){
-        try{
-            history.replaceState({tvTrackerRoute:true},"",SETTINGS_ROUTE + SETTINGS_HASH);
-        }catch(error){}
-    }
-
-    function navigateToNotificationSettings(replace=false){
-        settingsScrollPending = true;
-        if(global.TVTrackerRouter && typeof global.TVTrackerRouter.setPathRoute === "function"){
-            global.TVTrackerRouter.setPathRoute(SETTINGS_ROUTE,replace);
-            if(typeof global.TVTrackerRouter.applyRoute === "function"){
-                global.TVTrackerRouter.applyRoute();
-            }
-            markSettingsUrl();
-            global.setTimeout(()=>{
-                mountSettingsNotifications();
-                scrollToNotificationSettings();
-            },0);
-            return;
-        }
-        global.location.href = SETTINGS_ROUTE + SETTINGS_HASH;
-    }
-
-    function rewriteNotificationSettingsLinks(){
-        document.querySelectorAll(".notifications-settings-link").forEach(link=>{
-            link.setAttribute("href",SETTINGS_ROUTE + SETTINGS_HASH);
-        });
-    }
-
-    async function mountSettingsNotifications(){
-        if(settingsMountBusy) return;
-        const root = document.getElementById("settings-content");
-        if(!root || root.querySelector("#settings-notifications")){
-            if(settingsScrollPending) scrollToNotificationSettings();
-            return;
-        }
-        const profile = root.querySelector(".profile-settings-section");
-        if(!profile) return;
-
-        settingsMountBusy = true;
-        const section = document.createElement("div");
-        section.className = "settings-section notification-settings-section";
-        section.id = "settings-notifications";
-        section.innerHTML = `
-            <div class="settings-section-header">
-                <h2>NOTIFICATIONS</h2>
-                <p>Choose which alerts TV Tracker can send you.</p>
-            </div>
-            <div class="notification-settings-list" aria-label="Notification settings">
-                <div class="notifications-loading">Loading notification settings…</div>
-            </div>
-        `;
-        profile.insertAdjacentElement("afterend",section);
-
-        try{
-            await syncAutomaticTimezone();
-            const payload = await requestJSON("/api/notifications/settings");
-            if(!section.isConnected) return;
-            const settings = payload.settings || {};
-            const enabled = settings.enabled !== false;
-            const list = section.querySelector(".notification-settings-list");
-            if(!list) return;
-            list.innerHTML = "";
-
-            const masterRow = switchRow("enabled","Notifications",enabled,false,"Turn all notifications on or off.");
-            list.appendChild(masterRow);
-            BASE_SETTING_OPTIONS.forEach(([key,label,description])=>{
-                list.appendChild(switchRow(key,label,settings[key] !== false,!enabled,description));
-            });
-
-            let state;
-            try{
-                state = await pushState();
-            }catch(error){
-                state = {
-                    checked:false,
-                    disabled:true,
-                    description:"Push settings are temporarily unavailable.",
-                    publicKey:"",
-                    localSubscription:null,
-                    error:"Reload this page and try again."
-                };
-                console.warn("TV Tracker push status unavailable",error);
-            }
-            if(!section.isConnected) return;
-            const pushRow = switchRow("pushNotifications","Push Notifications",state.checked,state.disabled || !enabled,state.description,state.error || "");
-            pushRow.dataset.intrinsicDisabled = state.disabled ? "1" : "0";
-            list.appendChild(pushRow);
-
-            list.querySelectorAll('[data-notification-setting]:not([data-notification-setting="pushNotifications"])').forEach(input=>{
-                input.addEventListener("change",()=>{
-                    saveNotificationSetting(input.dataset.notificationSetting,input.checked,input,section);
-                });
-            });
-            await bindPushRow(pushRow,state,section);
-            syncSettingsDisabledStates(section);
-            if(settingsScrollPending) scrollToNotificationSettings();
-        }catch(error){
-            if(section.isConnected){
-                const list = section.querySelector(".notification-settings-list");
-                if(list) list.innerHTML = '<div class="notifications-empty">Notification settings are temporarily unavailable.</div>';
-            }
-            console.error("TV Tracker settings notifications failed to load",error);
-        }finally{
-            settingsMountBusy = false;
-            if(!settingsSection()) global.setTimeout(mountSettingsNotifications,0);
-        }
-    }
-
-    function observeSettings(){
-        const root = document.getElementById("settings-content");
-        if(root && !settingsObserver){
-            settingsObserver = new MutationObserver(()=>{
-                mountSettingsNotifications();
-                if(settingsScrollPending) scrollToNotificationSettings();
-            });
-            settingsObserver.observe(root,{childList:true,subtree:true});
-        }
-        mountSettingsNotifications();
-    }
-
-    function installNotificationSettingsNavigation(){
-        rewriteNotificationSettingsLinks();
-        const root = document.getElementById("notifications-content");
-        if(root && !notificationLinksObserver){
-            notificationLinksObserver = new MutationObserver(rewriteNotificationSettingsLinks);
-            notificationLinksObserver.observe(root,{childList:true,subtree:true});
-        }
-        document.addEventListener("click",event=>{
-            const target = event.target && event.target.closest ? event.target.closest(".notifications-settings-link") : null;
-            if(!target) return;
-            event.preventDefault();
-            event.stopPropagation();
-            navigateToNotificationSettings(false);
-        },true);
-
-        if(global.TVTrackerNotifications){
-            global.TVTrackerNotifications.openNotificationSettingsPage = options=>{
-                navigateToNotificationSettings(!!(options && options.fromRoute));
-            };
-        }
-
-        if(String(global.location && global.location.pathname || "") === "/app/notifications/settings"){
-            navigateToNotificationSettings(true);
-        }
-    }
-
     async function markPushClickRead(id){
         if(!Number.isInteger(id) || id <= 0) return false;
         try{
@@ -1601,7 +1310,7 @@
     }
 
     async function boot(){
-        // Settings UI and its navigation are owned by notifications-polish.js.
+        // The canonical Settings owner is installed by the runtime below.
         installServiceWorkerMessages();
         syncAutomaticTimezone();
         try{ await serviceWorkerRegistration(); }catch(error){ console.warn("TV Tracker service worker unavailable",error); }
@@ -1651,8 +1360,6 @@
     "use strict";
 
     const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";
-    const UPCOMING_REPAIR_COOLDOWN_MS = 30 * 60 * 1000;
-    const UPCOMING_REPAIR_MAX_PER_PASS = 8;
     const BASE_SETTING_OPTIONS = [
         ["newSeason","New Season","When a new season is added to a show."],
         ["seasonPremiereTomorrow","Season Premiere Tomorrow","When a show's new season begins tomorrow."],
@@ -1665,9 +1372,6 @@
     ];
 
     const settingsRenderBusy = new WeakSet();
-    const upcomingRepairAttempts = new Map();
-    let upcomingRepairBusy = false;
-
     function finalApi(){ return global.TVTrackerFinalNotifications || null; }
 
     function csrfToken(){
@@ -1927,72 +1631,7 @@
         },true);
     }
 
-    function watchedEpisodeCount(show){
-        const watched = show && show.episodes_watched && typeof show.episodes_watched === "object" ? show.episodes_watched : {};
-        return Object.values(watched).reduce((total,episodes)=>total + (Array.isArray(episodes) ? episodes.length : 0),0);
-    }
-
-    function hasCurrentOrFutureLastAirDate(show){
-        const raw = String(show && show.last_air_date || "").trim();
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
-        const value = Date.parse(raw + "T23:59:59Z");
-        return Number.isFinite(value) && value >= Date.now() - 24 * 60 * 60 * 1000;
-    }
-
-    function shouldRepairWatchingShow(show){
-        if(!show || show.status !== "watching") return false;
-        const tmdbStatus = String(show.tmdb_status || "").trim().toLowerCase();
-        if(tmdbStatus === "canceled" || tmdbStatus === "cancelled") return false;
-        const activeStatus = tmdbStatus === "returning series" || tmdbStatus === "in production" || tmdbStatus === "planned" || tmdbStatus === "pilot";
-        const nextEpisode = show.next_episode_to_air && typeof show.next_episode_to_air === "object" ? show.next_episode_to_air : null;
-        const knownUnwatched = Number(show.number_of_episodes || 0) > watchedEpisodeCount(show);
-        return activeStatus || !!nextEpisode || hasCurrentOrFutureLastAirDate(show) || knownUnwatched;
-    }
-
-    function showHasUpcomingItems(show){
-        if(typeof global.getUpcomingScheduleItems !== "function") return true;
-        try{ const items = global.getUpcomingScheduleItems(show); return Array.isArray(items) && items.length > 0; }
-        catch(error){ return true; }
-    }
-
-    async function repairMissingWatchingSchedules(){
-        if(upcomingRepairBusy) return false;
-        if(!global.DATA || !global.DATA.shows || typeof global.refreshShowForSchedule !== "function" || typeof global.getUpcomingScheduleItems !== "function") return false;
-        const now = Date.now();
-        const candidates = Object.values(global.DATA.shows)
-            .filter(show=>shouldRepairWatchingShow(show) && !showHasUpcomingItems(show))
-            .filter(show=>{ const id=String(show.tmdb_id||show.id||""); if(!id)return false; const last=Number(upcomingRepairAttempts.get(id)||0); return !last || now-last>=UPCOMING_REPAIR_COOLDOWN_MS; })
-            .slice(0,UPCOMING_REPAIR_MAX_PER_PASS);
-        if(!candidates.length) return false;
-        upcomingRepairBusy = true;
-        let refreshed = 0;
-        try{
-            for(const show of candidates){
-                const id=String(show.tmdb_id||show.id||"");
-                upcomingRepairAttempts.set(id,Date.now());
-                try{ await global.refreshShowForSchedule(show,true); refreshed += 1; }
-                catch(error){ console.warn("TV Tracker targeted Upcoming refresh failed",id,error); }
-            }
-            if(refreshed > 0){
-                if(typeof global.saveData === "function"){ try{ await global.saveData(); }catch(error){ console.warn("TV Tracker could not save targeted Upcoming refresh",error); } }
-                if(global.activePage === "shows" && global.activeShowsTab === "upcoming" && typeof global.renderUpcoming === "function") await global.renderUpcoming(false);
-                return true;
-            }
-            return false;
-        }finally{ upcomingRepairBusy = false; }
-    }
-
-    function installUpcomingRepair(){
-        const original = global.refreshUpcomingDataInBackground;
-        if(typeof original !== "function" || original._tvtrackerTargetedRepair) return;
-        const wrapped = async function(...args){ const result=await original.apply(this,args); await repairMissingWatchingSchedules(); return result; };
-        wrapped._tvtrackerTargetedRepair = true;
-        wrapped._tvtrackerOriginal = original;
-        global.refreshUpcomingDataInBackground = wrapped;
-        global.setTimeout(()=>{ if(global.activePage === "shows" && global.activeShowsTab === "upcoming") repairMissingWatchingSchedules(); },1200);
-    }
-
-    function boot(){ installCanonicalNavigation(); installUpcomingRepair(); }
+    function boot(){ installCanonicalNavigation(); }
     if(document.readyState === "loading") document.addEventListener("DOMContentLoaded",boot,{once:true}); else boot();
 
     global.TVTrackerNotificationsRuntime = Object.freeze({
@@ -2001,8 +1640,6 @@
         openDedicatedSettingsPage,
         ensureMainSettingsSection,
         adoptMainSettingsSurface,
-        shouldRepairWatchingShow,
-        repairMissingWatchingSchedules,
         pushErrorMessage
     });
 })(window);

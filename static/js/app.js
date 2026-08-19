@@ -957,17 +957,103 @@ async function init(){
         }).then(()=>window.TVTrackerReleaseTiming.prefetchShows(DATA.shows)).catch(()=>{});
     }
     renderAll();
-    appDataReady = true;
-
-    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.applyRoute === "function"){
-        setTimeout(()=>window.TVTrackerRouter.applyRoute(),0);
-    }
 
     startDataSync();
     scheduleInitialBackgroundMaintenance();
 
     // Migration metadata sync is intentionally not auto-started.
     // It can slow down search/rendering, and migration work is on hold for now.
+}
+
+const TV_TRACKER_STARTUP_FAILURE_MESSAGE = "TV Tracker could not start. Refresh the page to try again.";
+
+function getTVTrackerStartupState(){
+    if(window.TVTrackerStartup && typeof window.TVTrackerStartup === "object"){
+        return window.TVTrackerStartup;
+    }
+    window.TVTrackerStartup = {status:"idle",error:null,promise:null};
+    return window.TVTrackerStartup;
+}
+
+function setTVTrackerStartupDOMState(status){
+    if(typeof document === "undefined" || !document.documentElement){
+        return;
+    }
+
+    document.documentElement.setAttribute("data-tv-tracker-startup",status);
+    if(status === "ready"){
+        document.documentElement.setAttribute("data-tv-tracker-app-ready","true");
+    }else{
+        document.documentElement.removeAttribute("data-tv-tracker-app-ready");
+    }
+
+    const message = document.getElementById("tv-tracker-startup-status");
+    if(message){
+        message.hidden = status !== "failed";
+        message.textContent = status === "failed" ? TV_TRACKER_STARTUP_FAILURE_MESSAGE : "";
+    }
+
+    if(status === "failed"){
+        const skeleton = document.querySelector(".watchlist-initial-skeleton");
+        if(skeleton){
+            skeleton.remove();
+        }
+    }
+}
+
+function assertTVTrackerStartupOwnersLoaded(){
+    const missing = [];
+    const integrity = window.TVTrackerDuplicateShowIntegrity;
+    if(!integrity || integrity.storedDataWrapped !== true || typeof integrity.waitForReadiness !== "function"){
+        missing.push("data integrity");
+    }
+    if(!window.TVTrackerSettings || typeof window.TVTrackerSettings.render !== "function"){
+        missing.push("settings");
+    }
+    if(!window.TVTrackerRouter || typeof window.TVTrackerRouter.applyRoute !== "function"){
+        missing.push("router");
+    }
+    if(typeof startDataSync !== "function"){
+        missing.push("data sync");
+    }
+    if(missing.length){
+        throw new Error("TV Tracker startup dependencies unavailable: " + missing.join(", "));
+    }
+}
+
+function startTVTrackerApp(){
+    const startup = getTVTrackerStartupState();
+    if(startup.promise){
+        return startup.promise;
+    }
+
+    startup.status = "starting";
+    startup.error = null;
+    appDataReady = false;
+    setTVTrackerStartupDOMState("starting");
+    startup.promise = Promise.resolve()
+    .then(assertTVTrackerStartupOwnersLoaded)
+    .then(()=>init())
+    .then(()=>{
+        appDataReady = true;
+        return window.TVTrackerRouter.applyRoute();
+    })
+    .then(()=>{
+        startup.status = "ready";
+        setTVTrackerStartupDOMState("ready");
+        return true;
+    });
+    return startup.promise;
+}
+
+function handleTVTrackerStartupFailure(error){
+    const startup = getTVTrackerStartupState();
+    appDataReady = false;
+    startup.status = "failed";
+    startup.error = error;
+    setTVTrackerStartupDOMState("failed");
+    console.error("TV Tracker startup failed",error);
+    return false;
 }
 
 function scheduleInitialBackgroundMaintenance(){
@@ -17803,6 +17889,3 @@ function exportHTMLReport(){
     }
 
 }
-
-
-init();

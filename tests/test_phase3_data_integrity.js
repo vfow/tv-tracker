@@ -18,6 +18,7 @@ function comparable(value){
 }
 
 function createContext(options={}){
+  const readinessSignals = [];
   const DATA = options.DATA || {
     shows:{},
     history:[],
@@ -101,6 +102,16 @@ function createContext(options={}){
     getHistoryIdsForSeason(){ return []; }
   };
 
+  context.TVTrackerDuplicateShowIntegrity = {
+    signalDataIntegrityReady(integrity){
+      readinessSignals.push({
+        integrity,
+        regularIdentity:context.getEpisodeIdentityKey,
+        historyIdentity:context.getHistoryEntryEpisodeKey
+      });
+    }
+  };
+  context.dataIntegrityReadinessSignals = readinessSignals;
   context.window = context;
   context.globalThis = context;
   vm.createContext(context);
@@ -113,15 +124,23 @@ function createContext(options={}){
     const backendSchema = Number((backend.match(/^SCHEMA_VERSION\s*=\s*(\d+)/m) || [])[1]);
     const context = createContext();
     assert.strictEqual(context.TVTrackerDataIntegrity.frontendSchemaVersion,backendSchema,"browser and backend backup schema versions must match");
+    assert.strictEqual(context.dataIntegrityReadinessSignals.length,1,"data-integrity.js must explicitly signal identity readiness once");
+    const signal = context.dataIntegrityReadinessSignals[0];
+    assert.strictEqual(signal.integrity,context.TVTrackerDataIntegrity);
+    assert.strictEqual(signal.regularIdentity,context.TVTrackerDataIntegrity.regularEpisodeIdentity);
+    assert.strictEqual(signal.historyIdentity,context.TVTrackerDataIntegrity.historyEpisodeIdentity);
   }
 
   {
     const appIndex = template.indexOf("filename='js/app.js'");
     const integrityIndex = template.indexOf("filename='js/data-integrity.js'");
-    const firstDuplicate = template.indexOf("filename='js/tracker-integrity.js'");
-    const secondDuplicate = template.indexOf("filename='js/tracker-integrity.js'",firstDuplicate + 1);
-    assert.ok(appIndex >= 0 && integrityIndex > appIndex,"data-integrity.js must load after app.js so it can take ownership of legacy functions");
-    assert.ok(secondDuplicate > integrityIndex,"data-integrity.js must load before startup data is released by the second duplicate integrity hook");
+    const trackerIntegrityIndex = template.indexOf("filename='js/tracker-integrity.js'");
+    const secondTrackerIntegrity = template.indexOf("filename='js/tracker-integrity.js'",trackerIntegrityIndex + 1);
+    assert.ok(
+      trackerIntegrityIndex >= 0 && trackerIntegrityIndex < appIndex && integrityIndex > appIndex,
+      "tracker-integrity.js must load before app.js and data-integrity.js must load after app.js"
+    );
+    assert.strictEqual(secondTrackerIntegrity,-1,"tracker-integrity.js must have one canonical script load");
   }
 
   {

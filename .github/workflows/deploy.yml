@@ -3,16 +3,38 @@ name: Deploy TV Tracker
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tv-tracker-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   test-and-deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tvtracker_test
+          POSTGRES_USER: tvtracker_test
+          POSTGRES_PASSWORD: tvtracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tvtracker_test -d tvtracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
@@ -21,42 +43,115 @@ jobs:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
       - run: npm ci --audit=false
-      - run: npm --prefix frontend ci --audit=false
-      - name: Verify production npm dependency security
+      - name: Verify npm build dependency security
+        run: npm audit --audit-level=high
+      - name: Build and verify committed Tailwind CSS
         run: |
-          npm audit --omit=dev --audit-level=high
-          npm --prefix frontend audit --omit=dev --audit-level=high
-      - name: Build and verify committed modern frontend
+          npm run build:css
+          git diff --exit-code -- static/css/tailwind.css
+      - name: Run full regression suite
+        env:
+          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
+        run: python tests/run_all.py
+      - name: Verify current main release target
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          npm run frontend:build
-          git diff --exit-code -- static/modern
-      - run: python tests/run_all.py
+          set -eu
+          git fetch --no-tags origin refs/heads/main
+          test "$(git rev-parse FETCH_HEAD)" = "$DEPLOY_SHA"
+      - name: Prepare remote deployment inputs
+        id: deploy-inputs
+        env:
+          ALWAYSDATA_APP_DIR: ${{ secrets.ALWAYSDATA_APP_DIR }}
+        run: |
+          set -eu
+          case "$ALWAYSDATA_APP_DIR" in
+            /*) ;;
+            *) echo "ALWAYSDATA_APP_DIR must be an absolute path" >&2; exit 1 ;;
+          esac
+          APP_DIR_B64="$(printf '%s' "$ALWAYSDATA_APP_DIR" | base64 -w 0)"
+          echo "::add-mask::$APP_DIR_B64"
+          printf 'app_dir_b64=%s\n' "$APP_DIR_B64" >> "$GITHUB_OUTPUT"
       - name: Deploy over SSH
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        env:
+          APP_DIR_B64: ${{ steps.deploy-inputs.outputs.app_dir_b64 }}
+          DEPLOY_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.ALWAYSDATA_SSH_HOST }}
           username: ${{ secrets.ALWAYSDATA_SSH_USER }}
           key: ${{ secrets.ALWAYSDATA_SSH_KEY }}
+          envs: APP_DIR_B64,DEPLOY_SHA
           script: |
             set -eu
-            cd "${{ secrets.ALWAYSDATA_APP_DIR }}"
-            git pull --ff-only origin main
-            if [ -x ".venv/bin/python" ]; then
-              PYTHON_BIN=".venv/bin/python"
+            case "$DEPLOY_SHA" in
+              *[!0-9a-f]*|'') echo "Invalid deployment SHA" >&2; exit 1 ;;
+            esac
+            test "${#DEPLOY_SHA}" -eq 40
+            APP_DIR="$(printf '%s' "$APP_DIR_B64" | base64 -d)"
+            case "$APP_DIR" in
+              /*) ;;
+              *) echo "Decoded app directory must be absolute" >&2; exit 1 ;;
+            esac
+            test -d "$APP_DIR"
+            git -C "$APP_DIR" rev-parse --is-inside-work-tree >/dev/null
+            test -z "$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"
+
+            LIVE_SHA="$(git -C "$APP_DIR" rev-parse HEAD)"
+            RELEASE_DIR="${APP_DIR}.release-${DEPLOY_SHA}"
+            MARKER_TMP="${APP_DIR}/.tvtracker-release-sha.tmp.$$"
+            ACTIVATED=0
+            cleanup() {
+              cd "$APP_DIR" >/dev/null 2>&1 || true
+              rm -f "$MARKER_TMP"
+              git -C "$APP_DIR" worktree remove --force "$RELEASE_DIR" >/dev/null 2>&1 || true
+              if [ "$ACTIVATED" -ne 1 ] && [ "$(git -C "$APP_DIR" rev-parse HEAD)" != "$LIVE_SHA" ]; then
+                git -C "$APP_DIR" checkout --detach "$LIVE_SHA" >/dev/null 2>&1 || true
+              fi
+            }
+            trap cleanup EXIT
+            trap 'exit 1' INT TERM
+
+            git -C "$APP_DIR" fetch --no-tags origin refs/heads/main
+            test "$(git -C "$APP_DIR" rev-parse FETCH_HEAD)" = "$DEPLOY_SHA"
+            test ! -e "$RELEASE_DIR"
+            git -C "$APP_DIR" worktree add --detach "$RELEASE_DIR" "$DEPLOY_SHA"
+            test "$(git -C "$RELEASE_DIR" rev-parse HEAD)" = "$DEPLOY_SHA"
+
+            if [ -x "$APP_DIR/.venv/bin/python" ]; then
+              PYTHON_BIN="$APP_DIR/.venv/bin/python"
               PIP_SCOPE=""
-            elif [ -x "venv/bin/python" ]; then
-              PYTHON_BIN="venv/bin/python"
+            elif [ -x "$APP_DIR/venv/bin/python" ]; then
+              PYTHON_BIN="$APP_DIR/venv/bin/python"
               PIP_SCOPE=""
-            elif [ -x "env/bin/python" ]; then
-              PYTHON_BIN="env/bin/python"
+            elif [ -x "$APP_DIR/env/bin/python" ]; then
+              PYTHON_BIN="$APP_DIR/env/bin/python"
               PIP_SCOPE=""
             else
               PYTHON_BIN="python"
               PIP_SCOPE="--user"
             fi
-            "$PYTHON_BIN" -m pip install $PIP_SCOPE -r requirements.txt
+
+            cd "$RELEASE_DIR"
+            if [ -n "$PIP_SCOPE" ]; then
+              "$PYTHON_BIN" -m pip install "$PIP_SCOPE" -r requirements.txt
+            else
+              "$PYTHON_BIN" -m pip install -r requirements.txt
+            fi
             "$PYTHON_BIN" -c "import pywebpush"
             "$PYTHON_BIN" -m tvtracker.migrations
+
+            git -C "$APP_DIR" fetch --no-tags origin refs/heads/main
+            test "$(git -C "$APP_DIR" rev-parse FETCH_HEAD)" = "$DEPLOY_SHA"
+            test -z "$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"
+            git -C "$APP_DIR" checkout --detach "$DEPLOY_SHA"
+            test "$(git -C "$APP_DIR" rev-parse HEAD)" = "$DEPLOY_SHA"
+            git -C "$APP_DIR" diff --quiet
+            git -C "$APP_DIR" diff --cached --quiet
+            printf '%s\n' "$DEPLOY_SHA" > "$MARKER_TMP"
+            mv "$MARKER_TMP" "$APP_DIR/.tvtracker-release-sha"
+            ACTIVATED=1
       - name: Restart AlwaysData site
         env:
           ALWAYSDATA_API_KEY: ${{ secrets.ALWAYSDATA_API_KEY }}
@@ -74,9 +169,22 @@ jobs:
       - name: Verify public health endpoint
         env:
           ALWAYSDATA_HEALTH_URL: ${{ secrets.ALWAYSDATA_HEALTH_URL }}
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
           HEALTHZ_SECRET: ${{ secrets.HEALTHZ_SECRET }}
         run: |
-          curl --fail --silent --show-error \
+          set -eu
+          HEALTH_RESPONSE="$(curl --fail --silent --show-error \
             --retry 12 --retry-delay 5 --retry-all-errors \
             -H "X-Healthcheck-Token: ${HEALTHZ_SECRET}" \
-            "${ALWAYSDATA_HEALTH_URL%/}/healthz"
+            "${ALWAYSDATA_HEALTH_URL%/}/healthz")"
+          export HEALTH_RESPONSE EXPECTED_RELEASE_SHA
+          python - <<'PY'
+          import json
+          import os
+
+          payload = json.loads(os.environ["HEALTH_RESPONSE"])
+          if payload.get("ok") is not True:
+              raise SystemExit("deployed application is unhealthy")
+          if payload.get("releaseSha") != os.environ["EXPECTED_RELEASE_SHA"]:
+              raise SystemExit("health endpoint is not serving the deployed SHA")
+          PY

@@ -137,9 +137,9 @@ def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
 def prepare_final_notification_runtime(connection_factory: Callable[[], Any]) -> None:
     """Run final schema DDL once per process, before requests or worker work begin.
 
-    `final_notifications` predates this hardening and defensively calls its schema helper from
-    multiple public helpers. After the startup migration succeeds we replace only that schema
-    helper with a no-op. Business logic is not replaced or load-order patched.
+    The notification owner defensively calls its schema helper from multiple public helpers.
+    After the startup migration succeeds we replace only that schema helper with a no-op.
+    Business logic is not replaced or load-order patched.
     """
     global _PREPARED
     if _PREPARED:

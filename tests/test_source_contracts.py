@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -8,6 +9,30 @@ ROOT = Path(__file__).resolve().parents[1]
 class TMDBOnlyContractTests(unittest.TestCase):
     def read(self, relative: str) -> str:
         return (ROOT / relative).read_text(encoding='utf-8')
+
+    def assert_css_rule_has(self, css: str, selector: str, *declarations: str) -> None:
+        rule_bodies = re.findall(
+            rf'{re.escape(selector)}(?=\s*(?:,|\{{))[^{{}}]*\{{([^{{}}]*)\}}',
+            css,
+        )
+        self.assertTrue(rule_bodies, f'Missing CSS rule for {selector}')
+
+        def normalize(value: str) -> str:
+            compact = re.sub(r'\s+', '', value)
+            return re.sub(
+                r'hsla\(0,0%,100%,([^)]+)\)',
+                r'rgba(255,255,255,\1)',
+                compact,
+            )
+
+        expected = [normalize(declaration).rstrip(';') for declaration in declarations]
+        self.assertTrue(
+            any(
+                all(declaration in normalize(body) for declaration in expected)
+                for body in rule_bodies
+            ),
+            f'{selector} is missing CSS declarations: {declarations}',
+        )
 
     def test_source_section_removed(self):
         ui = self.read('static/js/ui.js')
@@ -377,7 +402,27 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', workflow)
         self.assertIn('actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548', workflow)
         self.assertIn('actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38', workflow)
-        self.assertIn('git pull --ff-only origin main', workflow)
+        self.assertIn('workflow_dispatch:', workflow)
+        self.assertIn('group: tv-tracker-production', workflow)
+        self.assertIn('cancel-in-progress: false', workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
+        self.assertIn('APP_DIR_B64:', workflow)
+        self.assertIn('envs: APP_DIR_B64,DEPLOY_SHA', workflow)
+        self.assertNotIn('cd "${{ secrets.ALWAYSDATA_APP_DIR }}"', workflow)
+        self.assertGreaterEqual(
+            workflow.count('git -C "$APP_DIR" fetch --no-tags origin refs/heads/main'),
+            2,
+        )
+        migration_index = workflow.index('"$PYTHON_BIN" -m tvtracker.migrations')
+        activation_index = workflow.index(
+            'git -C "$APP_DIR" checkout --detach "$DEPLOY_SHA"'
+        )
+        self.assertLess(migration_index, activation_index)
+        self.assertIn('.tvtracker-release-sha', workflow)
+        self.assertIn('payload.get("releaseSha")', workflow)
+        self.assertIn('releaseSha', app_py)
+        self.assertNotIn('git pull', workflow)
         self.assertIn('ALWAYSDATA_HEALTH_URL', workflow)
         self.assertIn('ALWAYSDATA_APP_DIR', workflow)
         self.assertNotIn('broghgf7', workflow)
@@ -446,8 +491,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('genre-media-switch-button', ui)
         self.assertIn('getGenreDetailRoute(genre.id,name,media)', ui)
         self.assertIn('renderShowGenreLinksHTML(genres,"movie")', ui)
-        self.assertIn('discover-genre-tab', source_css)
-        self.assertIn('Phase 5.3 genre media routing', built_css)
+        self.assert_css_rule_has(source_css, '.discover-genre-tab', '@apply tw-inline-flex')
+        self.assert_css_rule_has(built_css, '.discover-genre-tab', 'display:inline-flex')
 
     def test_phase6_movie_page_profile_and_navigation_repairs_exist(self):
         app_py = self.read('app.py')
@@ -623,8 +668,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-sort-menu-option', built_css)
         self.assertIn('closeMovieReleaseSortMenus', app)
         self.assertIn('tvTrackerMovieReleaseSortOutsideBound', app)
-        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', source_css)
-        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', built_css)
+        for css in (source_css, built_css):
+            self.assert_css_rule_has(
+                css,
+                '.movie-release-country-row',
+                'border:0',
+                'border-bottom:1px solid rgba(255,255,255,.12)',
+            )
         self.assertIn('font:inherit;', source_css)
         self.assertIn('font:inherit;', built_css)
         self.assertIn('margin-top:22px;', source_css)
@@ -846,11 +896,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         releases_block = ui[releases_start:ui.index('function sortMovieReleaseRows', releases_start)]
         self.assertIn('renderBrowseChevronIcon("movie-release-sort-chevron-icon")', releases_block)
         self.assertNotIn('>⌄</span>', releases_block)
-        self.assertIn('color:rgba(255,255,255,.68);', source_css)
+        self.assert_css_rule_has(
+            source_css,
+            '.person-bio-more-button',
+            'color:rgba(255,255,255,.68)',
+        )
         self.assertIn('background:#202124;', source_css)
         self.assertIn('background:#323438;', source_css)
         self.assertIn('movie-release-sort-chevron-icon', built_css)
-        self.assertIn('color:rgba(255,255,255,.68)', built_css)
+        self.assert_css_rule_has(
+            built_css,
+            '.person-bio-more-button',
+            'color:rgba(255,255,255,.68)',
+        )
 
     def test_main_list_initial_skeleton_and_hidden_soap_genre_exist(self):
         ui = self.read('static/js/ui.js')
@@ -963,8 +1021,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('def validate_movie_tracking_state(raw_value: Any)', backend)
         self.assertIn('entry["media_type"] = "movie"', backend)
         self.assertIn('movie-watched-', backend)
-        self.assertIn('background:#0b0b0b;', source_css)
-        self.assertIn('background:#0b0b0b;', built_css)
+        self.assert_css_rule_has(source_css, '.watchlist-skeleton-block', 'background:#0b0b0b')
+        self.assert_css_rule_has(built_css, '.watchlist-skeleton-block', 'background:#0b0b0b')
         self.assertIn('font:inherit;', source_css)
         self.assertIn('font:inherit;', built_css)
 

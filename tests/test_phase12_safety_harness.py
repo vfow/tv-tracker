@@ -16,7 +16,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import psycopg
-from flask import redirect, session
+from flask import jsonify, redirect, session
+from tvtracker.migrations import DATABASE_SCHEMA_VERSION
 from werkzeug.serving import make_server
 
 
@@ -29,6 +30,42 @@ os.environ.setdefault("DB_NAME", "phase12-db")
 os.environ.setdefault("DB_USER", "phase12-user")
 os.environ.setdefault("DB_PASSWORD", "phase12-password")
 
+
+def model_fresh_database(cursor):
+    applied = {}
+    schema_meta_exists = False
+    schema_version = None
+    row = None
+    rows = []
+
+    def execute(sql, params=None):
+        nonlocal schema_meta_exists, schema_version, row, rows
+        statement = str(sql)
+        row = None
+        rows = []
+
+        if "CREATE TABLE IF NOT EXISTS tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+        if "INSERT INTO tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+            schema_version = int(params[0]) if params else DATABASE_SCHEMA_VERSION
+        if "INSERT INTO tv_tracker_migrations" in statement:
+            applied[str(params[0])] = str(params[1])
+
+        if "to_regclass('tv_tracker_schema_meta')" in statement:
+            row = ("tv_tracker_schema_meta" if schema_meta_exists else None,)
+        elif "SELECT schema_version FROM tv_tracker_schema_meta" in statement:
+            row = (schema_version,) if schema_version is not None else None
+        elif "SELECT migration_id, checksum FROM tv_tracker_migrations" in statement:
+            rows = sorted(applied.items())
+        elif "SELECT 1 FROM tv_tracker_admin" in statement:
+            row = (1,)
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: row
+    cursor.fetchall.side_effect = lambda: list(rows)
+
+
 # app.py creates its Flask application at import time. Keep the safety harness
 # hermetic: importing the production module must never require a live database.
 with patch("psycopg.connect") as mocked_connect:
@@ -36,7 +73,7 @@ with patch("psycopg.connect") as mocked_connect:
     startup_cursor = MagicMock()
     mocked_connect.return_value.__enter__.return_value = startup_connection
     startup_connection.cursor.return_value.__enter__.return_value = startup_cursor
-    startup_cursor.fetchone.return_value = (1,)
+    model_fresh_database(startup_cursor)
     import app as tracker
 
 
@@ -99,7 +136,7 @@ class BackupAndMigrationSafetyTests(unittest.TestCase):
         connection.__enter__.return_value = connection
         cursor = MagicMock()
         connection.cursor.return_value.__enter__.return_value = cursor
-        cursor.fetchone.return_value = (1,)
+        model_fresh_database(cursor)
 
         with patch.object(tracker, "database_connection", return_value=connection), patch.object(
             tracker, "bootstrap_admin_credentials", return_value=("", "")
@@ -170,38 +207,49 @@ class EntrypointSafetyTests(unittest.TestCase):
         app_module.fetch_tmdb_notification_json = tmdb_fetcher
         app_module.login_required = login_required
 
-        final_module = types.ModuleType("final_notifications")
+        notifications_module = types.ModuleType("tvtracker.notifications.push_and_movies")
 
         def install_final(app, **kwargs):
             calls.append(("final", app, kwargs))
 
-        final_module.install_final_notifications = install_final
+        notifications_module.install_final_notifications = install_final
 
-        final_runtime = types.ModuleType("final_notifications_runtime")
-        final_runtime.prepare_final_notification_runtime = lambda factory: calls.append(
+        notifications_runtime = types.ModuleType("tvtracker.notifications.runtime")
+        notifications_runtime.prepare_final_notification_runtime = lambda factory: calls.append(
             ("runtime", factory)
         )
 
-        polish_runtime = types.ModuleType("notification_polish_runtime")
-        polish_runtime.install_notification_polish = lambda app, module: calls.append(
+        push_validation = types.ModuleType("tvtracker.notifications.push_validation")
+        push_validation.install_notification_polish = lambda app, module: calls.append(
             ("polish", app, module)
         )
 
-        static_runtime = types.ModuleType("static_asset_versioning")
-        static_runtime.install_static_asset_versioning = lambda app: calls.append(("static", app))
+        static_assets = types.ModuleType("tvtracker.infrastructure.static_assets")
+        static_assets.install_static_asset_versioning = lambda app: calls.append(("static", app))
 
         tvtracker_package = types.ModuleType("tvtracker")
         tvtracker_package.__path__ = []
+        notifications_package = types.ModuleType("tvtracker.notifications")
+        notifications_package.__path__ = []
+        notifications_package.push_and_movies = notifications_module
+        infrastructure_package = types.ModuleType("tvtracker.infrastructure")
+        infrastructure_package.__path__ = []
+        infrastructure_package.static_assets = static_assets
         data_integrity = types.ModuleType("tvtracker.data_integrity")
         data_integrity.install_backup_summary_hardening = lambda app: calls.append(("backup", app))
+        tvtracker_package.notifications = notifications_package
+        tvtracker_package.infrastructure = infrastructure_package
+        tvtracker_package.data_integrity = data_integrity
 
         modules = {
             "app": app_module,
-            "final_notifications": final_module,
-            "final_notifications_runtime": final_runtime,
-            "notification_polish_runtime": polish_runtime,
-            "static_asset_versioning": static_runtime,
             "tvtracker": tvtracker_package,
+            "tvtracker.notifications": notifications_package,
+            "tvtracker.notifications.push_and_movies": notifications_module,
+            "tvtracker.notifications.runtime": notifications_runtime,
+            "tvtracker.notifications.push_validation": push_validation,
+            "tvtracker.infrastructure": infrastructure_package,
+            "tvtracker.infrastructure.static_assets": static_assets,
             "tvtracker.data_integrity": data_integrity,
         }
         with patch.dict(sys.modules, modules):
@@ -209,6 +257,11 @@ class EntrypointSafetyTests(unittest.TestCase):
 
         self.assertIs(namespace["application"], app_object)
         self.assertEqual([item[0] for item in calls], ["runtime", "static", "backup", "polish", "final"])
+        self.assertIs(calls[0][1], connection_factory)
+        self.assertIs(calls[1][1], app_object)
+        self.assertIs(calls[2][1], app_object)
+        self.assertIs(calls[3][1], app_object)
+        self.assertIs(calls[3][2], notifications_module)
         final_call = calls[-1]
         self.assertIs(final_call[1], app_object)
         self.assertIs(final_call[2]["login_required"], login_required)
@@ -228,32 +281,70 @@ class EntrypointSafetyTests(unittest.TestCase):
         app_module.fetch_tmdb_notification_json = tmdb_fetcher
         app_module.run_notification_check = notification_check
 
-        runtime_module = types.ModuleType("final_notifications_runtime")
+        runtime_module = types.ModuleType("tvtracker.notifications.runtime")
 
         def run_worker(factory, fetcher, checker):
             calls.append((factory, fetcher, checker))
             return result
 
         runtime_module.run_final_notification_worker_hardened = run_worker
+        tvtracker_package = types.ModuleType("tvtracker")
+        tvtracker_package.__path__ = []
+        notifications_package = types.ModuleType("tvtracker.notifications")
+        notifications_package.__path__ = []
+        notifications_package.runtime = runtime_module
+        tvtracker_package.notifications = notifications_package
 
         stdout = io.StringIO()
         with patch.dict(
             sys.modules,
-            {"app": app_module, "final_notifications_runtime": runtime_module},
+            {
+                "app": app_module,
+                "tvtracker": tvtracker_package,
+                "tvtracker.notifications": notifications_package,
+                "tvtracker.notifications.runtime": runtime_module,
+            },
         ), contextlib.redirect_stdout(stdout):
             runpy.run_path(str(ROOT / "notification_worker.py"), run_name="__main__")
 
         self.assertEqual(calls, [(connection_factory, tmdb_fetcher, notification_check)])
+        self.assertEqual(stdout.getvalue(), json.dumps(result, sort_keys=True) + "\n")
         self.assertEqual(json.loads(stdout.getvalue()), result)
 
 
 class BrowserEndToEndSafetyTests(unittest.TestCase):
     @staticmethod
     def browser_binary() -> str | None:
-        for candidate in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        configured = os.environ.get("CHROME_BIN", "")
+        if configured and Path(configured).is_file():
+            return configured
+
+        for candidate in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "chrome",
+            "chrome.exe",
+            "msedge",
+            "msedge.exe",
+        ):
             binary = shutil.which(candidate)
             if binary:
                 return binary
+
+        if sys.platform == "win32":
+            for root_name in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+                root = os.environ.get(root_name)
+                if not root:
+                    continue
+                for relative_path in (
+                    Path("Google") / "Chrome" / "Application" / "chrome.exe",
+                    Path("Microsoft") / "Edge" / "Application" / "msedge.exe",
+                ):
+                    binary = Path(root) / relative_path
+                    if binary.is_file():
+                        return str(binary)
         return None
 
     def dump_dom(self, browser: str, url: str) -> str:
@@ -276,7 +367,8 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
             completed = subprocess.run(
                 command,
                 cwd=ROOT,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 timeout=20,
                 check=False,
@@ -291,8 +383,12 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
     def test_real_browser_covers_login_redirect_and_authenticated_app_shell(self):
         browser = self.browser_binary()
         if browser is None:
-            if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
-                self.fail("GitHub Actions must provide a Chromium/Chrome binary for Phase 12 browser E2E")
+            in_ci = any(
+                os.environ.get(name, "").lower() in {"1", "true", "yes"}
+                for name in ("CI", "GITHUB_ACTIONS")
+            )
+            if in_ci:
+                self.fail("CI must provide a Chromium/Chrome binary for Phase 12 browser E2E")
             self.skipTest("Chromium/Chrome is not installed in this local test environment")
 
         account = {
@@ -303,9 +399,24 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
         }
         with patch.object(tracker, "ensure_schema", return_value=None), patch.object(
             tracker, "cleanup_stored_tracker_data", return_value=None
-        ), patch.object(tracker, "read_admin_account", return_value=account):
+        ), patch.object(tracker, "read_admin_account", return_value=account), patch.object(
+            tracker, "read_tracker_data", return_value=({"shows": {}, "history": []}, 0)
+        ):
             app = tracker.create_app()
             app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
+            app.view_functions["notifications_api"] = lambda: jsonify(
+                {"ok": True, "notifications": []}
+            )
+            app.view_functions["notification_settings_api"] = lambda: jsonify(
+                {"ok": True, "settings": {}}
+            )
+            app.view_functions["notification_settings_patch_api"] = lambda: jsonify(
+                {"ok": True, "settings": {}}
+            )
+            app.view_functions["get_revision"] = lambda: jsonify(
+                {"ok": True, "revision": 0}
+            )
+            app.view_functions["tmdb_proxy"] = lambda **_kwargs: jsonify({})
 
             @app.get("/__phase12_auth")
             def phase12_auth():
@@ -324,9 +435,8 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 self.assertIn('id="login-panel"', logged_out_dom)
 
                 # The test-only route establishes the same authenticated session fields
-                # used by the real login flow, then follows the real protected Settings
-                # canonical redirect. The browser executes the real frontend bundle; API
-                # failure/fallback behavior is covered independently by the existing suite.
+                # used by the real login flow, then follows the protected Settings route.
+                # The marker proves the real scripts completed API-backed initialization.
                 authenticated_dom = self.dump_dom(browser, f"{base_url}/__phase12_auth")
                 self.assertIn(
                     'meta name="app-route" content="/app/settings/profile"',
@@ -334,10 +444,11 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 )
                 self.assertIn('id="settings-page"', authenticated_dom)
                 self.assertIn(
-                    'data-tv-modern-boundary="ready"',
+                    'data-tv-tracker-app-ready="true"',
                     authenticated_dom,
-                    "Phase 13 Vue compatibility bundle must execute in the real browser",
+                    "the real browser must complete the full startup barrier",
                 )
+                self.assertIn('data-tv-tracker-startup="ready"', authenticated_dom)
             finally:
                 server.shutdown()
                 thread.join(timeout=5)

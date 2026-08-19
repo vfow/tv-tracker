@@ -2,13 +2,19 @@
     "use strict";
 
     const state = global.TVTrackerDuplicateShowIntegrity || {};
-    state.loadCount = Number(state.loadCount || 0) + 1;
-
-    if(!state.cleanupReadyPromise){
-        state.cleanupReadyPromise = new Promise(resolve=>{
-            state.resolveCleanupReady = resolve;
-        });
+    if(state.scriptInstalled === true){
+        global.TVTrackerDuplicateShowIntegrity = state;
+        return;
     }
+
+    const DEFAULT_READINESS_TIMEOUT_MS = 5000;
+    const configuredReadinessTimeoutMs = Number(state.readinessTimeoutMs);
+    const readinessTimeoutMs = (
+        Number.isFinite(configuredReadinessTimeoutMs) &&
+        configuredReadinessTimeoutMs >= 1 &&
+        configuredReadinessTimeoutMs < DEFAULT_READINESS_TIMEOUT_MS
+    ) ? configuredReadinessTimeoutMs : DEFAULT_READINESS_TIMEOUT_MS;
+    state.readinessTimeoutMs = readinessTimeoutMs;
 
     function collectDuplicateProgress(data){
         const groups = new Map();
@@ -80,36 +86,133 @@
         return data;
     }
 
-    state.collectDuplicateProgress = collectDuplicateProgress;
-    state.restoreMergedProgress = restoreMergedProgress;
+    function installDuplicateNormalization(){
+        const cleanupDuplicateShows = global.cleanupDuplicateShows;
+        if(typeof cleanupDuplicateShows !== "function"){
+            return false;
+        }
 
-    if(typeof global.getStoredData === "function" && !state.storedDataWrapped){
-        const originalGetStoredData = global.getStoredData;
-        global.getStoredData = async function(...args){
-            const data = await originalGetStoredData.apply(this,args);
-            await state.cleanupReadyPromise;
-            return data;
-        };
-        state.storedDataWrapped = true;
-    }
+        if(cleanupDuplicateShows.__tvTrackerDuplicateShowIntegrityWrapped){
+            state.cleanupWrapped = true;
+            return true;
+        }
 
-    if(typeof global.cleanupDuplicateShows === "function" && !state.cleanupWrapped){
-        const originalCleanupDuplicateShows = global.cleanupDuplicateShows;
         const wrappedCleanupDuplicateShows = function(data,summary=null){
             const groups = collectDuplicateProgress(data);
-            const result = originalCleanupDuplicateShows.call(this,data,summary);
+            const result = cleanupDuplicateShows.call(this,data,summary);
             restoreMergedProgress(data,groups);
             return result;
         };
         wrappedCleanupDuplicateShows.__tvTrackerDuplicateShowIntegrityWrapped = true;
         global.cleanupDuplicateShows = wrappedCleanupDuplicateShows;
         state.cleanupWrapped = true;
+        return true;
     }
 
-    if(state.loadCount >= 2 && typeof state.resolveCleanupReady === "function"){
-        state.resolveCleanupReady();
-        state.resolveCleanupReady = null;
+    function identitiesAreInstalled(){
+        const integrity = state.dataIntegrity;
+        return !!(
+            integrity &&
+            integrity === global.TVTrackerDataIntegrity &&
+            integrity.installed === true &&
+            global.getEpisodeIdentityKey === integrity.regularEpisodeIdentity &&
+            global.getHistoryEntryEpisodeKey === integrity.historyEpisodeIdentity
+        );
     }
 
+    function resolveReadinessIfPossible(){
+        if(state.readinessFailed || state.storedDataWrapped !== true || !identitiesAreInstalled()){
+            return false;
+        }
+        if(!installDuplicateNormalization()){
+            return false;
+        }
+        if(!global.cleanupDuplicateShows.__tvTrackerDuplicateShowIntegrityWrapped){
+            return false;
+        }
+
+        state.ready = true;
+        if(state.readinessTimeoutId !== null && typeof global.clearTimeout === "function"){
+            global.clearTimeout(state.readinessTimeoutId);
+            state.readinessTimeoutId = null;
+        }
+        if(typeof state.resolveReadiness === "function"){
+            state.resolveReadiness();
+            state.resolveReadiness = null;
+            state.rejectReadiness = null;
+        }
+        return true;
+    }
+
+    function failReadiness(){
+        if(state.ready || state.readinessFailed){
+            return;
+        }
+        const error = new Error(
+            "TV Tracker data integrity startup timed out after " + readinessTimeoutMs +
+            "ms waiting for app cleanup, episode identities, and duplicate cleanup wrapping"
+        );
+        state.readinessFailed = true;
+        state.readinessError = error;
+        state.readinessTimeoutId = null;
+        if(typeof state.rejectReadiness === "function"){
+            state.rejectReadiness(error);
+            state.resolveReadiness = null;
+            state.rejectReadiness = null;
+        }
+    }
+
+    function waitForReadiness(){
+        if(resolveReadinessIfPossible()){
+            return Promise.resolve();
+        }
+        if(state.readinessFailed){
+            return Promise.reject(state.readinessError);
+        }
+        if(state.readinessPromise){
+            return state.readinessPromise;
+        }
+        if(typeof global.setTimeout !== "function"){
+            failReadiness();
+            return Promise.reject(state.readinessError);
+        }
+
+        state.readinessPromise = new Promise((resolve,reject)=>{
+            state.resolveReadiness = resolve;
+            state.rejectReadiness = reject;
+            state.readinessTimeoutId = global.setTimeout(
+                failReadiness,
+                readinessTimeoutMs
+            );
+        });
+        return state.readinessPromise;
+    }
+
+    state.collectDuplicateProgress = collectDuplicateProgress;
+    state.restoreMergedProgress = restoreMergedProgress;
+    state.installDuplicateNormalization = installDuplicateNormalization;
+    state.signalDataIntegrityReady = function(integrity){
+        state.dataIntegrity = integrity;
+        return resolveReadinessIfPossible();
+    };
+    state.waitForReadiness = waitForReadiness;
+    state.ready = false;
+    state.readinessFailed = false;
+    state.readinessError = null;
+    state.readinessTimeoutId = null;
+
+    if(typeof global.getStoredData === "function" && !state.storedDataWrapped){
+        const originalGetStoredData = global.getStoredData;
+        global.getStoredData = async function(...args){
+            const [data] = await Promise.all([
+                originalGetStoredData.apply(this,args),
+                waitForReadiness()
+            ]);
+            return data;
+        };
+        state.storedDataWrapped = true;
+    }
+
+    state.scriptInstalled = true;
     global.TVTrackerDuplicateShowIntegrity = state;
 })(globalThis);

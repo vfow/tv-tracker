@@ -8,11 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 class ReleaseTimingUIContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = (ROOT / "static/js/app.js").read_text()
-        cls.ui = (ROOT / "static/js/ui.js").read_text()
-        cls.release = (ROOT / "static/js/release-timing.js").read_text()
-        cls.routes = (ROOT / "tvtracker/release_timing/routes.py").read_text()
-        cls.resolver = (ROOT / "tvtracker/release_timing/service.py").read_text()
+        cls.app = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
+        cls.ui = (ROOT / "static/js/ui.js").read_text(encoding="utf-8")
+        cls.release = (ROOT / "static/js/release-timing.js").read_text(encoding="utf-8")
+        cls.routes = (ROOT / "tvtracker/release_timing/routes.py").read_text(encoding="utf-8")
+        cls.resolver = (ROOT / "tvtracker/release_timing/service.py").read_text(encoding="utf-8")
 
     def test_provider_has_no_extra_credit_ui(self):
         combined = "\n".join((self.release, self.routes, self.resolver))

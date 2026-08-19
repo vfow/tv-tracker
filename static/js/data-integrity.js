@@ -1,7 +1,15 @@
 (function(global){
     "use strict";
 
+    function signalDuplicateIntegrityReady(integrity){
+        const duplicateIntegrity = global.TVTrackerDuplicateShowIntegrity;
+        if(duplicateIntegrity && typeof duplicateIntegrity.signalDataIntegrityReady === "function"){
+            duplicateIntegrity.signalDataIntegrityReady(integrity);
+        }
+    }
+
     if(global.TVTrackerDataIntegrity && global.TVTrackerDataIntegrity.installed === true){
+        signalDuplicateIntegrityReady(global.TVTrackerDataIntegrity);
         return;
     }
 
@@ -312,7 +320,7 @@
     }
 
     // Install canonical episode identities before startup normalization is released
-    // by duplicate-show-integrity.js. Specials and regular episodes may share source
+    // by tracker-integrity.js. Specials and regular episodes may share source
     // coordinates; they must never dedupe each other.
     global.getEpisodeIdentityKey = regularEpisodeIdentity;
     global.getHistoryEntryEpisodeKey = historyEpisodeIdentity;
@@ -560,4 +568,5 @@
         scanCompatibleWatchedEpisodes,
         suspiciousHistoryReferences
     });
+    signalDuplicateIntegrityReady(global.TVTrackerDataIntegrity);
 })(globalThis);

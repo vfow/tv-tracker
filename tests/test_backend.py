@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 import sys
 import types
+
+from tvtracker.migrations import DATABASE_SCHEMA_VERSION
 
 try:
     import psycopg  # noqa: F401
@@ -34,6 +38,42 @@ os.environ.setdefault("DB_NAME", "test-db")
 os.environ.setdefault("DB_USER", "test-user")
 os.environ.setdefault("DB_PASSWORD", "test-password")
 
+
+def model_fresh_database(cursor):
+    applied = {}
+    schema_meta_exists = False
+    schema_version = None
+    row = None
+    rows = []
+
+    def execute(sql, params=None):
+        nonlocal schema_meta_exists, schema_version, row, rows
+        statement = str(sql)
+        row = None
+        rows = []
+
+        if "CREATE TABLE IF NOT EXISTS tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+        if "INSERT INTO tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+            schema_version = int(params[0]) if params else DATABASE_SCHEMA_VERSION
+        if "INSERT INTO tv_tracker_migrations" in statement:
+            applied[str(params[0])] = str(params[1])
+
+        if "to_regclass('tv_tracker_schema_meta')" in statement:
+            row = ("tv_tracker_schema_meta" if schema_meta_exists else None,)
+        elif "SELECT schema_version FROM tv_tracker_schema_meta" in statement:
+            row = (schema_version,) if schema_version is not None else None
+        elif "SELECT migration_id, checksum FROM tv_tracker_migrations" in statement:
+            rows = sorted(applied.items())
+        elif "SELECT 1 FROM tv_tracker_admin" in statement:
+            row = (1,)
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: row
+    cursor.fetchall.side_effect = lambda: list(rows)
+
+
 # app.py creates its production Flask application at import time. Replace only
 # the startup database connection so the regression suite remains hermetic and
 # never needs a real PostgreSQL service.
@@ -42,7 +82,7 @@ with patch("psycopg.connect") as mocked_connect:
     cursor = MagicMock()
     mocked_connect.return_value.__enter__.return_value = connection
     connection.cursor.return_value.__enter__.return_value = cursor
-    cursor.fetchone.return_value = (1,)
+    model_fresh_database(cursor)
     import app as tracker
 
 
@@ -80,6 +120,29 @@ def mocked_database_connection(*fetchone_values):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_release_sha_loader_is_strict_and_process_value_is_stable(self):
+        captured_release_sha = tracker.RELEASE_SHA
+        with patch.dict(
+            os.environ,
+            {"TVTRACKER_RELEASE_SHA": "A" * 40},
+            clear=True,
+        ):
+            self.assertEqual(tracker.load_release_sha(), "a" * 40)
+            self.assertEqual(tracker.RELEASE_SHA, captured_release_sha)
+
+        with patch.dict(
+            os.environ,
+            {"TVTRACKER_RELEASE_SHA": "not-a-commit"},
+            clear=True,
+        ):
+            self.assertIsNone(tracker.load_release_sha())
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            marker = Path(temporary_directory) / ".tvtracker-release-sha"
+            marker.write_text("B" * 40 + "\n", encoding="ascii")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(tracker.load_release_sha(marker), "b" * 40)
+
     def test_admin_bootstrap_accepts_legacy_env_names(self):
         with patch.dict(
             os.environ,
@@ -160,6 +223,81 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(tracker.BackupValidationError):
             tracker.validate_and_normalize_backup(backup)
 
+    def test_backup_preserves_colliding_regular_and_special_and_dedupes_special(self):
+        regular = {
+            **VALID_HISTORY,
+            "id": "history-regular-1234",
+            "watched_at": "2026-07-24T10:00:00Z",
+        }
+        special = {
+            **VALID_HISTORY,
+            "id": "history-special-old",
+            "special": True,
+            "source_tvdb_episode_id": 900,
+            "episode_title": "Behind & Beyond",
+            "watched_at": "2026-07-24T11:00:00Z",
+        }
+        newer_special_duplicate = {
+            **special,
+            "id": "history-special-new",
+            "season": 9,
+            "episode": 99,
+            "watched_at": "2026-07-24T12:00:00Z",
+        }
+        backup = {
+            "app": tracker.APP_NAME,
+            "backupType": "native-app-backup",
+            "backupVersion": tracker.BACKUP_VERSION,
+            "schemaVersion": tracker.SCHEMA_VERSION,
+            "data": {
+                "shows": {"123": VALID_SHOW},
+                "history": [regular, special, newer_special_duplicate],
+                "profile": {"username": "Owner", "favorite_shows": []},
+            },
+        }
+
+        data, summary = tracker.validate_and_normalize_backup(backup)
+
+        self.assertEqual(
+            {entry["id"] for entry in data["history"]},
+            {"history-regular-1234", "history-special-new"},
+        )
+        self.assertEqual(summary["historyEntries"], 2)
+        self.assertEqual(
+            next(entry for entry in data["history"] if entry.get("special"))[
+                "source_tvdb_episode_id"
+            ],
+            "900",
+        )
+
+    def test_history_identity_keeps_legacy_regular_key_and_rejects_bad_source_id(self):
+        regular = {"tmdb_id": "123", "season": 1, "episode": 2}
+        special = {
+            **regular,
+            "special": True,
+            "source_tvdb_episode_id": "900",
+        }
+        moved_special = {**special, "season": 9, "episode": 99}
+
+        self.assertEqual(tracker.history_episode_identity(regular), ("123", 1, 2))
+        self.assertNotEqual(
+            tracker.history_episode_identity(regular),
+            tracker.history_episode_identity(special),
+        )
+        self.assertEqual(
+            tracker.history_episode_identity(special),
+            tracker.history_episode_identity(moved_special),
+        )
+
+        malformed = {
+            **VALID_HISTORY,
+            "id": "history-special-bad",
+            "special": True,
+            "source_tvdb_episode_id": {"id": 900},
+        }
+        with self.assertRaises(tracker.BackupValidationError):
+            tracker.validate_history_record(malformed, 0, set())
+
     def test_read_tracker_data_uses_consistent_read_snapshot(self):
         connection = MagicMock()
         connection.__enter__.return_value = connection
@@ -181,6 +319,93 @@ class ValidationTests(unittest.TestCase):
             cursor.execute.call_args_list[0].args[0],
             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
         )
+
+
+class SchemaBootstrapTests(unittest.TestCase):
+    @staticmethod
+    def database_double(admin_row):
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        cursor = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        cursor.fetchone.return_value = admin_row
+        return connection, cursor
+
+    def test_schema_runs_migrations_before_separate_admin_bootstrap(self):
+        order = []
+        with patch.object(
+            tracker,
+            "run_migrations",
+            side_effect=lambda *_args: order.append("migrations"),
+        ) as run_migrations, patch.object(
+            tracker,
+            "_ensure_admin_account",
+            side_effect=lambda: order.append("admin"),
+        ) as ensure_admin:
+            tracker.ensure_schema()
+
+        self.assertEqual(order, ["migrations", "admin"])
+        run_migrations.assert_called_once_with(
+            tracker.database_connection,
+            tracker.MIGRATIONS,
+        )
+        ensure_admin.assert_called_once_with()
+
+    def test_admin_bootstrap_inserts_credentials_in_connection_transaction(self):
+        connection, cursor = self.database_double((1,))
+        with patch.object(
+            tracker,
+            "database_connection",
+            return_value=connection,
+        ), patch.object(
+            tracker,
+            "bootstrap_admin_credentials",
+            return_value=("bootstrap-admin", "bootstrap-hash"),
+        ):
+            tracker._ensure_admin_account()
+
+        insert_call, select_call = cursor.execute.call_args_list
+        self.assertIn("INSERT INTO tv_tracker_admin", insert_call.args[0])
+        self.assertEqual(
+            insert_call.args[1],
+            ("bootstrap-admin", "bootstrap-hash"),
+        )
+        self.assertIn("SELECT 1 FROM tv_tracker_admin", select_call.args[0])
+        connection.__exit__.assert_called_once_with(None, None, None)
+
+    def test_admin_bootstrap_preserves_an_existing_account_without_env_credentials(self):
+        connection, cursor = self.database_double((1,))
+        with patch.object(
+            tracker,
+            "database_connection",
+            return_value=connection,
+        ), patch.object(
+            tracker,
+            "bootstrap_admin_credentials",
+            return_value=("", ""),
+        ):
+            tracker._ensure_admin_account()
+
+        cursor.execute.assert_called_once_with(
+            "SELECT 1 FROM tv_tracker_admin WHERE singleton_id = 1"
+        )
+        connection.__exit__.assert_called_once_with(None, None, None)
+
+    def test_admin_bootstrap_failure_exits_the_transaction_with_error(self):
+        connection, _cursor = self.database_double(None)
+        with patch.object(
+            tracker,
+            "database_connection",
+            return_value=connection,
+        ), patch.object(
+            tracker,
+            "bootstrap_admin_credentials",
+            return_value=("", ""),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "admin account is not initialized"):
+                tracker._ensure_admin_account()
+
+        self.assertIs(connection.__exit__.call_args.args[0], RuntimeError)
 
 
 class RouteSecurityTests(unittest.TestCase):
@@ -206,9 +431,14 @@ class RouteSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_healthz_is_public_and_minimal(self):
-        connection, _cursor = mocked_database_connection((1,), (tracker.SCHEMA_VERSION,))
+        connection, _cursor = mocked_database_connection(
+            (1,),
+            (tracker.DATABASE_SCHEMA_VERSION,),
+        )
 
-        with patch.object(tracker, "database_connection", return_value=connection):
+        with patch.object(tracker, "RELEASE_SHA", None), patch.object(
+            tracker, "database_connection", return_value=connection
+        ):
             response = self.client.get("/healthz")
 
         self.assertEqual(response.status_code, 200)
@@ -217,18 +447,41 @@ class RouteSecurityTests(unittest.TestCase):
     def test_healthz_reports_unhealthy_without_details(self):
         connection, _cursor = mocked_database_connection((1,), (0,))
 
-        with patch.object(tracker, "database_connection", return_value=connection):
+        with patch.object(tracker, "RELEASE_SHA", None), patch.object(
+            tracker, "database_connection", return_value=connection
+        ):
             response = self.client.get("/healthz")
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.get_json(), {"ok": False})
+
+    def test_healthz_reports_process_release_sha(self):
+        release_sha = "a" * 40
+        connection, _cursor = mocked_database_connection(
+            (1,),
+            (tracker.DATABASE_SCHEMA_VERSION,),
+        )
+
+        with patch.object(tracker, "RELEASE_SHA", release_sha), patch.object(
+            tracker, "database_connection", return_value=connection
+        ):
+            response = self.client.get("/healthz")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"ok": True, "releaseSha": release_sha},
+        )
 
     def test_api_health_remains_private_and_detailed(self):
         unauthenticated = self.client.get("/api/health")
         self.assertEqual(unauthenticated.status_code, 401)
 
         authenticated_session(self.client)
-        connection, _cursor = mocked_database_connection((1,), (tracker.SCHEMA_VERSION,))
+        connection, _cursor = mocked_database_connection(
+            (1,),
+            (tracker.DATABASE_SCHEMA_VERSION,),
+        )
 
         with patch.object(tracker, "read_admin_account", return_value=self.account), patch.object(
             tracker, "database_connection", return_value=connection
@@ -239,7 +492,31 @@ class RouteSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["app"], tracker.APP_NAME)
         self.assertTrue(payload["database"])
-        self.assertEqual(payload["schemaVersion"], tracker.SCHEMA_VERSION)
+        self.assertEqual(
+            payload["schemaVersion"],
+            tracker.DATABASE_SCHEMA_VERSION,
+        )
+
+    def test_health_uses_database_version_not_native_backup_version(self):
+        database_schema_version = tracker.SCHEMA_VERSION + 1
+        connection, _cursor = mocked_database_connection(
+            (1,),
+            (database_schema_version,),
+        )
+
+        with patch.object(
+            tracker,
+            "DATABASE_SCHEMA_VERSION",
+            database_schema_version,
+        ), patch.object(
+            tracker,
+            "database_connection",
+            return_value=connection,
+        ):
+            status = tracker.tracker_health_status()
+
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["schemaVersion"], database_schema_version)
 
     def test_patch_requires_csrf(self):
         authenticated_session(self.client)
@@ -265,6 +542,96 @@ class RouteSecurityTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["code"], "invalid_sync_record")
+
+    def test_sync_preserves_colliding_regular_when_replacing_duplicate_special(self):
+        authenticated_session(self.client)
+        stored_history = {
+            "history-regular-existing": {
+                **VALID_HISTORY,
+                "id": "history-regular-existing",
+            },
+            "history-special-existing": {
+                **VALID_HISTORY,
+                "id": "history-special-existing",
+                "season": 8,
+                "episode": 88,
+                "special": True,
+                "source_tvdb_episode_id": "900",
+            },
+        }
+        inserted_ids = []
+        deleted_ids = []
+        current_row = None
+        current_rows = []
+
+        def execute(sql, params=None):
+            nonlocal current_row, current_rows
+            statement = " ".join(str(sql).split())
+            current_row = None
+            current_rows = []
+
+            if "SELECT revision FROM tv_tracker_meta" in statement:
+                current_row = (0,)
+            elif "SELECT revision FROM tv_tracker_changes" in statement:
+                current_row = None
+            elif "SELECT revision, operation_id, delta" in statement:
+                current_rows = []
+            elif "SELECT entry_id, data" in statement and "tv_tracker_history" in statement:
+                incoming_id = str(params[0])
+                show_id = str(params[1])
+                current_rows = [
+                    (entry_id, entry)
+                    for entry_id, entry in stored_history.items()
+                    if entry_id != incoming_id
+                    and str(entry.get("tmdb_id") or entry.get("show_id")) == show_id
+                ]
+            elif "INSERT INTO tv_tracker_history" in statement:
+                inserted_ids.append(str(params[0]))
+            elif "DELETE FROM tv_tracker_history" in statement:
+                deleted_ids.extend(str(item) for item in params[0])
+
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        cursor = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        cursor.execute.side_effect = execute
+        cursor.fetchone.side_effect = lambda: current_row
+        cursor.fetchall.side_effect = lambda: list(current_rows)
+
+        incoming_special = {
+            **VALID_HISTORY,
+            "id": "history-special-incoming",
+            "special": True,
+            "source_tvdb_episode_id": 900,
+            "watched_at": "2026-07-24T13:00:00Z",
+        }
+        payload = {
+            "baseRevision": 0,
+            "operationId": "operation-special-1234",
+            "historyUpsert": {incoming_special["id"]: incoming_special},
+        }
+
+        with patch.object(
+            tracker, "read_admin_account", return_value=self.account
+        ), patch.object(tracker, "database_connection", return_value=connection):
+            response = self.client.patch(
+                "/api/state",
+                json=payload,
+                headers={"X-CSRF-Token": "csrf-test-token"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(inserted_ids, ["history-special-incoming"])
+        self.assertEqual(deleted_ids, ["history-special-existing"])
+        resulting_ids = set(stored_history) - set(deleted_ids) | set(inserted_ids)
+        self.assertEqual(
+            resulting_ids,
+            {"history-regular-existing", "history-special-incoming"},
+        )
+        self.assertEqual(
+            response.get_json()["appliedDelta"]["historyDelete"],
+            ["history-special-existing"],
+        )
 
     def test_malformed_json_patch_returns_json_error(self):
         authenticated_session(self.client)

@@ -1,13 +1,28 @@
 from pathlib import Path
+import sys
 
-app = Path("app.py").read_text()
-backend = Path("tvtracker/notifications/backend.py").read_text()
-engine = Path("tvtracker/notifications/engine.py").read_text()
-frontend = Path("static/js/notifications-runtime.js").read_text()
-router = Path("static/js/app-router.js").read_text()
-ui = Path("static/js/ui.js").read_text()
-template = Path("templates/index.html").read_text()
-css = Path("static/css/tailwind-input.css").read_text()
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tvtracker.migrations import MIGRATIONS  # noqa: E402
+
+
+def read_source(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+app = read_source("app.py")
+backend = read_source("tvtracker/notifications/backend.py")
+engine = read_source("tvtracker/notifications/engine.py")
+frontend = read_source("static/js/notifications-runtime.js")
+upcoming_owner = read_source("static/js/upcoming-schedule-repair.js")
+router = read_source("static/js/app-router.js")
+ui = read_source("static/js/ui.js")
+template = read_source("templates/index.html")
+css = read_source("static/css/tailwind-input.css")
+migration_sql = "\n".join(migration.sql for migration in MIGRATIONS)
 
 for table in (
     "tv_tracker_notifications",
@@ -15,7 +30,9 @@ for table in (
     "tv_tracker_notification_baseline",
     "tv_tracker_notification_events",
 ):
-    assert f"CREATE TABLE IF NOT EXISTS {table}" in app
+    assert f"CREATE TABLE IF NOT EXISTS {table}" in migration_sql
+
+assert "tv_tracker_tvmaze_" not in migration_sql
 
 for route in (
     "/api/notifications/status",
@@ -31,11 +48,28 @@ for route in (
 assert "/api/state" not in frontend
 assert "/api/state" not in backend
 assert "saveData(" not in frontend
+for tracker_dependency in (
+    "DATA",
+    "saveData",
+    "refreshShowForSchedule",
+    "getUpcomingScheduleItems",
+    "refreshUpcomingDataInBackground",
+    "renderUpcoming",
+):
+    assert tracker_dependency not in frontend
+    assert tracker_dependency in upcoming_owner
+notification_runtime_export = frontend.split(
+    "global.TVTrackerNotificationsRuntime = Object.freeze({", 1
+)[1]
+assert "repair" not in notification_runtime_export.lower()
 assert "tv_tracker_state" not in backend
 assert "tvmaze" not in (backend + engine + frontend).lower()
 assert "filename='assets/icons/notification-bell.svg'" in template
 assert "filename='assets/icons/notification-settings.svg'" in template
 assert "filename='js/notifications-runtime.js'" in template
+assert template.count("filename='js/upcoming-schedule-repair.js'") == 1
+assert template.index("filename='js/release-timing.js'") < template.index("filename='js/app.js'")
+assert template.index("filename='js/app.js'") < template.index("filename='js/upcoming-schedule-repair.js'")
 assert "filename='js/notifications.js'" not in template
 assert 'id="notifications-page"' in template
 assert 'id="notification-settings-page"' not in template
