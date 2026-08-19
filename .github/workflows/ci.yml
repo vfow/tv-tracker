@@ -5,11 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Temporary continuation bootstrap for the explicitly authorized Phase 14–23
-# cleanup batch. The connector restores the normal read-only CI after the
-# one-shot continuation has pushed its phase commits.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -17,8 +14,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -29,17 +24,15 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: npm ci --audit=false
       - run: npm --prefix frontend ci --audit=false
-      - name: Continue authorized Phase 14–23 cleanup
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: python tools/phase14_23_batch_v2.py
       - name: Verify production npm dependency security
         run: |
           npm audit --omit=dev --audit-level=high
           npm --prefix frontend audit --omit=dev --audit-level=high
-      - name: Build and verify committed modern frontend
+      - name: Build and verify committed assets
         run: |
           npm run frontend:build
-          git diff --exit-code -- static/modern
+          npm run build:css
+          git diff --exit-code -- static/modern static/css/tailwind.css
       - name: Run full regression suite
         run: python tests/run_all.py
       - name: Check repository diff hygiene
