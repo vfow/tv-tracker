@@ -3,7 +3,7 @@ const path = require("path");
 const assert = require("assert");
 
 const ROOT = path.resolve(__dirname,"..");
-const source = fs.readFileSync(path.join(ROOT,"static/js/notifications-final.js"),"utf8");
+const source = fs.readFileSync(path.join(ROOT,"static/js/notifications-runtime.js"),"utf8");
 const backend = fs.readFileSync(path.join(ROOT,"tvtracker/notifications/push_and_movies.py"),"utf8");
 const runtime = fs.readFileSync(path.join(ROOT,"tvtracker/notifications/runtime.py"),"utf8");
 const worker = fs.readFileSync(path.join(ROOT,"notification_worker.py"),"utf8");

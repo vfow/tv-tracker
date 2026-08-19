@@ -207,17 +207,3 @@ def install_notification_polish(app: Any, final_notifications_module: Any) -> No
                 return _replace_json_body(response, browser_push_enable_error())
 
         return response
-
-    @app.after_request
-    def inject_notification_polish_asset(response: Response) -> Response:
-        if not request.path.startswith("/app") or response.mimetype != "text/html" or response.direct_passthrough:
-            return response
-        body = response.get_data(as_text=True)
-        if "notifications-polish.js" not in body:
-            body = body.replace(
-                "</body>",
-                '<script src="/static/js/notifications-polish.js"></script>\n</body>',
-            )
-            response.set_data(body)
-            response.headers["Content-Length"] = str(len(response.get_data()))
-        return response

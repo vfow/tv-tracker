@@ -1331,23 +1331,6 @@ def install_final_notifications(
             return response
         app.view_functions["update_admin_account"] = account_update_with_push_cleanup
 
-    @app.after_request
-    def inject_final_notification_assets(response: Response) -> Response:
-        if not request.path.startswith("/app") or response.mimetype != "text/html" or response.direct_passthrough:
-            return response
-        body = response.get_data(as_text=True)
-        if "notifications-final.js" not in body:
-            body = body.replace(
-                "</head>",
-                '<link rel="manifest" href="/manifest.webmanifest">\n<meta name="theme-color" content="#000000">\n<link rel="apple-touch-icon" href="/static/assets/icons/app-icon-192.png">\n</head>',
-            )
-            body = body.replace(
-                "</body>",
-                '<script src="/static/js/notifications-final.js"></script>\n</body>',
-            )
-            response.set_data(body)
-            response.headers["Content-Length"] = str(len(response.get_data()))
-        return response
 
     app.extensions["final_notifications"] = {
         "installed": True,

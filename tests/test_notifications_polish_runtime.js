@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'notifications-polish.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'notifications-runtime.js'), 'utf8');
 
 function createSandbox(){
     const document = {
@@ -64,14 +64,14 @@ function createSandbox(){
         clearTimeout:window.clearTimeout
     };
     vm.createContext(sandbox);
-    vm.runInContext(source,sandbox,{filename:'notifications-polish.js'});
+    vm.runInContext(source,sandbox,{filename:'notifications-runtime.js'});
     return {window,routed};
 }
 
 (async()=>{
     {
         const {window,routed} = createSandbox();
-        window.TVTrackerNotificationPolish.openDedicatedSettingsPage({fromRoute:false});
+        window.TVTrackerNotificationsRuntime.openDedicatedSettingsPage({fromRoute:false});
         assert.strictEqual(routed.length,1,'settings gear should route once');
         assert.strictEqual(routed[0].route,'/app/settings/notifications','settings gear should use canonical Account Settings route');
         assert.strictEqual(routed[0].replace,false);
@@ -80,15 +80,15 @@ function createSandbox(){
     {
         const {window} = createSandbox();
         assert.strictEqual(
-            window.TVTrackerNotificationPolish.pushErrorMessage(new Error('VAPID public/private keys do not match')),
+            window.TVTrackerNotificationsRuntime.pushErrorMessage(new Error('VAPID public/private keys do not match')),
             'Push notifications are temporarily unavailable.'
         );
         assert.strictEqual(
-            window.TVTrackerNotificationPolish.pushErrorMessage({code:'PUSH_PERMISSION',message:'permission denied'}),
+            window.TVTrackerNotificationsRuntime.pushErrorMessage({code:'PUSH_PERMISSION',message:'permission denied'}),
             'Push permission wasn’t granted.'
         );
         assert.strictEqual(
-            window.TVTrackerNotificationPolish.pushErrorMessage(new Error('unexpected browser failure')),
+            window.TVTrackerNotificationsRuntime.pushErrorMessage(new Error('unexpected browser failure')),
             'TV Tracker couldn’t enable Push on this device. Try again later.'
         );
     }
@@ -119,7 +119,7 @@ function createSandbox(){
             rerendered += 1;
         };
 
-        const repaired = await window.TVTrackerNotificationPolish.repairMissingWatchingSchedules();
+        const repaired = await window.TVTrackerNotificationsRuntime.repairMissingWatchingSchedules();
         assert.strictEqual(repaired,true);
         assert.strictEqual(forcedRefreshes,1);
         assert.strictEqual(saved,1);
@@ -143,7 +143,7 @@ function createSandbox(){
         window.getUpcomingScheduleItems = ()=>[];
         window.refreshShowForSchedule = async()=>{ forcedRefreshes += 1; };
 
-        const repaired = await window.TVTrackerNotificationPolish.repairMissingWatchingSchedules();
+        const repaired = await window.TVTrackerNotificationsRuntime.repairMissingWatchingSchedules();
         assert.strictEqual(repaired,false,'caught-up ended shows should not be force-refreshed');
         assert.strictEqual(forcedRefreshes,0);
     }

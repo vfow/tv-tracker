@@ -4,7 +4,7 @@ import threading
 from datetime import datetime
 from typing import Any, Callable
 
-import final_notifications as final
+from . import push_and_movies as final
 
 
 _PREPARE_LOCK = threading.Lock()

@@ -17,6 +17,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-v2.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/icons/app-icon-192.png') }}">
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
@@ -189,7 +192,7 @@
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/feedback.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
-<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications-runtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/release-timing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/adult-filter.js') }}"></script>

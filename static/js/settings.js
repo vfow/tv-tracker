@@ -151,7 +151,7 @@
     function bindNotifications(attempt=0){
         const list = global.document.getElementById("settings-v2-notification-list");
         if(!list) return;
-        const api = global.TVTrackerNotificationPolish;
+        const api = global.TVTrackerNotificationsRuntime;
         if(api && typeof api.renderNotificationControls === "function"){
             api.renderNotificationControls(list);
             return;
