@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-const source = fs.readFileSync('static/js/show-removal-integrity.js','utf8');
+const source = fs.readFileSync('static/js/tracker-removal.js','utf8');
 
 async function runCase(favorite){
   const saves = [];

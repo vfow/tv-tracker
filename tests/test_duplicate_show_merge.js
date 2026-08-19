@@ -2,11 +2,11 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-const integritySource = fs.readFileSync('static/js/duplicate-show-integrity.js','utf8');
+const integritySource = fs.readFileSync('static/js/tracker-integrity.js','utf8');
 const appSource = fs.readFileSync('static/js/app.js','utf8');
 const templateSource = fs.readFileSync('templates/index.html','utf8');
 
-const integrityNeedle = "filename='js/duplicate-show-integrity.js'";
+const integrityNeedle = "filename='js/tracker-integrity.js'";
 const appNeedle = "filename='js/app.js'";
 const firstIntegrity = templateSource.indexOf(integrityNeedle);
 const appIndex = templateSource.indexOf(appNeedle);

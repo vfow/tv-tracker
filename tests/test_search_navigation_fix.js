@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const source = fs.readFileSync(path.join(__dirname,"..","static","js","search-navigation-fix.js"),"utf8");
+const source = fs.readFileSync(path.join(__dirname,"..","static","js","search-navigation.js"),"utf8");
 
 function load(overrides={}){
     const calls = [];

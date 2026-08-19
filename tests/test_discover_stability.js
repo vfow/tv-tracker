@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const source = fs.readFileSync(path.join(__dirname,"..","static","js","discover-stability.js"),"utf8");
+const source = fs.readFileSync(path.join(__dirname,"..","static","js","discover-runtime.js"),"utf8");
 
 function deferred(){
     let resolve;
