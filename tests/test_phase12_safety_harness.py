@@ -333,6 +333,11 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                     authenticated_dom,
                 )
                 self.assertIn('id="settings-page"', authenticated_dom)
+                self.assertIn(
+                    'data-tv-modern-boundary="ready"',
+                    authenticated_dom,
+                    "Phase 13 Vue compatibility bundle must execute in the real browser",
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=5)

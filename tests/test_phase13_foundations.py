@@ -104,6 +104,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
         self.assertEqual(frontend_package["dependencies"]["vue"], "3.5.40")
         self.assertIn("vite", frontend_package["devDependencies"])
         self.assertIn("typescript", frontend_package["devDependencies"])
+        self.assertTrue((ROOT / "frontend/package-lock.json").is_file())
 
         template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
         self.assertIn("data-tv-modern-root", template)
@@ -113,6 +114,13 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
         feedback = (ROOT / "frontend/src/core/feedback.ts").read_text(encoding="utf-8")
         self.assertIn("window.TVTrackerFeedback", feedback)
         self.assertNotIn("createElement", feedback)
+
+        bundle = (ROOT / "static/modern/tvtracker-modern.js").read_text(encoding="utf-8")
+        self.assertNotIn(
+            "process.env.NODE_ENV",
+            bundle,
+            "Committed browser bundle must not depend on a Node process global",
+        )
 
     def test_ci_and_deploy_enforce_generated_frontend_and_migrations(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

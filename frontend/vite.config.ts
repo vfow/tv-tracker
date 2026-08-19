@@ -4,6 +4,9 @@ import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production")
+  },
   build: {
     outDir: fileURLToPath(new URL("../static/modern", import.meta.url)),
     emptyOutDir: true,
