@@ -265,8 +265,10 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 "--disable-gpu",
                 "--disable-dev-shm-usage",
                 "--disable-background-networking",
+                "--no-proxy-server",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--virtual-time-budget=2000",
                 f"--user-data-dir={profile_dir}",
                 "--dump-dom",
             ]
@@ -278,7 +280,7 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 cwd=ROOT,
                 text=True,
                 capture_output=True,
-                timeout=30,
+                timeout=20,
                 check=False,
             )
         self.assertEqual(
@@ -319,14 +321,18 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
             thread.start()
             base_url = f"http://127.0.0.1:{server.server_port}"
             try:
-                logged_out_dom = self.dump_dom(browser, f"{base_url}/app/settings")
+                logged_out_dom = self.dump_dom(
+                    browser,
+                    f"{base_url}/app/settings",
+                    javascript=False,
+                )
                 self.assertIn("TV Tracker — Access", logged_out_dom)
                 self.assertIn('id="login-panel"', logged_out_dom)
 
                 # The test-only route establishes the same authenticated session fields
                 # used by the real login flow, then redirects through the real protected
-                # Settings route. JavaScript is disabled for this navigation so this
-                # safety test stays hermetic and does not contact the database/providers.
+                # Settings route. JavaScript is disabled for these browser navigations so
+                # the safety test stays hermetic and does not contact the database/providers.
                 authenticated_dom = self.dump_dom(
                     browser,
                     f"{base_url}/__phase12_auth",
