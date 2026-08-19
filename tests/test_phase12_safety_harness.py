@@ -6,12 +6,18 @@ import json
 import os
 from pathlib import Path
 import runpy
+import shutil
+import subprocess
 import sys
+import tempfile
+import threading
 import types
 import unittest
 from unittest.mock import MagicMock, patch
 
 import psycopg
+from flask import redirect, session
+from werkzeug.serving import make_server
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -239,6 +245,98 @@ class EntrypointSafetyTests(unittest.TestCase):
 
         self.assertEqual(calls, [(connection_factory, tmdb_fetcher, notification_check)])
         self.assertEqual(json.loads(stdout.getvalue()), result)
+
+
+class BrowserEndToEndSafetyTests(unittest.TestCase):
+    @staticmethod
+    def browser_binary() -> str | None:
+        for candidate in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+            binary = shutil.which(candidate)
+            if binary:
+                return binary
+        return None
+
+    def dump_dom(self, browser: str, url: str, *, javascript: bool = True) -> str:
+        with tempfile.TemporaryDirectory(prefix="tv-tracker-phase12-browser-") as profile_dir:
+            command = [
+                browser,
+                "--headless=new",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-background-networking",
+                "--no-first-run",
+                "--no-default-browser-check",
+                f"--user-data-dir={profile_dir}",
+                "--dump-dom",
+            ]
+            if not javascript:
+                command.append("--disable-javascript")
+            command.append(url)
+            completed = subprocess.run(
+                command,
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=f"Headless browser failed for {url}: {completed.stderr[-2000:]}",
+        )
+        return completed.stdout
+
+    def test_real_browser_covers_login_redirect_and_authenticated_app_shell(self):
+        browser = self.browser_binary()
+        if browser is None:
+            if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
+                self.fail("GitHub Actions must provide a Chromium/Chrome binary for Phase 12 browser E2E")
+            self.skipTest("Chromium/Chrome is not installed in this local test environment")
+
+        account = {
+            "username": "phase12-admin",
+            "password_hash": "unused",
+            "session_version": 1,
+            "updated_at": None,
+        }
+        with patch.object(tracker, "ensure_schema", return_value=None), patch.object(
+            tracker, "cleanup_stored_tracker_data", return_value=None
+        ), patch.object(tracker, "read_admin_account", return_value=account):
+            app = tracker.create_app()
+            app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False)
+
+            @app.get("/__phase12_auth")
+            def phase12_auth():
+                session["authenticated"] = True
+                session["session_version"] = 1
+                session["csrf_token"] = "phase12-browser-csrf"
+                return redirect("/app/settings")
+
+            server = make_server("127.0.0.1", 0, app)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            try:
+                logged_out_dom = self.dump_dom(browser, f"{base_url}/app/settings")
+                self.assertIn("TV Tracker — Access", logged_out_dom)
+                self.assertIn('id="login-panel"', logged_out_dom)
+
+                # The test-only route establishes the same authenticated session fields
+                # used by the real login flow, then redirects through the real protected
+                # Settings route. JavaScript is disabled for this navigation so this
+                # safety test stays hermetic and does not contact the database/providers.
+                authenticated_dom = self.dump_dom(
+                    browser,
+                    f"{base_url}/__phase12_auth",
+                    javascript=False,
+                )
+                self.assertIn('meta name="app-route" content="/app/settings"', authenticated_dom)
+                self.assertIn('id="settings-page"', authenticated_dom)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
 
 
 if __name__ == "__main__":
