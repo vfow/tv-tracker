@@ -273,7 +273,12 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 "--dump-dom",
             ]
             if not javascript:
-                command.append("--disable-javascript")
+                command.extend(
+                    [
+                        "--disable-javascript",
+                        "--blink-settings=scriptEnabled=false",
+                    ]
+                )
             command.append(url)
             completed = subprocess.run(
                 command,
@@ -330,15 +335,18 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 self.assertIn('id="login-panel"', logged_out_dom)
 
                 # The test-only route establishes the same authenticated session fields
-                # used by the real login flow, then redirects through the real protected
-                # Settings route. JavaScript is disabled for these browser navigations so
-                # the safety test stays hermetic and does not contact the database/providers.
+                # used by the real login flow, then follows the real protected Settings
+                # canonical redirect. JavaScript is disabled for these navigations so the
+                # safety test remains independent from database/provider availability.
                 authenticated_dom = self.dump_dom(
                     browser,
                     f"{base_url}/__phase12_auth",
                     javascript=False,
                 )
-                self.assertIn('meta name="app-route" content="/app/settings"', authenticated_dom)
+                self.assertIn(
+                    'meta name="app-route" content="/app/settings/profile"',
+                    authenticated_dom,
+                )
                 self.assertIn('id="settings-page"', authenticated_dom)
             finally:
                 server.shutdown()
