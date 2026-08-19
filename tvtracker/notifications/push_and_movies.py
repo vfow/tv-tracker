@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import threading
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -13,10 +14,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import Response, jsonify, request, session
 from psycopg.types.json import Jsonb
 
-from tvtracker.notifications.backend import (
-    read_notification_settings,
-    serialize_notification_settings,
-    update_notification_settings,
+from tvtracker.notifications.backend import list_notifications, read_notification_settings
+from tvtracker.notifications.push_validation import (
+    missing_configuration_code,
+    validate_vapid_configuration,
+    validation_code,
 )
 from tvtracker.migrations import MIGRATIONS, run_migrations
 
@@ -24,10 +26,6 @@ LOGGER = logging.getLogger(__name__)
 MEANINGFUL_MOVIE_RELEASE_TYPES = {2, 3, 4, 6}
 DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
 CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,160}$")
-FINAL_SETTING_MAP = {
-    "movieReleased": "movie_released",
-    "movieReleaseUpdates": "movie_release_updates",
-}
 MAX_PUSH_ATTEMPTS = 5
 MAX_PUSHES_PER_BATCH = 3
 PUSH_REQUEST_TIMEOUT_SECONDS = 10
@@ -35,6 +33,8 @@ PUSH_ACTIVE_WINDOW_SECONDS = 75
 PUSH_DELIVERY_RETENTION_DAYS = 30
 PUSH_PRESENCE_RETENTION_DAYS = 1
 PUSH_DEVICE_COOKIE = "tv_tracker_push_device"
+_SCHEMA_PREPARE_LOCK = threading.Lock()
+_SCHEMA_PREPARED = False
 
 
 def _utc_now(value: datetime | None = None) -> datetime:
@@ -45,80 +45,18 @@ def _utc_now(value: datetime | None = None) -> datetime:
 
 
 def ensure_final_schema(connection_factory: Callable[[], Any]) -> None:
-    run_migrations(connection_factory, MIGRATIONS)
+    global _SCHEMA_PREPARED
+    if _SCHEMA_PREPARED:
+        return
+    with _SCHEMA_PREPARE_LOCK:
+        if _SCHEMA_PREPARED:
+            return
+        run_migrations(connection_factory, MIGRATIONS)
+        _SCHEMA_PREPARED = True
 
 
-def _read_final_settings_cursor(cursor: Any) -> dict[str, bool]:
-    cursor.execute(
-        "SELECT movie_released, movie_release_updates "
-        "FROM tv_tracker_final_notification_settings WHERE singleton_id = 1"
-    )
-    row = cursor.fetchone()
-    return {
-        "movie_released": bool(row[0]) if row else True,
-        "movie_release_updates": bool(row[1]) if row else True,
-    }
-
-
-def read_final_settings(connection_factory: Callable[[], Any]) -> dict[str, bool]:
-    ensure_final_schema(connection_factory)
-    with connection_factory() as connection:
-        with connection.cursor() as cursor:
-            return _read_final_settings_cursor(cursor)
-
-
-def serialize_combined_settings(connection_factory: Callable[[], Any]) -> dict[str, Any]:
-    base = serialize_notification_settings(read_notification_settings(connection_factory))
-    final = read_final_settings(connection_factory)
-    base.update({
-        "movieReleased": final["movie_released"],
-        "movieReleaseUpdates": final["movie_release_updates"],
-    })
-    return base
-
-
-def update_combined_settings(
-    connection_factory: Callable[[], Any],
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise ValueError("Invalid notification settings")
-
-    final_updates: dict[str, bool] = {}
-    for api_key, db_key in FINAL_SETTING_MAP.items():
-        if api_key not in payload:
-            continue
-        if not isinstance(payload[api_key], bool):
-            raise ValueError(f"{api_key} must be true or false")
-        final_updates[db_key] = payload[api_key]
-
-    base_payload = {key: value for key, value in payload.items() if key not in FINAL_SETTING_MAP}
-    if base_payload:
-        update_notification_settings(connection_factory, base_payload)
-
-    if final_updates:
-        ensure_final_schema(connection_factory)
-        assignments = [f"{column} = %s" for column in final_updates]
-        with connection_factory() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE tv_tracker_final_notification_settings SET "
-                    + ", ".join(assignments)
-                    + ", updated_at = NOW() WHERE singleton_id = 1",
-                    list(final_updates.values()),
-                )
-            connection.commit()
-
-    if payload.get("enabled") is False:
-        with connection_factory() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE tv_tracker_push_deliveries SET status = 'suppressed', updated_at = NOW() "
-                    "WHERE status IN ('pending', 'retry', 'sending')"
-                )
-            connection.commit()
-
-    return serialize_combined_settings(connection_factory)
+def schema_is_prepared() -> bool:
+    return _SCHEMA_PREPARED
 
 
 def _read_tracker_movies_and_region(
@@ -310,10 +248,13 @@ def run_movie_notification_check(
     current = _utc_now(now)
     movies, region = _read_tracker_movies_and_region(connection_factory)
     if not region:
+        with connection_factory() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM tv_tracker_movie_notification_baseline")
+            connection.commit()
         return {"ok": True, "status": "needs_region", "checked": 0, "created": 0, "fetchFailures": 0}
 
-    base_settings = read_notification_settings(connection_factory)
-    final_settings = read_final_settings(connection_factory)
+    settings = read_notification_settings(connection_factory)
     baselines = _read_movie_baselines(connection_factory)
     snapshots: dict[str, dict[str, Any]] = {}
     fetch_failures = 0
@@ -329,7 +270,7 @@ def run_movie_notification_check(
             fetch_failures += 1
 
     created = 0
-    timezone_name = str(base_settings.get("timezone") or "").strip()
+    timezone_name = str(settings.get("timezone") or "").strip()
     try:
         local_now = current.astimezone(ZoneInfo(timezone_name)) if timezone_name else current
     except ZoneInfoNotFoundError:
@@ -369,7 +310,7 @@ def run_movie_notification_check(
 
                 if release_due:
                     claimed = _claim_event(cursor, release_key, movie_id, "movie_released")
-                    if claimed and bool(base_settings.get("enabled", True)) and final_settings["movie_released"]:
+                    if claimed and bool(settings.get("enabled", True)) and settings["movie_released"]:
                         _write_movie_notification(
                             cursor,
                             movie_id=movie_id,
@@ -392,7 +333,7 @@ def run_movie_notification_check(
                     kind, message = _movie_update_message(title, previous_date, current_date)
                     event_key = f"movie:{movie_id}:{region}:{kind}:{previous_date or 'none'}:{current_date or 'none'}"
                     claimed = _claim_event(cursor, event_key, movie_id, kind)
-                    if claimed and bool(base_settings.get("enabled", True)) and final_settings["movie_release_updates"]:
+                    if claimed and bool(settings.get("enabled", True)) and settings["movie_release_updates"]:
                         _write_movie_notification(
                             cursor,
                             movie_id=movie_id,
@@ -444,51 +385,6 @@ def run_movie_notification_check(
     }
 
 
-def list_notifications_final(connection_factory: Callable[[], Any], limit: int = 200) -> list[dict[str, Any]]:
-    ensure_final_schema(connection_factory)
-    safe_limit = min(200, max(1, int(limit or 200)))
-    with connection_factory() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT notification_id, notification_type, show_id, title, message,
-                       image_path, event_date, is_read, payload, created_at, updated_at, media_type, event_key
-                FROM tv_tracker_notifications
-                ORDER BY created_at DESC, notification_id DESC
-                LIMIT %s
-                """,
-                (safe_limit,),
-            )
-            rows = cursor.fetchall()
-
-    result: list[dict[str, Any]] = []
-    for row in rows:
-        payload = row[8] if isinstance(row[8], dict) else {}
-        media_id = str(row[2] or "")
-        media_type = "movie" if str(row[11] or "tv") == "movie" or payload.get("mediaType") == "movie" else "tv"
-        route = str(payload.get("route") or "").strip()
-        if not route:
-            route = f"/app/movie/{media_id}" if media_type == "movie" else (f"/app/show/{media_id}" if media_id else "/app/upcoming")
-        result.append({
-            "id": int(row[0]),
-            "type": str(row[1] or ""),
-            "showId": media_id if media_type == "tv" else "",
-            "movieId": media_id if media_type == "movie" else "",
-            "mediaType": media_type,
-            "title": str(row[3] or ""),
-            "message": str(row[4] or ""),
-            "imagePath": str(row[5] or ""),
-            "eventDate": row[6].isoformat() if row[6] else "",
-            "read": bool(row[7]),
-            "payload": payload,
-            "route": route,
-            "createdAt": row[9].isoformat() if row[9] else "",
-            "updatedAt": row[10].isoformat() if row[10] else "",
-            "eventKey": str(row[12] or ""),
-        })
-    return result
-
-
 def _notification_versions(connection_factory: Callable[[], Any]) -> dict[int, str]:
     ensure_final_schema(connection_factory)
     with connection_factory() as connection:
@@ -502,7 +398,7 @@ def _changed_notifications(
     connection_factory: Callable[[], Any],
     before: dict[int, str],
 ) -> list[dict[str, Any]]:
-    items = list_notifications_final(connection_factory, 200)
+    items = list_notifications(connection_factory, 200)
     changed = [
         item for item in items
         if int(item["id"]) not in before or before[int(item["id"])] != str(item.get("eventKey") or "")
@@ -524,14 +420,42 @@ def push_config() -> dict[str, Any]:
     subject = str(os.environ.get("VAPID_SUBJECT") or "").strip()
     dependency_available = _pywebpush_available()
     keys_configured = bool(public_key and private_key and subject)
-    return {
+    config = {
         "configured": bool(keys_configured and dependency_available),
         "keysConfigured": keys_configured,
         "dependencyAvailable": dependency_available,
         "publicKey": public_key,
         "privateKey": private_key,
         "subject": subject,
+        # Diagnostics remain available to server logging/admin inspection only.
+        # They are deliberately stripped from the browser Push configuration API.
+        "validationError": "",
+        "validationCode": "",
     }
+
+    if not config["keysConfigured"]:
+        config["configured"] = False
+        config["validationCode"] = missing_configuration_code(config)
+        return config
+
+    valid, error = validate_vapid_configuration(
+        config["publicKey"],
+        config["privateKey"],
+        config["subject"],
+    )
+    config["validationError"] = error
+    config["validationCode"] = validation_code(error)
+    config["configured"] = bool(valid and config["dependencyAvailable"])
+
+    if valid and not config["dependencyAvailable"]:
+        config["validationCode"] = "dependency_unavailable"
+
+    if not valid:
+        # Never expose or attempt to use malformed key material downstream.
+        config["publicKey"] = ""
+        config["privateKey"] = ""
+
+    return config
 
 
 def _current_session_version_cursor(cursor: Any) -> int:
@@ -941,6 +865,98 @@ def deliver_push_outbox(connection_factory: Callable[[], Any], now: datetime | N
     return {"configured": True, "delivered": delivered, "failed": failed, "dead": dead}
 
 
+def _prepare_push_outbox_state(connection_factory: Callable[[], Any]) -> None:
+    """Resolve stale security/session and active-device state before actual delivery."""
+    ensure_final_schema(connection_factory)
+    with connection_factory() as connection:
+        with connection.cursor() as cursor:
+            # Credential changes invalidate old subscriptions even when best-effort cleanup failed.
+            cursor.execute(
+                """
+                DELETE FROM tv_tracker_push_subscriptions s
+                USING tv_tracker_admin a
+                WHERE a.singleton_id = 1
+                  AND s.session_version <> a.session_version
+                """
+            )
+            cursor.execute(
+                """
+                DELETE FROM tv_tracker_push_presence p
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM tv_tracker_push_subscriptions s
+                    JOIN tv_tracker_admin a ON a.singleton_id = 1
+                    WHERE s.device_id = p.device_id
+                      AND s.session_version = a.session_version
+                )
+                """
+            )
+
+            # A queued or retrying push can become obsolete when that same device opens TV Tracker.
+            cursor.execute(
+                f"""
+                UPDATE tv_tracker_push_deliveries d
+                SET status = 'suppressed',
+                    last_error = 'device active before delivery',
+                    updated_at = NOW()
+                FROM tv_tracker_push_subscriptions s
+                JOIN tv_tracker_admin a ON a.singleton_id = 1
+                WHERE d.subscription_id = s.subscription_id
+                  AND s.session_version = a.session_version
+                  AND d.status IN ('pending', 'retry')
+                  AND EXISTS (
+                      SELECT 1
+                      FROM tv_tracker_push_presence p
+                      WHERE p.device_id = s.device_id
+                        AND p.visible = TRUE
+                        AND p.last_seen_at > NOW() - INTERVAL '{PUSH_ACTIVE_WINDOW_SECONDS} seconds'
+                  )
+                """
+            )
+
+            # A worker can die after claiming a row. If the device is now active, suppress the
+            # stale send rather than resurrecting an OS notification on recovery.
+            cursor.execute(
+                f"""
+                UPDATE tv_tracker_push_deliveries d
+                SET status = 'suppressed',
+                    last_error = 'device active before stale delivery recovery',
+                    updated_at = NOW()
+                FROM tv_tracker_push_subscriptions s
+                JOIN tv_tracker_admin a ON a.singleton_id = 1
+                WHERE d.subscription_id = s.subscription_id
+                  AND s.session_version = a.session_version
+                  AND d.status = 'sending'
+                  AND d.updated_at < NOW() - INTERVAL '10 minutes'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM tv_tracker_push_presence p
+                      WHERE p.device_id = s.device_id
+                        AND p.visible = TRUE
+                        AND p.last_seen_at > NOW() - INTERVAL '{PUSH_ACTIVE_WINDOW_SECONDS} seconds'
+                  )
+                """
+            )
+
+            # Exhausted stale sends must terminate instead of remaining `sending` forever.
+            cursor.execute(
+                """
+                UPDATE tv_tracker_push_deliveries
+                SET status = 'failed',
+                    last_error = CASE
+                        WHEN last_error = '' THEN 'delivery worker stopped after final attempt'
+                        ELSE last_error
+                    END,
+                    updated_at = NOW()
+                WHERE status = 'sending'
+                  AND updated_at < NOW() - INTERVAL '10 minutes'
+                  AND attempts >= %s
+                """,
+                (MAX_PUSH_ATTEMPTS,),
+            )
+        connection.commit()
+
+
 def run_final_notification_worker(
     connection_factory: Callable[[], Any],
     tmdb_fetcher: Callable[[str, dict[str, Any] | None], dict[str, Any]],
@@ -953,6 +969,7 @@ def run_final_notification_worker(
     movie_result = run_movie_notification_check(connection_factory, tmdb_fetcher, now)
     changed = _changed_notifications(connection_factory, before)
     queued = enqueue_push_deliveries(connection_factory, changed)
+    _prepare_push_outbox_state(connection_factory)
     push_result = deliver_push_outbox(connection_factory, now)
     return {
         "ok": True,
@@ -1125,30 +1142,6 @@ def install_final_notifications(
     if app.extensions.get("final_notifications"):
         return
     ensure_final_schema(connection_factory)
-
-    @login_required
-    def combined_settings_get():
-        return jsonify({"ok": True, "settings": serialize_combined_settings(connection_factory)})
-
-    @login_required
-    def combined_settings_patch():
-        check_csrf()
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({"ok": False, "error": "Invalid notification settings", "code": "invalid_notification_settings"}), 400
-        try:
-            settings = update_combined_settings(connection_factory, payload)
-        except ValueError as error:
-            return jsonify({"ok": False, "error": str(error), "code": "invalid_notification_settings"}), 400
-        return jsonify({"ok": True, "settings": settings})
-
-    @login_required
-    def combined_notifications_get():
-        return jsonify({"ok": True, "notifications": list_notifications_final(connection_factory)})
-
-    app.view_functions["notification_settings_api"] = combined_settings_get
-    app.view_functions["notification_settings_patch_api"] = combined_settings_patch
-    app.view_functions["notifications_api"] = combined_notifications_get
 
     @app.get("/manifest.webmanifest")
     def final_manifest():

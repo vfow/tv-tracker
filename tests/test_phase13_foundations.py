@@ -440,6 +440,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
                 "0003_notification_timezone_mode",
                 "0004_final_notification_schema",
                 "0005_push_schema",
+                "0006_notification_settings_consolidation",
             ],
         )
         self.assertEqual(
@@ -453,7 +454,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
         )
         self.assertEqual(
             MIGRATIONS[-1].schema_contract.legacy_schema_versions,
-            (4,),
+            (4, 5),
         )
         adoption_seed_sql = MIGRATIONS[-1].schema_contract.adoption_seed_sql
         self.assertIsNotNone(adoption_seed_sql)
@@ -921,7 +922,9 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 premiere_date_updates BOOLEAN NOT NULL DEFAULT TRUE,
                 initialized_at TIMESTAMPTZ,
                 last_checked_at TIMESTAMPTZ,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                movie_released BOOLEAN NOT NULL DEFAULT TRUE,
+                movie_release_updates BOOLEAN NOT NULL DEFAULT TRUE
             );
             INSERT INTO tv_tracker_notification_settings
             (singleton_id, enabled, timezone, timezone_mode, new_episode)

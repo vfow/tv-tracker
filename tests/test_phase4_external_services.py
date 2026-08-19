@@ -164,18 +164,15 @@ class Phase4ExternalServiceTests(unittest.TestCase):
         })
 
     def test_push_server_config_keeps_diagnostics_for_logs_not_browser(self):
-        module = SimpleNamespace(
-            push_config=lambda: {
-                "configured": False,
-                "keysConfigured": False,
-                "dependencyAvailable": False,
-                "publicKey": "",
-                "privateKey": "",
-                "subject": "",
-            }
-        )
-        push_validation.harden_push_config(module)
-        server_config = module.push_config()
+        from unittest.mock import patch
+
+        from tvtracker.notifications.push_and_movies import push_config
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "tvtracker.notifications.push_and_movies._pywebpush_available",
+            return_value=False,
+        ):
+            server_config = push_config()
 
         self.assertEqual(server_config["validationCode"], "missing_public_key")
         self.assertIn("dependencyAvailable", server_config)

@@ -83,7 +83,7 @@ assert "/* Notifications V1 */" in css
 expected_notification_copy = (
     "When a new season is added to a show.",
     "When a show's new season begins tomorrow.",
-    "When a new episode show becomes available.",
+    "When a new episode becomes available.",
     "When a Watching show returns.",
     "When a show is canceled or ended.",
     "When a season premiere date is announced, changed, or delayed.",
@@ -92,10 +92,10 @@ for copy in expected_notification_copy:
     assert copy in frontend
 
 assert 'href="/app/upcoming" aria-label="Back to Upcoming"' in frontend
-assert 'href="/app/notifications" aria-label="Back to Notifications"' in frontend
-assert frontend.count('/static/assets/icons/arrow-narrow-left.svg') == 2
-assert frontend.count('class="show-page-back-button notifications-back-button"') == 2
-assert frontend.count('<h1 class="tw-font-league">') == 2
+assert 'href="/app/notifications" aria-label="Back to Notifications"' not in frontend
+assert frontend.count('/static/assets/icons/arrow-narrow-left.svg') == 1
+assert frontend.count('class="show-page-back-button notifications-back-button"') == 1
+assert frontend.count('<h1 class="tw-font-league">') == 1
 assert "Updates from the shows you follow." not in frontend
 assert "Choose which updates you want to receive." not in frontend
 assert "←" not in frontend
@@ -126,7 +126,7 @@ assert ".notification-settings-list{margin-top:18px;overflow:hidden;border:1px s
 assert ".notification-setting-row:last-child{border-bottom:0}" in css
 assert '<div class="notification-settings-divider"></div>' not in frontend
 
-settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
+settings_options = frontend.split("const BASE_SETTING_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
 for internal_wording in ("tracked", "loggable", "14 days"):
     assert internal_wording not in settings_options
 

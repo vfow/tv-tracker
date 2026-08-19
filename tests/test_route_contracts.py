@@ -39,6 +39,7 @@ def load_route_helpers():
         "APP_LIBRARY_SORT_MODES",
         "APP_EYE_QUERY_FLAGS",
         "APP_SECTION_PATHS",
+        "SETTINGS_SECTION_PATHS",
     }
     selected = []
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 from flask import Response, jsonify, request
@@ -100,7 +100,7 @@ def validate_vapid_configuration(public_key: str, private_key: str, subject: str
     return True, ""
 
 
-def _missing_configuration_code(config: dict[str, Any]) -> str:
+def missing_configuration_code(config: dict[str, Any]) -> str:
     if not str(config.get("publicKey") or "").strip():
         return "missing_public_key"
     if not str(config.get("privateKey") or "").strip():
@@ -110,7 +110,7 @@ def _missing_configuration_code(config: dict[str, Any]) -> str:
     return "missing_configuration"
 
 
-def _validation_code(error: str) -> str:
+def validation_code(error: str) -> str:
     return _VALIDATION_CODES.get(str(error or ""), "invalid_configuration" if error else "")
 
 
@@ -145,52 +145,13 @@ def _replace_json_body(response: Response, payload: dict[str, Any]) -> Response:
     return response
 
 
-def harden_push_config(final_notifications_module: Any) -> Callable[[], dict[str, Any]]:
-    original = final_notifications_module.push_config
+def install_notification_polish(app: Any, final_notifications_module: Any = None) -> None:
+    """Install the browser-safe Push response sanitizer.
 
-    if getattr(original, "_tvtracker_vapid_hardened", False):
-        return original
-
-    def validated_push_config() -> dict[str, Any]:
-        config = dict(original())
-        # Diagnostics remain available to server logging/admin inspection only.
-        # They are deliberately stripped from the browser Push configuration API.
-        config.setdefault("validationError", "")
-        config.setdefault("validationCode", "")
-
-        if not config.get("keysConfigured"):
-            config["configured"] = False
-            config["validationCode"] = _missing_configuration_code(config)
-            return config
-
-        valid, error = validate_vapid_configuration(
-            str(config.get("publicKey") or ""),
-            str(config.get("privateKey") or ""),
-            str(config.get("subject") or ""),
-        )
-        config["validationError"] = error
-        config["validationCode"] = _validation_code(error)
-        config["configured"] = bool(valid and config.get("dependencyAvailable"))
-
-        if valid and not config.get("dependencyAvailable"):
-            config["validationCode"] = "dependency_unavailable"
-
-        if not valid:
-            # Never expose or attempt to use malformed key material downstream.
-            config["publicKey"] = ""
-            config["privateKey"] = ""
-
-        return config
-
-    validated_push_config._tvtracker_vapid_hardened = True  # type: ignore[attr-defined]
-    final_notifications_module.push_config = validated_push_config
-    return validated_push_config
-
-
-def install_notification_polish(app: Any, final_notifications_module: Any) -> None:
-    """Install server-side Push validation and browser-safe Push responses."""
-    harden_push_config(final_notifications_module)
-
+    VAPID hardening is native to the canonical push_config builder, so this
+    installer only strips technical diagnostics from browser-facing Push
+    responses.
+    """
     @app.after_request
     def sanitize_push_api(response: Response) -> Response:
         # This hook is intentionally path-based rather than endpoint-wrapping.

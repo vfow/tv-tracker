@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import os
 import unittest
+from unittest.mock import patch
 
 from flask import Flask, Response
 
+from tvtracker.notifications import push_and_movies as final
 from tvtracker.notifications.push_validation import (
-    harden_push_config,
     install_notification_polish,
     validate_vapid_configuration,
 )
@@ -79,70 +81,53 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertEqual(error, "invalid VAPID subject")
 
-    def test_hardened_push_config_hides_invalid_key_material(self) -> None:
+    def test_push_config_hides_invalid_key_material(self) -> None:
         public_key, private_key = _vapid_pair(1)
-
-        class Module:
-            @staticmethod
-            def push_config():
-                return {
-                    "configured": True,
-                    "keysConfigured": True,
-                    "dependencyAvailable": True,
-                    "publicKey": public_key + "broghgf7",
-                    "privateKey": private_key,
-                    "subject": "mailto:push@example.com",
-                }
-
-        wrapped = harden_push_config(Module)
-        config = wrapped()
+        env = {
+            "VAPID_PUBLIC_KEY": public_key + "broghgf7",
+            "VAPID_PRIVATE_KEY": private_key,
+            "VAPID_SUBJECT": "mailto:push@example.com",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(
+            final, "_pywebpush_available", return_value=True
+        ):
+            config = final.push_config()
         self.assertFalse(config["configured"])
         self.assertEqual(config["publicKey"], "")
         self.assertEqual(config["privateKey"], "")
         self.assertEqual(config["validationError"], "invalid VAPID public key")
         self.assertEqual(config["validationCode"], "invalid_public_key")
 
-    def test_hardened_push_config_reports_missing_private_key_without_exposing_material(self) -> None:
+    def test_push_config_reports_missing_private_key_without_exposing_material(self) -> None:
         public_key, _ = _vapid_pair(1)
-
-        class Module:
-            @staticmethod
-            def push_config():
-                return {
-                    "configured": False,
-                    "keysConfigured": False,
-                    "dependencyAvailable": True,
-                    "publicKey": public_key,
-                    "privateKey": "",
-                    "subject": "mailto:push@example.com",
-                }
-
-        config = harden_push_config(Module)()
+        env = {
+            "VAPID_PUBLIC_KEY": public_key,
+            "VAPID_PRIVATE_KEY": "",
+            "VAPID_SUBJECT": "mailto:push@example.com",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(
+            final, "_pywebpush_available", return_value=True
+        ):
+            config = final.push_config()
         self.assertFalse(config["configured"])
         self.assertEqual(config["validationCode"], "missing_private_key")
+        self.assertEqual(config["validationError"], "")
 
     def test_push_config_response_hides_mismatch_diagnostics(self) -> None:
         public_key, _ = _vapid_pair(1)
-        _, private_key = _vapid_pair(2)
-
-        class Module:
-            @staticmethod
-            def push_config():
-                return {
-                    "configured": True,
-                    "keysConfigured": True,
-                    "dependencyAvailable": True,
-                    "publicKey": public_key,
-                    "privateKey": private_key,
-                    "subject": "mailto:push@example.com",
-                }
+        _, other_private_key = _vapid_pair(2)
+        env = {
+            "VAPID_PUBLIC_KEY": public_key,
+            "VAPID_PRIVATE_KEY": other_private_key,
+            "VAPID_SUBJECT": "mailto:push@example.com",
+        }
 
         app = Flask(__name__)
-        install_notification_polish(app, Module)
+        install_notification_polish(app)
 
         @app.get("/api/push/config")
         def push_config_route():
-            config = Module.push_config()
+            config = final.push_config()
             return {
                 "ok": True,
                 "configured": config["configured"],
@@ -150,7 +135,10 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
                 "dependencyAvailable": config["dependencyAvailable"],
             }
 
-        payload = app.test_client().get("/api/push/config").get_json()
+        with patch.dict(os.environ, env, clear=True), patch.object(
+            final, "_pywebpush_available", return_value=True
+        ):
+            payload = app.test_client().get("/api/push/config").get_json()
         self.assertFalse(payload["configured"])
         self.assertEqual(payload["publicKey"], "")
         self.assertTrue(payload["unavailable"])

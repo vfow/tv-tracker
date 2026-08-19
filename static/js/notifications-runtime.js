@@ -9,14 +9,6 @@
 
     const BELL_ICON = staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg");
     const SETTINGS_ICON = staticAsset("notification-settings-icon","/static/assets/icons/notification-settings.svg");
-    const SETTINGS_OPTIONS = [
-        ["newSeason","New Season","When a new season is added to a show."],
-        ["seasonPremiereTomorrow","Season Premiere Tomorrow","When a show's new season begins tomorrow."],
-        ["newEpisode","New Episode","When a new episode show becomes available."],
-        ["returnsTomorrow","Returns Tomorrow","When a Watching show returns."],
-        ["canceledEnded","Canceled / Ended","When a show is canceled or ended."],
-        ["premiereDateUpdates","Premiere Date Updates","When a season premiere date is announced, changed, or delayed."]
-    ];
     const bellButtons = new Set();
     let notificationSettings = null;
     let statusPromise = null;
@@ -442,145 +434,6 @@
         }
     }
 
-    async function loadSettings(){
-        const payload = await requestJSON("/api/notifications/settings");
-        notificationSettings = payload.settings || {};
-        await ensureTimezone(notificationSettings.timezone || "",notificationSettings.timezoneMode || "automatic");
-        if(notificationSettings && !notificationSettings.timezone){
-            const refreshed = await requestJSON("/api/notifications/settings");
-            notificationSettings = refreshed.settings || notificationSettings;
-        }
-        return notificationSettings;
-    }
-
-    function switchMarkup(key,label,checked,disabled=false,description=""){
-        return `
-            <label class="notification-setting-row" data-setting-row="${key}">
-                <span class="notification-setting-copy">
-                    <strong>${label}</strong>
-                    ${description ? '<span class="notification-setting-description">' + description + '</span>' : ""}
-                </span>
-                <span class="notification-switch">
-                    <input type="checkbox" data-notification-setting="${key}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
-                    <span class="notification-switch-track" aria-hidden="true"><span class="notification-switch-thumb"></span></span>
-                </span>
-            </label>
-        `;
-    }
-
-    async function saveSetting(key,value){
-        const payload = await requestJSON("/api/notifications/settings",{
-            method:"PATCH",
-            body:{[key]:value}
-        });
-        notificationSettings = payload.settings || notificationSettings;
-        return notificationSettings;
-    }
-
-    function refreshSettingsDisabledState(root){
-        if(!root || !notificationSettings){ return; }
-        const enabled = notificationSettings.enabled !== false;
-        root.querySelectorAll('[data-notification-setting]:not([data-notification-setting="enabled"])').forEach(input=>{
-            input.disabled = !enabled;
-        });
-        root.querySelectorAll('[data-setting-row]:not([data-setting-row="enabled"])').forEach(row=>{
-            row.classList.toggle("notification-setting-row--disabled",!enabled);
-        });
-    }
-
-    async function renderNotificationSettingsPage(){
-        const root = document.getElementById("notification-settings-content");
-        if(!root){ return; }
-        root.innerHTML = '<div class="notifications-shell"><div class="notifications-loading">Loading settings…</div></div>';
-        try{
-            const settings = await loadSettings();
-            const familyRows = SETTINGS_OPTIONS.map(([key,label,description])=>{
-                return switchMarkup(key,label,settings[key] !== false,settings.enabled === false,description);
-            }).join("");
-            root.innerHTML = `
-                <div class="notifications-shell notification-settings-shell">
-                    <header class="notifications-header notification-settings-header">
-                        <div class="notifications-title-row">
-                            <a class="show-page-back-button notifications-back-button" href="/app/notifications" aria-label="Back to Notifications">
-                                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-                            </a>
-                            <h1 class="tw-font-league">Notification Settings</h1>
-                        </div>
-                    </header>
-                    <section class="notification-settings-list" aria-label="Notification settings">
-                        ${switchMarkup("enabled","Notifications",settings.enabled !== false,false)}
-                        <div class="notification-setting-row" data-timezone-setting>
-                            <span class="notification-setting-copy">
-                                <strong>Timezone</strong>
-                                <span class="notification-setting-description">Automatic follows this device. Manual stays fixed.</span>
-                            </span>
-                            <span>
-                                <select data-notification-timezone-mode aria-label="Timezone mode">
-                                    <option value="automatic" ${settings.timezoneMode !== "manual" ? "selected" : ""}>Automatic</option>
-                                    <option value="manual" ${settings.timezoneMode === "manual" ? "selected" : ""}>Manual</option>
-                                </select>
-                                <input data-notification-timezone type="text" value="${String(settings.timezone || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}" aria-label="IANA timezone" placeholder="Asia/Kuala_Lumpur" ${settings.timezoneMode === "manual" ? "" : "disabled"}>
-                            </span>
-                        </div>
-                        ${familyRows}
-                    </section>
-                </div>
-            `;
-            const timezoneModeInput = root.querySelector("[data-notification-timezone-mode]");
-            const timezoneInput = root.querySelector("[data-notification-timezone]");
-            if(timezoneModeInput && timezoneInput){
-                timezoneModeInput.addEventListener("change",async()=>{
-                    const mode = timezoneModeInput.value === "manual" ? "manual" : "automatic";
-                    timezoneInput.disabled = mode !== "manual";
-                    try{
-                        if(mode === "automatic"){
-                            const detected = detectedTimezone();
-                            const payload = await requestJSON("/api/notifications/settings",{method:"PATCH",body:{timezoneMode:mode,timezone:detected}});
-                            notificationSettings = payload.settings || notificationSettings;
-                            timezoneInput.value = notificationSettings.timezone || detected;
-                        }else{
-                            await saveSetting("timezoneMode",mode);
-                        }
-                    }catch(error){ console.error("TV Tracker could not save timezone mode",error); }
-                });
-                timezoneInput.addEventListener("change",async()=>{
-                    if(timezoneModeInput.value !== "manual"){ return; }
-                    try{
-                        const payload = await requestJSON("/api/notifications/settings",{method:"PATCH",body:{timezoneMode:"manual",timezone:timezoneInput.value.trim()}});
-                        notificationSettings = payload.settings || notificationSettings;
-                        timezoneInput.value = notificationSettings.timezone || timezoneInput.value;
-                    }catch(error){ console.error("TV Tracker could not save manual timezone",error); }
-                });
-            }
-
-            root.querySelectorAll("[data-notification-setting]").forEach(input=>{
-                input.addEventListener("change",async()=>{
-                    const key = input.dataset.notificationSetting;
-                    const next = input.checked;
-                    input.disabled = true;
-                    try{
-                        await saveSetting(key,next);
-                        if(key === "enabled"){
-                            refreshSettingsDisabledState(root);
-                        }
-                    }catch(error){
-                        input.checked = !next;
-                        console.error("TV Tracker could not save notification setting",error);
-                    }finally{
-                        if(key === "enabled" || (notificationSettings && notificationSettings.enabled !== false)){
-                            input.disabled = false;
-                        }
-                    }
-                });
-            });
-            refreshSettingsDisabledState(root);
-        }catch(error){
-            root.innerHTML = '<div class="notifications-shell"><div class="notifications-empty">Notification settings are temporarily unavailable.</div></div>';
-            console.error("TV Tracker notification settings failed to load",error);
-        }
-    }
-
-
     function notificationVersion(item){
         if(!item || !item.id){ return ""; }
         return String(item.id) + ":" + String(item.createdAt || "");
@@ -856,24 +709,12 @@
         renderNotificationsPage();
     }
 
-    function openNotificationSettingsPage(options={}){
-        if(!options.fromRoute && global.TVTrackerRouter){
-            global.TVTrackerRouter.setPathRoute("/app/settings/notifications",false);
-            global.TVTrackerRouter.applyRoute();
-            return;
-        }
-        showStandalonePage("notification-settings-page","notification-settings");
-        renderNotificationSettingsPage();
-    }
-
     global.TVTrackerNotifications = {
         mountUpcomingBell,
         mountUpcomingBellFallback,
         refreshBellState:()=>loadStatus(true),
         openNotificationsPage,
-        openNotificationSettingsPage,
         renderNotificationsPage,
-        renderNotificationSettingsPage,
         _relativeTime:relativeTime
     };
 
@@ -1616,6 +1457,9 @@
     }
 
     function installCanonicalNavigation(){
+        // Temporary adapters: legacy entry points on TVTrackerNotifications now
+        // delegate to the canonical Settings owner (TVTrackerNotificationsRuntime).
+        // Remove together with these properties once nothing references them.
         if(global.TVTrackerNotifications){
             global.TVTrackerNotifications.openNotificationSettingsPage = openDedicatedSettingsPage;
             global.TVTrackerNotifications.renderNotificationSettingsPage = renderDedicatedSettingsPage;

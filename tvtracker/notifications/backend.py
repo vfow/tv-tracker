@@ -28,6 +28,8 @@ DEFAULT_NOTIFICATION_SETTINGS = {
     "premiere_date_updates": True,
     "timezone": "",
     "timezone_mode": "automatic",
+    "movie_released": True,
+    "movie_release_updates": True,
 }
 
 SETTING_API_TO_DB = {
@@ -38,6 +40,8 @@ SETTING_API_TO_DB = {
     "returnsTomorrow": "returns_tomorrow",
     "canceledEnded": "canceled_ended",
     "premiereDateUpdates": "premiere_date_updates",
+    "movieReleased": "movie_released",
+    "movieReleaseUpdates": "movie_release_updates",
 }
 
 SETTINGS_COLUMNS = (
@@ -52,6 +56,8 @@ SETTINGS_COLUMNS = (
     "premiere_date_updates",
     "initialized_at",
     "last_checked_at",
+    "movie_released",
+    "movie_release_updates",
 )
 
 
@@ -91,6 +97,8 @@ def serialize_notification_settings(settings: dict[str, Any]) -> dict[str, Any]:
         "returnsTomorrow": bool(settings.get("returns_tomorrow", True)),
         "canceledEnded": bool(settings.get("canceled_ended", True)),
         "premiereDateUpdates": bool(settings.get("premiere_date_updates", True)),
+        "movieReleased": bool(settings.get("movie_released", True)),
+        "movieReleaseUpdates": bool(settings.get("movie_release_updates", True)),
     }
 
 
@@ -155,7 +163,18 @@ def update_notification_settings(
                     values,
                 )
             connection.commit()
-            return _select_settings(cursor)
+            settings = _select_settings(cursor)
+
+    if settings.get("enabled") is False:
+        with connection_factory() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE tv_tracker_push_deliveries "
+                    "SET status = 'suppressed', updated_at = NOW() "
+                    "WHERE status IN ('pending', 'retry', 'sending')"
+                )
+            connection.commit()
+    return settings
 
 
 def notification_status(connection_factory: Callable[[], Any]) -> dict[str, Any]:
@@ -189,7 +208,8 @@ def list_notifications(connection_factory: Callable[[], Any], limit: int = 200) 
             cursor.execute(
                 """
                 SELECT notification_id, notification_type, show_id, title, message,
-                       image_path, event_date, is_read, payload, created_at, updated_at
+                       image_path, event_date, is_read, payload, created_at, updated_at,
+                       media_type, event_key
                 FROM tv_tracker_notifications
                 ORDER BY created_at DESC, notification_id DESC
                 LIMIT %s
@@ -198,23 +218,30 @@ def list_notifications(connection_factory: Callable[[], Any], limit: int = 200) 
             )
             rows = cursor.fetchall()
 
-    result = []
+    result: list[dict[str, Any]] = []
     for row in rows:
         payload = row[8] if isinstance(row[8], dict) else {}
-        show_id = str(row[2] or "")
+        media_id = str(row[2] or "")
+        media_type = "movie" if str(row[11] or "tv") == "movie" or payload.get("mediaType") == "movie" else "tv"
+        route = str(payload.get("route") or "").strip()
+        if not route:
+            route = f"/app/movie/{media_id}" if media_type == "movie" else (f"/app/show/{media_id}" if media_id else "/app/upcoming")
         result.append({
             "id": int(row[0]),
             "type": str(row[1] or ""),
-            "showId": show_id,
+            "showId": media_id if media_type == "tv" else "",
+            "movieId": media_id if media_type == "movie" else "",
+            "mediaType": media_type,
             "title": str(row[3] or ""),
             "message": str(row[4] or ""),
             "imagePath": str(row[5] or ""),
             "eventDate": row[6].isoformat() if row[6] else "",
             "read": bool(row[7]),
             "payload": payload,
-            "route": f"/app/show/{show_id}" if show_id else "/app/upcoming",
+            "route": route,
             "createdAt": row[9].isoformat() if row[9] else "",
             "updatedAt": row[10].isoformat() if row[10] else "",
+            "eventKey": str(row[12] or ""),
         })
     return result
 

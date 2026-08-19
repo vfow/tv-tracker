@@ -24,9 +24,10 @@ _MANAGED_RELATIONS = (
     "tv_tracker_state",
 )
 
-# Version 4 is the only behind version ever written to schema_meta before the
-# migration ledger existed. Adoption still requires the complete v5 contract.
-_LEGACY_SCHEMA_VERSIONS = (4,)
+# Versions 4 and 5 are the only behind versions ever written to schema_meta
+# before the migration ledger existed. Adoption still requires the complete
+# current-schema contract.
+_LEGACY_SCHEMA_VERSIONS = (4, 5)
 
 
 _CURRENT_SCHEMA_VALIDATION_SQL = """
@@ -134,6 +135,8 @@ expected_columns(
         ('tv_tracker_notification_settings', 'last_checked_at', 'timestamp with time zone', FALSE, NULL),
         ('tv_tracker_notification_settings', 'updated_at', 'timestamp with time zone', TRUE, 'now()'),
         ('tv_tracker_notification_settings', 'timezone_mode', 'text', TRUE, '''automatic'''),
+        ('tv_tracker_notification_settings', 'movie_released', 'boolean', TRUE, 'true'),
+        ('tv_tracker_notification_settings', 'movie_release_updates', 'boolean', TRUE, 'true'),
         ('tv_tracker_notification_baseline', 'show_id', 'text', TRUE, NULL),
         ('tv_tracker_notification_baseline', 'snapshot', 'jsonb', TRUE, NULL),
         ('tv_tracker_notification_baseline', 'updated_at', 'timestamp with time zone', TRUE, 'now()'),
@@ -790,6 +793,31 @@ MIGRATIONS: tuple[SqlMigration, ...] = (
         INSERT INTO tv_tracker_schema_meta
         (singleton_id, schema_version, updated_at)
         VALUES (1, 5, NOW())
+        ON CONFLICT (singleton_id) DO UPDATE
+        SET schema_version = EXCLUDED.schema_version,
+            updated_at = NOW()
+        WHERE tv_tracker_schema_meta.schema_version < EXCLUDED.schema_version;
+        """,
+    ),
+    SqlMigration(
+        "0006_notification_settings_consolidation",
+        """
+        ALTER TABLE tv_tracker_notification_settings
+        ADD COLUMN IF NOT EXISTS movie_released BOOLEAN NOT NULL DEFAULT TRUE;
+
+        ALTER TABLE tv_tracker_notification_settings
+        ADD COLUMN IF NOT EXISTS movie_release_updates BOOLEAN NOT NULL DEFAULT TRUE;
+
+        UPDATE tv_tracker_notification_settings AS settings
+        SET movie_released = final_settings.movie_released,
+            movie_release_updates = final_settings.movie_release_updates,
+            updated_at = NOW()
+        FROM tv_tracker_final_notification_settings AS final_settings
+        WHERE final_settings.singleton_id = 1;
+
+        INSERT INTO tv_tracker_schema_meta
+        (singleton_id, schema_version, updated_at)
+        VALUES (1, 6, NOW())
         ON CONFLICT (singleton_id) DO UPDATE
         SET schema_version = EXCLUDED.schema_version,
             updated_at = NOW()

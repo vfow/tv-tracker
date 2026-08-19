@@ -281,11 +281,19 @@ function createUpcomingRepairSandbox(){
     assert.strictEqual(occurrences(source,'const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";'),1,'there must be one canonical Settings route owner');
     assert.strictEqual(occurrences(source,'const BASE_SETTING_OPTIONS = ['),1,'there must be one notification setting definition owner');
     assert.strictEqual(occurrences(source,'async function renderNotificationControls'),1,'there must be one canonical notification control renderer');
+    assert(!source.includes('async function renderNotificationSettingsPage'),'the legacy settings-page renderer must stay deleted');
+    assert(!source.includes('const SETTINGS_OPTIONS = ['),'the legacy 6-family option list must stay deleted');
+    assert(!source.includes('notification-settings-content'),'the legacy settings page container must stay deleted');
+    assert(!source.includes('notification-settings-page'),'the legacy settings page id must stay deleted');
     assert(!source.includes('pushDiagnosticMessage'),'technical Push diagnostics must not have a browser-facing formatter');
     assert(!source.includes('The VAPID public and private keys do not match.'),'keypair diagnostics must stay out of normal-user UI copy');
     assert(source.includes('Push notifications are temporarily unavailable.'),'generic unavailable Push copy must exist');
     assert(source.includes('TV Tracker couldn’t enable Push on this device. Try again later.'),'generic enable failure copy must exist');
     assert(settingsOwnerSource.indexOf('list.appendChild(pushRow);') < settingsOwnerSource.indexOf('list.appendChild(masterRow);'),'Push Notifications must be the first notification control');
+    assert(settingsOwnerSource.includes('list.appendChild(pushRow);'),'the Push control must come from the canonical renderer');
+    assert(settingsOwnerSource.includes('BASE_SETTING_OPTIONS.forEach(([key,label,description])'),'TV and movie families must come from the canonical renderer');
+    assert(settingsOwnerSource.includes('["movieReleased","Movie Released"'),'movie rows must come from the canonical renderer');
+    assert(settingsOwnerSource.includes('["movieReleaseUpdates","Movie Release Updates"'),'movie release-update rows must come from the canonical renderer');
     assert(source.includes('if(input && key === "enabled") input.disabled = false;'),'master Notifications toggle must be re-enabled after save');
     for(const trackerDependency of ['DATA','saveData','refreshShowForSchedule','getUpcomingScheduleItems','refreshUpcomingDataInBackground']){
         assert(!source.includes(trackerDependency),`Notifications must not reference tracker dependency ${trackerDependency}`);

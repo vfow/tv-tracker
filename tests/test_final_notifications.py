@@ -1,10 +1,28 @@
 from __future__ import annotations
 
+import base64
 import os
 import unittest
 from unittest.mock import Mock, patch
 
 from tvtracker.notifications import push_and_movies as final
+
+
+def _b64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _vapid_pair(private_value: int = 1) -> tuple[str, str]:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private = ec.derive_private_key(private_value, ec.SECP256R1())
+    public_raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    private_raw = private_value.to_bytes(32, "big")
+    return _b64url(public_raw), _b64url(private_raw)
 
 
 class FinalNotificationPureTests(unittest.TestCase):
@@ -85,15 +103,31 @@ class FinalNotificationPureTests(unittest.TestCase):
         self.assertEqual(config["publicKey"], "")
 
     def test_push_configuration_requires_keys_and_dependency(self):
+        public_key, private_key = _vapid_pair(1)
         env = {
-            "VAPID_PUBLIC_KEY": "public",
-            "VAPID_PRIVATE_KEY": "private",
+            "VAPID_PUBLIC_KEY": public_key,
+            "VAPID_PRIVATE_KEY": private_key,
             "VAPID_SUBJECT": "mailto:test@example.com",
         }
         with patch.dict(os.environ, env, clear=True), patch.object(final, "_pywebpush_available", return_value=False):
             self.assertFalse(final.push_config()["configured"])
         with patch.dict(os.environ, env, clear=True), patch.object(final, "_pywebpush_available", return_value=True):
             self.assertTrue(final.push_config()["configured"])
+
+    def test_push_config_validates_natively_without_patching(self):
+        public_key, private_key = _vapid_pair(1)
+        invalid = {
+            "VAPID_PUBLIC_KEY": public_key + "broghgf7",
+            "VAPID_PRIVATE_KEY": private_key,
+            "VAPID_SUBJECT": "mailto:test@example.com",
+        }
+        with patch.dict(os.environ, invalid, clear=True), patch.object(final, "_pywebpush_available", return_value=True):
+            config = final.push_config()
+        self.assertFalse(config["configured"])
+        self.assertEqual(config["publicKey"], "")
+        self.assertEqual(config["privateKey"], "")
+        self.assertEqual(config["validationError"], "invalid VAPID public key")
+        self.assertEqual(config["validationCode"], "invalid_public_key")
 
     def test_service_worker_always_shows_received_push_and_persists_click(self):
         source = final._service_worker_source()
