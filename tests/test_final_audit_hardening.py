@@ -48,7 +48,7 @@ class FinalAuditHardeningTests(unittest.TestCase):
         self.assertNotIn("store.clear()", source)
 
     def test_frontend_acks_only_successfully_consumed_push_clicks(self):
-        source = self.read("static/js/notifications-final.js")
+        source = self.read("static/js/notifications-runtime.js")
 
         self.assertIn("async function acknowledgePushClicks(ids)", source)
         self.assertIn('type:"tvtracker-ack-push-clicks"', source)
