@@ -1586,21 +1586,60 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
 
                 const kinds = core.errors.Classification;
                 const actionable = core.errors.classify({status:409,code:"CONFLICT"});
-                assert.equal(actionable.classification,kinds.ACTIONABLE);
+                assert.equal(actionable.classification,kinds.USER_ACTIONABLE);
                 assert.equal(actionable.code,"CONFLICT");
                 assert.equal(actionable.retryable,true);
                 assert.ok(Object.isFrozen(actionable));
                 assert.equal(
-                    core.errors.classify({status:503}).classification,
-                    kinds.VISIBLE_SERVICE_PROBLEM
+                    core.errors.classify({status:400,code:"BAD_INPUT"}).classification,
+                    kinds.USER_ACTIONABLE
                 );
                 assert.equal(
-                    core.errors.classify({status:503},{background:true}).classification,
-                    kinds.RECOVERABLE_BACKGROUND_FAILURE
+                    core.errors.classify({status:404}).classification,
+                    kinds.USER_ACTIONABLE
                 );
+                assert.equal(
+                    core.errors.classify({status:422}).classification,
+                    kinds.VALIDATION
+                );
+                assert.equal(
+                    core.errors.classify({status:401}).classification,
+                    kinds.AUTHORIZATION_SESSION
+                );
+                assert.equal(
+                    core.errors.classify({status:403}).classification,
+                    kinds.AUTHORIZATION_SESSION
+                );
+                assert.equal(
+                    core.errors.classify({status:401,code:"session_expired"}).classification,
+                    kinds.SECURITY_SENSITIVE
+                );
+                assert.equal(
+                    core.errors.classify({status:403,code:"csrf"}).classification,
+                    kinds.SECURITY_SENSITIVE
+                );
+                assert.equal(
+                    core.errors.classify(new Error("Failed to fetch")).classification,
+                    kinds.OFFLINE_NETWORK
+                );
+                assert.equal(
+                    core.errors.classify({status:503}).classification,
+                    kinds.OPTIONAL_PROVIDER_FAILURE
+                );
+                assert.equal(
+                    core.errors.classify({code:"provider_malformed"}).classification,
+                    kinds.OPTIONAL_PROVIDER_FAILURE
+                );
+                assert.equal(
+                    core.errors.classify({status:500}).classification,
+                    kinds.SERVER_INTERNAL
+                );
+                const rateLimited = core.errors.classify({status:429});
+                assert.equal(rateLimited.classification,kinds.SERVER_INTERNAL);
+                assert.equal(rateLimited.retryable,true);
                 assert.equal(
                     core.errors.classify(new Error("unexpected")).classification,
-                    kinds.TECHNICAL_DETAIL
+                    kinds.SERVER_INTERNAL
                 );
                 assert.equal(core.errors.classify({status:null}).status,null);
 
@@ -1644,7 +1683,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
                 assert.ok(requestError instanceof core.errors.ApiRequestError);
                 assert.equal(requestError.status,422);
                 assert.equal(requestError.code,"INVALID_STATE");
-                assert.equal(requestError.classified.classification,kinds.ACTIONABLE);
+                assert.equal(requestError.classified.classification,kinds.VALIDATION);
 
                 context.fetch = async()=>{ throw new Error("Failed to fetch"); };
                 let networkError;
@@ -1655,7 +1694,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
                 }
                 assert.equal(
                     networkError.classified.classification,
-                    kinds.VISIBLE_SERVICE_PROBLEM
+                    kinds.OFFLINE_NETWORK
                 );
 
                 const feedbackId = core.feedback.presentError(

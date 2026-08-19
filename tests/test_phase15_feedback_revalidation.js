@@ -226,8 +226,8 @@ function loadFeedbackRuntime({online=true}={}){
     const core = window.TVTrackerCore;
     assert.strictEqual(
         core.errors.classify(error).classification,
-        core.errors.Classification.TECHNICAL_DETAIL,
-        "Unclassified internal failures must stay inside the technical-detail boundary"
+        core.errors.Classification.SERVER_INTERNAL,
+        "Unclassified internal failures must stay inside the internal-failure boundary"
     );
 
     const options = {userMessage:rawTechnicalDetail,context:"feedback revalidation"};

@@ -5,10 +5,13 @@
 
     const SAFE_METHODS = Object.freeze(["GET","HEAD","OPTIONS"]);
     const ErrorClassification = Object.freeze({
-        ACTIONABLE:"ACTIONABLE",
-        VISIBLE_SERVICE_PROBLEM:"VISIBLE_SERVICE_PROBLEM",
-        RECOVERABLE_BACKGROUND_FAILURE:"RECOVERABLE_BACKGROUND_FAILURE",
-        TECHNICAL_DETAIL:"TECHNICAL_DETAIL"
+        USER_ACTIONABLE:"USER_ACTIONABLE",
+        VALIDATION:"VALIDATION",
+        AUTHORIZATION_SESSION:"AUTHORIZATION_SESSION",
+        OFFLINE_NETWORK:"OFFLINE_NETWORK",
+        OPTIONAL_PROVIDER_FAILURE:"OPTIONAL_PROVIDER_FAILURE",
+        SERVER_INTERNAL:"SERVER_INTERNAL",
+        SECURITY_SENSITIVE:"SECURITY_SENSITIVE"
     });
 
     function statusFrom(error,override){
@@ -55,40 +58,77 @@
     function classifyError(error,options={}){
         const settings = options && typeof options === "object" ? options : {};
         const status = statusFrom(error,settings.status);
-        const serviceFailure = looksLikeNetworkFailure(error)
-            || status === 429
-            || (status !== null && status >= 500);
 
-        if(settings.background === true && serviceFailure){
+        if(looksLikeNetworkFailure(error) && status === null){
             return classified(
                 error,
-                ErrorClassification.RECOVERABLE_BACKGROUND_FAILURE,
-                status,
-                "",
-                true
-            );
-        }
-        if(status !== null && [400,401,403,404,409,422].includes(status)){
-            return classified(
-                error,
-                ErrorClassification.ACTIONABLE,
-                status,
-                "Couldn't complete that request. Check the details and try again.",
-                status === 409
-            );
-        }
-        if(serviceFailure){
-            return classified(
-                error,
-                ErrorClassification.VISIBLE_SERVICE_PROBLEM,
+                ErrorClassification.OFFLINE_NETWORK,
                 status,
                 "TV Tracker can't reach the service right now. Try again.",
                 true
             );
         }
+        if(
+            /^provider_/i.test(codeFrom(error))
+            || (status !== null && [502,503,504].includes(status))
+        ){
+            return classified(
+                error,
+                ErrorClassification.OPTIONAL_PROVIDER_FAILURE,
+                status,
+                "Some extra information is temporarily unavailable.",
+                true
+            );
+        }
+        if(status === 422){
+            return classified(
+                error,
+                ErrorClassification.VALIDATION,
+                status,
+                "One or more fields need attention. Check the details and try again.",
+                false
+            );
+        }
+        if(status !== null && [401,403].includes(status)){
+            const code = codeFrom(error);
+            if(["session_expired","csrf","invalid_token","login_required","password_changed","session_invalid"].includes(code)){
+                return classified(
+                    error,
+                    ErrorClassification.SECURITY_SENSITIVE,
+                    status,
+                    "That action couldn't be completed securely. Refresh and try again.",
+                    false
+                );
+            }
+            return classified(
+                error,
+                ErrorClassification.AUTHORIZATION_SESSION,
+                status,
+                "Couldn't complete that request. Check the details and try again.",
+                false
+            );
+        }
+        if(status !== null && [400,404,409].includes(status)){
+            return classified(
+                error,
+                ErrorClassification.USER_ACTIONABLE,
+                status,
+                "Couldn't complete that request. Check the details and try again.",
+                status === 409
+            );
+        }
+        if(status === 429 || (status !== null && status >= 500)){
+            return classified(
+                error,
+                ErrorClassification.SERVER_INTERNAL,
+                status,
+                "TV Tracker is having trouble right now. Try again.",
+                true
+            );
+        }
         return classified(
             error,
-            ErrorClassification.TECHNICAL_DETAIL,
+            ErrorClassification.SERVER_INTERNAL,
             status,
             "Something went wrong. Try again.",
             false
@@ -209,7 +249,14 @@
     function presentError(error,options={}){
         const settings = options && typeof options === "object" ? options : {};
         const result = classifyError(error,settings);
-        if(result.classification === ErrorClassification.RECOVERABLE_BACKGROUND_FAILURE){
+        if(
+            settings.background === true
+            && (
+                result.classification === ErrorClassification.OFFLINE_NETWORK
+                || result.classification === ErrorClassification.SERVER_INTERNAL
+                || result.classification === ErrorClassification.OPTIONAL_PROVIDER_FAILURE
+            )
+        ){
             return null;
         }
 
