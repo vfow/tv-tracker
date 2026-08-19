@@ -1,5 +1,5 @@
 import { createApp } from "vue";
-import CompatibilityBoundary from "./CompatibilityBoundary.vue";
+import CompatibilityBoundary from "./CompatibilityBoundary";
 import { apiClient } from "./core/api";
 import { classifyError } from "./core/errors";
 import { presentError } from "./core/feedback";
