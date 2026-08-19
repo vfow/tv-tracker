@@ -256,7 +256,7 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 return binary
         return None
 
-    def dump_dom(self, browser: str, url: str, *, javascript: bool = True) -> str:
+    def dump_dom(self, browser: str, url: str) -> str:
         with tempfile.TemporaryDirectory(prefix="tv-tracker-phase12-browser-") as profile_dir:
             command = [
                 browser,
@@ -271,15 +271,8 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
                 "--virtual-time-budget=2000",
                 f"--user-data-dir={profile_dir}",
                 "--dump-dom",
+                url,
             ]
-            if not javascript:
-                command.extend(
-                    [
-                        "--disable-javascript",
-                        "--blink-settings=scriptEnabled=false",
-                    ]
-                )
-            command.append(url)
             completed = subprocess.run(
                 command,
                 cwd=ROOT,
@@ -326,23 +319,15 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
             thread.start()
             base_url = f"http://127.0.0.1:{server.server_port}"
             try:
-                logged_out_dom = self.dump_dom(
-                    browser,
-                    f"{base_url}/app/settings",
-                    javascript=False,
-                )
+                logged_out_dom = self.dump_dom(browser, f"{base_url}/app/settings")
                 self.assertIn("TV Tracker — Access", logged_out_dom)
                 self.assertIn('id="login-panel"', logged_out_dom)
 
                 # The test-only route establishes the same authenticated session fields
                 # used by the real login flow, then follows the real protected Settings
-                # canonical redirect. JavaScript is disabled for these navigations so the
-                # safety test remains independent from database/provider availability.
-                authenticated_dom = self.dump_dom(
-                    browser,
-                    f"{base_url}/__phase12_auth",
-                    javascript=False,
-                )
+                # canonical redirect. The browser executes the real frontend bundle; API
+                # failure/fallback behavior is covered independently by the existing suite.
+                authenticated_dom = self.dump_dom(browser, f"{base_url}/__phase12_auth")
                 self.assertIn(
                     'meta name="app-route" content="/app/settings/profile"',
                     authenticated_dom,
