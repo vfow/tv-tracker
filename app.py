@@ -1964,6 +1964,8 @@ def safe_next_url(value: str | None) -> str:
         return candidate + (("?" + browse_query) if browse_query else "")
     if candidate in APP_SECTION_PATHS:
         return candidate
+    if candidate in SETTINGS_SECTION_PATHS:
+        return candidate
     if APP_DISCOVER_CATEGORY_PATH_RE.fullmatch(candidate):
         return candidate
     if APP_SHOW_PATH_RE.fullmatch(candidate):

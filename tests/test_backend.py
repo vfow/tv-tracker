@@ -888,6 +888,21 @@ class V2RouteSecurityTests(unittest.TestCase):
             "/app/show/1399/season/1/episode/3",
         )
 
+    def test_safe_next_url_preserves_settings_section_paths(self):
+        for section in ("/app/settings/profile", "/app/settings/notifications", "/app/settings/streaming"):
+            self.assertEqual(tracker.safe_next_url(section), section)
+        self.assertEqual(tracker.safe_next_url("/app/settings"), "/app/settings")
+        self.assertEqual(tracker.safe_next_url("/app/settings/profile?x=1"), "/app/settings/profile")
+        self.assertEqual(tracker.safe_next_url("/app/settings/not-a-section"), "/app/list/watching")
+
+    def test_settings_section_deep_link_survives_login_redirect(self):
+        with patch.object(tracker, "read_admin_account", return_value=self.account):
+            response = self.client.get("/app/settings/profile")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/login")
+        with self.client.session_transaction() as session:
+            self.assertEqual(session.get("post_login_path"), "/app/settings/profile")
+
     def test_signup_redirect_selects_signup_tab(self):
         response = self.client.get("/signup")
         self.assertEqual(response.status_code, 302)
