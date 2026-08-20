@@ -3,13 +3,22 @@
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
+const { extractFunction } = require("./helpers/extract.js");
 
-const trackerIntegritySource = fs.readFileSync("static/js/tracker-integrity.js","utf8");
-const dataIntegritySource = fs.readFileSync("static/js/data-integrity.js","utf8");
 const appSource = fs.readFileSync("static/js/app.js","utf8");
+const dbSource = fs.readFileSync("static/js/db.js","utf8");
 const startupSource = fs.readFileSync("static/js/startup.js","utf8");
 const templateSource = fs.readFileSync("templates/index.html","utf8");
 const failureMessage = "TV Tracker could not start. Refresh the page to try again.";
+
+const DB_GATE = (()=>{
+  const start = dbSource.indexOf("const DEFAULT_OWNERSHIP_READY_TIMEOUT_MS = 5000;");
+  assert.ok(start >= 0,"db.js ownership gate constants must exist");
+  const gateFn = extractFunction(dbSource, "waitForOwnershipLayerReadiness");
+  const end = dbSource.indexOf(gateFn) + gateFn.length;
+  assert.ok(end > start,"the db.js ownership gate region must be well-ordered");
+  return dbSource.slice(start,end);
+})();
 
 function createElement(){
   return {
@@ -73,13 +82,9 @@ function createContext(options={}){
       return storedData;
     }
   };
-  if(options.readinessTimeoutMs){
-    context.TVTrackerDuplicateShowIntegrity = {readinessTimeoutMs:options.readinessTimeoutMs};
-  }
   context.window = context;
   context.globalThis = context;
   vm.createContext(context);
-  vm.runInContext(trackerIntegritySource,context,{filename:"tracker-integrity.js"});
   vm.runInContext(appSource,context,{filename:"app.js"});
 
   context.initDatabase = async()=>{ calls.push("database"); };
@@ -150,7 +155,10 @@ function nextTurn(){
     assert.ok(scriptTags[scriptTags.length - 1][0].includes(startupNeedle),"startup.js must be the final script");
     assert.ok(templateSource.indexOf("filename='js/settings.js'") < startupIndex);
     assert.ok(templateSource.indexOf("filename='js/app-router.js'") < startupIndex);
-    assert.ok(templateSource.indexOf("filename='js/data-integrity.js'") < startupIndex);
+    assert.ok(templateSource.indexOf("filename='js/db.js'") < startupIndex);
+    for(const n of ["tracker-integrity.js","data-integrity.js","tracker-removal.js","upcoming-schedule-repair.js","discover-runtime.js","search-navigation.js"]){
+      assert.ok(!templateSource.includes(n),`${n} must no longer load as a separate script`);
+    }
     assert.ok(startupSource.includes(".catch(error=>global.handleTVTrackerStartupFailure(error))"),"production startup must catch init and route rejection");
     assert.ok(!templateSource.includes("startTVTrackerApp"),"the template must not invoke startup inline");
     assert.ok(!/\ninit\(\);\s*$/.test(appSource),"app.js must not start before later owner scripts load");
@@ -158,7 +166,6 @@ function nextTurn(){
 
   {
     const harness = createContext();
-    vm.runInContext(dataIntegritySource,harness.context,{filename:"data-integrity.js"});
     const startupPromise = runProductionBootstrap(harness.context);
 
     await Promise.resolve();
@@ -186,13 +193,6 @@ function nextTurn(){
     assert.ok(harness.calls.includes("route-data-ready:true"),"the full initial route must run with app data ready");
     assert.strictEqual(harness.status.hidden,true);
     assert.strictEqual(harness.status.textContent,"");
-
-    const integrityState = harness.context.TVTrackerDuplicateShowIntegrity;
-    vm.runInContext(trackerIntegritySource,harness.context,{filename:"tracker-integrity-reevaluation.js"});
-    assert.strictEqual(harness.context.TVTrackerDuplicateShowIntegrity,integrityState);
-    assert.strictEqual(harness.context.TVTrackerDuplicateShowIntegrity.ready,true);
-    assert.strictEqual(harness.attributes.get("data-tv-tracker-startup"),"ready");
-    assert.strictEqual(harness.attributes.get("data-tv-tracker-app-ready"),"true");
   }
 
   {
@@ -202,7 +202,6 @@ function nextTurn(){
       storedDataPromise:Promise.resolve({shows:{},history:[]}),
       routePromise
     });
-    vm.runInContext(dataIntegritySource,harness.context,{filename:"data-integrity.js"});
     const startupPromise = runProductionBootstrap(harness.context);
 
     await nextTurn();
@@ -223,7 +222,6 @@ function nextTurn(){
       storedDataPromise:Promise.resolve({shows:{},history:[]}),
       routeError
     });
-    vm.runInContext(dataIntegritySource,harness.context,{filename:"data-integrity.js"});
 
     assert.strictEqual(await runProductionBootstrap(harness.context),false);
     assert.strictEqual(harness.context.TVTrackerStartup.status,"failed");
@@ -240,7 +238,6 @@ function nextTurn(){
       storedDataPromise:Promise.resolve({shows:{},history:[]}),
       routePromise
     });
-    vm.runInContext(dataIntegritySource,harness.context,{filename:"data-integrity.js"});
     const unhandled = [];
     const onUnhandled = error=>{ unhandled.push(error); };
     process.on("unhandledRejection",onUnhandled);
@@ -263,8 +260,9 @@ function nextTurn(){
 
   {
     const harness = createContext({
-      readinessTimeoutMs:15,
-      storedDataPromise:Promise.resolve({shows:{},history:[]})
+      storedDataPromise:Promise.reject(new Error(
+        "TV Tracker data integrity startup timed out after 15ms waiting for the app ownership layer"
+      ))
     });
     const unhandled = [];
     const onUnhandled = error=>{ unhandled.push(error); };
@@ -278,7 +276,6 @@ function nextTurn(){
       process.removeListener("unhandledRejection",onUnhandled);
     }
 
-    assert.strictEqual(harness.context.TVTrackerDuplicateShowIntegrity.readinessFailed,true);
     assert.strictEqual(harness.context.appDataReady,false);
     assert.strictEqual(harness.context.TVTrackerStartup.status,"failed");
     assert.match(harness.context.TVTrackerStartup.error.message,/data integrity startup timed out/);
@@ -288,6 +285,39 @@ function nextTurn(){
     assert.strictEqual(harness.status.textContent,failureMessage);
     assert.strictEqual(harness.skeleton.removed,true,"failed startup must not leave the loading skeleton running");
     assert.strictEqual(harness.errors.length,1,"startup failure must be logged once");
+  }
+
+  {
+    const context = {
+      console,
+      Promise,
+      Map,
+      Set,
+      Date,
+      Object,
+      Array,
+      Number,
+      String,
+      RegExp,
+      JSON,
+      setTimeout,
+      clearTimeout
+    };
+    context.globalThis = context;
+    vm.createContext(context);
+    vm.runInContext(DB_GATE,context,{filename:"db-gate.js"});
+
+    context.TVTrackerOwnershipReadiness = {readinessTimeoutMs:15};
+    await assert.rejects(
+      context.waitForOwnershipLayerReadiness(),
+      /data integrity startup timed out/,
+      "stored data must not be released until the app ownership layer is installed"
+    );
+    context.getEpisodeIdentityKey = ()=>"k";
+    context.getHistoryEntryEpisodeKey = ()=>"h";
+    context.cleanupDuplicateShows = ()=>null;
+    await context.waitForOwnershipLayerReadiness();
+    assert.strictEqual(context.TVTrackerOwnershipReadiness.readinessTimeoutMs,15);
   }
 
   console.log("Startup readiness contracts passed.");

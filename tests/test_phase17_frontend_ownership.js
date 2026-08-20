@@ -1,7 +1,10 @@
 const fs=require("fs"),path=require("path"),assert=require("assert");
 const ROOT=path.resolve(__dirname,"..");
 const t=fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
-for(const n of ["discover-runtime.js","search-navigation.js","tracker-integrity.js","tracker-removal.js"])assert(t.includes(n));
+for(const n of ["tracker-integrity.js","tracker-removal.js","data-integrity.js","upcoming-schedule-repair.js","discover-runtime.js","search-navigation.js"])assert(!t.includes(n),`${n} must no longer load as a separate script`);
 for(const n of ["discover-stability.js","search-navigation-fix.js","duplicate-show-integrity.js","show-removal-integrity.js"])assert(!t.includes(n));
-for(const n of ["discover-runtime.js","search-navigation.js","tracker-integrity.js","tracker-removal.js"])assert.strictEqual((t.match(new RegExp(n.replace(".","\\."),"g"))||[]).length,1);
+for(const n of ["streaming-region.js","provider-freshness.js","app-router.js","settings.js","startup.js"])assert(t.includes(n),`${n} must still load as an owner script`);
+assert.strictEqual((t.match(/filename='js\/startup\.js'/g)||[]).length,1,"startup.js must load exactly once");
+const startupIndex=t.indexOf("filename='js/startup.js'");
+for(const n of ["ui.js","app.js","db.js","app-router.js","settings.js","streaming-region.js","provider-freshness.js"])assert(t.indexOf(`filename='js/${n}'`) < startupIndex,`${n} must load before startup.js`);
 console.log("Phase 17 frontend ownership contracts passed.");

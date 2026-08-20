@@ -3,10 +3,45 @@
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
+const { extractFunction, extractFunctions } = require("./helpers/extract.js");
 
-const source = fs.readFileSync("static/js/data-integrity.js","utf8");
+const appSource = fs.readFileSync("static/js/app.js","utf8");
+const dbSource = fs.readFileSync("static/js/db.js","utf8");
 const template = fs.readFileSync("templates/index.html","utf8");
 const backend = fs.readFileSync("app.py","utf8");
+
+const OWNERSHIP_REGION = (()=>{
+  const start = appSource.indexOf("function cleanProviderHTML(");
+  assert.ok(start >= 0,"ownership helpers must exist in app.js");
+  const endFn = extractFunction(appSource, "removeExistingHistoryEntriesForEpisode");
+  const end = appSource.indexOf(endFn) + endFn.length;
+  assert.ok(end > start,"the ownership region must be well-ordered in app.js");
+  return appSource.slice(start,end);
+})();
+
+const SCATTERED_OWNERS = extractFunctions(appSource, [
+  "getHistoryIdsForSeason",
+  "moveShowStorageKey",
+  "markSeasonWatched",
+  "unwatchFullyWatchedSeason",
+  "markSeasonWatchedLegacyFlow",
+  "getBackupSummary",
+  "commitTrackerDataTransactionally",
+  "getNativeBackupObject",
+  "validateNativeBackupObject",
+  "findTMDBTVDetailsByTitle",
+  "reapplyImportedWatchedProgress"
+]);
+
+const ENSURE_HISTORY_IDS = extractFunction(dbSource, "ensureHistoryIds");
+
+const EXPORT_TAIL = (()=>{
+  const start = appSource.indexOf("const FRONTEND_SCHEMA_VERSION = 5;");
+  assert.ok(start >= 0,"app.js must own the frontend backup schema version");
+  const end = appSource.lastIndexOf("});");
+  assert.ok(end > start,"app.js must export the canonical TVTrackerDataIntegrity API");
+  return appSource.slice(start,end + 3);
+})();
 
 function comparable(value){
   return String(value || "")
@@ -18,7 +53,7 @@ function comparable(value){
 }
 
 function createContext(options={}){
-  const readinessSignals = [];
+  const seasonUnwatchCalls = [];
   const DATA = options.DATA || {
     shows:{},
     history:[],
@@ -45,28 +80,20 @@ function createContext(options={}){
       DATA.profile.favorite_shows = DATA.profile.favorite_shows || [];
       DATA.profile.favorite_movies = DATA.profile.favorite_movies || [];
     },
-    getBackupSummary(){
-      return {historyEntries:(DATA.history || []).length};
+    async ensureSeasonLoaded(){},
+    getAiredEpisodeNumbersInSeason(){ return []; },
+    isSeasonFullyWatched(){ return false; },
+    async showAppConfirm(dialog){
+      seasonUnwatchCalls.push({kind:"confirm",dialog});
+      return true;
     },
-    getNativeBackupObject(){
-      return {
-        app:"TV Tracker",
-        backupType:"native-app-backup",
-        backupVersion:2,
-        schemaVersion:4,
-        summary:null,
-        data:DATA
-      };
-    },
-    async commitTrackerDataTransactionally(data,template){
-      return template;
-    },
-    validateNativeBackupObject(backup){
-      const schema = Number(backup && backup.schemaVersion || 1);
-      if(schema > 4){
-        return {valid:false,message:"unsupported"};
-      }
-      return {valid:true,summary:{schemaVersion:schema}};
+    updateShowLastWatchedFromHistory(){},
+    reopenCompletedShowAfterUnwatch(){},
+    refreshAfterLocalShowChange(){},
+    showToast(){},
+    async waitForNextPaint(){},
+    async saveShowMutation(showId,addedEntries,deletedHistoryIds){
+      seasonUnwatchCalls.push({kind:"save",showId,addedEntries,deletedHistoryIds});
     },
     normalizeComparableTitle:comparable,
     async tmdbSearchShows(){
@@ -75,76 +102,50 @@ function createContext(options={}){
     async tmdbGetShowDetails(id){
       return {id:Number(id),name:"resolved"};
     },
-    async findTMDBTVDetailsByTitle(){
-      return {id:-1};
+    fetch:options.fetch || (async()=>({ok:true})),
+    csrfToken(){
+      return "test-token";
     },
-    moveShowStorageKey(oldId,newId,show){
-      if(DATA.shows[String(newId)] && DATA.shows[String(newId)] !== show){
-        show.tmdb_id = oldId;
-        show.local_only = true;
-        return;
-      }
-      delete DATA.shows[String(oldId)];
-      DATA.shows[String(newId)] = show;
+    async parseAPIResponse(){
+      return {data:null,revision:1};
     },
-    importCompatibleEpisodesIntoShow(show){
-      show.episodes_watched = {"1":[1,2]};
-      show._imported_progress = {
-        watched:{
-          "1-1":{special:true,name:"Special"},
-          "1-2":{special:false,name:"Regular"}
-        },
-        specials:{"1-1":{watched:true}}
-      };
-      return {historyEntries:2,specialsPreserved:1,regularWatched:1};
-    },
-    reapplyImportedWatchedProgress(){},
-    getHistoryIdsForSeason(){ return []; }
+    adoptTransactionalTrackerData(){}
   };
 
-  context.TVTrackerDuplicateShowIntegrity = {
-    signalDataIntegrityReady(integrity){
-      readinessSignals.push({
-        integrity,
-        regularIdentity:context.getEpisodeIdentityKey,
-        historyIdentity:context.getHistoryEntryEpisodeKey
-      });
-    }
-  };
-  context.dataIntegrityReadinessSignals = readinessSignals;
   context.window = context;
   context.globalThis = context;
   vm.createContext(context);
-  vm.runInContext(source,context,{filename:"data-integrity.js"});
-  return context;
+  vm.runInContext(OWNERSHIP_REGION,context,{filename:"ownership-region.js"});
+  vm.runInContext(SCATTERED_OWNERS,context,{filename:"scattered-owners.js"});
+  vm.runInContext(ENSURE_HISTORY_IDS,context,{filename:"ensure-history-ids.js"});
+  vm.runInContext(EXPORT_TAIL,context,{filename:"export-tail.js"});
+  return {context,seasonUnwatchCalls};
 }
 
 (async()=>{
   {
     const backendSchema = Number((backend.match(/^SCHEMA_VERSION\s*=\s*(\d+)/m) || [])[1]);
-    const context = createContext();
-    assert.strictEqual(context.TVTrackerDataIntegrity.frontendSchemaVersion,backendSchema,"browser and backend backup schema versions must match");
-    assert.strictEqual(context.dataIntegrityReadinessSignals.length,1,"data-integrity.js must explicitly signal identity readiness once");
-    const signal = context.dataIntegrityReadinessSignals[0];
-    assert.strictEqual(signal.integrity,context.TVTrackerDataIntegrity);
-    assert.strictEqual(signal.regularIdentity,context.TVTrackerDataIntegrity.regularEpisodeIdentity);
-    assert.strictEqual(signal.historyIdentity,context.TVTrackerDataIntegrity.historyEpisodeIdentity);
+    const {context} = createContext();
+    const api = context.TVTrackerDataIntegrity;
+    assert.ok(api,"app.js must own the canonical TVTrackerDataIntegrity export");
+    assert.strictEqual(api.frontendSchemaVersion,backendSchema,"browser and backend backup schema versions must match");
+    assert.strictEqual(api.installed,true);
+    assert.strictEqual(api.regularEpisodeIdentity,context.getEpisodeIdentityKey,"the canonical regular identity must be the exported owner");
+    assert.strictEqual(api.historyEpisodeIdentity,context.getHistoryEntryEpisodeKey,"the canonical history identity must be the exported owner");
   }
 
   {
-    const appIndex = template.indexOf("filename='js/app.js'");
-    const integrityIndex = template.indexOf("filename='js/data-integrity.js'");
-    const trackerIntegrityIndex = template.indexOf("filename='js/tracker-integrity.js'");
-    const secondTrackerIntegrity = template.indexOf("filename='js/tracker-integrity.js'",trackerIntegrityIndex + 1);
-    assert.ok(
-      trackerIntegrityIndex >= 0 && trackerIntegrityIndex < appIndex && integrityIndex > appIndex,
-      "tracker-integrity.js must load before app.js and data-integrity.js must load after app.js"
-    );
-    assert.strictEqual(secondTrackerIntegrity,-1,"tracker-integrity.js must have one canonical script load");
+    for(const n of ["tracker-integrity.js","data-integrity.js","tracker-removal.js","upcoming-schedule-repair.js","discover-runtime.js","search-navigation.js"]){
+      assert.ok(!template.includes(n),`${n} must no longer load as a separate script`);
+    }
+    assert.ok(appSource.includes("function getEpisodeIdentityKey"),"app.js must own the regular episode identity");
+    assert.ok(appSource.includes("function getHistoryEntryEpisodeKey"),"app.js must own the history entry identity");
+    assert.ok(appSource.includes("function suspiciousHistoryReferences"),"app.js must own the suspicious history audit");
+    assert.ok(appSource.includes("window.TVTrackerDataIntegrity"),"app.js must export the canonical integrity API");
   }
 
   {
-    const context = createContext();
+    const {context} = createContext();
     const api = context.TVTrackerDataIntegrity;
     const regular = api.historyEpisodeIdentity({tmdb_id:"10",season:1,episode:1});
     const special = api.historyEpisodeIdentity({tmdb_id:"10",season:1,episode:1,special:true,source_tvdb_episode_id:"900"});
@@ -158,7 +159,7 @@ function createContext(options={}){
   }
 
   {
-    const context = createContext({DATA:{
+    const {context} = createContext({DATA:{
       shows:{"10":{}},
       history:[
         {tmdb_id:"10",season:1,episode:1},
@@ -177,12 +178,20 @@ function createContext(options={}){
   }
 
   {
-    const context = createContext();
+    const {context} = createContext();
     const backup = context.getNativeBackupObject();
     assert.strictEqual(backup.schemaVersion,5,"browser backup export must use the current schema");
     assert.strictEqual(context.validateNativeBackupObject(backup).valid,true,"browser restore must accept a current schema backup");
+
+    let capturedBody = null;
+    context.fetch = async (url,options)=>{
+      capturedBody = JSON.parse(options.body);
+      return {ok:true};
+    };
     const transactional = await context.commitTrackerDataTransactionally({shows:{},history:[]});
-    assert.strictEqual(transactional.schemaVersion,5,"transactional reset/import fallback must use the current schema");
+    assert.ok(capturedBody,"the transactional import must be sent to the backend");
+    assert.strictEqual(capturedBody.schemaVersion,5,"transactional reset/import must use the current schema");
+    assert.strictEqual(transactional.revision,1,"the backend revision must be adopted from the import response");
   }
 
   {
@@ -190,7 +199,7 @@ function createContext(options={}){
       {id:1,name:"Monster",first_air_date:"2004-04-07"},
       {id:2,name:"Monster",first_air_date:"2022-09-21"}
     ];
-    const context = createContext({searchResults:sameTitleCandidates});
+    const {context} = createContext({searchResults:sameTitleCandidates});
     const api = context.TVTrackerDataIntegrity;
     assert.strictEqual(
       api.selectStrictTMDBCandidate(sameTitleCandidates,"Monster"),
@@ -217,7 +226,7 @@ function createContext(options={}){
       metadata_sync:{pending:["local-tvdb-1"],failed:[{showId:"local-tvdb-1"}]},
       network_sync:{pending:["local-tvdb-1"],failed:["local-tvdb-1"]}
     };
-    const context = createContext({DATA});
+    const {context} = createContext({DATA});
     show.tmdb_id = "555";
     show.local_only = false;
     context.moveShowStorageKey("local-tvdb-1","555",show);
@@ -229,8 +238,7 @@ function createContext(options={}){
   }
 
   {
-    const context = createContext();
-    const show = {};
+    const {context} = createContext();
     const compatible = {
       seasons:[{
         number:1,
@@ -240,14 +248,22 @@ function createContext(options={}){
         ]
       }]
     };
-    context.importCompatibleEpisodesIntoShow(show,compatible,{history:[]});
+    assert.ok(
+      appSource.includes("removeSpecialOnlyProgress(show,scanCompatibleWatchedEpisodes(compatibleShow))"),
+      "importCompatibleEpisodesIntoShow must apply the folded special-only progress cleanup"
+    );
+    const show = {
+      episodes_watched:{"1":[1,2]},
+      _imported_progress:{watched:{},specials:{}}
+    };
+    context.removeSpecialOnlyProgress(show,context.scanCompatibleWatchedEpisodes(compatible));
     assert.deepStrictEqual(Array.from(show.episodes_watched["1"] || []),[2],"imported specials must not mark regular progress coordinates watched");
     assert.deepStrictEqual(Object.keys(show._imported_progress.watched),["1-2"]);
     assert.strictEqual(Object.keys(show._imported_progress.specials).length,1);
   }
 
   {
-    const context = createContext();
+    const {context} = createContext();
     const show = {
       episodes_watched:{},
       _imported_progress:{
@@ -262,7 +278,7 @@ function createContext(options={}){
   }
 
   {
-    const context = createContext();
+    const {context} = createContext();
     const data = {
       shows:{"30981":{tmdb_id:"30981",number_of_seasons:1}},
       history:[
@@ -274,6 +290,79 @@ function createContext(options={}){
     const findings = context.TVTrackerDataIntegrity.suspiciousHistoryReferences(data);
     assert.deepStrictEqual(Array.from(findings,item=>item.id),["suspect"]);
     assert.strictEqual(JSON.stringify(data),before,"integrity audit helpers must never silently repair or delete user history");
+  }
+
+  {
+    const {context} = createContext({DATA:{
+      shows:{},
+      history:[
+        {id:"h-regular-1",tmdb_id:"10",season:1,episode:1},
+        {id:"h-regular-2",tmdb_id:"10",season:1,episode:2},
+        {id:"h-special",tmdb_id:"10",season:1,episode:1,special:true,source_tvdb_episode_id:"900"},
+        {id:"h-special-season",tmdb_id:"10",season:0,episode:5,special:true},
+        {id:"h-movie",media_type:"movie",movie_id:"20",tmdb_id:"20"},
+        {id:"h-other-season",tmdb_id:"10",season:2,episode:1},
+        {id:"h-other-show",tmdb_id:"11",season:1,episode:1}
+      ],
+      profile:{favorite_shows:[],favorite_movies:[]}
+    }});
+    const ids = context.getHistoryIdsForSeason("10",1);
+    assert.deepStrictEqual(
+      Array.from(ids),
+      ["h-regular-1","h-regular-2"],
+      "season history ids must exclude specials and movies"
+    );
+    assert.deepStrictEqual(
+      Array.from(context.getHistoryIdsForSeason("10",2)),
+      ["h-other-season"]
+    );
+  }
+
+  {
+    const {context,seasonUnwatchCalls} = createContext({DATA:{
+      shows:{
+        "10":{
+          tmdb_id:"10",
+          title:"Season Watcher",
+          episodes_watched:{"1":[1,2,3]}
+        }
+      },
+      history:[
+        {id:"regular-1",tmdb_id:"10",season:1,episode:1},
+        {id:"regular-2",tmdb_id:"10",season:1,episode:2},
+        {id:"special-1",tmdb_id:"10",season:1,episode:1,special:true,source_tvdb_episode_id:"900"},
+        {id:"movie-1",media_type:"movie",movie_id:"20",tmdb_id:"20"}
+      ],
+      profile:{favorite_shows:[],favorite_movies:[]}
+    }});
+    context.getAiredEpisodeNumbersInSeason = ()=>[1,2,3];
+    context.isSeasonFullyWatched = ()=>true;
+    await context.markSeasonWatched("10",1);
+
+    assert.strictEqual(
+      context.DATA.shows["10"].episodes_watched["1"],
+      undefined,
+      "a fully watched season must be cleared from regular progress"
+    );
+    assert.deepStrictEqual(
+      Array.from(context.DATA.history,entry=>entry.id),
+      ["special-1","movie-1"],
+      "imported specials and movies must survive a season unwatch"
+    );
+    const confirmCall = seasonUnwatchCalls.find(call=>call.kind === "confirm");
+    assert.ok(confirmCall,"the season unwatch must ask for confirmation first");
+    assert.ok(
+      String(confirmCall.dialog.message || "").includes("Imported specials are preserved."),
+      "the unwatch confirmation must state that imported specials are preserved"
+    );
+    const saveCall = seasonUnwatchCalls.find(call=>call.kind === "save");
+    assert.ok(saveCall,"the season unwatch must persist through the canonical save mutation");
+    assert.deepStrictEqual(Array.from(saveCall.addedEntries),[]);
+    assert.deepStrictEqual(
+      Array.from(saveCall.deletedHistoryIds),
+      ["regular-1","regular-2"],
+      "only regular season history ids may be deleted"
+    );
   }
 
   console.log("Phase 3 data integrity contracts passed.");

@@ -164,10 +164,12 @@ assert.strictEqual(legacyNotifications.canonicalRoute,"/app/settings/notificatio
 assert.strictEqual(legacyNotifications.params.section,"notifications");
 assert.strictEqual(routerRuntime.router.parseRoute("/app/settings/billing").valid,false,"Unknown Settings routes must not be broadened");
 
-// This recovery gate validates the selected ownership transition only. The
-// compatibility entry point remains evidence that later helper/wrapper removal
-// and the full Settings migration are not being claimed here.
-assert(settingsSource.includes("global.renderSettings = render;"),"The current transitional renderSettings adapter must remain explicit");
-assert(loadedSources.get("js/ui.js").includes("function renderSettings()"),"Legacy Settings compatibility still exists, so this is not the full migration gate");
+// This gate validates the completed Settings ownership transition. The legacy
+// ui.js renderSettings shim and the streaming-region/provider-freshness
+// re-render patches are gone; settings.js is the single publishing owner.
+assert(settingsSource.includes("global.renderSettings = render;"),"The canonical renderSettings owner must remain explicit");
+assert(!loadedSources.get("js/ui.js").includes("function renderSettings()"),"The legacy ui.js renderSettings shim must be fully removed");
+assert(!loadedSources.get("js/streaming-region.js").includes("MutationObserver"),"streaming-region.js must no longer re-render Settings");
+assert(!loadedSources.get("js/provider-freshness.js").includes("installSettingsCleanup"),"provider-freshness.js must no longer patch Settings cleanup");
 
-console.log("Phase 14 Settings transition recovery contracts passed; full migration remains pending.");
+console.log("Phase 14 Settings migration contracts passed; the full migration gate is complete.");

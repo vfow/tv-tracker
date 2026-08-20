@@ -355,27 +355,346 @@ function getCleanTrackerDataCopy(data){
 
 
 function getEpisodeIdentityKey(showId,season,episode){
-    const cleanShowId = String(showId || "").trim();
-    const cleanSeason = Number(season);
-    const cleanEpisode = Number(episode);
-
-    if(!cleanShowId || !Number.isFinite(cleanSeason) || !Number.isFinite(cleanEpisode)){
+    const id = cleanString(showId);
+    const seasonNumber = Number(season);
+    const episodeNumber = Number(episode);
+    if(!id || !Number.isFinite(seasonNumber) || !Number.isFinite(episodeNumber)){
         return "";
     }
-
-    return cleanShowId + "::" + String(cleanSeason) + "::" + String(cleanEpisode);
+    return id + "::regular::" + String(seasonNumber) + "::" + String(episodeNumber);
 }
 
 function getHistoryEntryEpisodeKey(entry){
-    if(!entry || typeof entry !== "object"){
+    if(!entry || typeof entry !== "object" || isMovieHistoryRecord(entry)){
         return "";
     }
 
-    return getEpisodeIdentityKey(
-        entry.tmdb_id || entry.show_id,
-        entry.season,
-        entry.episode
-    );
+    const showId = cleanString(entry.tmdb_id || entry.show_id);
+    const season = Number(entry.season);
+    const episode = Number(entry.episode);
+    if(!showId || !Number.isFinite(season) || !Number.isFinite(episode)){
+        return "";
+    }
+
+    if(isSpecialHistoryEntry(entry)){
+        const sourceEpisodeId = cleanString(entry.source_tvdb_episode_id);
+        if(sourceEpisodeId){
+            return showId + "::special::tvdb::" + sourceEpisodeId;
+        }
+        return (
+            showId + "::special::" + String(season) + "::" + String(episode) + "::" +
+            normalizeIdentityTitle(entry.episode_title || entry.title || "special")
+        );
+    }
+
+    return getEpisodeIdentityKey(showId,season,episode);
+}
+
+function cleanString(value){
+    return String(value === null || typeof value === "undefined" ? "" : value).trim();
+}
+
+function isMovieHistoryRecord(entry){
+    if(!entry || typeof entry !== "object"){
+        return false;
+    }
+    const mediaType = cleanString(entry.media_type || entry.type).toLowerCase();
+    return mediaType === "movie" || !!cleanString(entry.movie_id);
+}
+
+function isSpecialHistoryEntry(entry){
+    if(!entry || typeof entry !== "object" || isMovieHistoryRecord(entry)){
+        return false;
+    }
+    return entry.special === true || Number(entry.season) === 0;
+}
+
+function normalizeIdentityTitle(value){
+    return cleanString(value)
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"");
+}
+
+function summarizeHistory(history){
+    const entries = Array.isArray(history) ? history : [];
+    let regularHistoryEntries = 0;
+    let specialHistoryEntries = 0;
+    let movieHistoryEntries = 0;
+    let otherHistoryEntries = 0;
+
+    entries.forEach(entry=>{
+        if(isMovieHistoryRecord(entry)){
+            movieHistoryEntries += 1;
+            return;
+        }
+        if(isSpecialHistoryEntry(entry)){
+            specialHistoryEntries += 1;
+            return;
+        }
+        if(
+            entry &&
+            typeof entry === "object" &&
+            cleanString(entry.tmdb_id || entry.show_id) &&
+            Number.isFinite(Number(entry.season)) &&
+            Number.isFinite(Number(entry.episode))
+        ){
+            regularHistoryEntries += 1;
+            return;
+        }
+        otherHistoryEntries += 1;
+    });
+
+    return {
+        historyEntries:entries.length,
+        regularHistoryEntries,
+        specialHistoryEntries,
+        movieHistoryEntries,
+        otherHistoryEntries
+    };
+}
+
+function titleHint(value){
+    const raw = cleanString(value);
+    const yearMatch = raw.match(/\(((?:19|20)\d{2})\)\s*$/);
+    const year = yearMatch ? yearMatch[1] : "";
+    const title = raw.replace(/\s*\((?:19|20)\d{2}\)\s*$/,"").replace(/\s+/g," ").trim();
+    return {title,year};
+}
+
+function comparableTitle(value){
+    if(typeof normalizeComparableTitle === "function"){
+        return normalizeComparableTitle(value);
+    }
+    return cleanString(value)
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function selectStrictTMDBCandidate(results,requestedTitle){
+    const hint = titleHint(requestedTitle);
+    const target = comparableTitle(hint.title);
+    if(!target){
+        return null;
+    }
+
+    const byId = new Map();
+    (Array.isArray(results) ? results : []).forEach(item=>{
+        if(!item || !item.id){
+            return;
+        }
+        const nameMatches = [item.name,item.original_name]
+        .filter(Boolean)
+        .some(name=>comparableTitle(name) === target);
+        if(!nameMatches){
+            return;
+        }
+        if(hint.year){
+            const itemYear = cleanString(item.first_air_date).slice(0,4);
+            if(itemYear !== hint.year){
+                return;
+            }
+        }
+        byId.set(String(item.id),item);
+    });
+
+    return byId.size === 1 ? Array.from(byId.values())[0] : null;
+}
+
+function scanCompatibleWatchedEpisodes(compatibleShow){
+    const regular = new Map();
+    const specials = [];
+    const seasons = compatibleShow && Array.isArray(compatibleShow.seasons)
+    ? compatibleShow.seasons
+    : [];
+
+    seasons.forEach(season=>{
+        if(!season || typeof season !== "object"){
+            return;
+        }
+        const seasonNumber = Number(season.number);
+        if(!Number.isFinite(seasonNumber)){
+            return;
+        }
+        const seasonIsSpecial = season.is_specials === true || seasonNumber === 0;
+        const episodes = Array.isArray(season.episodes) ? season.episodes : [];
+
+        episodes.forEach((episode,index)=>{
+            if(!episode || typeof episode !== "object"){
+                return;
+            }
+            const episodeNumber = Number(episode.number || index + 1);
+            if(!Number.isFinite(episodeNumber) || episodeNumber < 1){
+                return;
+            }
+            const watched = episode.is_watched === true || Number(episode.watched_count || 0) > 0;
+            if(!watched){
+                return;
+            }
+            const special = seasonIsSpecial || episode.special === true;
+            const sourceEpisodeId = episode.id && episode.id.tvdb ? cleanString(episode.id.tvdb) : "";
+            const watchedAt = episode.watched_at ? cleanString(episode.watched_at) : "";
+            const metadata = {
+                watched_at:watchedAt || null,
+                special,
+                name:cleanString(episode.name || ("Episode " + episodeNumber)),
+                source_tvdb_episode_id:sourceEpisodeId || null,
+                source_season:seasonNumber,
+                source_episode:episodeNumber
+            };
+            const coordinate = String(seasonNumber) + "-" + String(episodeNumber);
+            if(special){
+                specials.push({coordinate,metadata});
+            }else{
+                regular.set(coordinate,metadata);
+            }
+        });
+    });
+
+    return {regular,specials};
+}
+
+function removeSpecialOnlyProgress(show,scan){
+    if(!show || !scan){
+        return;
+    }
+    if(!show.episodes_watched || typeof show.episodes_watched !== "object"){
+        show.episodes_watched = {};
+    }
+
+    const specialCoordinates = new Set(scan.specials.map(item=>item.coordinate));
+    specialCoordinates.forEach(coordinate=>{
+        if(scan.regular.has(coordinate)){
+            return;
+        }
+        const parts = coordinate.split("-").map(Number);
+        const season = parts[0];
+        const episode = parts[1];
+        const key = String(season);
+        const watched = Array.isArray(show.episodes_watched[key]) ? show.episodes_watched[key] : [];
+        const filtered = watched.filter(value=>Number(value) !== episode);
+        if(filtered.length){
+            show.episodes_watched[key] = filtered;
+        }else{
+            delete show.episodes_watched[key];
+        }
+    });
+
+    if(!show._imported_progress || typeof show._imported_progress !== "object"){
+        return;
+    }
+
+    const regularProgress = {};
+    scan.regular.forEach((metadata,key)=>{
+        regularProgress[key] = metadata;
+    });
+    const specialProgress = {};
+    scan.specials.forEach((item,index)=>{
+        const sourceId = cleanString(item.metadata.source_tvdb_episode_id);
+        const key = sourceId
+        ? "tvdb-" + sourceId
+        : "source-" + item.coordinate + "-" + String(index);
+        specialProgress[key] = Object.assign({watched:true},item.metadata);
+    });
+    show._imported_progress.watched = regularProgress;
+    show._imported_progress.specials = specialProgress;
+}
+
+function remapQueueIds(sync,oldId,newId){
+    if(!sync || typeof sync !== "object"){
+        return;
+    }
+    if(Array.isArray(sync.pending)){
+        sync.pending = sync.pending.map(value=>String(value) === oldId ? newId : value);
+    }
+    if(Array.isArray(sync.failed)){
+        sync.failed = sync.failed.map(item=>{
+            if(typeof item === "string"){
+                return item === oldId ? newId : item;
+            }
+            if(item && typeof item === "object" && String(item.showId || item.id || "") === oldId){
+                const copy = Object.assign({},item);
+                if(Object.prototype.hasOwnProperty.call(copy,"showId")) copy.showId = newId;
+                if(Object.prototype.hasOwnProperty.call(copy,"id")) copy.id = newId;
+                return copy;
+            }
+            return item;
+        });
+    }
+}
+
+function collectDuplicateProgress(data){
+    const groups = new Map();
+
+    if(!data || !data.shows || typeof data.shows !== "object" || Array.isArray(data.shows)){
+        return groups;
+    }
+
+    Object.entries(data.shows).forEach(([key,show])=>{
+        if(!show || typeof show !== "object"){
+            return;
+        }
+
+        const id = String(show.tmdb_id || show.id || key || "").trim();
+        if(!id){
+            return;
+        }
+
+        if(!groups.has(id)){
+            groups.set(id,{count:0,progress:{}});
+        }
+
+        const group = groups.get(id);
+        group.count += 1;
+        const watched = show.episodes_watched && typeof show.episodes_watched === "object"
+        ? show.episodes_watched
+        : {};
+
+        Object.entries(watched).forEach(([seasonKey,values])=>{
+            const season = Number(seasonKey);
+            if(!Number.isFinite(season) || !Array.isArray(values)){
+                return;
+            }
+
+            const canonicalSeason = String(season);
+            if(!group.progress[canonicalSeason]){
+                group.progress[canonicalSeason] = [];
+            }
+            group.progress[canonicalSeason].push(...values);
+        });
+    });
+
+    return groups;
+}
+
+function restoreMergedProgress(data,groups){
+    if(!data || !data.shows || typeof data.shows !== "object"){
+        return data;
+    }
+
+    groups.forEach((group,id)=>{
+        if(group.count < 2){
+            return;
+        }
+
+        const preferred = data.shows[id];
+        if(!preferred || typeof preferred !== "object"){
+            return;
+        }
+
+        preferred.episodes_watched = Object.fromEntries(
+            Object.entries(group.progress).map(([seasonKey,values])=>[
+                seasonKey,
+                values.slice()
+            ])
+        );
+    });
+
+    return data;
 }
 
 function getDeterministicHistoryId(showId,season,episode){
@@ -553,7 +872,10 @@ function choosePreferredDuplicateShow(left,right){
 }
 
 function cleanupDuplicateShows(data,summary=null){
+    const groups = collectDuplicateProgress(data);
+
     if(!data || !data.shows || typeof data.shows !== "object" || Array.isArray(data.shows)){
+        restoreMergedProgress(data,groups);
         return;
     }
 
@@ -592,6 +914,7 @@ function cleanupDuplicateShows(data,summary=null){
     });
 
     data.shows = cleaned;
+    restoreMergedProgress(data,groups);
 }
 
 function normalizeTrackerDataForEpisodeIntegrity(data,summary=null){
@@ -877,14 +1200,18 @@ async function saveShowMutation(showId,addedEntries=[],deletedHistoryIds=[]){
 }
 
 function getHistoryIdsForSeason(showId,seasonNumber){
-    return (Array.isArray(DATA.history) ? DATA.history : [])
+    const data = DATA && typeof DATA === "object" ? DATA : {};
+    return (Array.isArray(data.history) ? data.history : [])
     .filter(entry=>{
         return (
+            entry &&
+            !isSpecialHistoryEntry(entry) &&
+            !isMovieHistoryRecord(entry) &&
             String(entry.tmdb_id) === String(showId) &&
             Number(entry.season) === Number(seasonNumber)
         );
     })
-    .map(entry=>String(entry.id || ""))
+    .map(entry=>cleanString(entry.id))
     .filter(Boolean);
 }
 
@@ -1002,9 +1329,11 @@ function setTVTrackerStartupDOMState(status){
 }
 
 function assertTVTrackerStartupOwnersLoaded(){
-    const missing = [];
-    const integrity = window.TVTrackerDuplicateShowIntegrity;
-    if(!integrity || integrity.storedDataWrapped !== true || typeof integrity.waitForReadiness !== "function"){
+const missing = [];
+    if(typeof getStoredData !== "function" || typeof cleanupDuplicateShows !== "function"){
+        missing.push("data integrity");
+    }
+    if(typeof getEpisodeIdentityKey !== "function" || typeof getHistoryEntryEpisodeKey !== "function"){
         missing.push("data integrity");
     }
     if(!window.TVTrackerSettings || typeof window.TVTrackerSettings.render !== "function"){
@@ -1797,13 +2126,16 @@ function applyTMDBDetailsToImportedShow(show,details,matchMethod){
 
 function moveShowStorageKey(oldId,newId,show){
 
-    if(!oldId || !newId || oldId === newId){
+    const oldKey = cleanString(oldId);
+    const newKey = cleanString(newId);
+
+    if(!oldKey || !newKey || oldKey === newKey){
         return;
     }
 
-    if(DATA.shows[String(newId)] && DATA.shows[String(newId)] !== show){
+    if(DATA.shows[newKey] && DATA.shows[newKey] !== show){
         // Keep both if there is an unexpected ID conflict.
-        show.tmdb_id = oldId;
+        show.tmdb_id = oldKey;
         show.local_only = true;
         if(show.compatible_import){
             show.compatible_import.match_method = "metadata-conflict";
@@ -1811,22 +2143,39 @@ function moveShowStorageKey(oldId,newId,show){
         return;
     }
 
-    delete DATA.shows[String(oldId)];
-    DATA.shows[String(newId)] = show;
+    delete DATA.shows[oldKey];
+    DATA.shows[newKey] = show;
 
     ensureProfileData();
 
     if(DATA.profile && Array.isArray(DATA.profile.favorite_shows)){
         DATA.profile.favorite_shows = DATA.profile.favorite_shows.map(id=>{
-            return String(id) === String(oldId) ? String(newId) : id;
+            return String(id) === oldKey ? newKey : id;
         });
     }
 
     if(DATA.metadata_sync && Array.isArray(DATA.metadata_sync.pending)){
         DATA.metadata_sync.pending = DATA.metadata_sync.pending.map(id=>{
-            return String(id) === String(oldId) ? String(newId) : id;
+            return String(id) === oldKey ? newKey : id;
         });
     }
+
+    if(Array.isArray(DATA.history)){
+        DATA.history.forEach(entry=>{
+            if(!entry || typeof entry !== "object"){
+                return;
+            }
+            if(String(entry.tmdb_id || "") === oldKey){
+                entry.tmdb_id = newKey;
+            }
+            if(String(entry.show_id || "") === oldKey){
+                entry.show_id = newKey;
+            }
+        });
+    }
+
+    remapQueueIds(DATA.metadata_sync,oldKey,newKey);
+    remapQueueIds(DATA.network_sync,oldKey,newKey);
 
 }
 
@@ -10909,6 +11258,10 @@ async function removeShow(showId){
     }
 
     const id = String(showId);
+    const favoriteShows = DATA.profile && Array.isArray(DATA.profile.favorite_shows)
+    ? DATA.profile.favorite_shows
+    : [];
+    const wasFavorite = favoriteShows.some(item=>String(item) === id);
     const deletedHistoryIds = (Array.isArray(DATA.history) ? DATA.history : [])
     .filter(entry=>String(entry.tmdb_id) === id)
     .map(entry=>String(entry.id || ""))
@@ -10919,20 +11272,31 @@ async function removeShow(showId){
         return String(entry.tmdb_id) !== id;
     });
 
+    if(wasFavorite){
+        DATA.profile.favorite_shows = favoriteShows.filter(item=>String(item) !== id);
+    }
+
     closeShowDetailsPage();
     refreshInterfaceForDataChanges({
         showIds:[id],
         historyChanged:deletedHistoryIds.length > 0,
-        stateChanged:false,
+        stateChanged:wasFavorite,
         remote:false
     });
     showToast(show.title + " removed");
 
     await waitForNextPaint();
-    await saveData({
+
+    const saveOptions = {
         showDeleteIds:[id],
         historyDeleteIds:deletedHistoryIds
-    });
+    };
+
+    if(wasFavorite){
+        saveOptions.stateKeys = ["profile"];
+    }
+
+    await saveData(saveOptions);
 
 }
 
@@ -11102,6 +11466,63 @@ async function updateEpisodeWatched(showId,season,episode,isWatched){
 
 async function markSeasonWatched(showId,seasonNumber){
     const id = String(showId);
+    const data = DATA && typeof DATA === "object" ? DATA : null;
+    const show = data && data.shows ? data.shows[id] : null;
+    if(!show || typeof getAiredEpisodeNumbersInSeason !== "function" || typeof isSeasonFullyWatched !== "function"){
+        return markSeasonWatchedLegacyFlow(showId,seasonNumber);
+    }
+
+    if(typeof ensureSeasonLoaded === "function"){
+        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
+    }
+    const aired = getAiredEpisodeNumbersInSeason(show,seasonNumber);
+    if(!isSeasonFullyWatched(show,seasonNumber,aired)){
+        return markSeasonWatchedLegacyFlow(showId,seasonNumber);
+    }
+
+    const confirmed = typeof showAppConfirm === "function"
+    ? await showAppConfirm({
+        title:"Mark Season Unwatched",
+        message:"Mark every watched regular episode in Season " + seasonNumber + " as unwatched? Imported specials are preserved.",
+        confirmLabel:"Mark Unwatched",
+        cancelLabel:"Cancel",
+        danger:true
+    })
+    : false;
+    if(!confirmed){
+        return;
+    }
+
+    await unwatchFullyWatchedSeason(show,id,seasonNumber);
+}
+
+async function unwatchFullyWatchedSeason(show,id,seasonNumber){
+    const deletedHistoryIds = typeof getHistoryIdsForSeason === "function"
+    ? getHistoryIdsForSeason(id,seasonNumber)
+    : [];
+    if(show.episodes_watched && typeof show.episodes_watched === "object"){
+        delete show.episodes_watched[String(seasonNumber)];
+    }
+    const data = DATA && typeof DATA === "object" ? DATA : null;
+    data.history = (Array.isArray(data.history) ? data.history : []).filter(entry=>{
+        if(!entry || isSpecialHistoryEntry(entry) || isMovieHistoryRecord(entry)){
+            return true;
+        }
+        return !(
+            String(entry.tmdb_id) === id &&
+            Number(entry.season) === Number(seasonNumber)
+        );
+    });
+    if(typeof updateShowLastWatchedFromHistory === "function") updateShowLastWatchedFromHistory(show);
+    if(typeof reopenCompletedShowAfterUnwatch === "function") reopenCompletedShowAfterUnwatch(show,seasonNumber);
+    if(typeof refreshAfterLocalShowChange === "function") refreshAfterLocalShowChange(id,true);
+    if(typeof showToast === "function") showToast("Marked Season " + seasonNumber + " as unwatched");
+    if(typeof waitForNextPaint === "function") await waitForNextPaint();
+    if(typeof saveShowMutation === "function") await saveShowMutation(id,[],deletedHistoryIds);
+}
+
+async function markSeasonWatchedLegacyFlow(showId,seasonNumber){
+    const id = String(showId);
     const show = DATA.shows[id];
 
     if(!show){
@@ -11124,36 +11545,7 @@ async function markSeasonWatched(showId,seasonNumber){
     );
 
     if(seasonIsFullyWatched){
-        const confirmed = await showAppConfirm({
-            title:"Mark Season Unwatched",
-            message:
-            "Mark every watched episode in Season " +
-            seasonNumber +
-            " as unwatched? This will remove those entries from History.",
-            confirmLabel:"Mark Unwatched",
-            cancelLabel:"Cancel",
-            danger:true
-        });
-
-        if(!confirmed){
-            return;
-        }
-
-        const deletedHistoryIds = getHistoryIdsForSeason(id,seasonNumber);
-        delete show.episodes_watched[String(seasonNumber)];
-        DATA.history = (Array.isArray(DATA.history) ? DATA.history : []).filter(entry=>{
-            return !(
-                String(entry.tmdb_id) === id &&
-                Number(entry.season) === Number(seasonNumber)
-            );
-        });
-        updateShowLastWatchedFromHistory(show);
-        reopenCompletedShowAfterUnwatch(show,seasonNumber);
-
-        refreshAfterLocalShowChange(id,true);
-        showToast("Marked Season " + seasonNumber + " as unwatched");
-        await waitForNextPaint();
-        await saveShowMutation(id,[],deletedHistoryIds);
+        await unwatchFullyWatchedSeason(show,id,seasonNumber);
         return;
     }
 
@@ -12719,6 +13111,66 @@ async function prepareUpcomingData(forceRefresh=false){
 
 
 
+const UPCOMING_REPAIR_COOLDOWN_MS = 30 * 60 * 1000;
+const UPCOMING_REPAIR_MAX_PER_PASS = 8;
+const upcomingRepairAttempts = new Map();
+let upcomingRepairBusy = false;
+
+function watchedEpisodeCount(show){
+    const watched = show && show.episodes_watched && typeof show.episodes_watched === "object" ? show.episodes_watched : {};
+    return Object.values(watched).reduce((total,episodes)=>total + (Array.isArray(episodes) ? episodes.length : 0),0);
+}
+
+function hasCurrentOrFutureLastAirDate(show){
+    const raw = String(show && show.last_air_date || "").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+    const value = Date.parse(raw + "T23:59:59Z");
+    return Number.isFinite(value) && value >= Date.now() - 24 * 60 * 60 * 1000;
+}
+
+function shouldRepairWatchingShow(show){
+    if(!show || show.status !== "watching") return false;
+    const tmdbStatus = String(show.tmdb_status || "").trim().toLowerCase();
+    if(tmdbStatus === "canceled" || tmdbStatus === "cancelled") return false;
+    const activeStatus = tmdbStatus === "returning series" || tmdbStatus === "in production" || tmdbStatus === "planned" || tmdbStatus === "pilot";
+    const nextEpisode = show.next_episode_to_air && typeof show.next_episode_to_air === "object" ? show.next_episode_to_air : null;
+    const knownUnwatched = Number(show.number_of_episodes || 0) > watchedEpisodeCount(show);
+    return activeStatus || !!nextEpisode || hasCurrentOrFutureLastAirDate(show) || knownUnwatched;
+}
+
+function showHasUpcomingItems(show){
+    if(typeof getUpcomingScheduleItems !== "function") return true;
+    try{ const items = getUpcomingScheduleItems(show); return Array.isArray(items) && items.length > 0; }
+    catch(error){ return true; }
+}
+
+async function repairMissingWatchingSchedules(){
+    if(upcomingRepairBusy) return false;
+    if(!DATA || !DATA.shows || typeof refreshShowForSchedule !== "function" || typeof getUpcomingScheduleItems !== "function") return false;
+    const now = Date.now();
+    const candidates = Object.values(DATA.shows)
+        .filter(show=>shouldRepairWatchingShow(show) && !showHasUpcomingItems(show))
+        .filter(show=>{ const id=String(show.tmdb_id||show.id||""); if(!id)return false; const last=Number(upcomingRepairAttempts.get(id)||0); return !last || now-last>=UPCOMING_REPAIR_COOLDOWN_MS; })
+        .slice(0,UPCOMING_REPAIR_MAX_PER_PASS);
+    if(!candidates.length) return false;
+    upcomingRepairBusy = true;
+    let refreshed = 0;
+    try{
+        for(const show of candidates){
+            const id=String(show.tmdb_id||show.id||"");
+            upcomingRepairAttempts.set(id,Date.now());
+            try{ await refreshShowForSchedule(show,true); refreshed += 1; }
+            catch(error){ console.warn("TV Tracker targeted Upcoming refresh failed",id,error); }
+        }
+        if(refreshed > 0){
+            if(typeof saveData === "function"){ try{ await saveData(); }catch(error){ console.warn("TV Tracker could not save targeted Upcoming refresh",error); } }
+            if(activePage === "shows" && activeShowsTab === "upcoming" && typeof renderUpcoming === "function") await renderUpcoming(false);
+            return true;
+        }
+        return false;
+    }finally{ upcomingRepairBusy = false; }
+}
+
 async function refreshUpcomingDataInBackground(){
 
     if(isRefreshingUpcoming){
@@ -12740,6 +13192,8 @@ async function refreshUpcomingDataInBackground(){
     if(activePage === "shows" && activeShowsTab === "upcoming"){
         renderUpcoming(false);
     }
+
+    await repairMissingWatchingSchedules();
 
 }
 
@@ -15181,27 +15635,15 @@ function getBackupSummary(){
 
     ensureProfileData();
 
-    const shows = Object.values(DATA.shows || {});
-    const history = Array.isArray(DATA.history) ? DATA.history : [];
-    const favorites = DATA.profile && Array.isArray(DATA.profile.favorite_shows)
-    ? DATA.profile.favorite_shows
-    : [];
-    const favoriteMovies = DATA.profile && Array.isArray(DATA.profile.favorite_movies)
-    ? DATA.profile.favorite_movies
-    : [];
+    const data = DATA && typeof DATA === "object" ? DATA : {};
+    const profile = data.profile && typeof data.profile === "object" ? data.profile : {};
+    const counts = summarizeHistory(data.history);
 
-    const specialHistoryEntries = history.filter(entry=>{
-        return Number(entry.season) === 0 || entry.special === true;
-    }).length;
-
-    return {
-        shows:shows.length,
-        historyEntries:history.length,
-        regularHistoryEntries:history.length - specialHistoryEntries,
-        specialHistoryEntries:specialHistoryEntries,
-        favorites:favorites.length,
-        favoriteMovies:favoriteMovies.length
-    };
+    return Object.assign({
+        shows:Object.keys(data.shows || {}).length,
+        favorites:Array.isArray(profile.favorite_shows) ? profile.favorite_shows.length : 0,
+        favoriteMovies:Array.isArray(profile.favorite_movies) ? profile.favorite_movies.length : 0
+    },counts);
 
 }
 
@@ -15239,7 +15681,7 @@ async function commitTrackerDataTransactionally(data,backupTemplate=null){
         app:"TV Tracker",
         backupType:"native-app-backup",
         backupVersion:2,
-        schemaVersion:4,
+        schemaVersion:5,
         exportedAt:new Date().toISOString(),
         summary:null,
         data:null
@@ -15282,7 +15724,7 @@ function getNativeBackupObject(){
         app:"TV Tracker",
         backupType:"native-app-backup",
         backupVersion:2,
-        schemaVersion:4,
+        schemaVersion:5,
         exportedAt:new Date().toISOString(),
         summary:getBackupSummary(),
         data:getCleanTrackerDataCopy(DATA)
@@ -15556,12 +15998,25 @@ function validateNativeBackupObject(backup){
         return {valid:false,message:"Invalid app backup file"};
     }
 
+    const schemaVersion = Number(backup.schemaVersion || 1);
+
+    if(schemaVersion === 5){
+        // Current-schema backups are validated through the compatibility
+        // downgrade path the backend restore pipeline already understands.
+        const compatibilityCopy = JSON.parse(JSON.stringify(backup));
+        compatibilityCopy.schemaVersion = 4;
+        const result = validateNativeBackupObject(compatibilityCopy);
+        if(result && result.valid === true && result.summary){
+            result.summary.schemaVersion = 5;
+        }
+        return result;
+    }
+
     if(backup.app !== "TV Tracker" || backup.backupType !== "native-app-backup"){
         return {valid:false,message:"This is not a TV Tracker app backup"};
     }
 
     const backupVersion = Number(backup.backupVersion || 1);
-    const schemaVersion = Number(backup.schemaVersion || 1);
 
     if(![1,2].includes(backupVersion)){
         return {valid:false,message:"This backup version is not supported"};
@@ -16859,33 +17314,20 @@ async function findTMDBTVDetailsByExternalId(externalId,externalSource){
 
 
 
-async function findTMDBTVDetailsByTitle(title){
+async function findTMDBTVDetailsByTitle(requestedTitle){
 
-    const cleanTitle = cleanCompatibleSearchTitle(title);
+    const hint = titleHint(requestedTitle);
 
-    if(!cleanTitle || cleanTitle.length < 2){
+    if(!hint.title || hint.title.length < 2 || typeof tmdbSearchShows !== "function"){
         return null;
     }
 
     try{
 
-        const results = await tmdbSearchShows(cleanTitle);
+        const results = await tmdbSearchShows(hint.title);
+        const selected = selectStrictTMDBCandidate(results,requestedTitle);
 
-        if(!Array.isArray(results) || results.length === 0){
-            return null;
-        }
-
-        const normalizedTarget = normalizeComparableTitle(cleanTitle);
-
-        let selected = results.find(show=>{
-            return normalizeComparableTitle(show.name || "") === normalizedTarget;
-        });
-
-        if(!selected){
-            selected = results[0];
-        }
-
-        if(!selected || !selected.id){
+        if(!selected || !selected.id || typeof tmdbGetShowDetails !== "function"){
             return null;
         }
 
@@ -17158,6 +17600,8 @@ function importCompatibleEpisodesIntoShow(show,compatibleShow,targetData){
     show.last_watched = latestWatchedAt ? latestWatchedAt.slice(0,10) : "";
     show.last_activity_at = latestWatchedAt || "";
 
+    removeSpecialOnlyProgress(show,scanCompatibleWatchedEpisodes(compatibleShow));
+
     return stats;
 
 }
@@ -17170,28 +17614,27 @@ function reapplyImportedWatchedProgress(show){
         return;
     }
 
-    Object.keys(show._imported_progress.watched).forEach(key=>{
-
-        const parts = key.split("-").map(Number);
-        const season = parts[0];
-        const episode = parts[1];
-
-        if(!Number.isFinite(season) || !Number.isFinite(episode)){
+    Object.entries(show._imported_progress.watched).forEach(([key,metadata])=>{
+        if(metadata && metadata.special === true){
             return;
         }
-
+        const parts = String(key).split("-").map(Number);
+        const season = parts[0];
+        const episode = parts[1];
+        if(!Number.isFinite(season) || season < 1 || !Number.isFinite(episode) || episode < 1){
+            return;
+        }
         const seasonKey = String(season);
-
-        if(!show.episodes_watched[seasonKey]){
+        if(!show.episodes_watched || typeof show.episodes_watched !== "object"){
+            show.episodes_watched = {};
+        }
+        if(!Array.isArray(show.episodes_watched[seasonKey])){
             show.episodes_watched[seasonKey] = [];
         }
-
         if(!show.episodes_watched[seasonKey].includes(episode)){
             show.episodes_watched[seasonKey].push(episode);
         }
-
         show.episodes_watched[seasonKey].sort((a,b)=>a-b);
-
     });
 
 }
@@ -17889,3 +18332,54 @@ function exportHTMLReport(){
     }
 
 }
+
+const FRONTEND_SCHEMA_VERSION = 5;
+
+function isMovieHistoryEntry(entry){
+    return isMovieHistoryRecord(entry);
+}
+
+function suspiciousHistoryReferences(data){
+    const source = data && typeof data === "object" ? data : {};
+    const shows = source.shows && typeof source.shows === "object" ? source.shows : {};
+    const history = Array.isArray(source.history) ? source.history : [];
+    const suspicious = [];
+
+    history.forEach(entry=>{
+        if(!entry || typeof entry !== "object" || isMovieHistoryEntry(entry) || isSpecialHistoryEntry(entry)){
+            return;
+        }
+        const show = shows[String(entry.tmdb_id || entry.show_id || "")];
+        if(!show){
+            suspicious.push({id:cleanString(entry.id),reason:"missing_show"});
+            return;
+        }
+        const season = Number(entry.season);
+        const episode = Number(entry.episode);
+        const knownSeasons = Number(show.number_of_seasons || 0);
+        if(knownSeasons > 0 && season > knownSeasons){
+            suspicious.push({id:cleanString(entry.id),reason:"season_out_of_range"});
+            return;
+        }
+        const seasonCount = show._season_episodes && Number(show._season_episodes[String(season)] || 0);
+        if(seasonCount > 0 && episode > seasonCount){
+            suspicious.push({id:cleanString(entry.id),reason:"episode_out_of_range"});
+        }
+    });
+
+    return suspicious;
+}
+
+window.TVTrackerDataIntegrity = Object.freeze({
+    installed:true,
+    frontendSchemaVersion:FRONTEND_SCHEMA_VERSION,
+    isMovieHistoryEntry,
+    isSpecialHistoryEntry,
+    regularEpisodeIdentity:getEpisodeIdentityKey,
+    historyEpisodeIdentity:getHistoryEntryEpisodeKey,
+    summarizeHistory,
+    titleHint,
+    selectStrictTMDBCandidate,
+    scanCompatibleWatchedEpisodes,
+    suspiciousHistoryReferences
+});

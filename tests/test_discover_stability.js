@@ -2,8 +2,14 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { extractBetween } = require("./helpers/extract.js");
 
-const source = fs.readFileSync(path.join(__dirname,"..","static","js","discover-runtime.js"),"utf8");
+const uiSource = fs.readFileSync(path.join(__dirname,"..","static","js","ui.js"),"utf8");
+const source = extractBetween(
+  uiSource,
+  "// --TVT-discover-gate-owner-begin--",
+  "// --TVT-discover-gate-owner-end--"
+);
 
 function deferred(){
     let resolve;
@@ -26,7 +32,7 @@ function load(trendingDeferred){
         discoverHubState:{loaded:false,loading:true,error:"",sections:[]},
         shouldShowDiscoverHub:()=>true,
         renderDiscoverHubSkeleton:title=>`<section data-skeleton="${title}"></section>`,
-        renderDiscoverHub:()=>{ finalRenders += 1; },
+        renderDiscoverHubContent:()=>{ finalRenders += 1; },
         document:{getElementById:id=>id === "search-results" ? results : null},
         TVTrackerTrending:{
             loadHubRows:()=>trendingDeferred.promise.then(value=>{
@@ -88,7 +94,7 @@ function load(trendingDeferred){
         assert.strictEqual(env.getFinalRenders(),1,"failed requests must still release the gate instead of freezing Discover");
     }
 
-    assert.ok(source.includes("api.loadHubRows(false)"),"Discover stability should coordinate the existing Trending loader");
+    assert.ok(source.includes("loadHubRows(false)"),"Discover stability should coordinate the existing Trending loader");
     assert.ok(source.includes("state.loaded === true || !!state.error"),"base success or failure should both count as settled");
 
     console.log("Discover stability regression tests passed.");

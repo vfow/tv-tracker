@@ -4,7 +4,30 @@ const path = require('path');
 const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'notifications-runtime.js'), 'utf8');
-const upcomingRepairSource = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'upcoming-schedule-repair.js'), 'utf8');
+const appSource = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'app.js'), 'utf8');
+
+function extractUpcomingRepairSource(){
+  const start = appSource.indexOf('const UPCOMING_REPAIR_COOLDOWN_MS');
+  assert.ok(start >= 0,'app.js must own the Upcoming repair pass constants');
+  const fnStart = appSource.indexOf('async function refreshUpcomingDataInBackground',start);
+  assert.ok(fnStart > start,'app.js must own refreshUpcomingDataInBackground');
+  const braceStart = appSource.indexOf('{',fnStart);
+  assert.ok(braceStart > fnStart);
+  let depth = 0;
+  let quote = null;
+  for(let i = braceStart; i < appSource.length; i += 1){
+    const char = appSource[i];
+    if(quote){
+      if(char === '\\'){ i += 1; continue; }
+      if(char === quote){ quote = null; }
+      continue;
+    }
+    if(char === '"' || char === "'" || char === '`'){ quote = char; continue; }
+    if(char === '{'){ depth += 1; continue; }
+    if(char === '}'){ depth -= 1; if(depth === 0){ return appSource.slice(start,i + 1); } }
+  }
+  throw new Error('could not extract the Upcoming repair owner block from app.js');
+}
 
 function occurrences(value,needle){
     return value.split(needle).length - 1;
@@ -69,36 +92,35 @@ function createSandbox(){
 }
 
 function createUpcomingRepairSandbox(){
-    const scheduled = [];
-    const calls = {background:0};
+    const calls = {prepared:0};
     const warnings = [];
-    const window = {
+    const sandbox = {
+        console:{
+            log:console.log,
+            error:console.error,
+            warn(...args){ warnings.push(args); }
+        },
         DATA:{shows:{}},
         activePage:'shows',
         activeShowsTab:'upcoming',
-        refreshUpcomingDataInBackground:async()=>{
-            calls.background += 1;
-            return 'background-result';
-        },
+        isRefreshingUpcoming:false,
+        prepareUpcomingData:async()=>{ calls.prepared += 1; },
         getUpcomingScheduleItems:()=>[],
         refreshShowForSchedule:async()=>{},
         saveData:async()=>{},
         renderUpcoming:async()=>{},
-        setTimeout(callback,delay){
-            scheduled.push({callback,delay});
-            return scheduled.length;
-        }
+        Map,
+        Date,
+        Object,
+        Array,
+        String,
+        Number,
+        Promise,
+        Math
     };
-    window.window = window;
-    const runtimeConsole = {
-        log:console.log,
-        error:console.error,
-        warn(...args){ warnings.push(args); }
-    };
-    const sandbox = {window,console:runtimeConsole};
     vm.createContext(sandbox);
-    vm.runInContext(upcomingRepairSource,sandbox,{filename:'upcoming-schedule-repair.js'});
-    return {window,scheduled,calls,sandbox,warnings};
+    vm.runInContext(extractUpcomingRepairSource(),sandbox,{filename:'app-upcoming-repair-owner.js'});
+    return {sandbox,calls,warnings};
 }
 
 (async()=>{
@@ -127,17 +149,23 @@ function createUpcomingRepairSandbox(){
         );
     }
 
-    {
-        const {window,scheduled,calls,sandbox} = createUpcomingRepairSandbox();
-        const installedWrapper = window.refreshUpcomingDataInBackground;
-        assert.strictEqual(installedWrapper._tvtrackerTargetedRepair,true,'owner must retain the shipped duplicate-wrapper marker');
-        vm.runInContext(upcomingRepairSource,sandbox,{filename:'upcoming-schedule-repair.js'});
-        assert.strictEqual(window.refreshUpcomingDataInBackground,installedWrapper,'owner must not wrap Upcoming refresh twice');
-        assert.strictEqual(scheduled.length,1,'owner must schedule one initial repair pass');
-        assert.strictEqual(scheduled[0].delay,1200);
-        assert.strictEqual(window.TVTrackerUpcomingScheduleRepair.install(),false,'owner installer must be idempotent');
-        assert.strictEqual(window.TVTrackerUpcomingScheduleRepair.repairMissingWatchingSchedules,undefined,'owner must keep repair implementation private');
+{
+        const repairBlock = extractUpcomingRepairSource();
+        assert.ok(repairBlock.includes('function repairMissingWatchingSchedules'),'app.js must own the Upcoming repair pass');
+        assert.ok(repairBlock.includes('const UPCOMING_REPAIR_MAX_PER_PASS = 8'),'the repair pass must keep the eight-show per-pass bound');
+        assert.ok(repairBlock.includes('const UPCOMING_REPAIR_COOLDOWN_MS = 30 * 60 * 1000'),'the repair pass must keep the thirty-minute cooldown');
+        assert.ok(repairBlock.includes('upcomingRepairAttempts'),'the repair pass must keep per-show cooldown bookkeeping');
+        assert.ok(repairBlock.includes('isRefreshingUpcoming'),'the repair pass must stay guarded by the Upcoming refresh lock');
+        assert.ok(repairBlock.includes('repairMissingWatchingSchedules()'),'refreshUpcomingDataInBackground must run the repair pass');
+        assert.ok(repairBlock.includes('refreshShowForSchedule(show,true)'),'the repair pass must force targeted schedule refreshes');
+        assert.ok(!repairBlock.includes('setTimeout'),'the folded repair pass must not rely on a wrapper-owned timer');
+        assert.ok(!appSource.includes('TVTrackerUpcomingScheduleRepair'),'the repair implementation must stay private to the app owner');
+        assert.strictEqual(occurrences(appSource,'async function refreshUpcomingDataInBackground'),1,'there must be one Upcoming refresh owner');
+        assert.strictEqual(occurrences(appSource,'function repairMissingWatchingSchedules'),1,'there must be one repair pass owner');
+    }
 
+    {
+        const {sandbox,calls} = createUpcomingRepairSandbox();
         let forcedRefreshes = 0;
         let saved = 0;
         let rerendered = 0;
@@ -149,36 +177,35 @@ function createUpcomingRepairSandbox(){
             number_of_episodes:7,
             episodes_watched:{'1':[1,2,3,4,5,6]}
         };
-        window.DATA.shows = {'123':lucky};
-        window.getUpcomingScheduleItems = show=>show._repaired ? [{episode_number:7,air_date:'2026-08-19'}] : [];
-        window.refreshShowForSchedule = async(show,force)=>{
+        sandbox.DATA.shows = {'123':lucky};
+        sandbox.getUpcomingScheduleItems = show=>show._repaired ? [{episode_number:7,air_date:'2026-08-19'}] : [];
+        sandbox.refreshShowForSchedule = async(show,force)=>{
             assert.strictEqual(force,true,'missing Watching schedule must force a targeted refresh');
             forcedRefreshes += 1;
             show._repaired = true;
         };
-        window.saveData = async()=>{ saved += 1; };
-        window.renderUpcoming = async(startBackgroundRefresh)=>{
+        sandbox.saveData = async()=>{ saved += 1; };
+        sandbox.renderUpcoming = async(startBackgroundRefresh)=>{
             assert.strictEqual(startBackgroundRefresh,false,'targeted repair rerender must not start another background loop');
             rerendered += 1;
         };
 
-        const result = await window.refreshUpcomingDataInBackground();
-        assert.strictEqual(result,'background-result','wrapper must preserve the original Upcoming refresh result');
-        assert.strictEqual(calls.background,1);
-        assert.strictEqual(forcedRefreshes,1);
-        assert.strictEqual(saved,1);
-        assert.strictEqual(rerendered,1);
+        await sandbox.refreshUpcomingDataInBackground();
+        assert.strictEqual(calls.prepared,1,'the Upcoming refresh owner must run the main refresh first');
+        assert.strictEqual(forcedRefreshes,1,'a show with no schedule items must receive a targeted refresh');
+        assert.strictEqual(saved,1,'a successful repair pass must save the refreshed tracker state');
+        assert.strictEqual(rerendered,2,'the refresh owner and the repair pass each render the Upcoming tab');
         assert.strictEqual(lucky._repaired,true);
 
-        await window.refreshUpcomingDataInBackground();
-        assert.strictEqual(calls.background,2);
+        await sandbox.refreshUpcomingDataInBackground();
+        assert.strictEqual(calls.prepared,2);
         assert.strictEqual(forcedRefreshes,1,'a show with a repaired schedule must not refresh again');
-        assert.strictEqual(saved,1);
-        assert.strictEqual(rerendered,1);
+        assert.strictEqual(saved,1,'no repair save is needed once the schedule exists');
+        assert.strictEqual(rerendered,3,'only the refresh owner rerenders when nothing needs repair');
     }
 
     {
-        const {window} = createUpcomingRepairSandbox();
+        const {sandbox,calls} = createUpcomingRepairSandbox();
         let forcedRefreshes = 0;
         const completed = {
             id:999,
@@ -189,21 +216,22 @@ function createUpcomingRepairSandbox(){
             episodes_watched:{'1':[1,2,3,4,5,6]},
             last_air_date:'2020-01-01'
         };
-        window.DATA.shows = {'999':completed};
-        window.getUpcomingScheduleItems = ()=>[];
-        window.refreshShowForSchedule = async()=>{ forcedRefreshes += 1; };
+        sandbox.DATA.shows = {'999':completed};
+        sandbox.getUpcomingScheduleItems = ()=>[];
+        sandbox.refreshShowForSchedule = async()=>{ forcedRefreshes += 1; };
 
-        await window.refreshUpcomingDataInBackground();
-        assert.strictEqual(forcedRefreshes,0);
+        await sandbox.refreshUpcomingDataInBackground();
+        assert.strictEqual(calls.prepared,1);
+        assert.strictEqual(forcedRefreshes,0,'ended shows must never be force-refreshed for a missing schedule');
     }
 
     {
-        const {window} = createUpcomingRepairSandbox();
+        const {sandbox} = createUpcomingRepairSandbox();
         const forcedIds = [];
         let saved = 0;
         let rerendered = 0;
         for(let id=1;id<=10;id+=1){
-            window.DATA.shows[String(id)] = {
+            sandbox.DATA.shows[String(id)] = {
                 id,
                 tmdb_id:id,
                 status:'watching',
@@ -212,37 +240,36 @@ function createUpcomingRepairSandbox(){
                 episodes_watched:{}
             };
         }
-        window.getUpcomingScheduleItems = ()=>[];
-        window.refreshShowForSchedule = async(show,force)=>{
+        sandbox.getUpcomingScheduleItems = ()=>[];
+        sandbox.refreshShowForSchedule = async(show,force)=>{
             assert.strictEqual(force,true);
             forcedIds.push(show.tmdb_id);
         };
-        window.saveData = async()=>{ saved += 1; };
-        window.renderUpcoming = async(startBackgroundRefresh)=>{
+        sandbox.saveData = async()=>{ saved += 1; };
+        sandbox.renderUpcoming = async(startBackgroundRefresh)=>{
             assert.strictEqual(startBackgroundRefresh,false);
             rerendered += 1;
         };
 
-        await window.refreshUpcomingDataInBackground();
+        await sandbox.refreshUpcomingDataInBackground();
         assert.strictEqual(forcedIds.length,8,'one repair pass must refresh at most eight shows');
         assert.strictEqual(saved,1);
-        assert.strictEqual(rerendered,1);
-
-        await window.refreshUpcomingDataInBackground();
-        assert.strictEqual(forcedIds.length,10,'a later pass may process candidates left beyond the bound');
-        assert.strictEqual(saved,2);
         assert.strictEqual(rerendered,2);
 
-        await window.refreshUpcomingDataInBackground();
+        await sandbox.refreshUpcomingDataInBackground();
+        assert.strictEqual(forcedIds.length,10,'a later pass may process candidates left beyond the bound');
+        assert.strictEqual(saved,2);
+        assert.strictEqual(rerendered,4);
+
+        await sandbox.refreshUpcomingDataInBackground();
         assert.strictEqual(forcedIds.length,10,'cooldown must suppress immediate repeat refreshes');
         assert.strictEqual(saved,2,'cooldown-only passes must not save tracker state');
-        assert.strictEqual(rerendered,2,'cooldown-only passes must not rerender Upcoming');
+        assert.strictEqual(rerendered,5,'cooldown-only passes must not rerender through the repair pass');
     }
 
     {
-        const {window,scheduled,warnings} = createUpcomingRepairSandbox();
-        const failure = new Error('initial repair render failed');
-        window.DATA.shows = {
+        const {sandbox,warnings} = createUpcomingRepairSandbox();
+        sandbox.DATA.shows = {
             '321':{
                 id:321,
                 tmdb_id:321,
@@ -252,20 +279,36 @@ function createUpcomingRepairSandbox(){
                 episodes_watched:{}
             }
         };
-        window.renderUpcoming = async()=>{ throw failure; };
-        const unhandled = [];
-        const onUnhandled = error=>{ unhandled.push(error); };
-        process.on('unhandledRejection',onUnhandled);
-        try{
-            scheduled[0].callback();
-            await new Promise(resolve=>setImmediate(resolve));
-            assert.deepStrictEqual(unhandled,[],'the timer-owned repair promise must not leak an unhandled rejection');
-        }finally{
-            process.removeListener('unhandledRejection',onUnhandled);
-        }
+        sandbox.saveData = async()=>{ throw new Error('targeted save failed'); };
+        await sandbox.refreshUpcomingDataInBackground();
         assert.ok(
-            warnings.some(args=>args[0] === 'TV Tracker initial targeted Upcoming repair failed' && args[1] === failure),
-            'the timer-owned repair rejection must be reported'
+            warnings.some(args=>args[0] === 'TV Tracker could not save targeted Upcoming refresh'),
+            'repair save failures must be reported without breaking the refresh'
+        );
+    }
+
+    {
+        const {sandbox} = createUpcomingRepairSandbox();
+        sandbox.DATA.shows = {
+            '456':{
+                id:456,
+                tmdb_id:456,
+                status:'watching',
+                tmdb_status:'Returning Series',
+                number_of_episodes:1,
+                episodes_watched:{}
+            }
+        };
+        const renderFailure = new Error('targeted render failed');
+        let renders = 0;
+        sandbox.renderUpcoming = async()=>{
+            renders += 1;
+            if(renders > 1) throw renderFailure;
+        };
+        await assert.rejects(
+            sandbox.refreshUpcomingDataInBackground(),
+            error=>error === renderFailure,
+            'a failed repair-pass rerender must propagate through the refresh owner'
         );
     }
 
@@ -297,7 +340,7 @@ function createUpcomingRepairSandbox(){
     assert(source.includes('if(input && key === "enabled") input.disabled = false;'),'master Notifications toggle must be re-enabled after save');
     for(const trackerDependency of ['DATA','saveData','refreshShowForSchedule','getUpcomingScheduleItems','refreshUpcomingDataInBackground']){
         assert(!source.includes(trackerDependency),`Notifications must not reference tracker dependency ${trackerDependency}`);
-        assert(upcomingRepairSource.includes(trackerDependency),`Upcoming owner must contain tracker dependency ${trackerDependency}`);
+        assert(extractUpcomingRepairSource().includes(trackerDependency),`Upcoming owner must contain tracker dependency ${trackerDependency}`);
     }
 
     console.log('Notification settings and Upcoming polish regression tests passed.');

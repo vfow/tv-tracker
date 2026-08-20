@@ -228,6 +228,10 @@ function showPage(page){
     updateShellTitle();
     renderAll();
 
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.updateRouteFromState === "function"){
+        window.setTimeout(()=>window.TVTrackerRouter.updateRouteFromState(false),0);
+    }
+
 }
 
 
@@ -310,7 +314,185 @@ function renderShowsPage(){
 
 
 
+// --TVT-discover-gate-owner-begin--
+const DISCOVER_GATE_MAX_MS = 12000;
+let discoverGateActive = false;
+let discoverGateStableReady = false;
+let discoverGateTrendingSettled = false;
+let discoverGateTrendingPromise = null;
+let discoverGateTimer = null;
+let discoverGateCycleId = 0;
+
+function discoverGateIsHubVisible(){
+    if(window.activePage !== "discover"){
+        return false;
+    }
+    if(typeof window.shouldShowDiscoverHub === "function"){
+        return !!window.shouldShowDiscoverHub();
+    }
+    return true;
+}
+
+function discoverGateBaseSettled(){
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {};
+    return state.loading !== true && (state.loaded === true || !!state.error);
+}
+
+function discoverGateSkeletonHTML(){
+    if(typeof window.renderDiscoverHubSkeleton === "function"){
+        return `
+            <div class="discover-page-shell">
+                ${window.renderDiscoverHubSkeleton("TV Shows")}
+                ${window.renderDiscoverHubSkeleton("Movies")}
+                ${window.renderDiscoverHubSkeleton("Collections")}
+            </div>
+        `;
+    }
+    return `
+        <div class="discover-page-shell">
+            <div class="discover-card-row discover-card-row-loading"></div>
+        </div>
+    `;
+}
+
+function discoverGateRenderSkeleton(){
+    if(!window.document || typeof window.document.getElementById !== "function"){
+        return;
+    }
+    const results = window.document.getElementById("search-results");
+    if(!results){
+        return;
+    }
+    if(results.dataset && results.dataset.discoverStableSkeleton === "1"){
+        return;
+    }
+    results.innerHTML = discoverGateSkeletonHTML();
+    if(results.dataset){
+        results.dataset.discoverStableSkeleton = "1";
+    }
+}
+
+function discoverGateClearSkeletonMarker(){
+    if(!window.document || typeof window.document.getElementById !== "function"){
+        return;
+    }
+    const results = window.document.getElementById("search-results");
+    if(results && results.dataset){
+        delete results.dataset.discoverStableSkeleton;
+    }
+}
+
+function discoverGateClearTimer(){
+    if(discoverGateTimer){
+        clearTimeout(discoverGateTimer);
+        discoverGateTimer = null;
+    }
+}
+
+function discoverGateRelease(force=false){
+    if(!discoverGateActive || !discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!force && (!discoverGateBaseSettled() || !discoverGateTrendingSettled)){
+        discoverGateRenderSkeleton();
+        return false;
+    }
+    discoverGateActive = false;
+    discoverGateStableReady = true;
+    discoverGateClearTimer();
+    discoverGateClearSkeletonMarker();
+    window.renderDiscoverHubContent();
+    return true;
+}
+
+function discoverGateEnsureTrending(cycle){
+    if(discoverGateTrendingPromise){
+        return discoverGateTrendingPromise;
+    }
+    const api = window.TVTrackerTrending;
+    if(!api || typeof api.loadHubRows !== "function"){
+        discoverGateTrendingSettled = true;
+        discoverGateRelease(false);
+        return Promise.resolve([]);
+    }
+
+    discoverGateTrendingSettled = false;
+    discoverGateTrendingPromise = Promise.resolve()
+    .then(()=>api.loadHubRows(false))
+    .catch(()=>[])
+    .finally(()=>{
+        if(cycle === discoverGateCycleId){
+            discoverGateTrendingSettled = true;
+            discoverGateTrendingPromise = null;
+            discoverGateRelease(false);
+        }
+    });
+    return discoverGateTrendingPromise;
+}
+
+function discoverGateBegin(){
+    if(!discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!discoverGateActive){
+        discoverGateActive = true;
+        discoverGateStableReady = false;
+        discoverGateTrendingSettled = false;
+        discoverGateCycleId += 1;
+        discoverGateClearTimer();
+        const cycle = discoverGateCycleId;
+        discoverGateTimer = setTimeout(()=>{
+            if(cycle === discoverGateCycleId){
+                discoverGateTrendingSettled = true;
+                discoverGateRelease(true);
+            }
+        },DISCOVER_GATE_MAX_MS);
+        discoverGateEnsureTrending(cycle);
+    }
+    discoverGateRenderSkeleton();
+    return true;
+}
+
 function renderDiscoverHub(){
+    if(!discoverGateIsHubVisible()){
+        return window.renderDiscoverHubContent();
+    }
+
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {loaded:false,loading:false,error:"",sections:[],genres:[]};
+
+    if(state.loading === true){
+        discoverGateStableReady = false;
+    }
+
+    if(discoverGateStableReady && state.loading !== true){
+        discoverGateClearSkeletonMarker();
+        return window.renderDiscoverHubContent();
+    }
+
+    discoverGateBegin();
+    if(discoverGateBaseSettled() && discoverGateTrendingSettled){
+        discoverGateRelease(false);
+    }
+    return undefined;
+}
+
+window.TVTrackerDiscoverStability = Object.freeze({
+    available:true,
+    begin:discoverGateBegin,
+    release:discoverGateRelease,
+    isGateActive:()=>discoverGateActive,
+    isStableReady:()=>discoverGateStableReady,
+    baseSettled:discoverGateBaseSettled,
+    MAX_GATE_MS:DISCOVER_GATE_MAX_MS
+});
+window.renderDiscoverHub = renderDiscoverHub;
+// --TVT-discover-gate-owner-end--
+
+function renderDiscoverHubContent(){
 
     const results = document.getElementById("search-results");
 
@@ -1019,25 +1201,44 @@ function renderSearchPersonCard(result){
 }
 
 
+// --TVT-search-navigation-owner-begin--
 function lockSearchRouteBeforeResultOpen(){
-    if(activePage !== "search" || typeof getSearchRoute !== "function" || !window.TVTrackerRouter){
+    if(typeof window.getSearchRoute !== "function"){
         return "";
     }
-    const state = typeof discoverSearchState === "object" && discoverSearchState ? discoverSearchState : {};
-    const query = String(state.query || (searchRouteState && searchRouteState.query) || "").trim();
-    const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || (searchRouteState && searchRouteState.media) || "tv") : "tv";
-    const route = getSearchRoute(query,media,searchRouteState);
-    if(searchRouteState){
-        searchRouteState.query = query;
-        searchRouteState.media = media;
+
+    const routeState = window.searchRouteState && typeof window.searchRouteState === "object"
+    ? window.searchRouteState
+    : {};
+    const searchState = window.discoverSearchState && typeof window.discoverSearchState === "object"
+    ? window.discoverSearchState
+    : {};
+    const query = String(searchState.query || routeState.query || "").trim();
+
+    if(!query){
+        return "";
     }
-    if(discoverSearchState){
-        discoverSearchState.query = query;
-        discoverSearchState.media = media;
+
+    const media = typeof window.normalizeSearchMediaType === "function"
+    ? window.normalizeSearchMediaType(searchState.media || routeState.media || "tv")
+    : "tv";
+    const route = window.getSearchRoute(query,media,routeState);
+
+    routeState.query = query;
+    routeState.media = media;
+    searchState.query = query;
+    searchState.media = media;
+
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+        window.TVTrackerRouter.setPathRoute(route,true);
+    }else if(window.history && typeof window.history.replaceState === "function"){
+        window.history.replaceState({tvTrackerRoute:true},"",route);
     }
-    window.TVTrackerRouter.setPathRoute(route,true);
+
     return route;
 }
+window.lockSearchRouteBeforeResultOpen = lockSearchRouteBeforeResultOpen;
+// --TVT-search-navigation-owner-end--
 
 function renderSearchResults(resultsList){
 
@@ -8832,19 +9033,6 @@ function renderRankedStatsRows(items,type){
 
 }
 
-
-function renderSettings(){
-
-    if(window.TVTrackerSettings && typeof window.TVTrackerSettings.render === "function"){
-        return window.TVTrackerSettings.render();
-    }
-
-    const settings = document.getElementById("settings-content");
-    if(settings){
-        settings.innerHTML = `<div class="settings-v2"><div class="settings-v2-loading" role="status" aria-label="Loading settings"><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div></div></div>`;
-    }
-
-}
 
 function renderMetadataSyncPanel(){
 

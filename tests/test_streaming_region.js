@@ -217,7 +217,7 @@ function fakeElement(extra={}){
     assert.ok(source.includes("input.addEventListener(\"click\",openMenu)"),"Picker must open on first click");
     assert.ok(source.includes("streaming-region-option-name"),"Country names should be the primary option label");
     assert.ok(source.includes("streaming-region-option-code"),"Country code should be secondary metadata only");
-    assert.ok(source.includes("MutationObserver"),"Settings re-renders should remount the Region section");
+    assert.ok(!source.includes("MutationObserver"),"settings.js now renders its own streaming section; streaming-region.js must not install a re-render observer");
     assert.ok(source.includes("mountStreamingRegionSetting:mountSetting"),"Region mount should remain directly testable");
 
     console.log("Streaming region regression tests passed.");

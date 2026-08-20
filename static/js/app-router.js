@@ -1199,15 +1199,6 @@
         }
     }
 
-    const originalShowPage = window.showPage;
-    if(typeof originalShowPage === "function"){
-        window.showPage = function(page){
-            const result = originalShowPage.apply(this,arguments);
-            window.setTimeout(()=>updateRouteFromState(false),0);
-            return result;
-        };
-    }
-
     document.querySelectorAll(".app-primary-nav [data-page]").forEach(link=>{
         link.addEventListener("click",()=>{
             window.setTimeout(()=>updateRouteFromState(false),0);

@@ -17,7 +17,39 @@ app = read_source("app.py")
 backend = read_source("tvtracker/notifications/backend.py")
 engine = read_source("tvtracker/notifications/engine.py")
 frontend = read_source("static/js/notifications-runtime.js")
-upcoming_owner = read_source("static/js/upcoming-schedule-repair.js")
+app_js = read_source("static/js/app.js")
+
+
+def extract_upcoming_repair_owner() -> str:
+    start = app_js.index("const UPCOMING_REPAIR_COOLDOWN_MS")
+    fn_start = app_js.index("async function refreshUpcomingDataInBackground", start)
+    brace_start = app_js.index("{", fn_start)
+    depth = 0
+    quote = None
+    i = brace_start
+    while i < len(app_js):
+        char = app_js[i]
+        if quote:
+            if char == "\\":
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in ('"', "'", "`"):
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return app_js[start:i + 1]
+        i += 1
+    raise AssertionError("could not extract the Upcoming repair owner block from app.js")
+
+
+upcoming_owner = extract_upcoming_repair_owner()
 router = read_source("static/js/app-router.js")
 ui = read_source("static/js/ui.js")
 template = read_source("templates/index.html")
@@ -67,9 +99,10 @@ assert "tvmaze" not in (backend + engine + frontend).lower()
 assert "filename='assets/icons/notification-bell.svg'" in template
 assert "filename='assets/icons/notification-settings.svg'" in template
 assert "filename='js/notifications-runtime.js'" in template
-assert template.count("filename='js/upcoming-schedule-repair.js'") == 1
+assert template.count("filename='js/upcoming-schedule-repair.js'") == 0
+assert "repairMissingWatchingSchedules" in upcoming_owner
 assert template.index("filename='js/release-timing.js'") < template.index("filename='js/app.js'")
-assert template.index("filename='js/app.js'") < template.index("filename='js/upcoming-schedule-repair.js'")
+assert template.index("filename='js/app.js'") < template.index("filename='js/startup.js'")
 assert "filename='js/notifications.js'" not in template
 assert 'id="notifications-page"' in template
 assert 'id="notification-settings-page"' not in template
