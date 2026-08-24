@@ -101,23 +101,29 @@ def monster_suspects(conn: Any) -> list[dict[str, Any]]:
 
 
 def remap_monster_rows(
-    conn: Any, target_tmdb_id: str, suspects: list[dict[str, Any]]
+    conn: Any, season_targets: dict[int, str], suspects: list[dict[str, Any]]
 ) -> int:
-    if not suspects:
-        return 0
-    entry_ids = [row["entry_id"] for row in suspects]
+    """Remap suspect rows per season. ``season_targets`` maps season -> TMDB id."""
+    total = 0
+    by_season: dict[int, list[str]] = {}
+    for row in suspects:
+        season = int(row["data"].get("season") or 0)
+        if season in season_targets:
+            by_season.setdefault(season, []).append(row["entry_id"])
     with conn.transaction():
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE tv_tracker_history "
-                "SET data = data || jsonb_build_object('tmdb_id', %s), "
-                "updated_at = now() "
-                "WHERE entry_id = ANY(%s) "
-                "AND data->>'tmdb_id' = %s "
-                "AND COALESCE((data->>'season')::int, 0) > 1",
-                (target_tmdb_id, entry_ids, MONSTER_TMDB_ID),
-            )
-            return cur.rowcount
+        for season, entry_ids in by_season.items():
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE tv_tracker_history "
+                    "SET data = data || jsonb_build_object('tmdb_id', %s), "
+                    "updated_at = now() "
+                    "WHERE entry_id = ANY(%s) "
+                    "AND data->>'tmdb_id' = %s "
+                    "AND COALESCE((data->>'season')::int, 0) = %s",
+                    (season_targets[season], entry_ids, MONSTER_TMDB_ID, season),
+                )
+                total += cur.rowcount
+    return total
 
 
 def special_collisions(conn: Any) -> list[dict[str, Any]]:
@@ -255,8 +261,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repair-monster",
-        metavar="TARGET_TMDB_ID",
-        help="remap Monster (30981) season>1 history rows to TARGET_TMDB_ID",
+        metavar="SEASON=TMDB_ID[,SEASON=TMDB_ID]",
+        help=(
+            "remap Monster (30981) season>1 history rows per season, e.g. "
+            "2=225634,3=286801"
+        ),
     )
     parser.add_argument(
         "--repair-specials",
@@ -294,8 +303,16 @@ def main(argv: list[str] | None = None) -> int:
                     f"({schema_version} != {DATABASE_SCHEMA_VERSION})"
                 )
         if args.repair_monster:
-            count = remap_monster_rows(conn, args.repair_monster, monsters)
-            print(f"Remapped {count} Monster history rows to {args.repair_monster}")
+            season_targets: dict[int, str] = {}
+            for pair in args.repair_monster.split(","):
+                raw_season, _, tmdb_id = pair.strip().partition("=")
+                if not raw_season.strip().isdigit() or not tmdb_id.strip().isdigit():
+                    raise SystemExit(
+                        "invalid --repair-monster format; expected e.g. 2=225634,3=286801"
+                    )
+                season_targets[int(raw_season)] = tmdb_id.strip()
+            count = remap_monster_rows(conn, season_targets, monsters)
+            print(f"Remapped {count} Monster history rows ({args.repair_monster})")
         if args.repair_specials:
             count = remove_special_coordinates(conn, specials)
             print(f"Removed {count} special-colliding regular progress coordinates")

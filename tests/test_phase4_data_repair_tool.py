@@ -33,14 +33,14 @@ class FakeCursor:
             return
         if "tv_tracker_history" in sql:
             if "UPDATE" in sql:
-                target, entry_ids = params[0], list(params[1])
+                target, entry_ids, season = params[0], list(params[1]), int(params[3])
                 matched = 0
                 for eid in entry_ids:
                     row = next(r for r in self.store["history"] if r["entry_id"] == eid)
                     data = row["data"]
                     if (
                         data.get("tmdb_id") == repair.MONSTER_TMDB_ID
-                        and int(data.get("season") or 0) > 1
+                        and int(data.get("season") or 0) == season
                     ):
                         data["tmdb_id"] = target
                         matched += 1
@@ -125,14 +125,18 @@ class DataRepairToolTests(unittest.TestCase):
         store = build_store()
         conn = FakeConn(store)
         suspects = repair.monster_suspects(conn)
-        count = repair.remap_monster_rows(conn, "286801", suspects)
+        count = repair.remap_monster_rows(conn, {2: "225634", 3: "286801"}, suspects)
         self.assertEqual(count, 2)
         good = next(r for r in store["history"] if r["entry_id"] == "good")
         other = next(r for r in store["history"] if r["entry_id"] == "other-show")
         self.assertEqual(good["data"]["tmdb_id"], "30981")
         self.assertEqual(other["data"]["tmdb_id"], "10")
-        remapped = [r["data"]["tmdb_id"] for r in store["history"] if r["entry_id"].startswith("suspect")]
-        self.assertEqual(remapped, ["286801", "286801"])
+        by_id = {
+            r["entry_id"]: r["data"]["tmdb_id"] for r in store["history"]
+            if r["entry_id"].startswith("suspect")
+        }
+        self.assertEqual(by_id["suspect-a"], "225634")
+        self.assertEqual(by_id["suspect-b"], "286801")
 
     def test_special_collisions_reports_only_colliding_coordinates(self):
         conn = FakeConn(build_store())
@@ -168,6 +172,12 @@ class DataRepairToolTests(unittest.TestCase):
         with patch.object(repair, "open_connection", return_value=FakeConn(store)):
             with self.assertRaises(SystemExit):
                 repair.main(["--repair-specials", "--confirm", "yes", "--backup-verified"])
+
+    def test_main_rejects_invalid_repair_monster_format(self):
+        store = build_store()
+        with patch.object(repair, "open_connection", return_value=FakeConn(store)):
+            with self.assertRaises(SystemExit):
+                repair.main(["--repair-monster", "badformat", "--confirm", "yes", "--backup-verified"])
 
     def test_main_report_only_never_mutates(self):
         store = build_store()
