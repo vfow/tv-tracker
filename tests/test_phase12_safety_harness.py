@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import psycopg
 from flask import jsonify, redirect, session
+from tvtracker.backup import primitives as backup_primitives
 from tvtracker.migrations import DATABASE_SCHEMA_VERSION
 from werkzeug.serving import make_server
 
@@ -158,15 +159,15 @@ class BackupAndMigrationSafetyTests(unittest.TestCase):
 
 class MaliciousInputAndConcurrencySafetyTests(unittest.TestCase):
     def test_json_limits_fail_closed_without_large_allocations(self):
-        with patch.object(tracker, "MAX_JSON_DEPTH", 2):
+        with patch.object(backup_primitives, "MAX_JSON_DEPTH", 2):
             with self.assertRaises(tracker.BackupValidationError):
                 tracker.validate_json_value({"a": {"b": {"c": {}}}}, "payload")
 
-        with patch.object(tracker, "MAX_JSON_STRING_CHARS", 8):
+        with patch.object(backup_primitives, "MAX_JSON_STRING_CHARS", 8):
             with self.assertRaises(tracker.BackupValidationError):
                 tracker.validate_json_value("x" * 9, "payload")
 
-        with patch.object(tracker, "MAX_JSON_CONTAINER_ITEMS", 2):
+        with patch.object(backup_primitives, "MAX_JSON_CONTAINER_ITEMS", 2):
             with self.assertRaises(tracker.BackupValidationError):
                 tracker.validate_json_value([1, 2, 3], "payload")
 

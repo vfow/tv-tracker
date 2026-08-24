@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
 import hmac
 import json
 import os
@@ -9,9 +8,8 @@ import re
 import secrets
 import threading
 import time
-import math
 from collections import defaultdict, deque
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -37,6 +35,28 @@ from flask import (
 from psycopg.types.json import Jsonb
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from tvtracker.backup.primitives import (
+    ALLOWED_PROFILE_IMAGE_PREFIXES,
+    ALLOWED_STATE_KEYS,
+    BASE64_RE,
+    DATE_ONLY_RE,
+    MAX_AVATAR_DATA_URL_CHARS,
+    MAX_DELETES_PER_SYNC,
+    MAX_HEADER_DATA_URL_CHARS,
+    MAX_HISTORY_ORDER,
+    MAX_HISTORY_PER_SYNC,
+    MAX_IDENTIFIER_CHARS,
+    MAX_SHOWS_PER_SYNC,
+    STATE_KEY_RE,
+    BackupValidationError,
+    SyncValidationError,
+    backup_int,
+    json_clone,
+    normalized_identifier,
+    validate_calendar_date,
+    validate_json_value,
+    validate_timestamp,
+)
 from tvtracker.media.tmdb_client import fetch_tmdb_notification_json
 from tvtracker.media.tmdb_exports import (
     TMDB_NETWORK_SEARCH_QUERY_MAX_CHARS,
@@ -89,6 +109,17 @@ from tvtracker.sync.change_log import (
     serialize_change_rows,
 )
 from tvtracker.sync.state_patch import apply_state_patch
+from tvtracker.tracker.history import (
+    clean_legacy_metadata,
+    dedupe_history_by_episode,
+    find_logical_duplicate_history_ids,
+    generated_history_id,
+    history_episode_identity,
+)
+from tvtracker.tracker.state import (
+    cleanup_stored_tracker_data as cleanup_stored_tracker_data_state,
+    read_tracker_data as read_tracker_data_state,
+)
 
 
 APP_NAME = "TV Tracker"
@@ -199,14 +230,6 @@ ERROR_PAGE_MESSAGES = {
 }
 PASSWORD_HASHER = PasswordHasher()
 MIN_ADMIN_PASSWORD_CHARS = 16
-MAX_AVATAR_DATA_URL_CHARS = 3 * 1024 * 1024
-MAX_HEADER_DATA_URL_CHARS = 5 * 1024 * 1024
-ALLOWED_PROFILE_IMAGE_PREFIXES = {
-    "data:image/png;base64",
-    "data:image/jpeg;base64",
-    "data:image/webp;base64",
-}
-BASE64_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
 ACCOUNT_CHANGE_WINDOW_SECONDS = 60 * 60
@@ -220,24 +243,7 @@ SYNC_MAX_REQUESTS = 180
 SYNC_REQUESTS: dict[str, deque[float]] = defaultdict(deque)
 SYNC_LOCK = threading.Lock()
 # TMDB export/index caches live in tvtracker.media.tmdb_exports.
-DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-STATE_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
-ALLOWED_STATE_KEYS = {
-    "profile",
-    "movies",
-    "metadata_sync",
-    "network_sync",
-    "import_info",
-    "provider_metadata",
-}
-MAX_JSON_DEPTH = 16
-MAX_JSON_CONTAINER_ITEMS = 500000
-MAX_JSON_STRING_CHARS = 12 * 1024 * 1024
-MAX_IDENTIFIER_CHARS = 240
-MAX_SHOWS_PER_SYNC = 5000
-MAX_HISTORY_PER_SYNC = 100000
-MAX_DELETES_PER_SYNC = 100000
-MAX_HISTORY_ORDER = 500000
+# Backup validation primitives and limits live in tvtracker.backup.primitives.
 
 
 def required_env(name: str, *, strip: bool = True) -> str:
@@ -347,53 +353,7 @@ def tracker_health_status() -> dict[str, Any]:
 
 
 def read_tracker_data() -> tuple[dict[str, Any], int]:
-    with database_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            cursor.execute("SELECT show_id, data FROM tv_tracker_shows")
-            shows = {str(row[0]): row[1] for row in cursor.fetchall()}
-
-            cursor.execute("SELECT entry_id, data FROM tv_tracker_history")
-            history_map = {str(row[0]): row[1] for row in cursor.fetchall()}
-
-            cursor.execute("SELECT state_key, data FROM tv_tracker_state")
-            state = {str(row[0]): row[1] for row in cursor.fetchall()}
-
-            revision = current_revision(cursor)
-
-    order = state.pop("history_order", [])
-    history: list[Any] = []
-    seen: set[str] = set()
-
-    if isinstance(order, list):
-        for raw_id in order:
-            entry_id = str(raw_id)
-            if entry_id in history_map and entry_id not in seen:
-                history.append(history_map[entry_id])
-                seen.add(entry_id)
-
-    for entry_id, entry in history_map.items():
-        if entry_id not in seen:
-            history.append(entry)
-
-    data: dict[str, Any] = {
-        "shows": shows,
-        "history": history,
-        "profile": state.pop(
-            "profile",
-            {
-                "username": "Username",
-                "favorite_shows": [],
-                "favorite_movies": [],
-                "avatar_type": "initial",
-                "avatar_preset": "silhouette-1",
-                "avatar_data": "",
-                "adult_filter": True,
-            },
-        ),
-    }
-    data.update(state)
-    return clean_legacy_metadata(data), revision
+    return read_tracker_data_state(database_connection)
 
 
 def check_csrf() -> None:
@@ -593,179 +553,8 @@ def sync_request_is_limited(key: str) -> bool:
         return False
 
 
-class BackupValidationError(ValueError):
-    pass
-
-
-class SyncValidationError(BackupValidationError):
-    pass
-
-
-def json_clone(value: Any) -> Any:
-    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
-
-
-def backup_int(
-    value: Any,
-    field: str,
-    *,
-    minimum: int | None = None,
-    maximum: int | None = None,
-) -> int:
-    if isinstance(value, bool):
-        raise BackupValidationError(f"{field} must be a number")
-    if isinstance(value, int):
-        number = value
-    elif isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
-        number = int(value.strip())
-    else:
-        raise BackupValidationError(f"{field} must be a number") from None
-    if minimum is not None and number < minimum:
-        raise BackupValidationError(f"{field} is outside the supported range")
-    if maximum is not None and number > maximum:
-        raise BackupValidationError(f"{field} is outside the supported range")
-    return number
-
-
-def validate_calendar_date(value: str, field: str) -> str:
-    if not DATE_ONLY_RE.fullmatch(value):
-        raise BackupValidationError(f"{field} must use YYYY-MM-DD")
-    try:
-        parsed = date.fromisoformat(value)
-    except ValueError:
-        raise BackupValidationError(f"{field} is not a real calendar date") from None
-    if parsed.isoformat() != value:
-        raise BackupValidationError(f"{field} is not a real calendar date")
-    return value
-
-
-def validate_timestamp(value: str, field: str) -> str:
-    if len(value) > 100:
-        raise BackupValidationError(f"{field} is too long")
-    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
-    try:
-        datetime.fromisoformat(normalized)
-    except ValueError:
-        raise BackupValidationError(f"{field} is not a valid timestamp") from None
-    return value
-
-
-def validate_json_value(value: Any, field: str, *, depth: int = 0) -> None:
-    if depth > MAX_JSON_DEPTH:
-        raise BackupValidationError(f"{field} is nested too deeply")
-    if value is None or isinstance(value, (str, bool, int)):
-        if isinstance(value, str):
-            if len(value) > MAX_JSON_STRING_CHARS:
-                raise BackupValidationError(f"{field} contains an oversized string")
-            if DATE_ONLY_RE.fullmatch(value):
-                validate_calendar_date(value, field)
-        return
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise BackupValidationError(f"{field} contains an invalid number")
-        return
-    if isinstance(value, list):
-        if len(value) > MAX_JSON_CONTAINER_ITEMS:
-            raise BackupValidationError(f"{field} contains too many items")
-        for index, item in enumerate(value):
-            validate_json_value(item, f"{field}[{index}]", depth=depth + 1)
-        return
-    if isinstance(value, dict):
-        if len(value) > MAX_JSON_CONTAINER_ITEMS:
-            raise BackupValidationError(f"{field} contains too many fields")
-        for raw_key, item in value.items():
-            if not isinstance(raw_key, str) or not raw_key or len(raw_key) > 160:
-                raise BackupValidationError(f"{field} contains an invalid field name")
-            validate_json_value(item, f"{field}.{raw_key}", depth=depth + 1)
-        return
-    raise BackupValidationError(f"{field} contains an unsupported value")
-
-
-def normalized_identifier(value: Any, field: str, *, maximum: int = MAX_IDENTIFIER_CHARS) -> str:
-    if isinstance(value, (dict, list, bool)):
-        raise BackupValidationError(f"{field} is invalid")
-    identifier = str(value or "").strip()
-    if not identifier or len(identifier) > maximum:
-        raise BackupValidationError(f"{field} is invalid")
-    return identifier
-
-
-def generated_history_id(entry: dict[str, Any], index: int) -> str:
-    if str(entry.get("media_type") or "").lower() == "movie" or entry.get("movie_id"):
-        movie_id = str(entry.get("movie_id") or entry.get("tmdb_id") or "").strip()
-        if movie_id:
-            return f"movie-watched-{movie_id}"
-    signature = "|".join([
-        str(entry.get("tmdb_id") or entry.get("show_id") or ""),
-        str(entry.get("season") or 0),
-        str(entry.get("episode") or 0),
-        str(entry.get("watched_at") or entry.get("date") or ""),
-        str(index),
-    ])
-    digest = hashlib.sha256(signature.encode("utf-8")).hexdigest()[:28]
-    return f"legacy-{digest}"
-
-
-def legacy_metadata_marker() -> str:
-    return "tv" + "maze"
-
-
-def is_legacy_metadata_key(key: Any) -> bool:
-    name = str(key or "").lower()
-    marker = legacy_metadata_marker()
-    return (
-        marker in name
-        or name in {
-            "air_time", "air_timestamp", "airtime", "airstamp",
-            "metadata_source", "artwork_source", "provider",
-            "_artwork_tmdb_id", "date_only_episode_time_override",
-        }
-    )
-
-
-def clean_legacy_metadata(value: Any) -> Any:
-    if isinstance(value, list):
-        return [clean_legacy_metadata(item) for item in value]
-    if isinstance(value, dict):
-        cleaned: dict[str, Any] = {}
-        for raw_key, raw_item in value.items():
-            if is_legacy_metadata_key(raw_key):
-                continue
-            cleaned[str(raw_key)] = clean_legacy_metadata(raw_item)
-        return cleaned
-    return value
-
-
 def cleanup_stored_tracker_data() -> None:
-    try:
-        with database_connection() as connection:
-            changed = False
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT show_id, data FROM tv_tracker_shows")
-                for show_id, raw_data in cursor.fetchall():
-                    cleaned = clean_legacy_metadata(raw_data)
-                    if cleaned != raw_data:
-                        cursor.execute(
-                            "UPDATE tv_tracker_shows SET data = %s, updated_at = NOW() WHERE show_id = %s",
-                            (Jsonb(cleaned), show_id),
-                        )
-                        changed = True
-                cursor.execute("SELECT state_key, data FROM tv_tracker_state")
-                for state_key, raw_data in cursor.fetchall():
-                    if state_key == "history_order":
-                        continue
-                    cleaned = clean_legacy_metadata(raw_data)
-                    if cleaned != raw_data:
-                        cursor.execute(
-                            "UPDATE tv_tracker_state SET data = %s, updated_at = NOW() WHERE state_key = %s",
-                            (Jsonb(cleaned), state_key),
-                        )
-                        changed = True
-            if changed:
-                connection.commit()
-    except Exception:
-        # Cleanup must never prevent the site from starting.
-        return
+    return cleanup_stored_tracker_data_state(database_connection)
 
 
 def validate_show_record(show_id: str, raw_show: Any) -> dict[str, Any]:
@@ -933,112 +722,6 @@ def validate_history_record(
     entry["id"] = entry_id
     return entry_id, entry
 
-def history_episode_identity(entry: dict[str, Any]) -> tuple[Any, ...] | None:
-    if str(entry.get("media_type") or "").lower() == "movie" or entry.get("movie_id"):
-        return None
-
-    raw_show_id = entry.get("tmdb_id") or entry.get("show_id")
-    if isinstance(raw_show_id, (dict, list, bool)):
-        return None
-    show_id = str(raw_show_id or "").strip()
-    if not show_id or len(show_id) > 160:
-        return None
-
-    try:
-        season = backup_int(
-            entry.get("season"), "History season", minimum=0, maximum=10000
-        )
-        episode = backup_int(
-            entry.get("episode"), "History episode", minimum=0, maximum=100000
-        )
-    except BackupValidationError:
-        return None
-
-    special = entry.get("special")
-    if "special" in entry and not isinstance(special, bool):
-        return None
-    if special is True or season == 0:
-        source_episode_id = entry.get("source_tvdb_episode_id")
-        if source_episode_id not in (None, ""):
-            if isinstance(source_episode_id, bool) or not isinstance(
-                source_episode_id, (str, int)
-            ):
-                return None
-            source_id = str(source_episode_id).strip()
-            if not source_id or len(source_id) > 160:
-                return None
-            return (show_id, "special", "tvdb", source_id)
-
-        title = entry.get("episode_title") or entry.get("title") or "special"
-        if not isinstance(title, str):
-            return None
-        normalized_title = re.sub(
-            r"[^a-z0-9]+", "-", title.strip().lower().replace("&", "and")
-        ).strip("-")
-        return (show_id, "special", season, episode, normalized_title)
-
-    return (show_id, season, episode)
-
-
-def history_timestamp_value(entry: dict[str, Any]) -> float:
-    value = entry.get("watched_at") or entry.get("date") or ""
-    if not isinstance(value, str) or not value:
-        return 0.0
-    try:
-        normalized = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized).timestamp()
-    except ValueError:
-        return 0.0
-
-
-def dedupe_history_by_episode(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_episode: dict[tuple[Any, ...], dict[str, Any]] = {}
-    passthrough: list[dict[str, Any]] = []
-
-    for entry in history:
-        identity = history_episode_identity(entry)
-        if identity is None or not identity[0]:
-            passthrough.append(entry)
-            continue
-
-        previous = by_episode.get(identity)
-        if previous is None or history_timestamp_value(entry) >= history_timestamp_value(previous):
-            by_episode[identity] = entry
-
-    deduped = passthrough + list(by_episode.values())
-    deduped.sort(key=history_timestamp_value, reverse=True)
-    return deduped
-
-
-def find_logical_duplicate_history_ids(
-    cursor: psycopg.Cursor[Any],
-    entry_id: str,
-    entry: dict[str, Any],
-) -> list[str]:
-    identity = history_episode_identity(entry)
-    if identity is None or not identity[0]:
-        return []
-
-    show_id = str(identity[0])
-    cursor.execute(
-        """
-        SELECT entry_id, data
-        FROM tv_tracker_history
-        WHERE entry_id <> %s
-          AND (
-              data->>'tmdb_id' = %s
-              OR data->>'show_id' = %s
-          )
-        """,
-        (str(entry_id), show_id, show_id),
-    )
-    duplicate_ids: list[str] = []
-    for row in cursor.fetchall():
-        if len(row) < 2 or not isinstance(row[1], dict):
-            continue
-        if history_episode_identity(row[1]) == identity:
-            duplicate_ids.append(str(row[0]))
-    return duplicate_ids
 
 
 def validate_profile_image_data_url(value: Any, field: str, maximum: int) -> str:
