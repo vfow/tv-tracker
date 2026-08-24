@@ -21,20 +21,49 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+import urllib.parse
+import urllib.request
+from typing import Any, Callable
 
-from tvtracker.database.connection import connect_database
-from tvtracker.migrations import DATABASE_SCHEMA_VERSION
+import psycopg
+import psycopg.errors
+
+try:
+    import reset_admin  # when executed as tools/data_repair_report.py
+except ImportError:  # pragma: no cover - package context
+    from tools import reset_admin
+
+try:
+    from tvtracker.migrations import DATABASE_SCHEMA_VERSION
+except ImportError:  # pragma: no cover - very old main checkouts
+    DATABASE_SCHEMA_VERSION = None
 
 MONSTER_TMDB_ID = "30981"
+TMDB_SEARCH_URL = "https://api.themoviedb.org/3/search/tv"
+
+
+def open_connection() -> Any:
+    environment = reset_admin.resolve_database_environment()
+    return psycopg.connect(
+        host=environment["DB_HOST"],
+        port=int(environment.get("DB_PORT", "5432")),
+        dbname=environment["DB_NAME"],
+        user=environment["DB_USER"],
+        password=environment["DB_PASSWORD"],
+        connect_timeout=10,
+    )
 
 
 def read_schema_version(conn: Any) -> int | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT schema_version FROM tv_tracker_schema_meta ORDER BY id DESC LIMIT 1"
-        )
-        row = cur.fetchone()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT schema_version FROM tv_tracker_schema_meta "
+                "ORDER BY id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    except psycopg.errors.UndefinedTable:
+        return None
     return int(row[0]) if row else None
 
 
@@ -178,6 +207,45 @@ def print_report(
         )
 
 
+def tmdb_tv_candidates(
+    title: str, fetch: Callable[[str], dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
+    environment = reset_admin.resolve_site_environment()
+    api_key = environment.get("TMDB_API_KEY", "")
+    if not api_key:
+        print("TMDB_API_KEY unavailable; skipping candidate resolution.")
+        return []
+    query = urllib.parse.urlencode({"api_key": api_key, "query": title})
+    url = f"{TMDB_SEARCH_URL}?{query}"
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    if fetch is None:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.load(response)
+    else:
+        payload = fetch(url)
+    return [
+        {
+            "id": item.get("id"),
+            "name": item.get("name"),
+            "first_air_date": item.get("first_air_date"),
+            "origin_country": item.get("origin_country"),
+        }
+        for item in payload.get("results", [])[:5]
+    ]
+
+
+def print_tmdb_candidates(title: str, candidates: list[dict[str, Any]]) -> None:
+    print(f"TMDB candidates for {title!r}:")
+    for item in candidates:
+        print(
+            "  -",
+            item["id"],
+            repr(item["name"]),
+            f"({item['first_air_date']})",
+            item["origin_country"],
+        )
+
+
 def require_gates(args: argparse.Namespace) -> None:
     if args.confirm != "yes":
         raise SystemExit("refusing repair: pass --confirm yes")
@@ -197,6 +265,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="remove special-colliding coordinates from regular episodes_watched",
     )
+    parser.add_argument(
+        "--tmdb-candidates",
+        metavar="TITLE",
+        help="print TMDB search candidates for TITLE (read-only)",
+    )
     parser.add_argument("--confirm", help="literal 'yes' required for any repair")
     parser.add_argument(
         "--backup-verified",
@@ -205,7 +278,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    conn = connect_database()
+    if args.tmdb_candidates:
+        print_tmdb_candidates(args.tmdb_candidates, tmdb_tv_candidates(args.tmdb_candidates))
+        return 0
+
+    conn = open_connection()
     try:
         schema_version = read_schema_version(conn)
         monsters = monster_suspects(conn)

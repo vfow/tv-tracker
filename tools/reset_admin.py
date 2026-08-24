@@ -126,6 +126,29 @@ def resolve_database_environment(
     return selected
 
 
+def resolve_site_environment(
+    shell_environment: Mapping[str, str] | None = None,
+    config_directory: Path | None = None,
+) -> dict[str, str]:
+    """Resolve database settings plus optional site configuration (e.g. TMDB key).
+
+    Read-only: never prints or persists any secret value.
+    """
+
+    resolved = resolve_database_environment(shell_environment, config_directory)
+    source_environment = shell_environment if shell_environment is not None else os.environ
+    directory = config_directory or (Path.home() / "admin" / "config" / "uwsgi")
+    merged: dict[str, str] = {}
+    for config_path in _candidate_uwsgi_configs(directory):
+        config_environment, _text = _read_uwsgi_environment(config_path)
+        merged.update(config_environment)
+    for name in ("TMDB_API_KEY",):
+        value = source_environment.get(name, "") or merged.get(name, "")
+        if value:
+            resolved[name] = value
+    return resolved
+
+
 def database_connection(database_environment: Mapping[str, str]) -> psycopg.Connection:
     try:
         port = int(database_environment.get("DB_PORT", "5432"))

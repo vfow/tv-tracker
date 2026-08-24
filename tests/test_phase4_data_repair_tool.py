@@ -158,16 +158,45 @@ class DataRepairToolTests(unittest.TestCase):
     def test_main_fails_closed_on_stale_schema(self):
         store = build_store()
         store["schema_version"] = 5
-        with patch.object(repair, "connect_database", return_value=FakeConn(store)):
+        with patch.object(repair, "open_connection", return_value=FakeConn(store)):
+            with self.assertRaises(SystemExit):
+                repair.main(["--repair-specials", "--confirm", "yes", "--backup-verified"])
+
+    def test_main_fails_closed_without_schema_meta_table(self):
+        store = build_store()
+        store["schema_version"] = None
+        with patch.object(repair, "open_connection", return_value=FakeConn(store)):
             with self.assertRaises(SystemExit):
                 repair.main(["--repair-specials", "--confirm", "yes", "--backup-verified"])
 
     def test_main_report_only_never_mutates(self):
         store = build_store()
         before = json.dumps(store["history"], sort_keys=True)
-        with patch.object(repair, "connect_database", return_value=FakeConn(store)):
+        with patch.object(repair, "open_connection", return_value=FakeConn(store)):
             self.assertEqual(repair.main([]), 0)
         self.assertEqual(json.dumps(store["history"], sort_keys=True), before)
+
+    def test_tmdb_candidates_uses_resolved_key_and_prints_ids(self):
+        fake_results = {
+            "results": [
+                {"id": 30981, "name": "Monster", "first_air_date": "2004-04-07", "origin_country": ["JP"]},
+                {"id": 113988, "name": "Monster", "first_air_date": "2022-09-21", "origin_country": ["US"]},
+            ]
+        }
+        with patch.object(
+            repair.reset_admin,
+            "resolve_site_environment",
+            return_value={"TMDB_API_KEY": "test-key"},
+        ):
+            candidates = repair.tmdb_tv_candidates("Monster", fetch=lambda url: fake_results)
+        self.assertEqual(candidates[0]["id"], 30981)
+        self.assertEqual(candidates[1]["id"], 113988)
+
+    def test_tmdb_candidates_missing_key_is_safe(self):
+        with patch.object(
+            repair.reset_admin, "resolve_site_environment", return_value={}
+        ):
+            self.assertEqual(repair.tmdb_tv_candidates("Monster", fetch=lambda url: {}), [])
 
 
 if __name__ == "__main__":
