@@ -50,6 +50,7 @@
     ]);
     let applyingRoute = false;
     let initialRoutePrepared = false;
+    const registeredRouteHandlers = [];
 
     function parseRouteIdSlug(value){
         const clean = String(value || "").trim().toLowerCase();
@@ -220,10 +221,34 @@
         };
     }
 
+    function registerRouteHandler(handler){
+        if(!handler || typeof handler.parseRoute !== "function" || typeof handler.applyRoute !== "function"){
+            return false;
+        }
+        registeredRouteHandlers.push(handler);
+        return true;
+    }
+
+    function drainRouteHandlerQueue(){
+        const queue = typeof window !== "undefined" ? window.TVTrackerRouteHandlerQueue : null;
+        if(!Array.isArray(queue)){ return; }
+        while(queue.length){
+            registerRouteHandler(queue.shift());
+        }
+    }
+
     function parseAppRoute(pathname,search=""){
         const rawPath = String(pathname || "").trim() || "/app/list/watching";
         if(rawPath !== "/app" && !rawPath.startsWith("/app/")){
             return {valid:false,type:"not-found",path:rawPath,search:"",canonicalRoute:rawPath,params:{}};
+        }
+
+        for(const handler of registeredRouteHandlers){
+            const claimed = handler.parseRoute(rawPath,search);
+            if(claimed && claimed.valid){
+                claimed.handler = handler;
+                return claimed;
+            }
         }
 
         const path = rawPath.length > 4 ? rawPath.replace(/\/+$/g,"") : rawPath;
@@ -507,6 +532,13 @@
             }
             return "/app/list/watching";
         }
+        if(activePage === "discovery-detail" && typeof discoveryPageState !== "undefined" && discoveryPageState && discoveryPageState.type === "trending" && discoveryPageState.value){
+            const api = typeof window !== "undefined" ? window.TVTrackerTrending : null;
+            if(api && typeof api.routeFor === "function"){
+                return api.routeFor(discoveryPageState.value);
+            }
+            return "/app/discover";
+        }
         if(activePage === "discovery-detail" && typeof selectedDiscoveryContext !== "undefined" && selectedDiscoveryContext && selectedDiscoveryContext.type && selectedDiscoveryContext.value){
             if(typeof getDiscoveryFilterDetailRoute === "function"){
                 const routeName = typeof discoveryPageState !== "undefined" && discoveryPageState ? (discoveryPageState.routeSlug || discoveryPageState.name) : "";
@@ -771,6 +803,14 @@
         }
 
         normalizeCurrentRoute(parsed);
+        if(parsed.handler){
+            if(typeof parsed.handler.prepareInitialRoute === "function"){
+                parsed.handler.prepareInitialRoute(parsed);
+            }else{
+                parsed.handler.applyRoute(parsed,{source:"initial"});
+            }
+            return;
+        }
         const params = parsed.params || {};
 
         if(parsed.type === "list"){
@@ -1034,7 +1074,12 @@
         }
     }
 
-    function applyParsedRoute(parsed){
+    function applyParsedRoute(parsed,source="direct"){
+        if(parsed.handler && typeof parsed.handler.applyRoute === "function"){
+            if(parsed.handler.applyRoute(parsed,{source}) !== false){
+                return;
+            }
+        }
         const params = parsed.params || {};
 
         if(parsed.type === "list"){
@@ -1167,7 +1212,7 @@
         }
     }
 
-    function applyRoute(){
+    function applyRoute(source="direct"){
         const parsed = getParsedCurrentRoute();
         if(!parsed.valid){
             showRouteNotFound();
@@ -1193,7 +1238,7 @@
 
         applyingRoute = true;
         try{
-            applyParsedRoute(parsed);
+            applyParsedRoute(parsed,source);
         }finally{
             applyingRoute = false;
         }
@@ -1257,14 +1302,14 @@
             return;
         }
         setPathRoute(parsed.canonicalRoute,false);
-        applyRoute();
+        applyRoute("click");
     }
 
     if(typeof document !== "undefined" && document && typeof document.addEventListener === "function"){
         document.addEventListener("click",handleAppRouteAnchorClick);
     }
 
-    window.addEventListener("popstate",applyRoute);
+    window.addEventListener("popstate",function(){ applyRoute("popstate"); });
 
     window.TVTrackerRouter = {
         applyRoute,
@@ -1273,9 +1318,11 @@
         prepareInitialRoute,
         updateRouteFromState,
         routePrefix,
-        setPathRoute
+        setPathRoute,
+        registerRouteHandler
     };
 
+    drainRouteHandlerQueue();
     prepareInitialRoute();
     if(typeof appDataReady === "undefined" || appDataReady){
         window.setTimeout(applyRoute,0);
