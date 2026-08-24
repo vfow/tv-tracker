@@ -1,8 +1,8 @@
 from pathlib import Path
 
-source = Path('app.py').read_text()
-conflict = source.split('                if conflicting:', 1)[1].split(
-    '                logical_history_delete:', 1
+source = Path('tvtracker/sync/state_patch.py').read_text()
+conflict = source.split('            if conflicting:', 1)[1].split(
+    '            logical_history_delete:', 1
 )[0]
 
 assert '"reset": True' in conflict

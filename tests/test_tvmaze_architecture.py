@@ -12,7 +12,7 @@ class TVmazeArchitectureTests(unittest.TestCase):
     def test_provider_schema_is_not_mandatory_core_schema(self):
         app = self.text("app.py")
         ensure_start = app.index("def ensure_schema()")
-        ensure_end = app.index("\ndef current_revision", ensure_start)
+        ensure_end = app.index("\ndef tracker_health_status", ensure_start)
         ensure_body = app[ensure_start:ensure_end]
         self.assertNotIn("tv_tracker_tvmaze_", ensure_body)
         provider = self.text("tvtracker/integrations/tvmaze.py")

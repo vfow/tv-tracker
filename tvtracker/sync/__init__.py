@@ -1,1 +1,30 @@
-"""Permanent home for synchronization code migrated in Phase 18."""
+"""Synchronization domain: revision bookkeeping, change log, conflict detection, and the state-patch transaction."""
+
+from tvtracker.sync.change_log import (
+    CHANGE_LOG_RETENTION_DAYS,
+    CHANGE_LOG_RETENTION_REVISIONS,
+    change_log_has_gap,
+    current_revision,
+    deltas_conflict,
+    fetch_change_rows,
+    merge_history_order,
+    normalize_delta,
+    serialize_change_rows,
+    touched_entities,
+)
+from tvtracker.sync.state_patch import OPERATION_ID_RE, apply_state_patch
+
+__all__ = [
+    "CHANGE_LOG_RETENTION_DAYS",
+    "CHANGE_LOG_RETENTION_REVISIONS",
+    "OPERATION_ID_RE",
+    "apply_state_patch",
+    "change_log_has_gap",
+    "current_revision",
+    "deltas_conflict",
+    "fetch_change_rows",
+    "merge_history_order",
+    "normalize_delta",
+    "serialize_change_rows",
+    "touched_entities",
+]
