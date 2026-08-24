@@ -55,9 +55,27 @@ flags, session-version invalidation, fail-closed migration runner, atomic backup
 transaction sync). Release gate for this campaign: all CRITICAL + HIGH findings fixed before merge
 (see audit doc); MEDIUM backlog tracked post-merge.
 
-## Open blockers (carried into current campaign)
+## Phase 4 approved production data repairs (owner-authorized 2026-08-24)
 
-| ID | Blocker | Phase |
+Evidence collected by `tools/data_repair_report.py` via the temporary read-only report workflow
+(production DB, schema v5):
+- 17 Monster history rows confirmed: `S2E1-S2E9` (imported 2024-09-22) and `S3E1-S3E8`
+  (imported 2025-10-10+) attached to TMDB 30981 (show has `number_of_seasons=1`).
+- 4 special progress collisions confirmed: Black Mirror S2E1, Euphoria S1E1 + S2E2,
+  Invincible S2E1.
+
+Approved actions (run immediately AFTER Phase 9 deploy, because the repair tool fail-closes
+until the production schema reaches v6):
+
+1. `python tools/data_repair_report.py --repair-monster 2=225634,3=286801 --confirm yes --backup-verified`
+   - S2 rows → TMDB 225634 ("Monsters: The Lyle and Erik Menendez Story")
+   - S3 rows → TMDB 286801 ("Monster: The Ed Gein Story")
+2. `python tools/data_repair_report.py --repair-specials --confirm yes --backup-verified`
+   - removes the 4 colliding coordinates from regular `episodes_watched`; history rows stay intact.
+
+Post-repair verification: re-run report (suspects = 0, collisions = 0), then verify critical flows.
+
+## Open blockers (carried into current campaign)| ID | Blocker | Phase |
 |---|---|---|
 | B-01 | Data fixes: 17 mis-imported Monster records, 4 specials collisions, schemaVersion bookkeeping | 4 |
 | B-02 | Logout does not clear client storage (localStorage/sessionStorage/pending-save queue) | 5 |
