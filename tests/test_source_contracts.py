@@ -425,8 +425,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('git pull', workflow)
         self.assertIn('ALWAYSDATA_HEALTH_URL', workflow)
         self.assertIn('ALWAYSDATA_APP_DIR', workflow)
-        self.assertNotIn('broghgf7', workflow)
-        self.assertNotIn('ssh-broghgf7', workflow)
+        self.assertNotIn('example-account', workflow)
+        self.assertNotIn('ssh-example-account', workflow)
         self.assertIn('/healthz', readme)
         self.assertIn('.glob("test_*.js")', run_all)
 

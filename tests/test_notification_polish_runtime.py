@@ -53,7 +53,7 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
     def test_appended_shell_text_invalidates_public_key(self) -> None:
         public_key, private_key = _vapid_pair(1)
         valid, error = validate_vapid_configuration(
-            public_key + "broghgf7",
+            public_key + "appended-shell-text",
             private_key,
             "mailto:push@example.com",
         )
@@ -84,7 +84,7 @@ class NotificationPolishRuntimeTests(unittest.TestCase):
     def test_push_config_hides_invalid_key_material(self) -> None:
         public_key, private_key = _vapid_pair(1)
         env = {
-            "VAPID_PUBLIC_KEY": public_key + "broghgf7",
+            "VAPID_PUBLIC_KEY": public_key + "appended-shell-text",
             "VAPID_PRIVATE_KEY": private_key,
             "VAPID_SUBJECT": "mailto:push@example.com",
         }

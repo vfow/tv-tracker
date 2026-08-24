@@ -117,7 +117,7 @@ class FinalNotificationPureTests(unittest.TestCase):
     def test_push_config_validates_natively_without_patching(self):
         public_key, private_key = _vapid_pair(1)
         invalid = {
-            "VAPID_PUBLIC_KEY": public_key + "broghgf7",
+            "VAPID_PUBLIC_KEY": public_key + "appended-shell-text",
             "VAPID_PRIVATE_KEY": private_key,
             "VAPID_SUBJECT": "mailto:test@example.com",
         }
