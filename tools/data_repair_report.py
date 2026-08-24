@@ -280,7 +280,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.tmdb_candidates:
         print_tmdb_candidates(args.tmdb_candidates, tmdb_tv_candidates(args.tmdb_candidates))
-        return 0
 
     conn = open_connection()
     try:
