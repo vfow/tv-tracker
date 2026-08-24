@@ -123,8 +123,7 @@ def remap_monster_rows(
 def special_collisions(conn: Any) -> list[dict[str, Any]]:
     rows = history_rows(
         conn,
-        "COALESCE((data->>'special')::boolean, false) = true "
-        "OR data ? 'source_tvdb_episode_id'",
+        "COALESCE((data->>'special')::boolean, false) = true",
         (),
     )
     findings: list[dict[str, Any]] = []

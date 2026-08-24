@@ -52,8 +52,8 @@ class FakeCursor:
                 if "data->>'tmdb_id' = %s" in sql:
                     if data.get("tmdb_id") == repair.MONSTER_TMDB_ID and int(data.get("season") or 0) > 1:
                         rows.append((row["entry_id"], dict(data)))
-                elif "'special'" in sql or "source_tvdb_episode_id" in sql:
-                    if data.get("special") or "source_tvdb_episode_id" in data:
+                elif "'special'" in sql:
+                    if data.get("special"):
                         rows.append((row["entry_id"], dict(data)))
             self._result = rows
             return
