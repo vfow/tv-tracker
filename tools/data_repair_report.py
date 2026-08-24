@@ -58,8 +58,7 @@ def read_schema_version(conn: Any) -> int | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT schema_version FROM tv_tracker_schema_meta "
-                "ORDER BY id DESC LIMIT 1"
+                "SELECT schema_version FROM tv_tracker_schema_meta LIMIT 1"
             )
             row = cur.fetchone()
     except psycopg.errors.UndefinedTable:
