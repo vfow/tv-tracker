@@ -6,13 +6,17 @@ from typing import Any
 import psycopg
 
 
-def required_database_env(name: str, *, strip: bool = True) -> str:
+def required_env(name: str, *, strip: bool = True) -> str:
     value = os.environ.get(name, "")
     if strip:
         value = value.strip()
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
+
+
+def required_database_env(name: str, *, strip: bool = True) -> str:
+    return required_env(name, strip=strip)
 
 
 def connect_database() -> psycopg.Connection[Any]:

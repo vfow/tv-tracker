@@ -814,9 +814,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('browseState:params.browseState', router)
         self.assertIn('APP_BROWSE_PATH_RE', backend)
         self.assertIn('@app.get("/api/tmdb/network-search")', backend)
-        self.assertIn('tv_network_ids_', backend)
-        self.assertIn('TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS', backend)
-        self.assertIn('normalize_tmdb_network_search_text', backend)
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
+        self.assertIn('tv_network_ids_', tmdb_exports)
+        self.assertIn('TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS', tmdb_exports)
+        self.assertIn('normalize_tmdb_network_search_text', tmdb_exports)
         self.assertIn('canonical_browse_query', backend)
         self.assertIn('@app.get("/app/browse/<media_type>", strict_slashes=False)', backend)
         self.assertIn('function navigateToBrowseState', app)
@@ -1118,14 +1119,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_phase66d_tmdb_collection_export_cache_exists(self):
         app_py = self.read('app.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
 
-        self.assertIn('TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60', app_py)
-        self.assertIn('TMDB_COLLECTION_INDEX_CACHE_FILE = "tmdb_collection_index.json"', app_py)
-        self.assertIn('def fetch_tmdb_collection_export(export_date: date)', app_py)
-        self.assertIn('collection_ids_{export_date:%m_%d_%Y}.json.gz', app_py)
-        self.assertIn('def build_tmdb_collection_index_batch()', app_py)
+        self.assertIn('TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60', tmdb_exports)
+        self.assertIn('TMDB_COLLECTION_INDEX_CACHE_FILE = "tmdb_collection_index.json"', tmdb_exports)
+        self.assertIn('def fetch_tmdb_collection_export(export_date: date)', tmdb_exports)
+        self.assertIn('collection_ids_{export_date:%m_%d_%Y}.json.gz', tmdb_exports)
+        self.assertIn('def build_tmdb_collection_index_batch()', tmdb_exports)
         self.assertIn('@app.get("/api/tmdb/collections")', app_py)
         self.assertIn('@app.get("/api/tmdb/collections/<int:collection_id>")', app_py)
         self.assertIn('if collections:', app_py)
@@ -1146,15 +1148,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
 
     def test_phase66g_collection_and_global_title_placeholders_exist(self):
-        app_py = self.read('app.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
 
-        self.assertIn('"poster_slots": poster_slots,', app_py)
-        self.assertIn('def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:', app_py)
-        self.assertIn('needs_poster_slot_backfill', app_py)
+        self.assertIn('"poster_slots": poster_slots,', tmdb_exports)
+        self.assertIn('def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:', tmdb_exports)
+        self.assertIn('needs_poster_slot_backfill', tmdb_exports)
         self.assertIn('function getCollectionPosterSlots(collection)', app_js)
         self.assertIn('poster_slots:posterSlots', app_js)
         self.assertIn('getCollectionPosterSlots(collection).length >= 1', app_js)
@@ -1171,14 +1173,14 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('collection-stack-placeholder', built_css)
 
     def test_phase66g1_collection_detail_ui_cleanup_exists(self):
-        app_py = self.read('app.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
 
-        self.assertIn('target_count = min(3, max(movie_count, 1))', app_py)
-        self.assertIn('return len(usable_slots) >= target_count', app_py)
+        self.assertIn('target_count = min(3, max(movie_count, 1))', tmdb_exports)
+        self.assertIn('return len(usable_slots) >= target_count', tmdb_exports)
         self.assertIn('tv-tracker-tmdb-collection-index:v6', app_js)
         self.assertIn('tv-tracker-tmdb-collection-detail:v5', app_js)
         self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
