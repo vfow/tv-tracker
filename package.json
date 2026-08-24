@@ -6,7 +6,7 @@
     "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17",
-    "daisyui": "4.12.13"
+    "tailwindcss": "^4.3.3",
+    "daisyui": "5.7.22"
   }
 }
