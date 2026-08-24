@@ -2,6 +2,11 @@ name: Temp data integrity report (remove after use)
 
 on:
   workflow_dispatch:
+    inputs:
+      tmdb-title:
+        description: Title to resolve TMDB candidates for
+        required: false
+        default: Monster
 
 permissions:
   contents: read
@@ -28,13 +33,15 @@ jobs:
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
         env:
           APP_DIR_B64: ${{ steps.report-inputs.outputs.app_dir_b64 }}
+          TMDB_TITLE: ${{ github.event.inputs.tmdb-title }}
         with:
           host: ${{ secrets.ALWAYSDATA_SSH_HOST }}
           username: ${{ secrets.ALWAYSDATA_SSH_USER }}
           key: ${{ secrets.ALWAYSDATA_SSH_KEY }}
-          envs: APP_DIR_B64
+          envs: APP_DIR_B64,TMDB_TITLE
           script: |
             set -eu
+            TMDB_TITLE="${TMDB_TITLE:-Monster}"
             APP_DIR="$(printf '%s' "$APP_DIR_B64" | base64 -d)"
             case "$APP_DIR" in
               /*) ;;
@@ -52,4 +59,4 @@ jobs:
             git -C "$APP_DIR" fetch --no-tags origin refs/heads/architecture-cleanup:refs/remotes/tmp-data-report
             git -C "$APP_DIR" archive refs/remotes/tmp-data-report tools tvtracker | tar -x -C "$REPORT_DIR"
             cd "$REPORT_DIR"
-            PYTHONPATH="$REPORT_DIR" python tools/data_repair_report.py --tmdb-candidates "Monster"
+            PYTHONPATH="$REPORT_DIR" python tools/data_repair_report.py --tmdb-candidates "$TMDB_TITLE"
