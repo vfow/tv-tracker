@@ -141,6 +141,15 @@
         if(input) input.addEventListener("input",()=>{ input.dataset.userEdited="true"; });
         const form = global.document.getElementById("admin-account-form");
         if(form && typeof global.saveAdminAccountChanges === "function") form.addEventListener("submit",event=>{ event.preventDefault(); global.saveAdminAccountChanges(); });
+        const logoutForm = global.document.querySelector('form[action="/logout"]');
+        if(logoutForm){
+            logoutForm.addEventListener("submit",function(){
+                const clientStorage = global.TVTrackerCore && global.TVTrackerCore.clientStorage;
+                if(clientStorage && typeof clientStorage.clearOnLogout === "function"){
+                    try{ clientStorage.clearOnLogout(); }catch(error){ /* Logout must proceed even if cleanup fails. */ }
+                }
+            });
+        }
         if(typeof global.loadAdminAccountIntoSettings === "function") global.loadAdminAccountIntoSettings();
     }
 

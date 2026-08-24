@@ -1934,6 +1934,8 @@ function startDataSync(){
                 Number(message.revision || 0) > SERVER_REVISION
             ){
                 syncFromServer("broadcast",true);
+            }else if(message.type === "logout-clear"){
+                clearPendingSaveOperations();
             }
         });
     }

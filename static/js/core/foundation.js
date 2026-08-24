@@ -278,6 +278,73 @@
         return null;
     }
 
+    const APP_STORAGE_PREFIX = "tv-tracker-";
+    const APP_LEGACY_STORAGE_KEYS = Object.freeze(["main-data"]);
+    const SYNC_CHANNEL_NAME = "tv-tracker-sync-v1";
+    const LOGOUT_CLEAR_MESSAGE_TYPE = "logout-clear";
+
+    function safeStorage(name){
+        try{
+            const value = global[name];
+            return value && typeof value.getItem === "function" ? value : null;
+        }catch(_error){
+            return null;
+        }
+    }
+
+    function isAppOwnedStorageKey(key){
+        return (
+            key.startsWith(APP_STORAGE_PREFIX) ||
+            APP_LEGACY_STORAGE_KEYS.includes(key)
+        );
+    }
+
+    function removeAppOwnedStorageKeys(storage){
+        if(!storage || typeof storage.removeItem !== "function"){
+            return;
+        }
+        const keys = [];
+        try{
+            for(let index=0;index<storage.length;index+=1){
+                const key = storage.key(index);
+                if(key){
+                    keys.push(String(key));
+                }
+            }
+        }catch(_error){
+            return;
+        }
+        keys.forEach(key=>{
+            if(!isAppOwnedStorageKey(key)){
+                return;
+            }
+            try{
+                storage.removeItem(key);
+            }catch(_error){
+                // A single restricted key must not block the rest of the cleanup.
+            }
+        });
+    }
+
+    function clearClientStorageOnLogout(){
+        try{
+            ["localStorage","sessionStorage"].forEach(name=>{
+                removeAppOwnedStorageKeys(safeStorage(name));
+            });
+            try{
+                if(typeof global.BroadcastChannel === "function"){
+                    const channel = new global.BroadcastChannel(SYNC_CHANNEL_NAME);
+                    channel.postMessage({type:LOGOUT_CLEAR_MESSAGE_TYPE});
+                    channel.close();
+                }
+            }catch(_error){
+                // Other tabs simply keep their queued state until navigation.
+            }
+        }catch(_error){
+            // Logout must never be blocked by client storage cleanup failures.
+        }
+    }
+
     const core = Object.freeze({
         version:"phase13-v1",
         api:Object.freeze({request,get,post,patch,delete:remove}),
@@ -286,7 +353,8 @@
             ApiRequestError,
             classify:classifyError
         }),
-        feedback:Object.freeze({presentError})
+        feedback:Object.freeze({presentError}),
+        clientStorage:Object.freeze({clearOnLogout:clearClientStorageOnLogout})
     });
 
     Object.defineProperty(global,"TVTrackerCore",{
