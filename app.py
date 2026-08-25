@@ -301,6 +301,8 @@ def create_app() -> Flask:
 
     register_routes(app, deps=sys.modules[__name__])
     return app
+
+
 app = create_app()
 
 # Optional release-timing integration is installed after the core app exists so
