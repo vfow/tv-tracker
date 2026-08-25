@@ -102,7 +102,8 @@ class Phase16NotificationConsolidationTests(unittest.TestCase):
             self.assertNotIn(removed, self.canonical)
 
     def test_single_endpoint_registration_per_route(self):
-        combined = self.app + self.canonical
+        self.routes = read_source("tvtracker/web/routes.py")
+        combined = self.routes + self.canonical
         app_owned = (
             '@app.get("/api/notifications/status")',
             '@app.get("/api/notifications")',
@@ -121,12 +122,12 @@ class Phase16NotificationConsolidationTests(unittest.TestCase):
         )
         for decorator in app_owned:
             self.assertEqual(combined.count(decorator), 1, decorator)
-            self.assertEqual(self.app.count(decorator), 1, decorator)
+            self.assertEqual(self.routes.count(decorator), 1, decorator)
             self.assertNotIn(decorator, self.canonical)
         for decorator in canonical_owned:
             self.assertEqual(combined.count(decorator), 1, decorator)
             self.assertEqual(self.canonical.count(decorator), 1, decorator)
-            self.assertNotIn(decorator, self.app)
+            self.assertNotIn(decorator, self.routes)
 
     def test_installer_never_overwrites_notification_endpoints(self):
         for endpoint in (

@@ -14,6 +14,7 @@ def read_source(path: str) -> str:
 
 
 app = read_source("app.py")
+routes = read_source("tvtracker/web/routes.py")
 backend = read_source("tvtracker/notifications/backend.py")
 engine = read_source("tvtracker/notifications/engine.py")
 frontend = read_source("static/js/notifications-runtime.js")
@@ -75,7 +76,7 @@ for route in (
     "/app/notifications",
     "/app/notifications/settings",
 ):
-    assert route in app or route in router
+    assert route in app or route in routes or route in router
 
 assert "/api/state" not in frontend
 assert "/api/state" not in backend
