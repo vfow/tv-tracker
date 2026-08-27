@@ -1,3 +1,9 @@
+import os
+
+# Production workers must never mutate the database schema while booting.
+# Deployment applies migrations from the staged release before this module loads.
+os.environ["TVTRACKER_SCHEMA_VERIFY_ONLY"] = "1"
+
 from app import (
     app,
     check_csrf,
