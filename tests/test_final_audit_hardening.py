@@ -40,6 +40,28 @@ class FinalAuditHardeningTests(unittest.TestCase):
         self.assertIn("--retry 12 --retry-delay 5 --retry-all-errors", workflow)
         self.assertLess(workflow.index("Restart AlwaysData site"), workflow.index("Verify public health endpoint"))
 
+    def test_deploy_resolves_database_environment_from_alwaysdata_before_ssh(self):
+        workflow = self.read(".github/workflows/deploy.yml")
+
+        self.assertIn("Resolve production database environment", workflow)
+        self.assertIn("python tools/resolve_alwaysdata_db_env.py", workflow)
+        self.assertIn("DB_HOST,DB_PORT,DB_NAME,DB_USER,DB_PASSWORD", workflow)
+        self.assertIn('"$PYTHON_BIN" -m tvtracker.migrations', workflow)
+        self.assertNotIn("secrets.DB_HOST", workflow)
+        self.assertNotIn("secrets.DB_PASSWORD", workflow)
+        self.assertLess(
+            workflow.index("Resolve production database environment"),
+            workflow.index("Deploy over SSH"),
+        )
+        self.assertLess(
+            workflow.index('"$PYTHON_BIN" -m tvtracker.migrations'),
+            workflow.index('git -C "$APP_DIR" checkout --detach "$DEPLOY_SHA"'),
+        )
+        self.assertIn("Clear production database environment", workflow)
+
+    def test_temporary_privileged_data_report_workflow_is_removed(self):
+        self.assertFalse((ROOT / ".github/workflows/temp-data-report.yml").exists())
+
     def test_service_worker_keeps_valid_push_clicks_until_acknowledged(self):
         source = final._service_worker_source()
 
