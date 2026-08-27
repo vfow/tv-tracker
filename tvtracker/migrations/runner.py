@@ -161,6 +161,38 @@ def _read_and_validate_ledger(
     return existing_ids, existing
 
 
+def _legacy_migration_prefix(
+    registry: tuple[SqlMigration, ...],
+    schema_version: int,
+) -> tuple[SqlMigration, ...]:
+    target_prefix = f"{schema_version:04d}_"
+    matching_indexes = [
+        index
+        for index, migration in enumerate(registry)
+        if migration.migration_id.startswith(target_prefix)
+    ]
+    if len(matching_indexes) != 1:
+        raise RuntimeError(
+            "Cannot map legacy database schema version "
+            f"{schema_version} to exactly one migration"
+        )
+
+    target_index = matching_indexes[0]
+    prefix = registry[: target_index + 1]
+    migration_numbers = [
+        int(migration.migration_id.split("_", 1)[0])
+        for migration in prefix
+    ]
+    expected_numbers = list(range(1, schema_version + 1))
+    if migration_numbers != expected_numbers:
+        raise RuntimeError(
+            "Cannot adopt legacy database schema version "
+            f"{schema_version}: migration IDs do not form the expected "
+            "contiguous schema-version prefix"
+        )
+    return prefix
+
+
 def _find_managed_relations(cursor: Any, contract: SchemaContract) -> list[str]:
     cursor.execute(
         """
@@ -260,15 +292,44 @@ def run_migrations(
                 if contract is not None
                 else set()
             )
-            adopting_certified_schema = bool(
+            adoption_candidate = bool(
                 contract is not None
                 and not existing_ids
                 and current_schema_version in adoption_versions
             )
-            if adopting_certified_schema:
-                _validate_schema_contract(cursor, contract)
-                if contract.adoption_seed_sql is not None:
-                    cursor.execute(contract.adoption_seed_sql)
+            adopting_certified_schema = False
+            upgrading_legacy_schema = False
+            if adoption_candidate:
+                try:
+                    _validate_schema_contract(cursor, contract)
+                except RuntimeError as validation_error:
+                    if current_schema_version == contract.schema_version:
+                        raise
+
+                    try:
+                        legacy_prefix = _legacy_migration_prefix(
+                            registry,
+                            current_schema_version,
+                        )
+                    except RuntimeError:
+                        raise validation_error
+
+                    for migration in legacy_prefix:
+                        cursor.execute(
+                            """
+                            INSERT INTO tv_tracker_migrations
+                            (migration_id, checksum, applied_at)
+                            VALUES (%s, %s, NOW())
+                            """,
+                            (migration.migration_id, migration.checksum),
+                        )
+                        existing[migration.migration_id] = migration.checksum
+                        applied_now.append(migration.migration_id)
+                    upgrading_legacy_schema = True
+                else:
+                    adopting_certified_schema = True
+                    if contract.adoption_seed_sql is not None:
+                        cursor.execute(contract.adoption_seed_sql)
             elif contract is not None and not existing_ids:
                 if current_schema_version is not None:
                     raise RuntimeError(
@@ -319,6 +380,13 @@ def run_migrations(
                 )
                 existing[migration.migration_id] = migration.checksum
                 applied_now.append(migration.migration_id)
+
+            if (
+                upgrading_legacy_schema
+                and contract is not None
+                and contract.adoption_seed_sql is not None
+            ):
+                cursor.execute(contract.adoption_seed_sql)
 
             if contract is not None:
                 recorded_schema_version = _read_database_schema_version(cursor)
