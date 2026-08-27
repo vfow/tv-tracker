@@ -42,6 +42,10 @@ jobs:
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
+      - name: Audit Python runtime dependencies
+        run: |
+          python -m pip install pip-audit==2.9.0
+          pip-audit -r requirements.txt --strict
       - run: npm ci --audit=false
       - name: Verify npm build dependency security
         run: npm audit --audit-level=high
@@ -74,6 +78,7 @@ jobs:
           echo "::add-mask::$APP_DIR_B64"
           printf 'app_dir_b64=%s\n' "$APP_DIR_B64" >> "$GITHUB_OUTPUT"
       - name: Deploy over SSH
+        id: deploy
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
         env:
           APP_DIR_B64: ${{ steps.deploy-inputs.outputs.app_dir_b64 }}
@@ -99,12 +104,18 @@ jobs:
             test -z "$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"
 
             LIVE_SHA="$(git -C "$APP_DIR" rev-parse HEAD)"
+            case "$LIVE_SHA" in
+              *[!0-9a-f]*|'') echo "Invalid live SHA" >&2; exit 1 ;;
+            esac
+            test "${#LIVE_SHA}" -eq 40
+
             RELEASE_DIR="${APP_DIR}.release-${DEPLOY_SHA}"
             MARKER_TMP="${APP_DIR}/.tvtracker-release-sha.tmp.$$"
+            PREVIOUS_TMP="${APP_DIR}/.tvtracker-previous-sha.tmp.$$"
             ACTIVATED=0
             cleanup() {
               cd "$APP_DIR" >/dev/null 2>&1 || true
-              rm -f "$MARKER_TMP"
+              rm -f "$MARKER_TMP" "$PREVIOUS_TMP"
               git -C "$APP_DIR" worktree remove --force "$RELEASE_DIR" >/dev/null 2>&1 || true
               if [ "$ACTIVATED" -ne 1 ] && [ "$(git -C "$APP_DIR" rev-parse HEAD)" != "$LIVE_SHA" ]; then
                 git -C "$APP_DIR" checkout --detach "$LIVE_SHA" >/dev/null 2>&1 || true
@@ -145,6 +156,10 @@ jobs:
             git -C "$APP_DIR" fetch --no-tags origin refs/heads/main
             test "$(git -C "$APP_DIR" rev-parse FETCH_HEAD)" = "$DEPLOY_SHA"
             test -z "$(git -C "$APP_DIR" status --porcelain --untracked-files=no)"
+
+            printf '%s\n' "$LIVE_SHA" > "$PREVIOUS_TMP"
+            mv "$PREVIOUS_TMP" "$APP_DIR/.tvtracker-previous-sha"
+
             git -C "$APP_DIR" checkout --detach "$DEPLOY_SHA"
             test "$(git -C "$APP_DIR" rev-parse HEAD)" = "$DEPLOY_SHA"
             git -C "$APP_DIR" diff --quiet
@@ -153,6 +168,7 @@ jobs:
             mv "$MARKER_TMP" "$APP_DIR/.tvtracker-release-sha"
             ACTIVATED=1
       - name: Restart AlwaysData site
+        id: restart
         env:
           ALWAYSDATA_API_KEY: ${{ secrets.ALWAYSDATA_API_KEY }}
           ALWAYSDATA_ACCOUNT: ${{ secrets.ALWAYSDATA_ACCOUNT }}
@@ -167,6 +183,7 @@ jobs:
             --user "${ALWAYSDATA_API_KEY} account=${ALWAYSDATA_ACCOUNT}:" \
             "https://api.alwaysdata.com/v1/site/${ALWAYSDATA_SITE_ID}/restart/"
       - name: Verify public health endpoint
+        id: verify-health
         env:
           ALWAYSDATA_HEALTH_URL: ${{ secrets.ALWAYSDATA_HEALTH_URL }}
           EXPECTED_RELEASE_SHA: ${{ github.sha }}
@@ -188,3 +205,48 @@ jobs:
           if payload.get("releaseSha") != os.environ["EXPECTED_RELEASE_SHA"]:
               raise SystemExit("health endpoint is not serving the deployed SHA")
           PY
+      - name: Roll back failed production activation
+        id: rollback
+        if: ${{ failure() && steps.deploy.outcome == 'success' }}
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        env:
+          APP_DIR_B64: ${{ steps.deploy-inputs.outputs.app_dir_b64 }}
+        with:
+          host: ${{ secrets.ALWAYSDATA_SSH_HOST }}
+          username: ${{ secrets.ALWAYSDATA_SSH_USER }}
+          key: ${{ secrets.ALWAYSDATA_SSH_KEY }}
+          envs: APP_DIR_B64
+          script: |
+            set -eu
+            APP_DIR="$(printf '%s' "$APP_DIR_B64" | base64 -d)"
+            case "$APP_DIR" in
+              /*) ;;
+              *) echo "Decoded app directory must be absolute" >&2; exit 1 ;;
+            esac
+            PREVIOUS_FILE="$APP_DIR/.tvtracker-previous-sha"
+            test -f "$PREVIOUS_FILE"
+            PREVIOUS_SHA="$(cat "$PREVIOUS_FILE")"
+            case "$PREVIOUS_SHA" in
+              *[!0-9a-f]*|'') echo "Invalid previous release SHA" >&2; exit 1 ;;
+            esac
+            test "${#PREVIOUS_SHA}" -eq 40
+            git -C "$APP_DIR" cat-file -e "${PREVIOUS_SHA}^{commit}"
+            git -C "$APP_DIR" checkout --detach "$PREVIOUS_SHA"
+            test "$(git -C "$APP_DIR" rev-parse HEAD)" = "$PREVIOUS_SHA"
+            git -C "$APP_DIR" diff --quiet
+            git -C "$APP_DIR" diff --cached --quiet
+            MARKER_TMP="${APP_DIR}/.tvtracker-release-sha.rollback.$$"
+            printf '%s\n' "$PREVIOUS_SHA" > "$MARKER_TMP"
+            mv "$MARKER_TMP" "$APP_DIR/.tvtracker-release-sha"
+      - name: Restart AlwaysData after rollback
+        if: ${{ failure() && steps.rollback.outcome == 'success' }}
+        env:
+          ALWAYSDATA_API_KEY: ${{ secrets.ALWAYSDATA_API_KEY }}
+          ALWAYSDATA_ACCOUNT: ${{ secrets.ALWAYSDATA_ACCOUNT }}
+          ALWAYSDATA_SITE_ID: ${{ secrets.ALWAYSDATA_SITE_ID }}
+        run: |
+          set -eu
+          curl --fail --silent --show-error \
+            -X POST --basic \
+            --user "${ALWAYSDATA_API_KEY} account=${ALWAYSDATA_ACCOUNT}:" \
+            "https://api.alwaysdata.com/v1/site/${ALWAYSDATA_SITE_ID}/restart/"
