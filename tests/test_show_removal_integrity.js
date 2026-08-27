@@ -1,8 +1,10 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const { extractFunction } = require('./helpers/extract.js');
 
-const source = fs.readFileSync('static/js/show-removal-integrity.js','utf8');
+const appSource = fs.readFileSync('static/js/app.js','utf8');
+const source = extractFunction(appSource, 'removeShow');
 
 async function runCase(favorite){
   const saves = [];

@@ -4,42 +4,69 @@ const vm = require("vm");
 const assert = require("assert");
 
 const ROOT = path.resolve(__dirname,"..");
-const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"static/js/notifications-final.js");
+const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"static/js/notifications-runtime.js");
 const source = fs.readFileSync(sourcePath,"utf8");
-const polish = fs.readFileSync(path.join(ROOT,"static/js/notifications-polish.js"),"utf8");
+const runtime = fs.readFileSync(path.join(ROOT,"static/js/notifications-runtime.js"),"utf8");
+const settings = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
+const settingsRuntimeStart = runtime.indexOf('const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";');
+const settingsRuntime = runtime.slice(settingsRuntimeStart);
+const rendererStart = settingsRuntime.indexOf("async function renderNotificationControls");
+const rendererEnd = settingsRuntime.indexOf("function openDedicatedSettingsPage",rendererStart);
+const rendererSource = settingsRuntime.slice(rendererStart,rendererEnd);
 
-assert(polish.includes('section.id = "settings-notifications"'));
-assert(polish.includes('profile.insertAdjacentElement("afterend",section)'));
-assert(polish.includes('"When a movie you plan to watch is released."'));
-assert(polish.includes('"When a movie you plan to watch gets a release date or the date changes."'));
-assert(polish.includes('"Enable alerts on this device."'));
-assert(!polish.includes('Enable browser or phone alerts on this device.'));
-assert(!polish.includes('first meaningful release in your selected region'));
+function occurrences(value,needle){
+    return value.split(needle).length - 1;
+}
+
+// Account Settings is now the sole owner of the Notifications settings surface.
+assert(settings.includes('function renderNotifications()'));
+assert(settings.includes('id="settings-v2-notification-list"'));
+assert(settings.includes('const api = global.TVTrackerNotificationsRuntime;'));
+assert(settings.includes('api.renderNotificationControls(list);'));
+assert(settingsRuntimeStart > 0);
+assert(rendererStart > 0 && rendererEnd > rendererStart);
+assert(!runtime.includes('section.id = "settings-notifications"'));
+assert(!runtime.includes('insertAdjacentElement'));
+assert(!runtime.includes('MutationObserver'));
+assert(!runtime.includes('function observeSettings()'));
+assert(!runtime.includes('function installNotificationSettingsNavigation()'));
+assert(!runtime.includes('function mountSettingsNotifications()'));
+assert.strictEqual(occurrences(runtime,'const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";'),1);
+assert.strictEqual(occurrences(runtime,'const BASE_SETTING_OPTIONS = ['),1);
+assert.strictEqual(occurrences(runtime,'async function renderNotificationControls'),1);
+assert(runtime.includes('"When a movie you plan to watch is released."'));
+assert(runtime.includes('"When a movie you plan to watch gets a release date or the date changes."'));
+assert(runtime.includes('"Enable alerts on this device."'));
+assert(!runtime.includes('Enable browser or phone alerts on this device.'));
+assert(!runtime.includes('first meaningful release in your selected region'));
 assert(source.includes('body:{timezone,timezoneMode:"automatic"}'));
-assert(!source.includes('timezoneMode:"manual"'));
-assert(polish.includes('DEDICATED_SETTINGS_ROUTE = "/app/notifications/settings"'));
-assert(polish.includes('global.TVTrackerNotifications.openNotificationSettingsPage = openDedicatedSettingsPage'));
-assert(polish.includes('data-push-error'));
+assert(rendererSource.includes('api.syncAutomaticTimezone()'));
+assert(!rendererSource.includes('timezoneMode:"manual"'));
+assert(!rendererSource.includes('data-timezone-setting'));
+assert(!rendererSource.includes('data-notification-timezone'));
+assert(runtime.includes('const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";'));
+assert(runtime.includes('global.TVTrackerNotifications.openNotificationSettingsPage = openDedicatedSettingsPage'));
+assert(runtime.includes('data-push-error'));
+assert(!runtime.includes('pushDiagnosticMessage'));
+assert(!runtime.includes('The VAPID public and private keys do not match.'));
 assert(source.includes('registerSubscriptionWithServer(localSubscription)'));
 assert(source.includes('subscriptionMatchesPublicKey'));
 assert(!source.includes('NotificationApi.requestPermission()'));
 
-// Regression for the duplicate Push row: notifications-final.js may keep its
-// legacy renderer functions for compatibility, but its runtime boot must never
-// start them. notifications-polish.js is the sole active Settings renderer.
+// Regression for the duplicate Push row: only the first-class Settings owner
+// may render notification controls or intercept notification Settings routes.
 const bootStart = source.indexOf("async function boot()");
 const bootEnd = source.indexOf('document.addEventListener("visibilitychange"',bootStart);
 const bootSource = source.slice(bootStart,bootEnd);
 assert(bootStart > 0 && bootEnd > bootStart);
-assert(!bootSource.includes("observeSettings();"));
-assert(!bootSource.includes("installNotificationSettingsNavigation();"));
 assert(bootSource.includes("installServiceWorkerMessages();"));
-assert(source.includes('const polish = global.TVTrackerNotificationPolish;'));
+assert(source.includes('const polish = global.TVTrackerNotificationsRuntime;'));
 assert(source.includes('return polish.adoptMainSettingsSurface(...args);'));
 assert(source.includes('return polish.openDedicatedSettingsPage({fromRoute:!!replace});'));
-assert(polish.includes('function ensureMainSettingsSection()'));
-assert(polish.includes('renderNotificationControls(list);'));
-assert(polish.includes('renderNotificationControls(root.querySelector(".notification-settings-list"))'));
+assert(runtime.includes('function ensureMainSettingsSection()'));
+assert(runtime.includes('document.getElementById("settings-v2-notification-list")'));
+assert(runtime.includes('renderNotificationControls(list);'));
+assert(rendererSource.indexOf('list.appendChild(pushRow);') < rendererSource.indexOf('list.appendChild(masterRow);'));
 
 const enableStart = source.indexOf("async function enablePush");
 const enableEnd = source.indexOf("async function disablePush",enableStart);
@@ -95,7 +122,10 @@ async function runtimePushRecoveryTest(){
         querySelector(){ return null; },
         querySelectorAll(){ return []; },
         getElementById(){ return null; },
-        addEventListener(type,handler){ domListeners[type] = handler; }
+        addEventListener(type,handler){
+            if(!domListeners[type]) domListeners[type] = [];
+            domListeners[type].push(handler);
+        }
     };
     const navigator = {
         userAgent:"Firefox",
@@ -183,9 +213,10 @@ async function runtimePushRecoveryTest(){
         encodeURIComponent,
         console
     });
-    vm.runInContext(source,context,{filename:"notifications-final.js"});
-    assert(domListeners.DOMContentLoaded);
-    await domListeners.DOMContentLoaded();
+    vm.runInContext(source,context,{filename:"notifications-runtime.js"});
+    const pushBoot = (domListeners.DOMContentLoaded || []).find(handler=>handler.name === "boot");
+    assert(pushBoot);
+    await pushBoot();
 
     // Regression: a successful PushSubscription must not be rejected only because
     // Notification.permission is still momentarily "default".

@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 
 from flask import Flask, jsonify
 
-import final_notifications as final
-import final_notifications_runtime as runtime
+from tvtracker.notifications import push_and_movies as final
+from tvtracker.notifications import runtime as runtime
 
 
 class RecordingCursor:
@@ -119,21 +119,14 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
         self.assertEqual(response.headers.get("Service-Worker-Allowed"), "/")
         self.assertIn("no-store", response.headers.get("Cache-Control", ""))
 
-    def test_installed_notifications_route_uses_media_aware_serializer(self):
+    def test_installed_notifications_routes_are_not_overwritten(self):
         app = self.build_app()
-        item = {
-            "id": 44,
-            "mediaType": "movie",
-            "movieId": "123",
-            "showId": "",
-            "title": "Movie",
-            "message": "Movie is out today.",
-            "route": "/app/movie/123",
-        }
-        with patch.object(final, "list_notifications_final", return_value=[item]):
-            response = app.test_client().get("/api/notifications")
+        response = app.test_client().get("/api/notifications")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["notifications"], [item])
+        self.assertEqual(response.get_json(), {"legacy": True})
+        settings = app.test_client().get("/api/notifications/settings")
+        self.assertEqual(settings.status_code, 200)
+        self.assertEqual(settings.get_json(), {"legacy": True})
 
     def test_installed_push_subscribe_route_sets_device_cookie(self):
         app = self.build_app()
@@ -185,15 +178,20 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
 
     def test_no_region_clears_movie_baselines_before_returning(self):
         factory = RecordingFactory()
-        with patch.object(final, "_read_tracker_movies_and_region", return_value=({"123": {"plan": True}}, "")):
-            result = runtime.run_movie_notification_check_hardened(factory, Mock())
+        with patch.object(final, "ensure_final_schema"), patch.object(
+            final,
+            "_read_tracker_movies_and_region",
+            return_value=({"123": {"plan": True}}, ""),
+        ):
+            result = final.run_movie_notification_check(factory, Mock())
         self.assertEqual(result["status"], "needs_region")
         self.assertTrue(any("DELETE FROM tv_tracker_movie_notification_baseline" in query for query in factory.queries))
         self.assertEqual(sum(connection.commits for connection in factory.connections), 1)
 
     def test_push_preflight_handles_active_retries_and_exhausted_stale_sends(self):
         factory = RecordingFactory()
-        runtime._prepare_push_outbox_state(factory)
+        with patch.object(final, "ensure_final_schema"):
+            final._prepare_push_outbox_state(factory)
         sql = "\n".join(factory.queries)
         self.assertIn("d.status IN ('pending', 'retry')", sql)
         self.assertIn("p.visible = TRUE", sql)
@@ -202,27 +200,35 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
         self.assertIn("status = 'failed'", sql)
         self.assertIn("s.session_version <> a.session_version", sql)
 
-    def test_runtime_preparation_runs_schema_once_without_replacing_business_logic(self):
+    def test_direct_schema_preparation_uses_canonical_migration_runner(self):
+        factory = RecordingFactory()
+        original_prepared = final._SCHEMA_PREPARED
+        final._SCHEMA_PREPARED = False
+        try:
+            with patch.object(final, "run_migrations") as run_migrations:
+                final.ensure_final_schema(factory)
+                final.ensure_final_schema(factory)
+            run_migrations.assert_called_once_with(factory, final.MIGRATIONS)
+            self.assertEqual(factory.connections, [])
+        finally:
+            final._SCHEMA_PREPARED = original_prepared
+
+    def test_runtime_preparation_runs_schema_once_without_patching(self):
         factory = RecordingFactory()
         original_ensure = final.ensure_final_schema
-        original_movie = final.run_movie_notification_check
-        original_claim = final._claim_push_batch
-        original_prepared = runtime._PREPARED
-        ensure = Mock()
+        original_prepared = final._SCHEMA_PREPARED
+        final._SCHEMA_PREPARED = False
         try:
-            runtime._PREPARED = False
-            with patch.object(runtime, "_ORIGINAL_ENSURE_FINAL_SCHEMA", ensure):
+            with patch.object(final, "run_migrations") as run_migrations:
                 runtime.prepare_final_notification_runtime(factory)
                 runtime.prepare_final_notification_runtime(factory)
-            ensure.assert_called_once_with(factory)
-            self.assertIs(final.ensure_final_schema, runtime._schema_already_prepared)
-            self.assertIs(final.run_movie_notification_check, original_movie)
-            self.assertIs(final._claim_push_batch, original_claim)
-            final.ensure_final_schema(factory)
-            ensure.assert_called_once_with(factory)
+                runtime.prepare_final_notification_runtime(factory)
+            run_migrations.assert_called_once_with(factory, final.MIGRATIONS)
+            self.assertIs(final.ensure_final_schema, original_ensure)
+            self.assertTrue(runtime.runtime_is_prepared())
         finally:
             final.ensure_final_schema = original_ensure
-            runtime._PREPARED = original_prepared
+            final._SCHEMA_PREPARED = original_prepared
 
     def test_hardened_worker_orders_persistence_preflight_and_delivery(self):
         order: list[str] = []
@@ -254,11 +260,12 @@ class FinalNotificationFlaskIntegrationTests(unittest.TestCase):
             return push_result
 
         with patch.object(runtime, "prepare_final_notification_runtime"), \
+             patch.object(final, "ensure_final_schema"), \
              patch.object(final, "_notification_versions", return_value={}), \
-             patch.object(runtime, "run_movie_notification_check_hardened", side_effect=movie_runner), \
+             patch.object(final, "run_movie_notification_check", side_effect=movie_runner), \
              patch.object(final, "_changed_notifications", side_effect=changed), \
              patch.object(final, "enqueue_push_deliveries", side_effect=enqueue), \
-             patch.object(runtime, "_prepare_push_outbox_state", side_effect=preflight), \
+             patch.object(final, "_prepare_push_outbox_state", side_effect=preflight), \
              patch.object(final, "deliver_push_outbox", side_effect=deliver):
             result = runtime.run_final_notification_worker_hardened(
                 RecordingFactory(),

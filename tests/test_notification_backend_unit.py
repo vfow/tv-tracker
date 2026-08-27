@@ -1,6 +1,6 @@
 import unittest
 
-from notifications_backend import mark_notification_read
+from tvtracker.notifications.backend import mark_notification_read
 
 
 class FakeCursor:

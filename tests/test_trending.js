@@ -58,7 +58,10 @@ const source = fs.readFileSync(path.join(__dirname,"../static/js/trending.js"),"
 assert.ok(source.includes("tmdbFetchJSON"),"Trending should use the existing TMDB fetch helper");
 assert.ok(!source.includes("sortBrowseResultsForDisplay"),"Trending must not re-sort TMDB ranking");
 assert.ok(!source.includes("renderBrowseControlsHTML"),"Trending full pages must not expose normal Discover browse filters");
-assert.ok(source.includes("originalNavigateToRouteFallback"),"Trending detail back routes should restore the dedicated Trending page");
+assert.ok(source.includes("registerRouteHandler"),"Trending must register its routes through the shared router extension point");
+assert.ok(!source.includes("stopImmediatePropagation"),"Trending must not intercept events that belong to the shared router");
+assert.ok(!source.includes("document.addEventListener"),"Trending must not install its own document-level click interceptor");
+assert.ok(!source.includes('addEventListener("popstate"'),"Trending must not install its own popstate handler");
 assert.ok(source.includes("currentRouteKey() !== config.key"),"Stale Trending failures must not overwrite a page after navigation");
 
 console.log("Trending regression tests passed.");

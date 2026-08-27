@@ -2,8 +2,14 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { extractBetween } = require("./helpers/extract.js");
 
-const source = fs.readFileSync(path.join(__dirname,"..","static","js","search-navigation-fix.js"),"utf8");
+const uiSource = fs.readFileSync(path.join(__dirname,"..","static","js","ui.js"),"utf8");
+const source = extractBetween(
+  uiSource,
+  "// --TVT-search-navigation-owner-begin--",
+  "// --TVT-search-navigation-owner-end--"
+);
 
 function load(overrides={}){
     const calls = [];
@@ -15,7 +21,7 @@ function load(overrides={}){
         TVTrackerRouter:{setPathRoute:(route,replace)=>calls.push({route,replace})},
         history:{replaceState:(state,title,route)=>calls.push({route,replace:"history"})}
     },overrides);
-    const context = {window:win};
+    const context = {window:win,console,Object,String,Array,encodeURIComponent};
     vm.createContext(context);
     vm.runInContext(source,context);
     return {win,calls};
@@ -50,4 +56,5 @@ function load(overrides={}){
     assert.deepStrictEqual(calls,[route]);
 }
 
+assert.ok(source.includes("window.TVTrackerRouter"),"the folded search navigation logic must live in ui.js and use window-scoped refs");
 console.log("Search navigation fix regression tests passed.");

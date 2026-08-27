@@ -156,6 +156,9 @@ function createRouter(route, options={}){
     openNotificationsPage(options){ context.activePage='notifications'; calls.push(['openNotificationsPage',options]); },
     openNotificationSettingsPage(options){ context.activePage='notification-settings'; calls.push(['openNotificationSettingsPage',options]); }
   };
+  context.window.TVTrackerSettings={
+    open(section,options){ context.activePage='settings'; calls.push(['openSettings',section,options]); }
+  };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync('static/js/discover-browse.js','utf8'),context);
   vm.runInContext(fs.readFileSync('static/js/app-router.js','utf8'),context);
@@ -779,8 +782,18 @@ console.log('Real-path router runtime checks passed');
 
 {
   const {calls,router}=createRouter('/app/notifications/settings');
-  assert.strictEqual(router.currentRoute(),'/app/notifications/settings');
-  const call=calls.find(item=>item[0]==='openNotificationSettingsPage');
-  assert(call,'notification settings route should open settings page');
-  assert.strictEqual(call[1].fromRoute,true);
+  assert.strictEqual(router.currentRoute(),'/app/settings/notifications');
+  const call=calls.find(item=>item[0]==='openSettings');
+  assert(call,'legacy notification settings route should canonicalize into Account Settings');
+  assert.strictEqual(call[1],'notifications');
+  assert.strictEqual(call[2].fromRoute,true);
+}
+
+{
+  const {calls,router}=createRouter('/app/settings/data');
+  assert.strictEqual(router.currentRoute(),'/app/settings/data');
+  const call=calls.find(item=>item[0]==='openSettings');
+  assert(call,'canonical settings subsection should open the Settings owner');
+  assert.strictEqual(call[1],'data');
+  assert.strictEqual(call[2].fromRoute,true);
 }

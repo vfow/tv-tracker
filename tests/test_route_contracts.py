@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_route_helpers():
-    source = (ROOT / "app.py").read_text(encoding="utf-8")
+    source = (ROOT / "tvtracker/web/routing.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     wanted_names = {
         "APP_ROUTE_ID_SLUG",
@@ -39,6 +39,7 @@ def load_route_helpers():
         "APP_LIBRARY_SORT_MODES",
         "APP_EYE_QUERY_FLAGS",
         "APP_SECTION_PATHS",
+        "SETTINGS_SECTION_PATHS",
     }
     selected = []
 

@@ -6,7 +6,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
-import final_notifications as final
+from tvtracker.notifications import push_and_movies as final
 
 
 class FakeCursor:
@@ -76,12 +76,12 @@ class FinalNotificationDestructionTests(unittest.TestCase):
             stack.enter_context(patch.object(
                 final,
                 "read_notification_settings",
-                return_value={"enabled": True, "timezone": "Asia/Kuala_Lumpur"},
-            ))
-            stack.enter_context(patch.object(
-                final,
-                "read_final_settings",
-                return_value={"movie_released": True, "movie_release_updates": True},
+                return_value={
+                    "enabled": True,
+                    "timezone": "Asia/Kuala_Lumpur",
+                    "movie_released": True,
+                    "movie_release_updates": True,
+                },
             ))
             result = final.run_movie_notification_check(lambda: connection, fetcher)
         self.assertEqual(result["created"], 0)
@@ -199,6 +199,9 @@ class FinalNotificationDestructionTests(unittest.TestCase):
             order.append("enqueue")
             return 0
 
+        def preflight(*_args, **_kwargs):
+            order.append("preflight")
+
         def deliver(*_args, **_kwargs):
             order.append("deliver")
             return {"configured": False, "delivered": 0, "failed": 0, "dead": 0}
@@ -209,10 +212,11 @@ class FinalNotificationDestructionTests(unittest.TestCase):
             stack.enter_context(patch.object(final, "run_movie_notification_check", side_effect=movie_runner))
             stack.enter_context(patch.object(final, "_changed_notifications", side_effect=changed))
             stack.enter_context(patch.object(final, "enqueue_push_deliveries", side_effect=enqueue))
+            stack.enter_context(patch.object(final, "_prepare_push_outbox_state", side_effect=preflight))
             stack.enter_context(patch.object(final, "deliver_push_outbox", side_effect=deliver))
             final.run_final_notification_worker(lambda: FakeConnection(), Mock(), core_runner)
 
-        self.assertEqual(order, ["core", "movies", "changed", "enqueue", "deliver"])
+        self.assertEqual(order, ["core", "movies", "changed", "enqueue", "preflight", "deliver"])
 
 
 if __name__ == "__main__":

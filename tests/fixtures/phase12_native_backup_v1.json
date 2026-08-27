@@ -1,0 +1,32 @@
+{
+  "app": "TV Tracker",
+  "backupType": "native-app-backup",
+  "backupVersion": 1,
+  "schemaVersion": 4,
+  "data": {
+    "shows": {
+      "123": {
+        "title": "Fixture Show",
+        "tmdb_id": "123",
+        "status": "watching",
+        "episodes_watched": {
+          "1": [1, 2]
+        }
+      }
+    },
+    "history": [
+      {
+        "id": "history-fixture-0001",
+        "tmdb_id": "123",
+        "season": 1,
+        "episode": 2,
+        "date": "2026-07-24",
+        "watched_at": "2026-07-24T12:00:00Z"
+      }
+    ],
+    "profile": {
+      "username": "Fixture Owner",
+      "favorite_shows": ["123"]
+    }
+  }
+}

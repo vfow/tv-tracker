@@ -1,13 +1,61 @@
 from pathlib import Path
+import sys
 
-app = Path("app.py").read_text()
-backend = Path("notifications_backend.py").read_text()
-engine = Path("notification_engine.py").read_text()
-frontend = Path("static/js/notifications.js").read_text()
-router = Path("static/js/app-router.js").read_text()
-ui = Path("static/js/ui.js").read_text()
-template = Path("templates/index.html").read_text()
-css = Path("static/css/tailwind-input.css").read_text()
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tvtracker.migrations import MIGRATIONS  # noqa: E402
+
+
+def read_source(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+app = read_source("app.py")
+routes = read_source("tvtracker/web/routes.py")
+backend = read_source("tvtracker/notifications/backend.py")
+engine = read_source("tvtracker/notifications/engine.py")
+frontend = read_source("static/js/notifications-runtime.js")
+app_js = read_source("static/js/app.js")
+
+
+def extract_upcoming_repair_owner() -> str:
+    start = app_js.index("const UPCOMING_REPAIR_COOLDOWN_MS")
+    fn_start = app_js.index("async function refreshUpcomingDataInBackground", start)
+    brace_start = app_js.index("{", fn_start)
+    depth = 0
+    quote = None
+    i = brace_start
+    while i < len(app_js):
+        char = app_js[i]
+        if quote:
+            if char == "\\":
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in ('"', "'", "`"):
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return app_js[start:i + 1]
+        i += 1
+    raise AssertionError("could not extract the Upcoming repair owner block from app.js")
+
+
+upcoming_owner = extract_upcoming_repair_owner()
+router = read_source("static/js/app-router.js")
+ui = read_source("static/js/ui.js")
+template = read_source("templates/index.html")
+css = read_source("static/css/tailwind-input.css")
+migration_sql = "\n".join(migration.sql for migration in MIGRATIONS)
 
 for table in (
     "tv_tracker_notifications",
@@ -15,7 +63,9 @@ for table in (
     "tv_tracker_notification_baseline",
     "tv_tracker_notification_events",
 ):
-    assert f"CREATE TABLE IF NOT EXISTS {table}" in app
+    assert f"CREATE TABLE IF NOT EXISTS {table}" in migration_sql
+
+assert "tv_tracker_tvmaze_" not in migration_sql
 
 for route in (
     "/api/notifications/status",
@@ -26,18 +76,38 @@ for route in (
     "/app/notifications",
     "/app/notifications/settings",
 ):
-    assert route in app or route in router
+    assert route in app or route in routes or route in router
 
 assert "/api/state" not in frontend
 assert "/api/state" not in backend
 assert "saveData(" not in frontend
+for tracker_dependency in (
+    "DATA",
+    "saveData",
+    "refreshShowForSchedule",
+    "getUpcomingScheduleItems",
+    "refreshUpcomingDataInBackground",
+    "renderUpcoming",
+):
+    assert tracker_dependency not in frontend
+    assert tracker_dependency in upcoming_owner
+notification_runtime_export = frontend.split(
+    "global.TVTrackerNotificationsRuntime = Object.freeze({", 1
+)[1]
+assert "repair" not in notification_runtime_export.lower()
 assert "tv_tracker_state" not in backend
 assert "tvmaze" not in (backend + engine + frontend).lower()
 assert "filename='assets/icons/notification-bell.svg'" in template
 assert "filename='assets/icons/notification-settings.svg'" in template
-assert "filename='js/notifications.js'" in template
+assert "filename='js/notifications-runtime.js'" in template
+assert template.count("filename='js/upcoming-schedule-repair.js'") == 0
+assert "repairMissingWatchingSchedules" in upcoming_owner
+assert template.index("filename='js/release-timing.js'") < template.index("filename='js/app.js'")
+assert template.index("filename='js/app.js'") < template.index("filename='js/startup.js'")
+assert "filename='js/notifications.js'" not in template
 assert 'id="notifications-page"' in template
-assert 'id="notification-settings-page"' in template
+assert 'id="notification-settings-page"' not in template
+assert '/app/settings/notifications' in router
 assert "mountUpcomingBell" in ui
 assert "mountUpcomingBellFallback" in ui
 assert 'path === "/app/notifications"' in router
@@ -47,7 +117,7 @@ assert "/* Notifications V1 */" in css
 expected_notification_copy = (
     "When a new season is added to a show.",
     "When a show's new season begins tomorrow.",
-    "When a new episode show becomes available.",
+    "When a new episode becomes available.",
     "When a Watching show returns.",
     "When a show is canceled or ended.",
     "When a season premiere date is announced, changed, or delayed.",
@@ -56,10 +126,10 @@ for copy in expected_notification_copy:
     assert copy in frontend
 
 assert 'href="/app/upcoming" aria-label="Back to Upcoming"' in frontend
-assert 'href="/app/notifications" aria-label="Back to Notifications"' in frontend
-assert frontend.count('/static/assets/icons/arrow-narrow-left.svg') == 2
-assert frontend.count('class="show-page-back-button notifications-back-button"') == 2
-assert frontend.count('<h1 class="tw-font-league">') == 2
+assert 'href="/app/notifications" aria-label="Back to Notifications"' not in frontend
+assert frontend.count('/static/assets/icons/arrow-narrow-left.svg') == 1
+assert frontend.count('class="show-page-back-button notifications-back-button"') == 1
+assert frontend.count('<h1 class="tw-font-league">') == 1
 assert "Updates from the shows you follow." not in frontend
 assert "Choose which updates you want to receive." not in frontend
 assert "←" not in frontend
@@ -90,7 +160,7 @@ assert ".notification-settings-list{margin-top:18px;overflow:hidden;border:1px s
 assert ".notification-setting-row:last-child{border-bottom:0}" in css
 assert '<div class="notification-settings-divider"></div>' not in frontend
 
-settings_options = frontend.split("const SETTINGS_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
+settings_options = frontend.split("const BASE_SETTING_OPTIONS = [", 1)[1].split("];", 1)[0].lower()
 for internal_wording in ("tracked", "loggable", "14 days"):
     assert internal_wording not in settings_options
 

@@ -1,25 +1,31 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const { extractFunctions, extractFunction } = require('./helpers/extract.js');
 
-const integritySource = fs.readFileSync('static/js/duplicate-show-integrity.js','utf8');
 const appSource = fs.readFileSync('static/js/app.js','utf8');
+const dbSource = fs.readFileSync('static/js/db.js','utf8');
 const templateSource = fs.readFileSync('templates/index.html','utf8');
 
-const integrityNeedle = "filename='js/duplicate-show-integrity.js'";
-const appNeedle = "filename='js/app.js'";
-const firstIntegrity = templateSource.indexOf(integrityNeedle);
-const appIndex = templateSource.indexOf(appNeedle);
-const secondIntegrity = templateSource.indexOf(integrityNeedle,firstIntegrity + integrityNeedle.length);
-assert.ok(firstIntegrity >= 0 && firstIntegrity < appIndex,'duplicate integrity preload must run before app.js');
-assert.ok(secondIntegrity > appIndex,'duplicate cleanup hook must run again after app.js');
+for(const n of ['tracker-integrity.js','data-integrity.js','tracker-removal.js','upcoming-schedule-repair.js'])assert(!templateSource.includes(n),`${n} must no longer load as a separate script`);
 
-function extractAppCleanupSource(){
-  const start = appSource.indexOf('function normalizeWatchedEpisodeArray');
-  const end = appSource.indexOf('function normalizeTrackerDataForEpisodeIntegrity');
-  assert.ok(start >= 0 && end > start,'duplicate cleanup helpers must exist in app.js');
+const OWNERSHIP_REGION = (()=>{
+  const start = appSource.indexOf("function cleanProviderHTML(");
+  assert.ok(start >= 0,"ownership helpers must exist in app.js");
+  const endFn = extractFunction(appSource, "removeExistingHistoryEntriesForEpisode");
+  const end = appSource.indexOf(endFn) + endFn.length;
+  assert.ok(end > start,"the ownership region must be well-ordered in app.js");
   return appSource.slice(start,end);
-}
+})();
+const CLEANUP_SOURCE = extractFunction(appSource, 'cleanupDuplicateShows');
+const DB_GATE = (()=>{
+  const start = dbSource.indexOf("const DEFAULT_OWNERSHIP_READY_TIMEOUT_MS = 5000;");
+  assert.ok(start >= 0,"db.js ownership gate constants must exist");
+  const gateFn = extractFunction(dbSource, "waitForOwnershipLayerReadiness");
+  const end = dbSource.indexOf(gateFn) + gateFn.length;
+  assert.ok(end > start,"the db.js ownership gate region must be well-ordered");
+  return dbSource.slice(start,end);
+})();
 
 function clone(value){
   return JSON.parse(JSON.stringify(value));
@@ -36,6 +42,10 @@ function makeContext(storedData){
     Date,
     Set,
     Promise,
+    JSON,
+    RegExp,
+    setTimeout,
+    clearTimeout,
     getStoredData:async()=>clone(storedData)
   };
   context.globalThis = context;
@@ -48,21 +58,100 @@ function normalizeAll(context,data,summary=null){
 
 async function loadThroughStartup(storedData){
   const context = makeContext(storedData);
-
-  // First load happens before app.js. getStoredData must wait until the
-  // post-app load has wrapped cleanupDuplicateShows, rather than mutating
-  // duplicate progress before the app chooses its preferred record.
-  vm.runInContext(integritySource,context);
-  const pendingData = context.getStoredData();
-
-  vm.runInContext(extractAppCleanupSource(),context);
-  vm.runInContext(integritySource,context);
-
-  const loaded = await pendingData;
+  vm.runInContext(OWNERSHIP_REGION,context);
+  vm.runInContext(CLEANUP_SOURCE,context);
+  const loaded = await context.getStoredData();
+  assert.strictEqual(typeof context.cleanupDuplicateShows,'function','cleanupDuplicateShows must be owned by app.js');
   return {context,loaded};
 }
 
+function makeGateContext(readinessTimeoutMs){
+  const context = {
+    console,
+    Map,
+    Object,
+    Array,
+    Number,
+    String,
+    Date,
+    Set,
+    Promise,
+    JSON,
+    RegExp,
+    setTimeout,
+    clearTimeout
+  };
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(DB_GATE,context);
+  context.TVTrackerOwnershipReadiness = {readinessTimeoutMs};
+  return context;
+}
+
+function resolveWithin(promise,timeoutMs=1000){
+  return new Promise((resolve,reject)=>{
+    const timeout = setTimeout(
+      ()=>reject(new Error('single-load stored data startup timed out')),
+      timeoutMs
+    );
+    promise.then(
+      value=>{
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      error=>{
+        clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
 (async()=>{
+  {
+    const data = {
+      shows:{'10':{tmdb_id:'10',episodes_watched:{'1':[1]}}},
+      history:[
+        {id:'regular-1',tmdb_id:'10',season:1,episode:1,watched_at:'2026-01-01T00:00:00Z'},
+        {
+          id:'special-1',
+          tmdb_id:'10',
+          season:1,
+          episode:1,
+          special:true,
+          source_tvdb_episode_id:'900',
+          watched_at:'2026-01-02T00:00:00Z'
+        }
+      ]
+    };
+    const {context,loaded} = await loadThroughStartup(data);
+
+    context.normalizeTrackerDataForEpisodeIntegrity(loaded);
+
+    assert.deepStrictEqual(
+      Array.from(loaded.history,entry=>entry.id).sort(),
+      ['regular-1','special-1'],
+      'regular and special history sharing coordinates must both survive startup normalization'
+    );
+    assert.notStrictEqual(
+      context.getHistoryEntryEpisodeKey(loaded.history[0]),
+      context.getHistoryEntryEpisodeKey(loaded.history[1])
+    );
+  }
+
+  {
+    const context = makeGateContext(20);
+    await assert.rejects(
+      resolveWithin(context.waitForOwnershipLayerReadiness(),250),
+      /data integrity startup timed out/,
+      'a storage read without the app ownership layer must reject within a bounded interval'
+    );
+    context.getEpisodeIdentityKey = ()=>"k";
+    context.getHistoryEntryEpisodeKey = ()=>"h";
+    context.cleanupDuplicateShows = ()=>null;
+    await resolveWithin(context.waitForOwnershipLayerReadiness(),250);
+  }
+
   {
     const data = {
       shows:{

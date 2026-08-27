@@ -1,0 +1,3 @@
+# Privacy
+
+TV Tracker stores tracker data, profile preferences, history, notification settings and account/security state in its application database. The browser also uses essential session/security cookies, local storage, IndexedDB for pending Push-click delivery, and a pending-save queue where needed for reliability. The service worker does not cache application responses. Web Push is optional and off until explicitly enabled per browser/device. TV Tracker requests media metadata and images from TMDB; optional release-time enrichment can use TVmaze; watch-provider data returned through TMDB is powered by JustWatch. Production credentials and private keys must not be committed.

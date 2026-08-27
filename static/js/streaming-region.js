@@ -7,8 +7,6 @@
     let countries = [];
     let countriesPromise = null;
     let pendingRegion = "";
-    let mountQueued = false;
-    let settingsObserver = null;
 
     function normalize(value){
         const code = String(value || "").trim().toUpperCase();
@@ -701,68 +699,6 @@
         return true;
     }
 
-    function queueMount(){
-        if(mountQueued){
-            return;
-        }
-        mountQueued = true;
-        Promise.resolve().then(()=>{
-            mountQueued = false;
-            mountSetting();
-        });
-    }
-
-    function installSettingsRender(){
-        const original = global.renderSettings;
-        if(typeof original !== "function" || original.__streamingRegionGuard){
-            return;
-        }
-        const wrapped = function(){
-            const result = original.apply(this,arguments);
-            mountSetting();
-            return result;
-        };
-        wrapped.__streamingRegionGuard = true;
-        global.renderSettings = wrapped;
-    }
-
-    function installSettingsObserver(){
-        if(
-            !global.document ||
-            typeof global.MutationObserver !== "function" ||
-            settingsObserver
-        ){
-            return;
-        }
-        const root = global.document.getElementById("settings-content");
-        if(!root){
-            return;
-        }
-        settingsObserver = new global.MutationObserver(()=>{
-            if(
-                global.document.querySelector(".profile-settings-controls") &&
-                !global.document.getElementById("streaming-region-setting")
-            ){
-                queueMount();
-            }
-        });
-        settingsObserver.observe(root,{childList:true,subtree:true});
-    }
-
-    function installMountLifecycle(){
-        if(!global.document){
-            return;
-        }
-        installSettingsObserver();
-        queueMount();
-        if(global.document.readyState === "loading" && typeof global.document.addEventListener === "function"){
-            global.document.addEventListener("DOMContentLoaded",()=>{
-                installSettingsObserver();
-                queueMount();
-            },{once:true});
-        }
-    }
-
     profile();
     pendingRegion = getRegion();
     installRegionGetters();
@@ -772,8 +708,6 @@
     installProviderRenderGuard();
     installSettingsDraft();
     installSettingsSave();
-    installSettingsRender();
-    installMountLifecycle();
 
     global.TVTrackerStreamingRegion = Object.freeze({
         normalizeStreamingRegion:normalize,

@@ -228,6 +228,10 @@ function showPage(page){
     updateShellTitle();
     renderAll();
 
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.updateRouteFromState === "function"){
+        window.setTimeout(()=>window.TVTrackerRouter.updateRouteFromState(false),0);
+    }
+
 }
 
 
@@ -310,7 +314,185 @@ function renderShowsPage(){
 
 
 
+// --TVT-discover-gate-owner-begin--
+const DISCOVER_GATE_MAX_MS = 12000;
+let discoverGateActive = false;
+let discoverGateStableReady = false;
+let discoverGateTrendingSettled = false;
+let discoverGateTrendingPromise = null;
+let discoverGateTimer = null;
+let discoverGateCycleId = 0;
+
+function discoverGateIsHubVisible(){
+    if(window.activePage !== "discover"){
+        return false;
+    }
+    if(typeof window.shouldShowDiscoverHub === "function"){
+        return !!window.shouldShowDiscoverHub();
+    }
+    return true;
+}
+
+function discoverGateBaseSettled(){
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {};
+    return state.loading !== true && (state.loaded === true || !!state.error);
+}
+
+function discoverGateSkeletonHTML(){
+    if(typeof window.renderDiscoverHubSkeleton === "function"){
+        return `
+            <div class="discover-page-shell">
+                ${window.renderDiscoverHubSkeleton("TV Shows")}
+                ${window.renderDiscoverHubSkeleton("Movies")}
+                ${window.renderDiscoverHubSkeleton("Collections")}
+            </div>
+        `;
+    }
+    return `
+        <div class="discover-page-shell">
+            <div class="discover-card-row discover-card-row-loading"></div>
+        </div>
+    `;
+}
+
+function discoverGateRenderSkeleton(){
+    if(!window.document || typeof window.document.getElementById !== "function"){
+        return;
+    }
+    const results = window.document.getElementById("search-results");
+    if(!results){
+        return;
+    }
+    if(results.dataset && results.dataset.discoverStableSkeleton === "1"){
+        return;
+    }
+    results.innerHTML = discoverGateSkeletonHTML();
+    if(results.dataset){
+        results.dataset.discoverStableSkeleton = "1";
+    }
+}
+
+function discoverGateClearSkeletonMarker(){
+    if(!window.document || typeof window.document.getElementById !== "function"){
+        return;
+    }
+    const results = window.document.getElementById("search-results");
+    if(results && results.dataset){
+        delete results.dataset.discoverStableSkeleton;
+    }
+}
+
+function discoverGateClearTimer(){
+    if(discoverGateTimer){
+        clearTimeout(discoverGateTimer);
+        discoverGateTimer = null;
+    }
+}
+
+function discoverGateRelease(force=false){
+    if(!discoverGateActive || !discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!force && (!discoverGateBaseSettled() || !discoverGateTrendingSettled)){
+        discoverGateRenderSkeleton();
+        return false;
+    }
+    discoverGateActive = false;
+    discoverGateStableReady = true;
+    discoverGateClearTimer();
+    discoverGateClearSkeletonMarker();
+    window.renderDiscoverHubContent();
+    return true;
+}
+
+function discoverGateEnsureTrending(cycle){
+    if(discoverGateTrendingPromise){
+        return discoverGateTrendingPromise;
+    }
+    const api = window.TVTrackerTrending;
+    if(!api || typeof api.loadHubRows !== "function"){
+        discoverGateTrendingSettled = true;
+        discoverGateRelease(false);
+        return Promise.resolve([]);
+    }
+
+    discoverGateTrendingSettled = false;
+    discoverGateTrendingPromise = Promise.resolve()
+    .then(()=>api.loadHubRows(false))
+    .catch(()=>[])
+    .finally(()=>{
+        if(cycle === discoverGateCycleId){
+            discoverGateTrendingSettled = true;
+            discoverGateTrendingPromise = null;
+            discoverGateRelease(false);
+        }
+    });
+    return discoverGateTrendingPromise;
+}
+
+function discoverGateBegin(){
+    if(!discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!discoverGateActive){
+        discoverGateActive = true;
+        discoverGateStableReady = false;
+        discoverGateTrendingSettled = false;
+        discoverGateCycleId += 1;
+        discoverGateClearTimer();
+        const cycle = discoverGateCycleId;
+        discoverGateTimer = setTimeout(()=>{
+            if(cycle === discoverGateCycleId){
+                discoverGateTrendingSettled = true;
+                discoverGateRelease(true);
+            }
+        },DISCOVER_GATE_MAX_MS);
+        discoverGateEnsureTrending(cycle);
+    }
+    discoverGateRenderSkeleton();
+    return true;
+}
+
 function renderDiscoverHub(){
+    if(!discoverGateIsHubVisible()){
+        return window.renderDiscoverHubContent();
+    }
+
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {loaded:false,loading:false,error:"",sections:[],genres:[]};
+
+    if(state.loading === true){
+        discoverGateStableReady = false;
+    }
+
+    if(discoverGateStableReady && state.loading !== true){
+        discoverGateClearSkeletonMarker();
+        return window.renderDiscoverHubContent();
+    }
+
+    discoverGateBegin();
+    if(discoverGateBaseSettled() && discoverGateTrendingSettled){
+        discoverGateRelease(false);
+    }
+    return undefined;
+}
+
+window.TVTrackerDiscoverStability = Object.freeze({
+    available:true,
+    begin:discoverGateBegin,
+    release:discoverGateRelease,
+    isGateActive:()=>discoverGateActive,
+    isStableReady:()=>discoverGateStableReady,
+    baseSettled:discoverGateBaseSettled,
+    MAX_GATE_MS:DISCOVER_GATE_MAX_MS
+});
+window.renderDiscoverHub = renderDiscoverHub;
+// --TVT-discover-gate-owner-end--
+
+function renderDiscoverHubContent(){
 
     const results = document.getElementById("search-results");
 
@@ -1019,25 +1201,44 @@ function renderSearchPersonCard(result){
 }
 
 
+// --TVT-search-navigation-owner-begin--
 function lockSearchRouteBeforeResultOpen(){
-    if(activePage !== "search" || typeof getSearchRoute !== "function" || !window.TVTrackerRouter){
+    if(typeof window.getSearchRoute !== "function"){
         return "";
     }
-    const state = typeof discoverSearchState === "object" && discoverSearchState ? discoverSearchState : {};
-    const query = String(state.query || (searchRouteState && searchRouteState.query) || "").trim();
-    const media = typeof normalizeSearchMediaType === "function" ? normalizeSearchMediaType(state.media || (searchRouteState && searchRouteState.media) || "tv") : "tv";
-    const route = getSearchRoute(query,media,searchRouteState);
-    if(searchRouteState){
-        searchRouteState.query = query;
-        searchRouteState.media = media;
+
+    const routeState = window.searchRouteState && typeof window.searchRouteState === "object"
+    ? window.searchRouteState
+    : {};
+    const searchState = window.discoverSearchState && typeof window.discoverSearchState === "object"
+    ? window.discoverSearchState
+    : {};
+    const query = String(searchState.query || routeState.query || "").trim();
+
+    if(!query){
+        return "";
     }
-    if(discoverSearchState){
-        discoverSearchState.query = query;
-        discoverSearchState.media = media;
+
+    const media = typeof window.normalizeSearchMediaType === "function"
+    ? window.normalizeSearchMediaType(searchState.media || routeState.media || "tv")
+    : "tv";
+    const route = window.getSearchRoute(query,media,routeState);
+
+    routeState.query = query;
+    routeState.media = media;
+    searchState.query = query;
+    searchState.media = media;
+
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+        window.TVTrackerRouter.setPathRoute(route,true);
+    }else if(window.history && typeof window.history.replaceState === "function"){
+        window.history.replaceState({tvTrackerRoute:true},"",route);
     }
-    window.TVTrackerRouter.setPathRoute(route,true);
+
     return route;
 }
+window.lockSearchRouteBeforeResultOpen = lockSearchRouteBeforeResultOpen;
+// --TVT-search-navigation-owner-end--
 
 function renderSearchResults(resultsList){
 
@@ -4229,119 +4430,6 @@ function openBehindEpisodesPopup(showId,episodes){
         });
 
     });
-
-}
-
-
-
-function renderHistory(){
-
-    const list = document.getElementById("show-list");
-
-    list.innerHTML = "";
-
-    const allHistoryEntries = getHistoryEntries();
-
-    if(allHistoryEntries.length === 0){
-
-        list.innerHTML = `
-            <div class="empty-state">
-                <h2>No watch history</h2>
-                <p>Watched episodes will appear here.</p>
-            </div>
-        `;
-
-        return;
-
-    }
-
-    const historyEntries = allHistoryEntries.slice(0,historyVisibleLimit);
-    const groups = groupHistoryByDate(historyEntries);
-    const fragment = document.createDocumentFragment();
-
-    groups.forEach(group=>{
-
-        const groupBox = document.createElement("div");
-        groupBox.className = "history-group";
-
-        groupBox.innerHTML = `
-            <div class="history-group-title">
-                ${escapeHTML(group.label)}
-            </div>
-        `;
-
-        group.entries.forEach(entry=>{
-
-            const show = DATA.shows[String(entry.tmdb_id)] || {};
-            const episodeData = getEpisodeData(show,entry.season,entry.episode);
-
-            const stillPath =
-            entry.episode_still_path ||
-            episodeData.still_path ||
-            "";
-
-            const card = document.createElement("a");
-            card.className = "show history-entry-card";
-            card.href = typeof getEpisodeDetailRoute === "function"
-            ? getEpisodeDetailRoute(entry.tmdb_id,entry.season,entry.episode)
-            : "/app/history";
-
-            const imageHTML = stillPath
-            ? `<img class="history-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(stillPath,"w780"))}">`
-            : `<div class="history-still-placeholder">📺</div>`;
-
-            const episodeTitle =
-            entry.episode_title ||
-            episodeData.name ||
-            "Untitled Episode";
-
-            card.innerHTML = `
-
-                ${imageHTML}
-
-                <div class="info">
-
-                    <div class="title">
-                        ${escapeHTML(entry.title || show.title || "Unknown Show")}
-                    </div>
-
-                    <div class="history-episode-line">
-                        S${entry.season}E${String(entry.episode).padStart(2,"0")} — ${escapeHTML(episodeTitle)}
-                    </div>
-
-                </div>
-
-                <div class="history-time">
-                    ${formatHistoryRelative(entry.watched_at)}
-                </div>
-
-            `;
-
-            groupBox.appendChild(card);
-
-        });
-
-        fragment.appendChild(groupBox);
-
-    });
-
-    list.appendChild(fragment);
-
-    if(allHistoryEntries.length > historyEntries.length){
-
-        const moreButton = document.createElement("button");
-        moreButton.className = "history-load-more";
-        moreButton.type = "button";
-        moreButton.textContent = "Load More";
-
-        moreButton.addEventListener("click",function(){
-            historyVisibleLimit += HISTORY_BATCH_SIZE;
-            renderHistory();
-        });
-
-        list.appendChild(moreButton);
-
-    }
 
 }
 
@@ -8832,275 +8920,6 @@ function renderRankedStatsRows(items,type){
 
 }
 
-
-function renderSettings(){
-
-    const settings = document.getElementById("settings-content");
-
-    if(!settings){
-        return;
-    }
-
-    ensureProfileData();
-    profileSettingsDraft = createProfileSettingsDraft();
-
-    const summary = getBackupSummary();
-
-    const presetButtons = ["silhouette-1","silhouette-2","silhouette-3","silhouette-4"]
-    .map(preset=>{
-        return `
-            <button class="avatar-preset-button" type="button" data-avatar-type="preset" data-avatar-preset="${preset}" title="Choose preset avatar">
-                <span class="avatar-preset-preview">${getPresetAvatarSVG(preset)}</span>
-            </button>
-        `;
-    }).join("");
-
-    settings.innerHTML = `
-
-        <div class="settings-inner">
-
-            <h1>SETTINGS</h1>
-
-
-            <div class="settings-section profile-settings-section">
-
-                <div class="settings-section-header">
-                    <h2>PROFILE</h2>
-                </div>
-
-                <div class="profile-settings-layout">
-
-                    <div class="settings-avatar-preview" id="settings-avatar-preview">
-                        ${getProfileAvatarInnerHTML(profileSettingsDraft)}
-                    </div>
-
-                    <div class="profile-settings-controls">
-
-                        <label class="profile-settings-label" for="profile-username-input">Username</label>
-                        <input class="profile-settings-input" id="profile-username-input" type="text" maxlength="30" value="${escapeHTML(profileSettingsDraft.username)}">
-
-                        <div class="profile-settings-label avatar-label">Avatar</div>
-
-                        <div class="avatar-preset-grid">
-                            <button class="avatar-preset-button" type="button" data-avatar-type="initial" title="Use username initial">
-                                <span class="avatar-initial-option">${escapeHTML(getProfileInitial(profileSettingsDraft.username))}</span>
-                            </button>
-                            ${presetButtons}
-                        </div>
-
-                        <div class="settings-button-list profile-settings-buttons">
-                            <button class="settings-action-button muted" id="upload-profile-avatar" type="button">Upload Image</button>
-                            <button class="settings-action-button muted" id="remove-profile-avatar" type="button">Remove Avatar</button>
-                        </div>
-
-                        <div class="profile-settings-label header-label">Profile Header</div>
-
-                        <div id="profile-header-preview-wrap">
-                            ${getProfileHeaderPreviewHTML(profileSettingsDraft)}
-                        </div>
-
-                        <div class="profile-header-preset-grid">
-                            ${[
-                                ["default","Default"],
-                                ["blue","Blue"],
-                                ["purple","Purple"],
-                                ["green","Green"],
-                                ["amber","Amber"],
-                                ["monochrome","Monochrome"]
-                            ].map(([preset,label])=>{
-                                return `
-                                    <button class="profile-header-preset-button profile-header-${preset}" type="button" data-profile-header-preset="${preset}">
-                                        <span>${label}</span>
-                                    </button>
-                                `;
-                            }).join("")}
-                        </div>
-
-                        <div class="settings-button-list profile-settings-buttons">
-                            <button class="settings-action-button muted" id="upload-profile-header" type="button">Upload Header Image</button>
-                            <button class="settings-action-button muted" id="remove-profile-header" type="button">Use Default Header</button>
-                            <button class="settings-action-button" id="save-profile-settings" type="button">Save Profile</button>
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="settings-section admin-account-section">
-
-                <div class="settings-section-header">
-                    <h2>ADMIN ACCOUNT</h2>
-                    <p>Change the private login username or password. Saving signs out every logged-in device.</p>
-                </div>
-
-                <form class="admin-account-form" id="admin-account-form" autocomplete="on">
-                <div class="admin-account-grid">
-                    <label class="profile-settings-label" for="admin-username-input">Admin Username</label>
-                    <input class="profile-settings-input" id="admin-username-input" type="text" maxlength="80" autocomplete="username" value="${escapeHTML(getAdminAccountUsername())}" placeholder="Loading account...">
-
-                    <label class="profile-settings-label" for="admin-current-password-input">Current Password</label>
-                    <input class="profile-settings-input" id="admin-current-password-input" type="password" autocomplete="current-password">
-
-                    <label class="profile-settings-label" for="admin-new-password-input">New Password</label>
-                    <input class="profile-settings-input" id="admin-new-password-input" type="password" minlength="16" autocomplete="new-password" placeholder="Leave blank to keep current password">
-
-                    <label class="profile-settings-label" for="admin-confirm-password-input">Confirm New Password</label>
-                    <input class="profile-settings-input" id="admin-confirm-password-input" type="password" minlength="16" autocomplete="new-password">
-                </div>
-
-                <p class="settings-small-note admin-account-status" id="admin-account-status" aria-live="polite"></p>
-
-                <div class="settings-button-list">
-                    <button class="settings-action-button" id="save-admin-account" type="submit">Save Account Changes</button>
-                </div>
-                </form>
-
-            </div>
-
-            <div class="settings-section">
-
-                <div class="settings-section-header">
-                    <h2>APP BACKUP</h2>
-                    <p>Export or import a full backup.</p>
-                </div>
-
-                <div class="settings-summary-grid">
-                    <div class="settings-summary-card">
-                        <span>Shows</span>
-                        <strong>${Number(summary.shows).toLocaleString()}</strong>
-                    </div>
-
-                    <div class="settings-summary-card">
-                        <span>History Entries</span>
-                        <strong>${Number(summary.historyEntries).toLocaleString()}</strong>
-                    </div>
-
-                    <div class="settings-summary-card">
-                        <span>Favorites</span>
-                        <strong>${Number(summary.favorites).toLocaleString()}</strong>
-                    </div>
-                </div>
-
-                <div class="settings-button-list">
-                    <button class="settings-action-button" id="export-native-backup-button" type="button">Export App Backup JSON</button>
-                    <button class="settings-action-button" id="import-native-backup-button" type="button">Import App Backup JSON</button>
-                    <button class="settings-action-button" id="export-html-report-button" type="button">Export HTML Report</button>
-                </div>
-
-
-            </div>
-
-            <div class="settings-section subtle-section">
-                <div class="settings-section-header">
-                    <h2>EXPORT TO OTHER APPS</h2>
-                    <p>On hold for now. Native App Backup JSON remains the main backup and restore format.</p>
-                </div>
-                <div class="settings-button-list">
-                    <button class="settings-action-button muted" type="button" disabled>Simkl / Trakt Export Later</button>
-                </div>
-            </div>
-
-            <div class="settings-section danger-section">
-                <div class="settings-section-header">
-                    <h2>DANGER ZONE</h2>
-                    <p>Sign out or permanently delete all tracker data.</p>
-                </div>
-                <div class="settings-button-list danger-zone-actions">
-                    <button class="settings-action-button danger" id="reset-data-button" type="button">Reset Data</button>
-                    <form class="settings-logout-form" method="post" action="/logout">
-                        <input type="hidden" name="csrf_token" value="${escapeHTML(csrfToken())}">
-                        <button class="settings-action-button muted" type="submit">Log Out</button>
-                    </form>
-                </div>
-            </div>
-
-        </div>
-
-    `;
-
-    updateProfileSettingsPreview();
-
-    const usernameInput = document.getElementById("profile-username-input");
-
-    usernameInput.addEventListener("input",function(){
-        profileSettingsDraft.username = this.value;
-        const initial = document.querySelector(".avatar-initial-option");
-        if(initial){
-            initial.textContent = getProfileInitial(this.value);
-        }
-        if(profileSettingsDraft.avatar_type === "initial"){
-            updateProfileSettingsPreview();
-        }
-    });
-
-    document.querySelectorAll(".avatar-preset-button").forEach(button=>{
-        button.addEventListener("click",function(){
-            profileSettingsDraft.avatar_type = this.dataset.avatarType || "initial";
-            profileSettingsDraft.avatar_preset = this.dataset.avatarPreset || "silhouette-1";
-            if(profileSettingsDraft.avatar_type !== "upload"){
-                profileSettingsDraft.avatar_data = "";
-            }
-            updateProfileSettingsPreview();
-        });
-    });
-
-    document.getElementById("upload-profile-avatar").addEventListener("click",openAvatarFilePicker);
-
-    document.getElementById("remove-profile-avatar").addEventListener("click",function(){
-        profileSettingsDraft.avatar_type = "initial";
-        profileSettingsDraft.avatar_data = "";
-        updateProfileSettingsPreview();
-    });
-
-    document.querySelectorAll(".profile-header-preset-button").forEach(button=>{
-        button.addEventListener("click",function(){
-            profileSettingsDraft.header_type = "preset";
-            profileSettingsDraft.header_preset = this.dataset.profileHeaderPreset || "default";
-            profileSettingsDraft.header_image = "";
-            updateProfileSettingsPreview();
-        });
-    });
-
-    document.getElementById("upload-profile-header").addEventListener("click",openProfileHeaderFilePicker);
-
-    document.getElementById("remove-profile-header").addEventListener("click",function(){
-        profileSettingsDraft.header_type = "preset";
-        profileSettingsDraft.header_preset = "default";
-        profileSettingsDraft.header_image = "";
-        updateProfileSettingsPreview();
-    });
-
-    document.getElementById("save-profile-settings").addEventListener("click",function(){
-        profileSettingsDraft.username = usernameInput.value;
-        saveProfileSettings(profileSettingsDraft);
-    });
-
-
-    const adminUsernameInput = document.getElementById("admin-username-input");
-    if(adminUsernameInput){
-        adminUsernameInput.addEventListener("input",function(){
-            this.dataset.userEdited = "true";
-        });
-    }
-
-    const adminAccountForm = document.getElementById("admin-account-form");
-    if(adminAccountForm){
-        adminAccountForm.addEventListener("submit",function(event){
-            event.preventDefault();
-            saveAdminAccountChanges();
-        });
-    }
-
-    loadAdminAccountIntoSettings();
-
-    document.getElementById("export-native-backup-button").addEventListener("click",exportNativeBackupJSON);
-    document.getElementById("import-native-backup-button").addEventListener("click",importNativeBackupJSON);
-    document.getElementById("export-html-report-button").addEventListener("click",exportHTMLReport);
-    document.getElementById("reset-data-button").addEventListener("click",resetTrackerData);
-
-}
 
 function renderMetadataSyncPanel(){
 

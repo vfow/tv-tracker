@@ -4,6 +4,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from tvtracker.migrations import DATABASE_SCHEMA_VERSION
+
 try:
     import psycopg  # noqa: F401
 except ModuleNotFoundError:
@@ -32,12 +34,48 @@ os.environ.setdefault("DB_NAME", "test-db")
 os.environ.setdefault("DB_USER", "test-user")
 os.environ.setdefault("DB_PASSWORD", "test-password")
 
+
+def model_fresh_database(cursor):
+    applied = {}
+    schema_meta_exists = False
+    schema_version = None
+    row = None
+    rows = []
+
+    def execute(sql, params=None):
+        nonlocal schema_meta_exists, schema_version, row, rows
+        statement = str(sql)
+        row = None
+        rows = []
+
+        if "CREATE TABLE IF NOT EXISTS tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+        if "INSERT INTO tv_tracker_schema_meta" in statement:
+            schema_meta_exists = True
+            schema_version = int(params[0]) if params else DATABASE_SCHEMA_VERSION
+        if "INSERT INTO tv_tracker_migrations" in statement:
+            applied[str(params[0])] = str(params[1])
+
+        if "to_regclass('tv_tracker_schema_meta')" in statement:
+            row = ("tv_tracker_schema_meta" if schema_meta_exists else None,)
+        elif "SELECT schema_version FROM tv_tracker_schema_meta" in statement:
+            row = (schema_version,) if schema_version is not None else None
+        elif "SELECT migration_id, checksum FROM tv_tracker_migrations" in statement:
+            rows = sorted(applied.items())
+        elif "SELECT 1 FROM tv_tracker_admin" in statement:
+            row = (1,)
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: row
+    cursor.fetchall.side_effect = lambda: list(rows)
+
+
 with patch("psycopg.connect") as mocked_connect:
     connection = MagicMock()
     cursor = MagicMock()
     mocked_connect.return_value.__enter__.return_value = connection
     connection.cursor.return_value.__enter__.return_value = cursor
-    cursor.fetchone.return_value = (1,)
+    model_fresh_database(cursor)
     import app as tracker
 
 

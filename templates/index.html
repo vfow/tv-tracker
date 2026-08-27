@@ -15,6 +15,11 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
 <link rel="preload" href="{{ url_for('static', filename='assets/league-gothic.regular.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings-v2.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/icons/app-icon-192.png') }}">
 </head>
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
@@ -48,57 +53,25 @@
 
 <section class="main">
 
-
+<div id="tv-tracker-startup-status" role="alert" hidden></div>
 
 <!-- SHOWS PAGE -->
-
 <div id="shows-page" class="page">
-
     <nav class="top-tabs">
-
-      <a class="tw-font-league" data-tab="watchlist" href="/app/list/watching">
-        WATCHLIST
-      </a>
-
-      <a class="tw-font-league" data-tab="upcoming" href="/app/upcoming">
-        UPCOMING
-      </a>
-
-      <a class="tw-font-league" data-tab="history" href="/app/history">
-        HISTORY
-     </a>
-
+      <a class="tw-font-league" data-tab="watchlist" href="/app/list/watching">WATCHLIST</a>
+      <a class="tw-font-league" data-tab="upcoming" href="/app/upcoming">UPCOMING</a>
+      <a class="tw-font-league" data-tab="history" href="/app/history">HISTORY</a>
     </nav>
 
-
-
     <div class="filters">
-
         <div class="status-filter-track">
-            <a data-filter="watching" href="/app/list/watching">
-                Watching
-            </a>
-
-            <a data-filter="paused" href="/app/list/paused">
-                Paused
-            </a>
-
-            <a data-filter="finished" href="/app/list/completed">
-                Completed
-            </a>
-
-            <a data-filter="plan" href="/app/list/plan-to-watch">
-                Plan To Watch
-            </a>
-
-            <a data-filter="dropped" href="/app/list/dropped">
-                Dropped
-            </a>
+            <a data-filter="watching" href="/app/list/watching">Watching</a>
+            <a data-filter="paused" href="/app/list/paused">Paused</a>
+            <a data-filter="finished" href="/app/list/completed">Completed</a>
+            <a data-filter="plan" href="/app/list/plan-to-watch">Plan To Watch</a>
+            <a data-filter="dropped" href="/app/list/dropped">Dropped</a>
         </div>
-
     </div>
-
-
 
     <main class="content" id="show-list">
         <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="Loading shows">
@@ -116,19 +89,11 @@
             <span class="watchlist-skeleton-sr">Loading shows…</span>
         </div>
     </main>
-
 </div>
 
-
-
-
-
 <!-- DISCOVER PAGE -->
-
 <div id="discover-page" class="page">
-
     <div class="search-container">
-
         <input
         class="search-bar"
         id="search"
@@ -144,211 +109,103 @@
         data-1p-ignore="true"
         data-form-type="other"
         >
-
         <div class="search-results" id="search-results"></div>
-
     </div>
-
 </div>
-
-
-
-
 
 <!-- PROFILE PAGE -->
-
 <div id="profile-page" class="page">
-
     <div class="profile" id="profile-content"></div>
-
 </div>
-
-
 
 <!-- SETTINGS PAGE -->
-
 <div id="settings-page" class="page">
-
     <div class="settings" id="settings-content"></div>
-
 </div>
 
-
 <!-- NOTIFICATIONS PAGE -->
-
 <div id="notifications-page" class="page notifications-page">
     <div id="notifications-content"></div>
 </div>
 
-
-<!-- NOTIFICATION SETTINGS PAGE -->
-
-<div id="notification-settings-page" class="page notification-settings-page">
-    <div id="notification-settings-content"></div>
-</div>
-
-
-
 <!-- SHOW DETAIL PAGE -->
-
 <div id="show-detail-page" class="page show-detail-page">
-
     <div class="show-detail-page-content" id="show-detail-content"></div>
-
 </div>
-
 
 <!-- GENRE DETAIL PAGE -->
-
 <div id="genre-detail-page" class="page genre-detail-page">
-
     <div class="genre-detail-page-content" id="genre-detail-content"></div>
-
 </div>
-
 
 <!-- PERSON DETAIL PAGE -->
-
 <div id="person-detail-page" class="page genre-detail-page person-detail-page">
-
     <div class="genre-detail-page-content" id="person-detail-content"></div>
-
 </div>
-
 
 <!-- EPISODE DETAIL PAGE -->
-
 <div id="episode-detail-page" class="page episode-detail-page">
-
     <div class="episode-detail-page-content" id="episode-detail-content"></div>
-
 </div>
-
-
-
 </section>
 
-
-
-
-
 <!-- STATUS POPUP -->
-
 <div class="popup-overlay" id="status-popup">
-
     <div class="popup">
-
-        <h2 id="popup-title">
-            Add Show
-        </h2>
-
-        <p>
-            Choose status:
-        </p>
-
+        <h2 id="popup-title">Add Show</h2>
+        <p>Choose status:</p>
         <div class="popup-buttons">
-
-            <button data-status="watching">
-                Watching
-            </button>
-
-            <button data-status="plan">
-                Plan To Watch
-            </button>
-
-            <button data-status="finished">
-                Completed
-            </button>
-
-            <button data-status="paused">
-                Paused
-            </button>
-			
-			<button data-status="dropped">
-			Dropped    
-			</button>
-				
-
+            <button data-status="watching">Watching</button>
+            <button data-status="plan">Plan To Watch</button>
+            <button data-status="finished">Completed</button>
+            <button data-status="paused">Paused</button>
+            <button data-status="dropped">Dropped</button>
         </div>
-
-        <button class="close-popup" id="close-popup">
-            Cancel
-        </button>
-
+        <button class="close-popup" id="close-popup">Cancel</button>
     </div>
-
 </div>
-
 
 <!-- SHOW DETAIL MODAL -->
-
 <div class="show-modal-overlay" id="show-modal">
-
     <div class="show-modal">
-
-        <button class="show-modal-close" id="close-show-modal">
-            ×
-        </button>
-
+        <button class="show-modal-close" id="close-show-modal">×</button>
         <div id="show-modal-content"></div>
-
     </div>
-
 </div>
-
 
 <!-- FAVORITES POPUP -->
-
 <div class="popup-overlay" id="favorites-popup">
-
     <div class="popup favorites-popup-box">
-
         <h2 id="favorites-popup-title">Favorite Shows</h2>
-
         <p id="favorites-popup-description">Choose up to 8 favorite shows.</p>
-
         <div id="favorites-popup-content"></div>
-
-        <button class="close-popup" id="close-favorites-popup">
-            Close
-        </button>
-
+        <button class="close-popup" id="close-favorites-popup">Close</button>
     </div>
-
 </div>
-
-
-<!-- TOAST -->
-
-<div class="app-toast" id="toast" role="status" aria-live="polite"></div>
-
-
-
-
 
 <script src="{{ url_for('static', filename='js/config.js') }}"></script>
 <script src="{{ url_for('static', filename='js/audit-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/pending-save-store.js') }}"></script>
 <script src="{{ url_for('static', filename='js/db.js') }}"></script>
 <script src="{{ url_for('static', filename='js/save-storage-fallback.js') }}"></script>
-<script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tmdb.js') }}"></script>
 <script src="{{ url_for('static', filename='js/show-detail-filters.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/feedback.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/foundation.js') }}"></script>
 <script src="{{ url_for('static', filename='js/discover-browse.js') }}"></script>
-<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications-runtime.js') }}"></script>
 <script src="{{ url_for('static', filename='js/release-timing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/duplicate-show-integrity.js') }}"></script>
-<script src="{{ url_for('static', filename='js/show-removal-integrity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/adult-filter.js') }}"></script>
 <script src="{{ url_for('static', filename='js/history-activity.js') }}"></script>
 <script src="{{ url_for('static', filename='js/episode-crew.js') }}"></script>
 <script src="{{ url_for('static', filename='js/trending.js') }}"></script>
 <script src="{{ url_for('static', filename='js/streaming-region.js') }}"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/provider-freshness.js') }}"></script>
-<script src="{{ url_for('static', filename='js/discover-stability.js') }}"></script>
-<script src="{{ url_for('static', filename='js/search-navigation-fix.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
+<script src="{{ url_for('static', filename='js/startup.js') }}"></script>
 
 </body>
 </html>

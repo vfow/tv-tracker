@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from notification_engine import (
+from tvtracker.notifications.engine import (
     collect_metadata_notification_candidates,
     collect_time_notification_candidates,
 )

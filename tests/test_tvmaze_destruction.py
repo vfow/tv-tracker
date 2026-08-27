@@ -2,7 +2,7 @@ import unittest
 
 import psycopg
 
-from release_timing import ReleaseTimingResolver
+from tvtracker.release_timing.service import ReleaseTimingResolver
 
 
 class RaisingProvider:

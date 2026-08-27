@@ -422,20 +422,6 @@
         return !!(header || help);
     }
 
-    function installSettingsCleanup(){
-        const original = global.renderSettings;
-        if(typeof original !== "function"){ cleanupStreamingCopy(); return; }
-        const wrapped = function(){
-            const result = original.apply(this,arguments);
-            cleanupStreamingCopy();
-            return result;
-        };
-        if(original.__streamingRegionGuard){ wrapped.__streamingRegionGuard = true; }
-        wrapped.__providerCopyCleanup = true;
-        global.renderSettings = wrapped;
-        cleanupStreamingCopy();
-    }
-
     function installRegionRefresh(){
         const original = global.saveProfileSettings;
         if(typeof original !== "function" || original.__providerFreshness){ return; }
@@ -465,7 +451,6 @@
     installDetailWrappers();
     installOpenWrappers();
     installRegionRefresh();
-    installSettingsCleanup();
     start();
 
     global.TVTrackerProviderFreshness = Object.freeze({

@@ -2,6 +2,7 @@
     "use strict";
 
     const SHOW_TABS = new Set(["watchlist","upcoming","history"]);
+    const SETTINGS_SECTIONS = new Set(["profile","auth","notifications","streaming","data","danger-zone"]);
     const LIST_ROUTE_TO_FILTER = {
         "watching":"watching",
         "paused":"paused",
@@ -49,6 +50,7 @@
     ]);
     let applyingRoute = false;
     let initialRoutePrepared = false;
+    const registeredRouteHandlers = [];
 
     function parseRouteIdSlug(value){
         const clean = String(value || "").trim().toLowerCase();
@@ -219,10 +221,34 @@
         };
     }
 
+    function registerRouteHandler(handler){
+        if(!handler || typeof handler.parseRoute !== "function" || typeof handler.applyRoute !== "function"){
+            return false;
+        }
+        registeredRouteHandlers.push(handler);
+        return true;
+    }
+
+    function drainRouteHandlerQueue(){
+        const queue = typeof window !== "undefined" ? window.TVTrackerRouteHandlerQueue : null;
+        if(!Array.isArray(queue)){ return; }
+        while(queue.length){
+            registerRouteHandler(queue.shift());
+        }
+    }
+
     function parseAppRoute(pathname,search=""){
         const rawPath = String(pathname || "").trim() || "/app/list/watching";
         if(rawPath !== "/app" && !rawPath.startsWith("/app/")){
             return {valid:false,type:"not-found",path:rawPath,search:"",canonicalRoute:rawPath,params:{}};
+        }
+
+        for(const handler of registeredRouteHandlers){
+            const claimed = handler.parseRoute(rawPath,search);
+            if(claimed && claimed.valid){
+                claimed.handler = handler;
+                return claimed;
+            }
         }
 
         const path = rawPath.length > 4 ? rawPath.replace(/\/+$/g,"") : rawPath;
@@ -272,13 +298,17 @@
             return buildParsedRoute("profile",path,"",{});
         }
         if(path === "/app/settings"){
-            return buildParsedRoute("settings",path,"",{});
+            return buildParsedRoute("settings","/app/settings/profile","",{section:"profile"});
+        }
+        const settingsMatch = path.match(/^\/app\/settings\/(profile|auth|notifications|streaming|data|danger-zone)$/);
+        if(settingsMatch && SETTINGS_SECTIONS.has(settingsMatch[1])){
+            return buildParsedRoute("settings",path,"",{section:settingsMatch[1]});
         }
         if(path === "/app/notifications"){
             return buildParsedRoute("notifications",path,"",{});
         }
         if(path === "/app/notifications/settings"){
-            return buildParsedRoute("notification-settings",path,"",{});
+            return buildParsedRoute("settings","/app/settings/notifications","",{section:"notifications",legacy:true});
         }
 
         const discoverCategoryMatch = path.match(/^\/app\/discover\/(?:(tv)\/(popular|top-rated|airing-today|on-the-air)|(movie)\/(popular|top-rated|now-playing|upcoming))$/);
@@ -501,6 +531,13 @@
                 return getPersonDetailRoute(personRole,selectedPersonContext.personId,personName,personMedia);
             }
             return "/app/list/watching";
+        }
+        if(activePage === "discovery-detail" && typeof discoveryPageState !== "undefined" && discoveryPageState && discoveryPageState.type === "trending" && discoveryPageState.value){
+            const api = typeof window !== "undefined" ? window.TVTrackerTrending : null;
+            if(api && typeof api.routeFor === "function"){
+                return api.routeFor(discoveryPageState.value);
+            }
+            return "/app/discover";
         }
         if(activePage === "discovery-detail" && typeof selectedDiscoveryContext !== "undefined" && selectedDiscoveryContext && selectedDiscoveryContext.type && selectedDiscoveryContext.value){
             if(typeof getDiscoveryFilterDetailRoute === "function"){
@@ -766,6 +803,14 @@
         }
 
         normalizeCurrentRoute(parsed);
+        if(parsed.handler){
+            if(typeof parsed.handler.prepareInitialRoute === "function"){
+                parsed.handler.prepareInitialRoute(parsed);
+            }else{
+                parsed.handler.applyRoute(parsed,{source:"initial"});
+            }
+            return;
+        }
         const params = parsed.params || {};
 
         if(parsed.type === "list"){
@@ -800,18 +845,19 @@
             if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
-        if(parsed.type === "notification-settings"){
-            activePage = "notification-settings";
-            setPageActiveWithoutRender("notification-settings-page","shows");
+        if(parsed.type === "profile"){
+            activePage = "profile";
+            setPageActiveWithoutRender("profile-page","profile");
             if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
-        if(parsed.type === "profile" || parsed.type === "settings"){
-            activePage = parsed.type;
-            setPageActiveWithoutRender(parsed.type + "-page",parsed.type);
-            if(typeof updateShellTitle === "function"){
-                updateShellTitle();
+        if(parsed.type === "settings"){
+            activePage = "settings";
+            setPageActiveWithoutRender("settings-page","settings");
+            if(globalThis.TVTrackerSettings && typeof globalThis.TVTrackerSettings.open === "function"){
+                globalThis.TVTrackerSettings.open(params.section || "profile",{fromRoute:true,skipShowPage:true});
             }
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
         if(parsed.type === "show"){
@@ -1028,7 +1074,12 @@
         }
     }
 
-    function applyParsedRoute(parsed){
+    function applyParsedRoute(parsed,source="direct"){
+        if(parsed.handler && typeof parsed.handler.applyRoute === "function"){
+            if(parsed.handler.applyRoute(parsed,{source}) !== false){
+                return;
+            }
+        }
         const params = parsed.params || {};
 
         if(parsed.type === "list"){
@@ -1134,16 +1185,6 @@
             }
             return;
         }
-        if(parsed.type === "notification-settings"){
-            clearDetailState();
-            if(
-                window.TVTrackerNotifications &&
-                typeof window.TVTrackerNotifications.openNotificationSettingsPage === "function"
-            ){
-                window.TVTrackerNotifications.openNotificationSettingsPage({fromRoute:true});
-            }
-            return;
-        }
         if(parsed.type === "profile"){
             clearDetailState();
             showPage("profile");
@@ -1151,7 +1192,11 @@
         }
         if(parsed.type === "settings"){
             clearDetailState();
-            showPage("settings");
+            if(window.TVTrackerSettings && typeof window.TVTrackerSettings.open === "function"){
+                window.TVTrackerSettings.open(params.section || "profile",{fromRoute:true});
+            }else{
+                showPage("settings");
+            }
             return;
         }
         if(parsed.type === "upcoming"){
@@ -1167,7 +1212,7 @@
         }
     }
 
-    function applyRoute(){
+    function applyRoute(source="direct"){
         const parsed = getParsedCurrentRoute();
         if(!parsed.valid){
             showRouteNotFound();
@@ -1193,19 +1238,10 @@
 
         applyingRoute = true;
         try{
-            applyParsedRoute(parsed);
+            applyParsedRoute(parsed,source);
         }finally{
             applyingRoute = false;
         }
-    }
-
-    const originalShowPage = window.showPage;
-    if(typeof originalShowPage === "function"){
-        window.showPage = function(page){
-            const result = originalShowPage.apply(this,arguments);
-            window.setTimeout(()=>updateRouteFromState(false),0);
-            return result;
-        };
     }
 
     document.querySelectorAll(".app-primary-nav [data-page]").forEach(link=>{
@@ -1266,14 +1302,14 @@
             return;
         }
         setPathRoute(parsed.canonicalRoute,false);
-        applyRoute();
+        applyRoute("click");
     }
 
     if(typeof document !== "undefined" && document && typeof document.addEventListener === "function"){
         document.addEventListener("click",handleAppRouteAnchorClick);
     }
 
-    window.addEventListener("popstate",applyRoute);
+    window.addEventListener("popstate",function(){ applyRoute("popstate"); });
 
     window.TVTrackerRouter = {
         applyRoute,
@@ -1282,9 +1318,11 @@
         prepareInitialRoute,
         updateRouteFromState,
         routePrefix,
-        setPathRoute
+        setPathRoute,
+        registerRouteHandler
     };
 
+    drainRouteHandlerQueue();
     prepareInitialRoute();
     if(typeof appDataReady === "undefined" || appDataReady){
         window.setTimeout(applyRoute,0);

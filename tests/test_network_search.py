@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_network_helpers():
-    source = (ROOT / "app.py").read_text(encoding="utf-8")
+    source = (ROOT / "tvtracker/media/tmdb_exports.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     wanted_assignments = {
         "TMDB_NETWORK_EXPORT_LOOKBACK_DAYS",

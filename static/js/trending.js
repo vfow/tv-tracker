@@ -171,19 +171,34 @@
         }catch(error){}
     }
 
+    const inflightFeeds = new Map();
+
     async function fetchFeed(config,force=false){
         if(!config){ throw new Error("Trending feed not found."); }
-        if(!force){
-            const cached = readCache(config);
-            if(cached){ return cached; }
+        if(!force && inflightFeeds.has(config.key)){
+            return inflightFeeds.get(config.key);
         }
-        if(typeof global.tmdbFetchJSON !== "function"){
-            throw new Error("TMDB is unavailable.");
+        const task = (async()=>{
+            if(!force){
+                const cached = readCache(config);
+                if(cached){ return cached; }
+            }
+            if(typeof global.tmdbFetchJSON !== "function"){
+                throw new Error("TMDB is unavailable.");
+            }
+            const payload = await global.tmdbFetchJSON(config.path,{language:"en-US"});
+            const clean = {results:Array.isArray(payload && payload.results) ? payload.results : []};
+            writeCache(config,clean);
+            return clean;
+        })();
+        inflightFeeds.set(config.key,task);
+        try{
+            return await task;
+        }finally{
+            if(inflightFeeds.get(config.key) === task){
+                inflightFeeds.delete(config.key);
+            }
         }
-        const payload = await global.tmdbFetchJSON(config.path,{language:"en-US"});
-        const clean = {results:Array.isArray(payload && payload.results) ? payload.results : []};
-        writeCache(config,clean);
-        return clean;
     }
 
     function currentHubTrendingSections(){
@@ -362,9 +377,6 @@
         return true;
     }
 
-    const initialKey = currentRouteKey();
-    let pendingInitialKey = initialKey;
-
     const originalRenderDiscoverHub = typeof global.renderDiscoverHub === "function" ? global.renderDiscoverHub : null;
     if(originalRenderDiscoverHub){
         global.renderDiscoverHub = function(){
@@ -375,58 +387,50 @@
 
     const originalOpenDiscoverHomePage = typeof global.openDiscoverHomePage === "function" ? global.openDiscoverHomePage : null;
     if(originalOpenDiscoverHomePage){
-        global.openDiscoverHomePage = function(options={}){
-            if(pendingInitialKey){
-                const key = pendingInitialKey;
-                pendingInitialKey = "";
-                return openPage(key,{replace:true});
-            }
+        global.openDiscoverHomePage = function(){
             const result = originalOpenDiscoverHomePage.apply(this,arguments);
             Promise.resolve(result).then(()=>loadHubRows(false)).catch(()=>{});
             return result;
         };
     }
 
-    const originalNavigateToRouteFallback = typeof global.navigateToRouteFallback === "function" ? global.navigateToRouteFallback : null;
-    if(originalNavigateToRouteFallback){
-        global.navigateToRouteFallback = function(route){
-            let key = "";
-            try{
-                const url = new URL(String(route || ""),global.location && global.location.origin ? global.location.origin : "http://localhost");
-                key = parseRoute(url.pathname,url.search);
-            }catch(error){}
-            if(key){
-                return openPage(key,{replace:false});
-            }
-            return originalNavigateToRouteFallback.apply(this,arguments);
-        };
-    }
-
-    if(typeof global.document !== "undefined"){
-        global.document.addEventListener("click",event=>{
-            if(!isPlainClick(event)){ return; }
-            const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
-            if(!anchor){ return; }
-            let url;
-            try{ url = new URL(anchor.getAttribute("href"),global.location && global.location.origin ? global.location.origin : "http://localhost"); }
-            catch(error){ return; }
-            const key = parseRoute(url.pathname,url.search);
+    const routeHandler = {
+        parseRoute(pathname,search){
+            const key = parseRoute(pathname,search);
+            if(!key){ return null; }
+            return {
+                valid:true,
+                type:"trending",
+                path:"/app/discover",
+                search:"?trending=" + encodeURIComponent(key),
+                canonicalRoute:routeFor(key),
+                params:{trendingKey:key}
+            };
+        },
+        prepareInitialRoute(parsed){
+            const key = parsed.params && parsed.params.trendingKey;
             if(!key){ return; }
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            openPage(key,{replace:false}).catch(()=>{});
-        },true);
-    }
-
-    if(typeof global.addEventListener === "function"){
-        global.addEventListener("popstate",event=>{
-            const key = currentRouteKey();
-            if(!key){ return; }
-            if(event && typeof event.stopImmediatePropagation === "function"){
-                event.stopImmediatePropagation();
+            if(typeof global.rememberRouteNavContext === "function"){
+                global.rememberRouteNavContext(routeFor(key),"discover");
             }
             openPage(key,{keepRoute:true}).catch(()=>{});
-        });
+        },
+        applyRoute(parsed,context){
+            const key = parsed.params && parsed.params.trendingKey;
+            if(!key){ return false; }
+            const source = context && context.source ? context.source : "direct";
+            if(source !== "popstate" && typeof global.rememberRouteNavContext === "function"){
+                global.rememberRouteNavContext(routeFor(key),"discover");
+            }
+            return openPage(key,{keepRoute:true});
+        }
+    };
+
+    if(global.TVTrackerRouter && typeof global.TVTrackerRouter.registerRouteHandler === "function"){
+        global.TVTrackerRouter.registerRouteHandler(routeHandler);
+    }else{
+        global.TVTrackerRouteHandlerQueue = global.TVTrackerRouteHandlerQueue || [];
+        global.TVTrackerRouteHandlerQueue.push(routeHandler);
     }
 
     global.TVTrackerTrending = Object.freeze({

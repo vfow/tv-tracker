@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from app import database_connection, fetch_tmdb_notification_json, run_notification_check
-from final_notifications_runtime import run_final_notification_worker_hardened
+from tvtracker.notifications.runtime import run_final_notification_worker_hardened
 
 
 if __name__ == "__main__":

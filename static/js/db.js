@@ -1045,7 +1045,58 @@ async function fetchFullState(){
     };
 }
 
+const DEFAULT_OWNERSHIP_READY_TIMEOUT_MS = 5000;
+const OWNERSHIP_READY_POLL_MS = 25;
+
+function ownershipReadyTimeoutMs(){
+    const configured = globalThis.TVTrackerOwnershipReadiness && Number(globalThis.TVTrackerOwnershipReadiness.readinessTimeoutMs);
+    return (
+        Number.isFinite(configured) &&
+        configured >= 1 &&
+        configured < DEFAULT_OWNERSHIP_READY_TIMEOUT_MS
+    ) ? configured : DEFAULT_OWNERSHIP_READY_TIMEOUT_MS;
+}
+
+function ownershipLayerIsReady(){
+    return (
+        typeof globalThis.getEpisodeIdentityKey === "function" &&
+        typeof globalThis.getHistoryEntryEpisodeKey === "function" &&
+        typeof globalThis.cleanupDuplicateShows === "function"
+    );
+}
+
+function waitForOwnershipLayerReadiness(){
+    if(ownershipLayerIsReady()){
+        return Promise.resolve();
+    }
+    if(typeof globalThis.setTimeout !== "function"){
+        return Promise.reject(new Error(
+            "TV Tracker data integrity startup timed out waiting for the app ownership layer"
+        ));
+    }
+    return new Promise((resolve,reject)=>{
+        const startedAt = Date.now();
+        const tick = function(){
+            if(ownershipLayerIsReady()){
+                resolve();
+                return;
+            }
+            if(Date.now() - startedAt >= ownershipReadyTimeoutMs()){
+                reject(new Error(
+                    "TV Tracker data integrity startup timed out after " +
+                    ownershipReadyTimeoutMs() +
+                    "ms waiting for the app ownership layer"
+                ));
+                return;
+            }
+            globalThis.setTimeout(tick,OWNERSHIP_READY_POLL_MS);
+        };
+        globalThis.setTimeout(tick,OWNERSHIP_READY_POLL_MS);
+    });
+}
+
 async function getStoredData(){
+    await waitForOwnershipLayerReadiness();
     const result = await fetchFullState();
     SERVER_REVISION = result.revision;
 
@@ -1883,6 +1934,8 @@ function startDataSync(){
                 Number(message.revision || 0) > SERVER_REVISION
             ){
                 syncFromServer("broadcast",true);
+            }else if(message.type === "logout-clear"){
+                clearPendingSaveOperations();
             }
         });
     }

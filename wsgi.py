@@ -1,3 +1,9 @@
+import os
+
+# Production workers must never mutate the database schema while booting.
+# Deployment applies migrations from the staged release before this module loads.
+os.environ["TVTRACKER_SCHEMA_VERIFY_ONLY"] = "1"
+
 from app import (
     app,
     check_csrf,
@@ -5,17 +11,17 @@ from app import (
     fetch_tmdb_notification_json,
     login_required,
 )
-import final_notifications as final_notifications_module
-from final_notifications_runtime import prepare_final_notification_runtime
-from notification_polish_runtime import install_notification_polish
-from static_asset_versioning import install_static_asset_versioning
+from tvtracker.notifications import push_and_movies as notifications_module
+from tvtracker.notifications.runtime import prepare_final_notification_runtime
+from tvtracker.notifications.push_validation import install_notification_polish
+from tvtracker.infrastructure.static_assets import install_static_asset_versioning
+from tvtracker.data_integrity import install_backup_summary_hardening
 
 prepare_final_notification_runtime(database_connection)
 install_static_asset_versioning(app)
-# Register before final_notifications so Flask's reverse after_request order
-# injects notifications-final.js first and notifications-polish.js after it.
-install_notification_polish(app, final_notifications_module)
-final_notifications_module.install_final_notifications(
+install_backup_summary_hardening(app)
+install_notification_polish(app, notifications_module)
+notifications_module.install_final_notifications(
     app,
     login_required=login_required,
     check_csrf=check_csrf,

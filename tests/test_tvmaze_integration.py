@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from unittest import mock
 from urllib.error import HTTPError
 
-import tvmaze_integration
-from tvmaze_integration import (
+from tvtracker.integrations import tvmaze as tvmaze_integration
+from tvtracker.integrations.tvmaze import (
     EPISODE_NEGATIVE_TTL,
     EPISODE_NEAR_TERM_EXACT_TTL,
     EPISODE_SUCCESS_TTL,

@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
-import final_notifications as final
+from tvtracker.notifications import push_and_movies as final
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +22,8 @@ class FinalAuditHardeningTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("branches-ignore:", workflow)
         self.assertIn("npm ci --audit=false", workflow)
-        self.assertIn("npm audit --omit=dev --audit-level=high", workflow)
+        self.assertIn("npm audit --audit-level=high", workflow)
+        self.assertNotIn("npm audit --omit=dev", workflow)
         self.assertFalse(package.get("dependencies"), "Runtime npm dependencies must remain explicitly audited")
 
     def test_deploy_restarts_alwaysdata_with_supported_python_before_health_check(self):
@@ -34,7 +35,8 @@ class FinalAuditHardeningTests(unittest.TestCase):
         self.assertIn("ALWAYSDATA_ACCOUNT", workflow)
         self.assertIn("ALWAYSDATA_SITE_ID", workflow)
         self.assertIn("https://api.alwaysdata.com/v1/site/${ALWAYSDATA_SITE_ID}/restart/", workflow)
-        self.assertIn("npm audit --omit=dev --audit-level=high", workflow)
+        self.assertIn("npm audit --audit-level=high", workflow)
+        self.assertNotIn("npm audit --omit=dev", workflow)
         self.assertIn("--retry 12 --retry-delay 5 --retry-all-errors", workflow)
         self.assertLess(workflow.index("Restart AlwaysData site"), workflow.index("Verify public health endpoint"))
 
@@ -48,7 +50,7 @@ class FinalAuditHardeningTests(unittest.TestCase):
         self.assertNotIn("store.clear()", source)
 
     def test_frontend_acks_only_successfully_consumed_push_clicks(self):
-        source = self.read("static/js/notifications-final.js")
+        source = self.read("static/js/notifications-runtime.js")
 
         self.assertIn("async function acknowledgePushClicks(ids)", source)
         self.assertIn('type:"tvtracker-ack-push-clicks"', source)

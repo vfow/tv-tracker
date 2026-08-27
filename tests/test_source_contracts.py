@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -9,13 +10,38 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def read(self, relative: str) -> str:
         return (ROOT / relative).read_text(encoding='utf-8')
 
+    def assert_css_rule_has(self, css: str, selector: str, *declarations: str) -> None:
+        rule_bodies = re.findall(
+            rf'{re.escape(selector)}(?=\s*(?:,|\{{))[^{{}}]*\{{([^{{}}]*)\}}',
+            css,
+        )
+        self.assertTrue(rule_bodies, f'Missing CSS rule for {selector}')
+
+        def normalize(value: str) -> str:
+            compact = re.sub(r'\s+', '', value)
+            return re.sub(
+                r'hsla\(0,0%,100%,([^)]+)\)',
+                r'rgba(255,255,255,\1)',
+                compact,
+            )
+
+        expected = [normalize(declaration).rstrip(';') for declaration in declarations]
+        self.assertTrue(
+            any(
+                all(declaration in normalize(body) for declaration in expected)
+                for body in rule_bodies
+            ),
+            f'{selector} is missing CSS declarations: {declarations}',
+        )
+
     def test_source_section_removed(self):
         ui = self.read('static/js/ui.js')
-        self.assertNotIn('Metadata ' + 'Source', ui)
+        settings = self.read('static/js/settings.js')
+        self.assertNotIn('Metadata ' + 'Source', settings)
         self.assertNotIn('Artwork ' + 'Source', ui)
         self.assertNotIn('<h2>SOURCE</h2>', ui)
-        self.assertIn('Export or import a full backup.', ui)
-        self.assertNotIn('Export or import a full backup of this tracker.', ui)
+        self.assertIn('Export, import, or create a readable report', settings)
+        self.assertNotIn('Simkl / Trakt', settings)
 
     def test_episode_logging_auto_completion_rules_exist(self):
         app_js = self.read('static/js/app.js')
@@ -56,9 +82,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('static-adapter.js', template)
 
     def test_backend_proxy_is_tmdb_only(self):
-        app_py = self.read('app.py')
-        self.assertIn('/api/tmdb/<path:tmdb_path>', app_py)
-        self.assertNotIn('api.' + 'tv' + 'maze.com', app_py)
+        routes = self.read('tvtracker/web/routes.py')
+        self.assertIn('/api/tmdb/<path:tmdb_path>', routes)
+        self.assertNotIn('api.' + 'tv' + 'maze.com', routes)
+        self.assertNotIn('api.' + 'tv' + 'maze.com', self.read('app.py'))
 
     def test_legacy_metadata_cleanup_exists(self):
         app_py = self.read('app.py')
@@ -132,7 +159,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@apply tw-ml-0;', css)
 
     def test_real_protected_page_routes_exist(self):
-        app_py = self.read('app.py')
+        app_py = self.read('tvtracker/web/routes.py')
         router = self.read('static/js/app-router.js')
         template = self.read('templates/index.html')
         self.assertIn('@app.get("/app/list/<list_slug>", strict_slashes=False)', app_py)
@@ -144,6 +171,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('@app.get("/app/search", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/profile", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/settings", strict_slashes=False)', app_py)
+        self.assertIn('@app.get("/app/settings/<settings_section>", strict_slashes=False)', app_py)
+        self.assertIn('/app/settings/notifications', router)
         self.assertIn('@app.get("/app/show/<show_key>", strict_slashes=False)', app_py)
         self.assertIn('@app.get("/app/genre/<genre_media>/<genre_slug>", strict_slashes=False)', app_py)
         self.assertNotIn('@app.get("/app/genre/<genre_slug>", strict_slashes=False)', app_py)
@@ -197,7 +226,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('<div id="shows-page" class="page">', template)
         self.assertIn('class="watchlist-initial-skeleton"', template)
         self.assertIn('function configureInitialListSkeleton(filter)', router)
-        self.assertIn('window.addEventListener("popstate",applyRoute)', router)
+        self.assertIn('window.addEventListener("popstate"', router)
+        self.assertIn('applyRoute("popstate")', router)
         self.assertIn('normalizeCurrentRoute(parsed)', router)
         self.assertNotIn('/app/watchlist', router)
         self.assertFalse((ROOT / 'static/js/v2-router.js').exists())
@@ -221,12 +251,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderShowThemesDetailsHTML', ui)
 
     def test_friendly_error_page_copy_exists(self):
-        app_py = self.read('app.py')
+        routing = self.read('tvtracker/web/routing.py')
         error_template = self.read('templates/error.html')
-        self.assertIn("Are you lost?", app_py)
-        self.assertNotIn("We're not in Kansas anymore", app_py)
-        self.assertIn('Houston, we have a problem', app_py)
-        self.assertIn('Something went wrong. Try again in a moment.', app_py)
+        self.assertIn("Are you lost?", routing)
+        self.assertNotIn("We're not in Kansas anymore", routing)
+        self.assertIn('Houston, we have a problem', routing)
+        self.assertIn('Something went wrong. Try again in a moment.', routing)
         self.assertIn('{{ error_title }}', error_template)
         self.assertIn('{{ error_text }}', error_template)
         self.assertIn('BACK TO APP', error_template)
@@ -278,11 +308,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('class="view-more-button route-error-app-button"', error_template)
 
     def test_auth_tabs_and_server_side_return_path_exist(self):
-        app_py = self.read('app.py')
+        routes = self.read('tvtracker/web/routes.py')
+        auth_security = self.read('tvtracker/auth/security.py')
         login_template = self.read('templates/login.html')
         db_js = self.read('static/js/db.js')
-        self.assertIn('post_login_path', app_py)
-        self.assertIn('@app.get("/signup")', app_py)
+        self.assertIn('post_login_path', auth_security)
+        self.assertIn('@app.get("/signup")', routes)
         self.assertIn('Track your Movies, Shows and Anime all in one place', login_template)
         self.assertIn('Registration coming soon', login_template)
         self.assertNotIn('Your watch history stays private to this signed-in session.', login_template)
@@ -304,21 +335,21 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('static-adapter.js', template)
 
     def test_frontend_security_hardening_exists(self):
-        app_py = self.read('app.py')
+        routes = self.read('tvtracker/web/routes.py')
         ui = self.read('static/js/ui.js')
         self.assertIn('function safeExternalURL', ui)
         self.assertIn('const homepageURL = show ? safeExternalURL(show.homepage) : "";', ui)
         self.assertNotIn('href="${escapeHTML(show.homepage)}"', ui)
-        self.assertIn('"script-src \'self\'"', app_py)
-        self.assertIn('"style-src \'self\' \'unsafe-inline\'"', app_py)
-        self.assertNotIn('cdn.jsdelivr.net', app_py)
+        self.assertIn('"script-src \'self\'"', routes)
+        self.assertIn('"style-src \'self\' \'unsafe-inline\'"', routes)
+        self.assertNotIn('cdn.jsdelivr.net', routes)
 
     def test_profile_header_presets_survive_tailwind_purge(self):
         config = self.read('tailwind.config.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        ui = self.read('static/js/ui.js')
-        self.assertIn('profile-header-${preset}', ui)
+        settings = self.read('static/js/settings.js')
+        self.assertIn('profile-header-${preset}', settings)
         for class_name in (
             'profile-header-default',
             'profile-header-blue',
@@ -353,7 +384,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieTitleWithAdultBadgeHTML', ui)
         self.assertIn('adult-movie-badge', css)
         self.assertIn('"person","collection"', app_js)
-        self.assertIn('"person", "collection"', app_py)
+        routing = self.read('tvtracker/web/routing.py')
+        self.assertIn('"person", "collection"', routing)
         self.assertIn('rawQuery', router)
         self.assertIn('renderInactiveEyeFilterControlHTML', ui)
         self.assertIn('runCollectionsLiveFallbackSearch', app_js)
@@ -362,23 +394,43 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-title-with-adult-badge', css)
 
     def test_deploy_workflow_tests_and_checks_healthz(self):
-        app_py = self.read('app.py')
+        routes = self.read('tvtracker/web/routes.py')
         workflow = self.read('.github/workflows/deploy.yml')
         readme = self.read('README.md')
         run_all = self.read('tests/run_all.py')
 
-        self.assertIn('@app.get("/healthz")', app_py)
-        self.assertIn('@app.get("/api/health")', app_py)
+        self.assertIn('@app.get("/healthz")', routes)
+        self.assertIn('@app.get("/api/health")', routes)
         self.assertIn('python tests/run_all.py', workflow)
         self.assertIn('appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17', workflow)
         self.assertIn('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', workflow)
         self.assertIn('actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548', workflow)
         self.assertIn('actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38', workflow)
-        self.assertIn('git pull --ff-only origin main', workflow)
+        self.assertIn('workflow_dispatch:', workflow)
+        self.assertIn('group: tv-tracker-production', workflow)
+        self.assertIn('cancel-in-progress: false', workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
+        self.assertIn('APP_DIR_B64:', workflow)
+        self.assertIn('envs: APP_DIR_B64,DEPLOY_SHA', workflow)
+        self.assertNotIn('cd "${{ secrets.ALWAYSDATA_APP_DIR }}"', workflow)
+        self.assertGreaterEqual(
+            workflow.count('git -C "$APP_DIR" fetch --no-tags origin refs/heads/main'),
+            2,
+        )
+        migration_index = workflow.index('"$PYTHON_BIN" -m tvtracker.migrations')
+        activation_index = workflow.index(
+            'git -C "$APP_DIR" checkout --detach "$DEPLOY_SHA"'
+        )
+        self.assertLess(migration_index, activation_index)
+        self.assertIn('.tvtracker-release-sha', workflow)
+        self.assertIn('payload.get("releaseSha")', workflow)
+        self.assertIn('releaseSha', routes)
+        self.assertNotIn('git pull', workflow)
         self.assertIn('ALWAYSDATA_HEALTH_URL', workflow)
         self.assertIn('ALWAYSDATA_APP_DIR', workflow)
-        self.assertNotIn('broghgf7', workflow)
-        self.assertNotIn('ssh-broghgf7', workflow)
+        self.assertNotIn('example-account', workflow)
+        self.assertNotIn('ssh-example-account', workflow)
         self.assertIn('/healthz', readme)
         self.assertIn('.glob("test_*.js")', run_all)
 
@@ -443,18 +495,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('genre-media-switch-button', ui)
         self.assertIn('getGenreDetailRoute(genre.id,name,media)', ui)
         self.assertIn('renderShowGenreLinksHTML(genres,"movie")', ui)
-        self.assertIn('discover-genre-tab', source_css)
-        self.assertIn('Phase 5.3 genre media routing', built_css)
+        self.assert_css_rule_has(source_css, '.discover-genre-tab', '@apply tw-inline-flex')
+        self.assert_css_rule_has(built_css, '.discover-genre-tab', 'display:inline-flex')
 
     def test_phase6_movie_page_profile_and_navigation_repairs_exist(self):
-        app_py = self.read('app.py')
+        routes = self.read('tvtracker/web/routes.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         css = self.read('static/css/tailwind-input.css')
         template = self.read('templates/index.html')
-        self.assertIn('favorite_movies', app_py)
-        self.assertIn('app_valid_spa_fallback', app_py)
-        self.assertIn('@app.get("/app/<path:app_path>", strict_slashes=False)', app_py)
+        backup_validation = self.read('tvtracker/backup/validation.py')
+        self.assertIn('favorite_movies', backup_validation)
+        self.assertIn('app_valid_spa_fallback', routes)
+        self.assertIn('@app.get("/app/<path:app_path>", strict_slashes=False)', routes)
         self.assertIn('favorite_movies', app_js)
         self.assertIn('normalizeFavoriteMovieRecord', app_js)
         self.assertIn('addFavoriteMovie', app_js)
@@ -620,8 +673,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-sort-menu-option', built_css)
         self.assertIn('closeMovieReleaseSortMenus', app)
         self.assertIn('tvTrackerMovieReleaseSortOutsideBound', app)
-        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', source_css)
-        self.assertIn('border:0;\n    border-bottom:1px solid rgba(255,255,255,.12);', built_css)
+        for css in (source_css, built_css):
+            self.assert_css_rule_has(
+                css,
+                '.movie-release-country-row',
+                'border:0',
+                'border-bottom:1px solid rgba(255,255,255,.12)',
+            )
         self.assertIn('font:inherit;', source_css)
         self.assertIn('font:inherit;', built_css)
         self.assertIn('margin-top:22px;', source_css)
@@ -682,12 +740,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('data-discovery-media="${escapeHTML(media)}"', ui)
         self.assertIn('language.code === originalLanguage', ui)
         self.assertIn('getPersonDetailRoute(movieRole,pageState.personId,personRouteLabel,"movie",pageState)', ui)
-        self.assertIn('APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/(tv|movie)/', backend)
-        self.assertIn('APP_THEME_PATH_RE = re.compile(rf"^/app/theme/(tv|movie)/', backend)
-        self.assertIn('if media_type == "movie":', backend)
-        self.assertIn('params["media"] = "movie"', backend)
-        self.assertIn('if role:', backend)
-        self.assertIn('params["role"] = role', backend)
+        routing = self.read('tvtracker/web/routing.py')
+        self.assertIn('APP_LANGUAGE_PATH_RE = re.compile(r"^/app/language/(tv|movie)/', routing)
+        self.assertIn('APP_THEME_PATH_RE = re.compile(rf"^/app/theme/(tv|movie)/', routing)
+        self.assertIn('if media_type == "movie":', routing)
+        self.assertIn('params["media"] = "movie"', routing)
+        self.assertIn('if role:', routing)
+        self.assertIn('params["role"] = role', routing)
 
     def test_phase_63c_unified_discover_browse_exists(self):
         app = self.read('static/js/app.js')
@@ -750,7 +809,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('params.with_original_language = state.language;', browse)
         self.assertIn('params["vote_count.gte"] = media === "movie" ? 50 : 20;', browse)
         self.assertIn('params.certification_country = "US";', browse)
-        self.assertIn('APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/movie/', backend)
+        routing_63c = self.read('tvtracker/web/routing.py')
+        self.assertIn('APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/movie/', routing_63c)
         self.assertIn('if(media !== "movie")', ui)
         self.assertIn('params["first_air_date.gte"] = today;', browse)
         self.assertIn('return "/app/browse/"', browse)
@@ -759,12 +819,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('openBrowsePage', router)
         self.assertIn('browseState:params.browseState', router)
         self.assertIn('APP_BROWSE_PATH_RE', backend)
-        self.assertIn('@app.get("/api/tmdb/network-search")', backend)
-        self.assertIn('tv_network_ids_', backend)
-        self.assertIn('TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS', backend)
-        self.assertIn('normalize_tmdb_network_search_text', backend)
-        self.assertIn('canonical_browse_query', backend)
-        self.assertIn('@app.get("/app/browse/<media_type>", strict_slashes=False)', backend)
+        routes_63c = self.read('tvtracker/web/routes.py')
+        self.assertIn('@app.get("/api/tmdb/network-search")', routes_63c)
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
+        self.assertIn('tv_network_ids_', tmdb_exports)
+        self.assertIn('TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS', tmdb_exports)
+        self.assertIn('normalize_tmdb_network_search_text', tmdb_exports)
+        routing = self.read('tvtracker/web/routing.py')
+        self.assertIn('canonical_browse_query', routing)
+        self.assertIn('@app.get("/app/browse/<media_type>", strict_slashes=False)', routes_63c)
         self.assertIn('function navigateToBrowseState', app)
         self.assertIn('function mapBrowseGenresForMedia', app)
         self.assertIn('search/keyword', app)
@@ -843,11 +906,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         releases_block = ui[releases_start:ui.index('function sortMovieReleaseRows', releases_start)]
         self.assertIn('renderBrowseChevronIcon("movie-release-sort-chevron-icon")', releases_block)
         self.assertNotIn('>⌄</span>', releases_block)
-        self.assertIn('color:rgba(255,255,255,.68);', source_css)
+        self.assert_css_rule_has(
+            source_css,
+            '.person-bio-more-button',
+            'color:rgba(255,255,255,.68)',
+        )
         self.assertIn('background:#202124;', source_css)
         self.assertIn('background:#323438;', source_css)
         self.assertIn('movie-release-sort-chevron-icon', built_css)
-        self.assertIn('color:rgba(255,255,255,.68)', built_css)
+        self.assert_css_rule_has(
+            built_css,
+            '.person-bio-more-button',
+            'color:rgba(255,255,255,.68)',
+        )
 
     def test_main_list_initial_skeleton_and_hidden_soap_genre_exist(self):
         ui = self.read('static/js/ui.js')
@@ -932,8 +1003,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('>NEXT</button>', ui)
         self.assertNotIn('collections-pagination-status', ui)
         self.assertIn('canonicalCollectionsSearch', router)
-        self.assertIn('COLLECTION_SORT_MODES', backend)
-        self.assertIn('APP_COLLECTION_SORT_MODES', backend)
+        routing_66b = self.read('tvtracker/web/routing.py')
+        self.assertIn('COLLECTION_SORT_MODES', routing_66b)
+        self.assertIn('APP_COLLECTION_SORT_MODES', routing_66b)
 
 
     def test_phase61_movie_tracking_foundation_exists(self):
@@ -955,13 +1027,16 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")', ui)
         self.assertIn('renderFavoriteHeartButtonHTML(state.favorite,`data-movie-tracking-action="favorite"`)', ui)
         self.assertIn('data-show-favorite-button="true"', ui)
-        self.assertIn('ALLOWED_STATE_KEYS = {', backend)
-        self.assertIn('"movies",', backend)
-        self.assertIn('def validate_movie_tracking_state(raw_value: Any)', backend)
-        self.assertIn('entry["media_type"] = "movie"', backend)
-        self.assertIn('movie-watched-', backend)
-        self.assertIn('background:#0b0b0b;', source_css)
-        self.assertIn('background:#0b0b0b;', built_css)
+        primitives = self.read('tvtracker/backup/primitives.py')
+        backup_validation = self.read('tvtracker/backup/validation.py')
+        tracker_history = self.read('tvtracker/tracker/history.py')
+        self.assertIn('ALLOWED_STATE_KEYS = {', primitives)
+        self.assertIn('"movies",', primitives)
+        self.assertIn('def validate_movie_tracking_state(raw_value: Any)', backup_validation)
+        self.assertIn('entry["media_type"] = "movie"', backup_validation)
+        self.assertIn('movie-watched-', tracker_history)
+        self.assert_css_rule_has(source_css, '.watchlist-skeleton-block', 'background:#0b0b0b')
+        self.assert_css_rule_has(built_css, '.watchlist-skeleton-block', 'background:#0b0b0b')
         self.assertIn('font:inherit;', source_css)
         self.assertIn('font:inherit;', built_css)
 
@@ -1013,11 +1088,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('refreshOpenTrackedShowMetadata(id).catch(()=>{});', app)
         self.assertIn('const twelveHours = 12 * 60 * 60 * 1000;', app)
 
-        self.assertIn('APP_GENRE_PATH_RE = re.compile(rf"^/app/genre/(tv|movie)/({APP_ROUTE_ID_SLUG})$")', backend)
+        routing_genre = self.read('tvtracker/web/routing.py')
+        self.assertIn('APP_GENRE_PATH_RE = re.compile(rf"^/app/genre/(tv|movie)/({APP_ROUTE_ID_SLUG})$")', routing_genre)
         self.assertIn('openGenrePage(params.key || params.id', router)
         self.assertIn('function getGenreDetailRoute(genreId,label="",media="tv")', app)
-        self.assertNotIn('APP_TV_GENRE_SLUGS', backend)
-        self.assertNotIn('APP_MOVIE_GENRE_SLUGS', backend)
+        self.assertNotIn('APP_TV_GENRE_SLUGS', routing_genre)
+        self.assertNotIn('APP_MOVIE_GENRE_SLUGS', routing_genre)
 
         self.assertIn('function getPersonAvailableRoles(person,media="tv")', app)
         self.assertIn('data-person-role-filter', ui)
@@ -1055,18 +1131,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('filters:filters.state', router)
 
     def test_phase66d_tmdb_collection_export_cache_exists(self):
-        app_py = self.read('app.py')
+        routes = self.read('tvtracker/web/routes.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
 
-        self.assertIn('TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60', app_py)
-        self.assertIn('TMDB_COLLECTION_INDEX_CACHE_FILE = "tmdb_collection_index.json"', app_py)
-        self.assertIn('def fetch_tmdb_collection_export(export_date: date)', app_py)
-        self.assertIn('collection_ids_{export_date:%m_%d_%Y}.json.gz', app_py)
-        self.assertIn('def build_tmdb_collection_index_batch()', app_py)
-        self.assertIn('@app.get("/api/tmdb/collections")', app_py)
-        self.assertIn('@app.get("/api/tmdb/collections/<int:collection_id>")', app_py)
-        self.assertIn('if collections:', app_py)
+        self.assertIn('TMDB_COLLECTION_EXPORT_CACHE_TTL_SECONDS = 24 * 60 * 60', tmdb_exports)
+        self.assertIn('TMDB_COLLECTION_INDEX_CACHE_FILE = "tmdb_collection_index.json"', tmdb_exports)
+        self.assertIn('def fetch_tmdb_collection_export(export_date: date)', tmdb_exports)
+        self.assertIn('collection_ids_{export_date:%m_%d_%Y}.json.gz', tmdb_exports)
+        self.assertIn('def build_tmdb_collection_index_batch()', tmdb_exports)
+        self.assertIn('@app.get("/api/tmdb/collections")', routes)
+        self.assertIn('@app.get("/api/tmdb/collections/<int:collection_id>")', routes)
+        self.assertIn('if collections:', routes)
 
         self.assertIn('const DISCOVER_COLLECTION_IDS = Object.freeze', app_js)
         self.assertIn('async function tmdbGetCollectionIndex(options={})', app_js)
@@ -1084,15 +1161,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
 
     def test_phase66g_collection_and_global_title_placeholders_exist(self):
-        app_py = self.read('app.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
 
-        self.assertIn('"poster_slots": poster_slots,', app_py)
-        self.assertIn('def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:', app_py)
-        self.assertIn('needs_poster_slot_backfill', app_py)
+        self.assertIn('"poster_slots": poster_slots,', tmdb_exports)
+        self.assertIn('def tmdb_collection_summary_has_poster_slots(summary: dict[str, Any]) -> bool:', tmdb_exports)
+        self.assertIn('needs_poster_slot_backfill', tmdb_exports)
         self.assertIn('function getCollectionPosterSlots(collection)', app_js)
         self.assertIn('poster_slots:posterSlots', app_js)
         self.assertIn('getCollectionPosterSlots(collection).length >= 1', app_js)
@@ -1109,14 +1186,14 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('collection-stack-placeholder', built_css)
 
     def test_phase66g1_collection_detail_ui_cleanup_exists(self):
-        app_py = self.read('app.py')
+        tmdb_exports = self.read('tvtracker/media/tmdb_exports.py')
         app_js = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
 
-        self.assertIn('target_count = min(3, max(movie_count, 1))', app_py)
-        self.assertIn('return len(usable_slots) >= target_count', app_py)
+        self.assertIn('target_count = min(3, max(movie_count, 1))', tmdb_exports)
+        self.assertIn('return len(usable_slots) >= target_count', tmdb_exports)
         self.assertIn('tv-tracker-tmdb-collection-index:v6', app_js)
         self.assertIn('tv-tracker-tmdb-collection-detail:v5', app_js)
         self.assertIn('function chooseRicherCollectionSummary(current,next)', app_js)
@@ -1143,7 +1220,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
 
     def test_trailing_slash_redirects_preserve_query_strings(self):
-        backend = self.read('app.py')
+        backend = self.read('tvtracker/web/routes.py')
         app_js = self.read('static/js/app.js')
 
         self.assertIn('def redirect_app_path_preserving_query(path: str):', backend)
