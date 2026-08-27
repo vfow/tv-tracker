@@ -125,7 +125,7 @@ def run_scheduled_notification_worker(
                 run_id=run_id,
                 release_sha=release_sha,
             )
-            result = run_final_notification_worker_hardened(
+            result = final.run_final_notification_worker(
                 connection_factory,
                 tmdb_fetcher,
                 core_runner,

@@ -10,6 +10,7 @@ from flask import Flask
 
 from tools import production_smoke
 from tvtracker.infrastructure import observability
+from tvtracker.notifications import push_and_movies as final
 from tvtracker.notifications import runtime
 
 
@@ -149,8 +150,8 @@ class OperationalObservabilityTests(unittest.TestCase):
         lock_connection = LockConnection(False)
         core_worker = Mock(return_value={"ok": True})
         with patch.object(
-            runtime,
-            "run_final_notification_worker_hardened",
+            final,
+            "run_final_notification_worker",
             core_worker,
         ):
             result = runtime.run_scheduled_notification_worker(
@@ -175,13 +176,13 @@ class OperationalObservabilityTests(unittest.TestCase):
             "changedNotifications": 2,
             "push": {"delivered": 1, "failed": 0, "dead": 0},
         }
-        hardened = Mock(return_value=result)
+        canonical = Mock(return_value=result)
         ticks = iter([2.0, 2.250])
 
         with patch.object(
-            runtime,
-            "run_final_notification_worker_hardened",
-            hardened,
+            final,
+            "run_final_notification_worker",
+            canonical,
         ):
             actual = runtime.run_scheduled_notification_worker(
                 lambda: lock_connection,
@@ -192,7 +193,7 @@ class OperationalObservabilityTests(unittest.TestCase):
             )
 
         self.assertIs(actual, result)
-        hardened.assert_called_once()
+        canonical.assert_called_once()
         sql = "\n".join(query for query, _ in lock_connection.cursor_instance.calls)
         self.assertIn("pg_try_advisory_lock", sql)
         self.assertIn("pg_advisory_unlock", sql)
@@ -325,6 +326,8 @@ class Phase9SourceContracts(unittest.TestCase):
             source.index("notifications_module.install_final_notifications"),
             source.index("install_request_observability("),
         )
+        self.assertIn('hasattr(app, "extensions")', source)
+        self.assertIn('callable(getattr(app, "after_request", None))', source)
 
 
 if __name__ == "__main__":

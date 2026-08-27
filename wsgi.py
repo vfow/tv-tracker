@@ -38,7 +38,12 @@ notifications_module.install_final_notifications(
     connection_factory=database_connection,
     tmdb_fetcher=fetch_tmdb_notification_json,
 )
-if install_request_observability is not None:
+if (
+    install_request_observability is not None
+    and hasattr(app, "extensions")
+    and callable(getattr(app, "before_request", None))
+    and callable(getattr(app, "after_request", None))
+):
     install_request_observability(
         app,
         release_sha=getattr(app_module, "RELEASE_SHA", None),
