@@ -7,32 +7,35 @@ Single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailw
 - Tracks Watching, Paused, Completed, Plan To Watch, and Dropped shows.
 - Stores watched episodes, progress, history, favourites, notes, profile details, posters, backdrops, and imported metadata in PostgreSQL.
 - Uses TMDB for search, show and episode metadata, artwork, cast and crew, trailers, alternative titles, similar shows, and Where to Watch.
-- Keeps the TMDB API key on the Flask server. It is never sent to the browser or placed in a URL.
+- Keeps TMDB credentials server-side. The browser only talks to authenticated TV Tracker endpoints; the server adds the TMDB v3 API key to upstream TMDB request URLs where required by TMDB.
 - Supports native App Backup JSON export/import and compatible external JSON/CSV imports.
 - Uses revision-based optimistic synchronization for multiple tabs and devices.
 - Supports refresh-safe app, show, and episode URLs.
+- Uses content-derived static asset versions so long-lived immutable caching is safe across releases.
 
 ## Tech Stack
 
 - Backend: Flask, psycopg, PostgreSQL, Argon2 password hashing.
 - Frontend: plain JavaScript and Tailwind CSS.
 - Styling: `static/css/tailwind-input.css` compiled to `static/css/tailwind.css`.
-- Tests: Python unittest plus Node-based frontend contract checks.
-- Deployment: GitHub Actions deploy to Alwaysdata over SSH.
+- Tests: Python unittest plus Node-based frontend contract checks, with PostgreSQL integration coverage in CI.
+- Deployment: GitHub Actions deploy to Alwaysdata over SSH using exact commit SHAs, explicit migrations, health verification, and source rollback.
 
 ## Project Structure
 
 ```text
-app.py                 Flask app, auth, routes, backup/import, TMDB proxy, PostgreSQL sync
-wsgi.py                WSGI entrypoint
-requirements.txt       Python dependencies
-package.json           Tailwind build scripts
-templates/             Login, error, and protected app templates
-static/css/            Tailwind source and generated CSS
-static/js/             UI, router, TMDB client, persistence, and sync logic
-static/assets/         Local font and UI icons
-tests/                 Backend, route, source-contract, and frontend checks
-tools/                 Admin and secret helper scripts
+app.py                  Thin Flask bootstrap and compatibility seams
+wsgi.py                 Production entrypoint; schema verification only
+tvtracker/               Domain packages for auth, backup, database, media,
+                         migrations, notifications, sync, tracker state and web routes
+requirements.txt        Python runtime dependencies
+package.json            Tailwind build scripts
+templates/              Login, error, and protected app templates
+static/css/             Tailwind source and generated CSS
+static/js/              UI, router, TMDB client, persistence, and sync logic
+tests/                  Backend, PostgreSQL, route, source-contract, and frontend checks
+tools/                  Admin, repair, release and secret helper scripts
+docs/                   Deployment, policy, architecture, and audit records
 ```
 
 ## Environment
@@ -60,9 +63,13 @@ HEALTHZ_SECRET=<token>      # When set, /healthz requires X-Healthcheck-Token.
 
 Existing deployments may still use `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` as fallbacks. Generate `APP_PASSWORD_HASH` with the helper under `tools/`. New admin passwords must contain at least 16 characters. Do not commit `.env`, database dumps, API keys, password hashes for real users, SSH keys, or deployment credentials.
 
-## Public Repository Safety
+`wsgi.py` forces `TVTRACKER_SCHEMA_VERIFY_ONLY=1` before importing the application. Production workers therefore fail closed when migrations are missing or schema drift is detected instead of applying DDL while booting.
 
-This repository can be public because runtime secrets and personal data must stay outside the source tree. Do not commit `.env`, real API keys, database dumps, App Backup exports, SSH keys, password hashes for real users, private deployment tokens, or redistributable-restricted font files. Keep production values in the hosting provider and GitHub Actions secrets/variables.
+## Repository Safety
+
+Runtime secrets and personal data must stay outside the source tree. Do not commit `.env`, real API keys, database dumps, App Backup exports, SSH keys, password hashes for real users, private deployment tokens, or redistributable-restricted font files. Keep production values in the hosting provider and GitHub Actions secrets/variables.
+
+Dependency maintenance is covered by weekly Dependabot updates for Python, npm, and GitHub Actions. CI additionally audits Python runtime dependencies and npm dependencies and pins third-party GitHub Actions to exact commit SHAs.
 
 ## Local Development
 
@@ -78,13 +85,42 @@ Install frontend dependencies:
 npm ci
 ```
 
-Set the required environment variables in your shell or host config, then run Flask:
+Set the required environment variables in your shell or host config, apply migrations explicitly, then run the same WSGI entrypoint used by production:
 
 ```text
-flask --app app run --debug
+python -m tvtracker.migrations
+flask --app wsgi run --debug
 ```
 
 The app expects a reachable PostgreSQL database and a valid TMDB API key for normal use.
+
+Direct imports of `app.py` retain migration-on-start compatibility for legacy development/test tooling. Normal development and production should use `wsgi.py` so startup verifies rather than mutates the schema.
+
+## Database Migrations
+
+Database DDL is owned by the additive migration registry under `tvtracker/migrations/`.
+
+```text
+python -m tvtracker.migrations
+```
+
+The migration runner uses:
+
+- an ordered migration ledger;
+- checksums that fail closed if an applied migration changes;
+- a PostgreSQL advisory transaction lock to prevent concurrent migration races;
+- a canonical schema contract and schema-version verification;
+- explicit adoption rules for supported legacy schemas.
+
+The production WSGI process never applies pending migrations. Deployment runs migrations against the staged exact release before activating that release.
+
+Legacy metadata cleanup is no longer a hidden web-startup mutation. Run it explicitly when needed:
+
+```text
+python -m tvtracker.maintenance cleanup-legacy
+```
+
+The command reports how many rows changed and surfaces failures to the operator.
 
 ## Tailwind CSS
 
@@ -102,7 +138,13 @@ Watch Tailwind during UI work:
 npm run css:watch
 ```
 
-On Windows PowerShell, use `npm.cmd run css:build` or `npm.cmd run css:watch` if script execution policy blocks `npm`.
+CI and deployment rebuild the CSS and fail if the committed generated file differs.
+
+## Static Asset Caching
+
+Static template URLs receive a content-derived `?v=<sha256-prefix>` version. A matching version may be cached for one year with `immutable`; unversioned or stale versions are served with revalidation instead.
+
+This means normal releases do **not** require users to hard-refresh to receive updated JavaScript or CSS.
 
 ## Routes And Authentication
 
@@ -155,13 +197,15 @@ Canonical route families include:
 
 Protected paths requested before login are validated and stored in the server session. After login, the user returns to the validated application path; otherwise the destination is `/app/list/watching`.
 
-Route URLs contain only public TMDB identifiers, route slugs, filter values, and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in generated URLs.
+Route URLs contain only public TMDB identifiers, route slugs, filter values, and numeric season/episode positions. Personal statuses, watched progress, notes, profile data, tokens, credentials, and API keys are never included in browser-generated application URLs.
 
 ## Data Safety
 
 The app keeps metadata in existing JSONB show records and preserves native backup compatibility. Existing data remains authoritative for shows, statuses, watched progress, history, favourites, notes, profile details, and imported metadata.
 
 Export a fresh App Backup JSON before deploying major changes.
+
+Backup import and sync inputs are validated and bounded, and tracker replacement is transactional. Database migrations are additive; automatic source rollback does not attempt destructive schema rollback.
 
 ## Tests
 
@@ -171,13 +215,26 @@ Run the full local regression suite:
 python tests/run_all.py
 ```
 
-The suite checks backend contracts, route protection, source contracts, JavaScript syntax, frontend behavior, synchronization reliability, TMDB proxy usage, asset references, and the Tailwind-only frontend contract.
+The suite checks backend contracts, route protection, source contracts, JavaScript syntax, frontend behavior, synchronization reliability, TMDB proxy usage, asset references, migration behavior, and the Tailwind-only frontend contract.
+
+CI provisions PostgreSQL 16 and passes `TEST_DATABASE_URL` so migration and database-sensitive integration paths are exercised against a real PostgreSQL service rather than only mocks.
 
 ## Deployment
 
-Pushing an accepted commit to `main` triggers `.github/workflows/deploy.yml`. Manual runs are also restricted to `main`. The workflow tests the exact commit with PostgreSQL, verifies the committed Tailwind build, stages that commit on Alwaysdata, runs additive migrations from the staged tree, and only then checks out the same commit in the live worktree. After restart, `/healthz` must report both database health and the exact process release SHA.
+Pushing an accepted commit to `main` triggers `.github/workflows/deploy.yml`. Manual runs are also restricted to `main`. The workflow:
 
-The fixed production concurrency group and current-`main` checks prevent queued jobs from silently deploying a superseded commit. The live checkout is intentionally delayed until migration succeeds, but it is not a symlink-based atomic release mechanism.
+1. tests the exact commit with PostgreSQL;
+2. audits Python/npm dependencies;
+3. rebuilds and verifies committed Tailwind CSS;
+4. confirms the requested SHA is still the tip of `main`;
+5. stages that exact SHA in a temporary worktree on Alwaysdata;
+6. installs dependencies and runs additive migrations from the staged release;
+7. records the previous live SHA;
+8. activates the exact tested SHA and release marker;
+9. restarts the site and verifies `/healthz` serves the same release SHA;
+10. if restart or health verification fails after activation, restores the previous source SHA and restarts the site while leaving the workflow failed for investigation.
+
+The fixed production concurrency group prevents overlapping production deployments. Database migrations are intentionally **not** automatically rolled back: they are additive, and database restoration is a separate incident decision requiring an explicit backup/recovery action.
 
 Configure these GitHub Actions **Secrets**:
 
@@ -201,12 +258,12 @@ Deployment checklist:
 2. Keep the existing environment variables and PostgreSQL database.
 3. Select an accepted exact SHA that is still the tip of `main`; never deploy a moving branch name.
 4. Install dependencies and run migrations from a staged checkout of that SHA.
-5. Activate the exact SHA only after migration succeeds, then record its release marker.
+5. Activate the exact SHA only after migration succeeds, record the prior SHA, then record the new release marker.
 6. Restart the WSGI application and verify `/healthz` returns `ok: true` and the exact `releaseSha`.
-7. Hard-refresh the browser and test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
-8. Roll source back only to a known accepted SHA. Because migrations are additive, database restoration is a separate incident decision and must use the private backup rather than an automatic workflow action.
+7. Test login, existing shows, episode progress, history, profile, backups, Discover, direct show URLs, and direct episode URLs.
+8. If activation fails health checks, source rollback is automatic. Because migrations are additive, database restoration remains a separate incident decision using a verified backup.
 
-These instructions do not authorize a merge or production deployment; both remain separate owner decisions.
+These instructions do not authorize a production merge; merging to `main` triggers the production deployment workflow.
 
 ## Architecture and policy documents
 
@@ -214,3 +271,4 @@ These instructions do not authorize a merge or production deployment; both remai
 - `docs/PRIVACY.md`
 - `docs/TERMS.md`
 - `docs/CREDITS.md`
+- `docs/architecture/`
