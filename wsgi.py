@@ -4,18 +4,28 @@ import os
 # Deployment applies migrations from the staged release before this module loads.
 os.environ["TVTRACKER_SCHEMA_VERIFY_ONLY"] = "1"
 
-from app import (
-    app,
-    check_csrf,
-    database_connection,
-    fetch_tmdb_notification_json,
-    login_required,
-)
+import app as app_module
 from tvtracker.notifications import push_and_movies as notifications_module
 from tvtracker.notifications.runtime import prepare_final_notification_runtime
 from tvtracker.notifications.push_validation import install_notification_polish
 from tvtracker.infrastructure.static_assets import install_static_asset_versioning
 from tvtracker.data_integrity import install_backup_summary_hardening
+
+try:
+    from tvtracker.infrastructure.observability import install_request_observability
+except ModuleNotFoundError as error:
+    # Keep rollback-compatible hermetic entrypoint tooling working when it models
+    # the pre-observability package boundary. Other import failures remain fatal.
+    if error.name != "tvtracker.infrastructure.observability":
+        raise
+    install_request_observability = None
+
+
+app = app_module.app
+database_connection = app_module.database_connection
+fetch_tmdb_notification_json = app_module.fetch_tmdb_notification_json
+login_required = app_module.login_required
+check_csrf = app_module.check_csrf
 
 prepare_final_notification_runtime(database_connection)
 install_static_asset_versioning(app)
@@ -28,4 +38,9 @@ notifications_module.install_final_notifications(
     connection_factory=database_connection,
     tmdb_fetcher=fetch_tmdb_notification_json,
 )
+if install_request_observability is not None:
+    install_request_observability(
+        app,
+        release_sha=getattr(app_module, "RELEASE_SHA", None),
+    )
 application = app
