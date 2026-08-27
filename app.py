@@ -38,6 +38,7 @@ from tvtracker.backup.validation import (
     validate_sync_delta_payload,
     validate_tracker_data,
 )
+from tvtracker.infrastructure.static_assets import install_static_asset_versioning
 from tvtracker.media.tmdb_client import fetch_tmdb_notification_json
 from tvtracker.media.tmdb_proxy import (
     TMDB_PROXY_CACHE,
@@ -51,6 +52,7 @@ from tvtracker.migrations import (
     DATABASE_SCHEMA_VERSION,
     MIGRATIONS,
     run_migrations,
+    verify_migrations_current,
 )
 from tvtracker.sync.change_log import deltas_conflict, normalize_delta
 from tvtracker.sync.state_patch import apply_state_patch
@@ -214,16 +216,15 @@ def _ensure_admin_account() -> None:
 
 
 def ensure_schema() -> None:
-    """Apply migration-owned core DDL, then preserve admin startup validation.
+    """Fail closed unless explicit migrations already match this application.
 
-    Migration-owned notification declarations include:
-    CREATE TABLE IF NOT EXISTS tv_tracker_notifications
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_settings
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_baseline
-    CREATE TABLE IF NOT EXISTS tv_tracker_notification_events
+    The historical function name remains for patch-compatible tests and tools,
+    but web-process startup no longer applies DDL. Deployment and operators run
+    ``python -m tvtracker.migrations`` before activation; workers only verify the
+    ledger, schema version, and canonical schema contract before serving traffic.
     """
 
-    run_migrations(database_connection, MIGRATIONS)
+    verify_migrations_current(database_connection, MIGRATIONS)
     _ensure_admin_account()
 
 
@@ -257,7 +258,8 @@ def read_tracker_data() -> tuple[dict[str, Any], int]:
     return read_tracker_data_state(database_connection)
 
 
-def cleanup_stored_tracker_data() -> None:
+def cleanup_stored_tracker_data() -> int:
+    """Compatibility wrapper for the explicit legacy cleanup operation."""
     return cleanup_stored_tracker_data_state(database_connection)
 
 
@@ -297,9 +299,8 @@ def create_app() -> Flask:
     )
 
     ensure_schema()
-    cleanup_stored_tracker_data()
-
     register_routes(app, deps=sys.modules[__name__])
+    install_static_asset_versioning(app)
     return app
 
 
