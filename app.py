@@ -216,15 +216,19 @@ def _ensure_admin_account() -> None:
 
 
 def ensure_schema() -> None:
-    """Fail closed unless explicit migrations already match this application.
+    """Prepare or verify the schema according to the startup contract.
 
-    The historical function name remains for patch-compatible tests and tools,
-    but web-process startup no longer applies DDL. Deployment and operators run
-    ``python -m tvtracker.migrations`` before activation; workers only verify the
-    ledger, schema version, and canonical schema contract before serving traffic.
+    Production WSGI sets ``TVTRACKER_SCHEMA_VERIFY_ONLY=1`` before importing this
+    module. In that mode workers never apply DDL; deployment must run
+    ``python -m tvtracker.migrations`` first. Direct app imports keep the legacy
+    migration-on-start behavior for existing development tools and hermetic tests.
     """
 
-    verify_migrations_current(database_connection, MIGRATIONS)
+    if env_flag("TVTRACKER_SCHEMA_VERIFY_ONLY"):
+        verify_migrations_current(database_connection, MIGRATIONS)
+    else:
+        run_migrations(database_connection, MIGRATIONS)
+        verify_migrations_current(database_connection, MIGRATIONS)
     _ensure_admin_account()
 
 
