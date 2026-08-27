@@ -126,6 +126,8 @@ class CacheHeaderTests(unittest.TestCase):
         versioned = self.client.get(f"/static/{filename}?v={version}")
         unversioned = self.client.get(f"/static/{filename}")
         stale = self.client.get(f"/static/{filename}?v=stale")
+        for response in (versioned, unversioned, stale):
+            self.addCleanup(response.close)
 
         self.assertEqual(versioned.status_code, 200)
         self.assertEqual(
