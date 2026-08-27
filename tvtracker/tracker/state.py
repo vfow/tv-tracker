@@ -58,10 +58,20 @@ def read_tracker_data(connection_factory: Callable[[], Any]) -> tuple[dict[str, 
     return clean_legacy_metadata(data), revision
 
 
-def cleanup_stored_tracker_data(connection_factory: Callable[[], Any]) -> None:
+def cleanup_stored_tracker_data(
+    connection_factory: Callable[[], Any],
+    *,
+    suppress_errors: bool = True,
+) -> int:
+    """Remove legacy metadata explicitly and return the number of rows changed.
+
+    The cleanup remains idempotent for maintenance tooling. Runtime callers may
+    opt into legacy best-effort behavior with ``suppress_errors=True``; explicit
+    maintenance commands use ``False`` so operational failures are visible.
+    """
     try:
         with connection_factory() as connection:
-            changed = False
+            changed = 0
             with connection.cursor() as cursor:
                 cursor.execute("SELECT show_id, data FROM tv_tracker_shows")
                 for show_id, raw_data in cursor.fetchall():
@@ -71,7 +81,7 @@ def cleanup_stored_tracker_data(connection_factory: Callable[[], Any]) -> None:
                             "UPDATE tv_tracker_shows SET data = %s, updated_at = NOW() WHERE show_id = %s",
                             (Jsonb(cleaned), show_id),
                         )
-                        changed = True
+                        changed += 1
                 cursor.execute("SELECT state_key, data FROM tv_tracker_state")
                 for state_key, raw_data in cursor.fetchall():
                     if state_key == "history_order":
@@ -82,9 +92,11 @@ def cleanup_stored_tracker_data(connection_factory: Callable[[], Any]) -> None:
                             "UPDATE tv_tracker_state SET data = %s, updated_at = NOW() WHERE state_key = %s",
                             (Jsonb(cleaned), state_key),
                         )
-                        changed = True
+                        changed += 1
             if changed:
                 connection.commit()
+            return changed
     except Exception:
-        # Cleanup must never prevent the site from starting.
-        return
+        if suppress_errors:
+            return 0
+        raise
