@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test-and-deploy:
@@ -55,6 +56,23 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
         run: python tests/run_all.py
+      - name: Require merged-PR release provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          test -n "$GH_TOKEN"
+          case "$DEPLOY_SHA" in
+            *[!0-9a-f]*|'') echo "Invalid deployment SHA" >&2; exit 1 ;;
+          esac
+          test "${#DEPLOY_SHA}" -eq 40
+          curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/pulls" \
+            | python tools/verify_release_provenance.py
       - name: Verify current main release target
         env:
           DEPLOY_SHA: ${{ github.sha }}
