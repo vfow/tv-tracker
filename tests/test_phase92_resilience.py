@@ -178,6 +178,7 @@ class Phase92SourceContracts(unittest.TestCase):
         self.assertIn('"--clean"', restore_block)
         self.assertIn('"--if-exists"', restore_block)
         self.assertIn('f"--dbname={target_database}"', restore_block)
+        self.assertIn("str(dump_path)", restore_block)
         self.assertIn("parse_local_database_url(database_url)", source)
         self.assertIn("Restore drill refuses a non-loopback database host", source)
 
