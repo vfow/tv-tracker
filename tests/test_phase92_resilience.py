@@ -172,6 +172,15 @@ class Phase92SourceContracts(unittest.TestCase):
         self.assertIn("Never run the automated restore drill against production", source)
         self.assertIn("python -m tvtracker.maintenance operational-check", source)
 
+    def test_restore_drill_cleans_only_its_disposable_target_before_restore(self):
+        source = (ROOT / "tools" / "postgres_restore_drill.py").read_text()
+        restore_block = source[source.index("pg_restore,") : source.index("target_factory =")]
+        self.assertIn('"--clean"', restore_block)
+        self.assertIn('"--if-exists"', restore_block)
+        self.assertIn('f"--dbname={target_database}"', restore_block)
+        self.assertIn("parse_local_database_url(database_url)", source)
+        self.assertIn("Restore drill refuses a non-loopback database host", source)
+
 
 if __name__ == "__main__":
     unittest.main()
