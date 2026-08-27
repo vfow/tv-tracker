@@ -7,16 +7,20 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from tvtracker.database.connection import required_env
+from tvtracker.media.tmdb_proxy import tmdb_proxy_path_group
 
 
 def fetch_tmdb_notification_json(
     tmdb_path: str,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    # NOTE: TMDB_PATH_RE was historically referenced here without a definition
-    # (the strict proxy allowlist replaced it). This branch is preserved
-    # exactly as the legacy app behaved; callers pass allowlisted paths.
-    if not TMDB_PATH_RE.fullmatch(tmdb_path):
+    """Fetch an internal TMDB endpoint used by notification processing.
+
+    Notification callers share the same path allowlist as the browser-facing
+    proxy. This keeps server-side jobs from accidentally turning a future path
+    value into an arbitrary upstream request.
+    """
+    if tmdb_proxy_path_group(str(tmdb_path or "")) is None:
         raise RuntimeError("Invalid TMDB notification path")
 
     query_items: list[tuple[str, str]] = []
