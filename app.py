@@ -228,7 +228,6 @@ def ensure_schema() -> None:
         verify_migrations_current(database_connection, MIGRATIONS)
     else:
         run_migrations(database_connection, MIGRATIONS)
-        verify_migrations_current(database_connection, MIGRATIONS)
     _ensure_admin_account()
 
 
