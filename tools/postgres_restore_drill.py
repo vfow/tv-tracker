@@ -208,6 +208,7 @@ def run_restore_drill(
                 "--exit-on-error",
                 "--no-owner",
                 "--no-privileges",
+                str(dump_path),
             ],
             environment=_postgres_env(config, database=target_database),
             runner=runner,
