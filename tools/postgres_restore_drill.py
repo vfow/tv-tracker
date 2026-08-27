@@ -203,6 +203,8 @@ def run_restore_drill(
             [
                 pg_restore,
                 f"--dbname={target_database}",
+                "--clean",
+                "--if-exists",
                 "--exit-on-error",
                 "--no-owner",
                 "--no-privileges",
