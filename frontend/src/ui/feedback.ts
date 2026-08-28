@@ -28,23 +28,22 @@ type CoreFeedback = Readonly<{
   presentError?: (error: unknown, options?: Record<string, unknown>) => unknown;
 }>;
 
-declare global {
-  interface Window {
-    TVTrackerFeedback?: FeedbackSurface;
-    TVTrackerCore?: { feedback?: CoreFeedback };
-    showToast?: (message: string, options?: FeedbackOptions) => unknown;
-  }
-}
+type FeedbackRuntimeWindow = Window & Readonly<{
+  TVTrackerFeedback?: FeedbackSurface;
+  TVTrackerCore?: { feedback?: CoreFeedback };
+  showToast?: (message: string, options?: FeedbackOptions) => unknown;
+}>;
 
+const runtimeWindow = window as FeedbackRuntimeWindow;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Try again.';
 
 function notify(message: string, options: FeedbackOptions = {}): unknown {
-  const surface = window.TVTrackerFeedback;
+  const surface = runtimeWindow.TVTrackerFeedback;
   if (typeof surface?.notify === 'function') {
     return surface.notify(message, options);
   }
-  if (typeof window.showToast === 'function') {
-    return window.showToast(message, options);
+  if (typeof runtimeWindow.showToast === 'function') {
+    return runtimeWindow.showToast(message, options);
   }
   return null;
 }
@@ -55,7 +54,7 @@ function presentError(
   options: PresentErrorOptions = {}
 ): unknown {
   if (options.background === true) {
-    const core = window.TVTrackerCore?.feedback;
+    const core = runtimeWindow.TVTrackerCore?.feedback;
     if (typeof core?.presentError === 'function') {
       return core.presentError(error, {
         userMessage,
@@ -66,7 +65,7 @@ function presentError(
     return null;
   }
 
-  const surface = window.TVTrackerFeedback;
+  const surface = runtimeWindow.TVTrackerFeedback;
   if (typeof surface?.reportError === 'function') {
     return surface.reportError(error, userMessage, {
       context: options.context ?? 'vue feedback',
@@ -77,7 +76,7 @@ function presentError(
     });
   }
 
-  const core = window.TVTrackerCore?.feedback;
+  const core = runtimeWindow.TVTrackerCore?.feedback;
   if (typeof core?.presentError === 'function') {
     return core.presentError(error, {
       userMessage,
