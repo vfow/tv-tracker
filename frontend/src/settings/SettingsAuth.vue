@@ -51,6 +51,11 @@ function csrfToken(): string {
   return String(meta?.content ?? '');
 }
 
+function markUsernameEdited(event: Event): void {
+  const input = event.currentTarget;
+  if (input instanceof HTMLInputElement) input.dataset.userEdited = 'true';
+}
+
 function saveAccount(event: SubmitEvent): void {
   event.preventDefault();
   if (typeof window.saveAdminAccountChanges !== 'function') {
@@ -114,6 +119,7 @@ onMounted(() => {
               autocomplete="username"
               :value="initialUsername"
               placeholder="Loading account..."
+              @input="markUsernameEdited"
             >
           </div>
           <div class="settings-v2-field">
