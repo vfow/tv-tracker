@@ -4,23 +4,25 @@ const assert = require("assert");
 
 const ROOT = path.resolve(__dirname,"..");
 const settings = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
+const streaming = fs.readFileSync(path.join(ROOT,"frontend/src/settings/SettingsStreaming.vue"),"utf8");
 const css = fs.readFileSync(path.join(ROOT,"static/css/settings-v2.css"),"utf8");
 
-assert(settings.includes('aria-controls="settings-v2-region-menu"'));
-assert(settings.includes('aria-activedescendant=""'));
+assert(!settings.includes('settings-v2-region-menu'),"route/state Settings facade must not retain Streaming presentation ownership");
+assert(streaming.includes('aria-controls="settings-vue-region-menu"'));
+assert(streaming.includes(':aria-activedescendant="activeOptionId"'));
 for(const key of ["ArrowDown","ArrowUp","Home","End","Enter","Escape","Tab"]){
-    assert(settings.includes(`event.key === "${key}"`),`${key} must be handled by the streaming combobox`);
+    assert(streaming.includes(`'${key}'`),`${key} must be handled by the Vue streaming combobox`);
 }
-assert(settings.includes('role="option" aria-selected="${active ? "true" : "false"}"'));
-assert(settings.includes('input.setAttribute("aria-activedescendant",optionId(visibleCountries[activeIndex]))'));
-assert(settings.includes('global.document.removeEventListener("click",streamingOutsideClickHandler)'));
-assert(settings.includes('streamingOutsideClickHandler = event=>'));
+assert(streaming.includes('role="option"'));
+assert(streaming.includes(':aria-selected="item.code === chosen ? \'true\' : \'false\'"'));
+assert(streaming.includes("const activeOptionId = computed"),"active descendant must be derived from the keyboard-active option");
+assert(streaming.includes("document.removeEventListener('click', onDocumentClick)"),"Vue owner must clean up the outside-click listener");
 assert.strictEqual(
-    (settings.match(/global\.document\.addEventListener\("click",streamingOutsideClickHandler\)/g)||[]).length,
+    (streaming.match(/document\.addEventListener\('click', onDocumentClick\)/g)||[]).length,
     1,
-    "Settings must have one owned outside-click registration"
+    "Streaming Vue owner must have one outside-click registration"
 );
-assert(settings.includes("cleanupStreamingBinding();\n        container.innerHTML"),"re-render must remove the previous document listener first");
+assert(streaming.includes("onBeforeUnmount"),"Vue owner must remove document listeners before unmount completes");
 assert(css.includes(".settings-v2-region-option.is-active"),"keyboard-active option must be visibly highlighted");
 
 console.log("Frontend modernization Settings interaction tests passed.");
