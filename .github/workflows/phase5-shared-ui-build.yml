@@ -1,0 +1,52 @@
+name: Phase 5 Shared UI Frontend Build
+
+on:
+  push:
+    branches: [frontend-modernization-phase5-shared-ui-feedback]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install -r requirements.txt -r requirements-ci.txt
+      - run: npm ci --audit=false
+      - name: Verify deterministic Tailwind CSS
+        run: |
+          npm run build:css
+          git diff --exit-code -- static/css/tailwind.css
+      - name: Build typed Vue frontend
+        run: npm run build:frontend
+      - name: Run Shared UI ownership contract
+        run: node tests/test_frontend_modernization_phase5_shared_ui.js
+      - name: Run Shared UI browser canary against rebuilt bundle
+        env:
+          CI: 'true'
+        run: python -m unittest tests.test_frontend_modernization_phase5_shared_ui_browser -v
+      - name: Check generated diff
+        run: |
+          git diff --check
+          git status --short -- static/vue
+      - name: Commit deterministic Vue assets
+        run: |
+          if git diff --quiet -- static/vue; then
+            echo "Vue assets already match source."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/vue
+          git commit -m "Build Phase 5 shared UI Vue assets"
+          git push
