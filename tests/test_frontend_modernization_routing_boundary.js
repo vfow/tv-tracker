@@ -60,10 +60,9 @@ assert.deepStrictEqual(
         "static/js/app-router.js",
         "static/js/app.js",
         "static/js/settings.js",
-        "static/js/trending.js",
         "static/js/ui.js"
     ],
-    "Routing migration must not introduce new direct browser-history writers; all legacy exceptions are explicitly inventoried"
+    "Routing migration must not introduce new direct browser-history writers; all remaining legacy exceptions are explicitly inventoried"
 );
 assert.deepStrictEqual(
     popstateFiles,
