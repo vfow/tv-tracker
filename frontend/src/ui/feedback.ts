@@ -13,6 +13,10 @@ export type FeedbackOptions = Readonly<{
 export type PresentErrorOptions = Readonly<{
   context?: string;
   background?: boolean;
+  actionLabel?: string;
+  onAction?: () => unknown;
+  dismissible?: boolean;
+  key?: string;
 }>;
 
 type FeedbackSurface = Readonly<{
@@ -50,24 +54,44 @@ function presentError(
   userMessage = GENERIC_ERROR_MESSAGE,
   options: PresentErrorOptions = {}
 ): unknown {
-  const core = window.TVTrackerCore?.feedback;
-  if (typeof core?.presentError === 'function') {
-    return core.presentError(error, {
-      userMessage,
-      context: options.context,
-      background: options.background === true
-    });
+  if (options.background === true) {
+    const core = window.TVTrackerCore?.feedback;
+    if (typeof core?.presentError === 'function') {
+      return core.presentError(error, {
+        userMessage,
+        context: options.context,
+        background: true
+      });
+    }
+    return null;
   }
 
   const surface = window.TVTrackerFeedback;
   if (typeof surface?.reportError === 'function') {
     return surface.reportError(error, userMessage, {
-      context: options.context ?? 'vue feedback'
+      context: options.context ?? 'vue feedback',
+      actionLabel: options.actionLabel,
+      onAction: options.onAction,
+      dismissible: options.dismissible,
+      key: options.key
     });
   }
 
-  if (options.background === true) return null;
-  return notify(userMessage, { severity: 'error' });
+  const core = window.TVTrackerCore?.feedback;
+  if (typeof core?.presentError === 'function') {
+    return core.presentError(error, {
+      userMessage,
+      context: options.context
+    });
+  }
+
+  return notify(userMessage, {
+    severity: 'error',
+    actionLabel: options.actionLabel,
+    onAction: options.onAction,
+    dismissible: options.dismissible,
+    key: options.key
+  });
 }
 
 export const feedback = Object.freeze({
