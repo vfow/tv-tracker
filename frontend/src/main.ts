@@ -3,11 +3,12 @@ import { createApp, type App as VueApp } from 'vue';
 import FoundationProbe from './FoundationProbe.vue';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import SettingsAuth from './settings/SettingsAuth.vue';
+import SettingsData from './settings/SettingsData.vue';
 import SettingsProfile from './settings/SettingsProfile.vue';
 import SettingsStreaming from './settings/SettingsStreaming.vue';
 
 export const FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation';
-export const FRONTEND_FOUNDATION_VERSION = 'phase4c-settings-auth-canary';
+export const FRONTEND_FOUNDATION_VERSION = 'phase4d-settings-data-canary';
 
 export function createFoundationProbe(): VueApp<Element> {
   return createApp(FoundationProbe);
@@ -60,7 +61,8 @@ function supportsSettingsSection(section: string): boolean {
   return supportsPhase3Streaming(section)
     || section === 'notifications'
     || section === 'profile'
-    || section === 'auth';
+    || section === 'auth'
+    || section === 'data';
 }
 
 const settingsOwner: SettingsVueOwner = Object.freeze({
@@ -85,8 +87,10 @@ const settingsOwner: SettingsVueOwner = Object.freeze({
       settingsApp = createApp(SettingsNotifications);
     } else if (section === 'profile') {
       settingsApp = createApp(SettingsProfile);
-    } else {
+    } else if (section === 'auth') {
       settingsApp = createApp(SettingsAuth);
+    } else {
+      settingsApp = createApp(SettingsData);
     }
     settingsApp.mount(root);
   },
