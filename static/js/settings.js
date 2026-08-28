@@ -36,8 +36,6 @@
             const route = routeFor(activeSection);
             if(global.TVTrackerRouter && typeof global.TVTrackerRouter.setPathRoute === "function"){
                 global.TVTrackerRouter.setPathRoute(route,options.replaceRoute === true);
-            }else if(global.history){
-                global.history[options.replaceRoute ? "replaceState" : "pushState"]({tvTrackerRoute:true},"",route);
             }
         }
     }
