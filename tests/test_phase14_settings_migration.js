@@ -8,6 +8,8 @@ const vm = require("vm");
 const ROOT = path.resolve(__dirname,"..");
 const SETTINGS_SECTIONS = ["profile","auth","notifications","streaming","data","danger-zone"];
 const settingsSource = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
+const bridgeSource = fs.readFileSync(path.join(ROOT,"static/js/settings-vue-bridge.js"),"utf8");
+const loaderSource = fs.readFileSync(path.join(ROOT,"static/js/settings-vue-loader.js"),"utf8");
 const routerSource = fs.readFileSync(path.join(ROOT,"static/js/app-router.js"),"utf8");
 const template = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT,"package.json"),"utf8"));
@@ -37,30 +39,40 @@ function sourceFiles(root){
 const scripts = loadedStaticScripts(template);
 const scriptNames = scripts.map(script=>script.filename);
 const settingsScripts = scripts.filter(script=>script.filename === "js/settings.js");
-assert.strictEqual(settingsScripts.length,1,"Settings must be loaded exactly once by the browser template");
-assert(!/\btype\s*=\s*["']module["']/i.test(settingsScripts[0].tag),"The selected Settings owner is the current classic modular-vanilla script");
-assert(scriptNames.indexOf("js/settings.js") < scriptNames.indexOf("js/app-router.js"),"Settings must load before routes delegate to it");
-assert(!scriptNames.some(filename=>/(?:^|\/)(?:frontend|modern)(?:\/|$)|\.(?:ts|tsx|vue)$/i.test(filename)),"No framework or modern Settings bundle may be loaded");
-assert(!/\bid\s*=\s*["']tv-modern-root["']/i.test(template),"The removed framework mount must not return");
+assert.strictEqual(settingsScripts.length,1,"The legacy Settings fallback must remain loaded exactly once");
+assert(!/\btype\s*=\s*["']module["']/i.test(settingsScripts[0].tag),"The legacy Settings fallback remains a classic script");
+assert.strictEqual(scriptNames.filter(name=>name === "js/settings-vue-bridge.js").length,1,"The guarded Settings bridge must load exactly once");
+assert.strictEqual(scriptNames.filter(name=>name === "js/settings-vue-loader.js").length,1,"The lazy Vue Settings loader must load exactly once");
+assert(scriptNames.indexOf("js/settings.js") < scriptNames.indexOf("js/settings-vue-bridge.js"),"Legacy Settings must install before the bridge captures it");
+assert(scriptNames.indexOf("js/settings-vue-bridge.js") < scriptNames.indexOf("js/settings-vue-loader.js"),"The bridge must exist before the lazy loader can attach Vue");
+assert(scriptNames.indexOf("js/settings-vue-loader.js") < scriptNames.indexOf("js/app-router.js"),"The Settings handoff must be ready before routes delegate to it");
+assert(!template.includes("static/vue/"),"The app shell must not hard-wire a hashed Vue asset; the canary stays manifest-driven");
+assert(!/\bid\s*=\s*["']tv-modern-root["']/i.test(template),"The removed global framework mount must not return");
 
-// Phase 2 formally permits an inactive Vue build foundation, but it must not
-// become a second Settings owner before the later surface migration is
-// explicitly approved and proven. Keep this gate focused on active ownership.
 assert.strictEqual(packageJson.devDependencies?.vue,"3.5.41","Vue must remain the approved build-time foundation version");
 assert(!packageJson.dependencies || Object.keys(packageJson.dependencies).length === 0,"The server runtime must not gain Node dependencies");
-assert(frontendDecision.includes("supersedes **L-04 Frontend**"),"The Vue foundation must be backed by the explicit frontend architecture decision");
-assert(frontendDecision.includes("does not mount Vue"),"Phase 2 must document that Vue stays inactive");
-assert(!template.includes("static/vue/"),"The production template must not load the Vue bundle during Phase 2");
+assert(frontendDecision.includes("supersedes **L-04 Frontend**"),"The Vue migration must remain backed by the explicit frontend architecture decision");
 
 const frontendSources = sourceFiles(path.join(ROOT,"frontend","src"));
 const settingsVueOwners = frontendSources.filter(file=>{
     const relative = path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/");
     const source = fs.readFileSync(file,"utf8");
     return /(?:^|\/)settings(?:\/|\.|$)/i.test(relative)
-        || /TVTrackerSettings\s*=/.test(source)
-        || /data-tvtracker-settings-root/i.test(source);
+        || /data-tvtracker-vue-settings/i.test(source);
 });
-assert.deepStrictEqual(settingsVueOwners,[],"Vue foundation must not introduce a Settings component, mount, or publisher in Phase 2");
+assert.deepStrictEqual(
+    settingsVueOwners.map(file=>path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/")),
+    ["settings/SettingsStreaming.vue"],
+    "Phase 3 may introduce only the Streaming Settings Vue canary"
+);
+
+assert(bridgeSource.includes('new Set(["streaming"])'),"The bridge canary allowlist must contain only Streaming Settings");
+for(const legacySection of ["profile","auth","notifications","data","danger-zone"]){
+    assert(!bridgeSource.includes(`new Set(["${legacySection}"]`),`${legacySection} must not become a Vue canary in this phase`);
+}
+assert(loaderSource.includes('"/static/vue/manifest.json"'),"The Vue canary must load through the committed manifest");
+assert(loaderSource.includes('cache:"no-store"'),"The manifest request must avoid stale cross-release caching");
+assert(loaderSource.includes("vue_settings_load_failed"),"Lazy-load failure must be observable without exposing user data");
 
 const loadedSources = new Map();
 for(const script of scripts){
@@ -72,7 +84,11 @@ for(const script of scripts){
 const settingsPublishers = Array.from(loadedSources.entries())
     .filter(([,source])=>/(?:window|globalThis|global)\.TVTrackerSettings\s*=/.test(source))
     .map(([filename])=>filename);
-assert.deepStrictEqual(settingsPublishers,["js/settings.js"],"Exactly one loaded browser source may publish the Settings owner");
+assert.deepStrictEqual(
+    settingsPublishers,
+    ["js/settings.js","js/settings-vue-bridge.js"],
+    "Settings may have only the legacy fallback publisher and the explicit guarded handoff publisher"
+);
 
 function loadSettings(pathname="/app/settings/profile"){
     const routes = [];
@@ -93,7 +109,7 @@ function loadSettings(pathname="/app/settings/profile"){
 
 const settingsRuntime = loadSettings();
 const settingsApi = settingsRuntime.api;
-assert(settingsApi,"The Settings browser owner must install");
+assert(settingsApi,"The legacy Settings fallback must still install");
 assert.deepStrictEqual(Array.from(settingsApi.sections,item=>item.id),SETTINGS_SECTIONS,"The current six Settings sections must remain exact");
 
 for(const section of SETTINGS_SECTIONS){
@@ -168,7 +184,7 @@ function loadRouter(pathname){
 }
 
 const routerRuntime = loadRouter("/app/settings/data");
-assert.strictEqual(routerRuntime.ownerCalls.length,1,"Initial Settings routing must delegate once to the sole browser owner");
+assert.strictEqual(routerRuntime.ownerCalls.length,1,"Initial Settings routing must delegate once to the browser owner");
 assert.strictEqual(routerRuntime.ownerCalls[0].section,"data");
 assert.strictEqual(routerRuntime.ownerCalls[0].options.fromRoute,true);
 assert.strictEqual(routerRuntime.ownerCalls[0].options.skipShowPage,true);
@@ -189,12 +205,10 @@ assert.strictEqual(legacyNotifications.canonicalRoute,"/app/settings/notificatio
 assert.strictEqual(legacyNotifications.params.section,"notifications");
 assert.strictEqual(routerRuntime.router.parseRoute("/app/settings/billing").valid,false,"Unknown Settings routes must not be broadened");
 
-// This gate validates the completed Settings ownership transition. The legacy
-// ui.js renderSettings shim and the streaming-region/provider-freshness
-// re-render patches are gone; settings.js is the single publishing owner.
-assert(settingsSource.includes("global.renderSettings = render;"),"The canonical renderSettings owner must remain explicit");
-assert(!loadedSources.get("js/ui.js").includes("function renderSettings()"),"The legacy ui.js renderSettings shim must be fully removed");
-assert(!loadedSources.get("js/streaming-region.js").includes("MutationObserver"),"streaming-region.js must no longer re-render Settings");
-assert(!loadedSources.get("js/provider-freshness.js").includes("installSettingsCleanup"),"provider-freshness.js must no longer patch Settings cleanup");
+assert(settingsSource.includes("global.renderSettings = render;"),"The legacy fallback renderSettings owner must remain explicit during the canary");
+assert(bridgeSource.includes("global.renderSettings = render;"),"The bridge must explicitly replace the global render handoff");
+assert(!loadedSources.get("js/ui.js").includes("function renderSettings()"),"The removed ui.js renderSettings shim must stay removed");
+assert(!loadedSources.get("js/streaming-region.js").includes("MutationObserver"),"streaming-region.js must not reintroduce Settings DOM patching");
+assert(!loadedSources.get("js/provider-freshness.js").includes("installSettingsCleanup"),"provider-freshness.js must not patch Settings cleanup");
 
-console.log("Phase 14 Settings migration contracts passed; the full migration gate is complete.");
+console.log("Phase 14 Settings ownership contracts passed with the guarded Vue Streaming canary.");
