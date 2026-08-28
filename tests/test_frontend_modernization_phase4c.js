@@ -39,6 +39,8 @@ for(const id of [
 }
 assert(authSource.includes("window.loadAdminAccountIntoSettings?.()"),"Auth Vue must delegate account loading to the existing service boundary");
 assert(authSource.includes("window.saveAdminAccountChanges()"),"Auth Vue must delegate credential persistence to the existing service boundary");
+assert(authSource.includes('@input="markUsernameEdited"'),"Auth Vue must preserve the legacy username edit guard while account loading is in flight");
+assert(authSource.includes("input.dataset.userEdited = 'true'"),"Auth Vue must mark locally edited usernames before the legacy loader can overwrite them");
 assert(authSource.includes("clientStorage.clearOnLogout()"),"Auth Vue must preserve best-effort client-storage cleanup before logout");
 assert(authSource.includes('name="csrf_token"'),"Auth Vue logout must preserve the CSRF form field");
 assert(authSource.includes('method="post" action="/logout"'),"Auth Vue logout must remain a server POST");
@@ -49,6 +51,7 @@ assert(!authSource.includes("v-model"),"Auth Vue must not retain password values
 assert(settingsSource.includes("function renderAuth()"),"Legacy Auth renderer must remain available as the lazy-load fallback");
 assert(appSource.includes("function getAdminAccountUsername()"),"Canonical account state accessor must remain in app.js during Phase 4C");
 assert(appSource.includes("async function loadAdminAccountIntoSettings"),"Canonical account loading must remain in app.js during Phase 4C");
+assert(appSource.includes('input.dataset.userEdited !== "true"'),"Canonical account loading must continue honoring the username edit guard");
 assert(appSource.includes("async function saveAdminAccountChanges()"),"Canonical credential persistence must remain in app.js during Phase 4C");
 
 let section = "auth";
