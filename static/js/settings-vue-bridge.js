@@ -33,12 +33,23 @@
         }
     }
 
-    function renderLoading(){
-        const root = global.document && global.document.getElementById
+    function settingsRoot(){
+        return global.document && global.document.getElementById
             ? global.document.getElementById("settings-content")
             : null;
+    }
+
+    function renderLoading(){
+        const root = settingsRoot();
         if(!root){ return; }
         root.innerHTML = '<div class="settings-v2-loading" data-tvtracker-settings-loading="true" role="status" aria-label="Loading settings"><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div></div>';
+    }
+
+    function renderLoadFailure(){
+        if(vueOwner){ return; }
+        const root = settingsRoot();
+        if(!root){ return; }
+        root.innerHTML = '<section class="settings-v2-section" data-tvtracker-settings-load-failed="true" role="alert"><h2>Settings unavailable</h2><p class="settings-v2-copy">Reload the page to try again.</p></section>';
     }
 
     function render(){
@@ -76,6 +87,7 @@
     const bridge = Object.freeze({
         attachVueOwner,
         render,
+        renderLoadFailure,
         open,
         current:currentSection,
         normalizeSection:routeState.normalizeSection,
