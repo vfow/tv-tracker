@@ -51,13 +51,13 @@
     <a class="tw-font-league" data-page="settings" href="/app/settings">SETTINGS</a>
 </nav>
 
-<section class="main">
+<main class="main" id="app-main">
 
-<div id="tv-tracker-startup-status" role="alert" hidden></div>
+<div id="tv-tracker-startup-status" role="alert" aria-live="assertive" hidden></div>
 
 <!-- SHOWS PAGE -->
 <div id="shows-page" class="page">
-    <nav class="top-tabs">
+    <nav class="top-tabs" aria-label="Show sections">
       <a class="tw-font-league" data-tab="watchlist" href="/app/list/watching">WATCHLIST</a>
       <a class="tw-font-league" data-tab="upcoming" href="/app/upcoming">UPCOMING</a>
       <a class="tw-font-league" data-tab="history" href="/app/history">HISTORY</a>
@@ -73,7 +73,7 @@
         </div>
     </div>
 
-    <main class="content" id="show-list">
+    <div class="content" id="show-list">
         <div class="watchlist-initial-skeleton" role="status" aria-live="polite" aria-label="Loading shows">
             {% for _ in range(5) %}
             <article class="watchlist-skeleton-row" aria-hidden="true">
@@ -88,7 +88,7 @@
             {% endfor %}
             <span class="watchlist-skeleton-sr">Loading shows…</span>
         </div>
-    </main>
+    </div>
 </div>
 
 <!-- DISCOVER PAGE -->
@@ -99,7 +99,8 @@
         id="search"
         name="tv_tracker_show_search"
         type="search"
-        placeholder="Search TV shows"
+        placeholder="Search shows, movies, people, collections"
+        aria-label="Search TV shows, movies, people, and collections"
         autocomplete="off"
         autocorrect="off"
         autocapitalize="off"
@@ -147,11 +148,11 @@
 <div id="episode-detail-page" class="page episode-detail-page">
     <div class="episode-detail-page-content" id="episode-detail-content"></div>
 </div>
-</section>
+</main>
 
 <!-- STATUS POPUP -->
-<div class="popup-overlay" id="status-popup">
-    <div class="popup">
+<div class="popup-overlay" id="status-popup" aria-hidden="true">
+    <div class="popup" role="dialog" aria-modal="true" aria-labelledby="popup-title" tabindex="-1">
         <h2 id="popup-title">Add Show</h2>
         <p>Choose status:</p>
         <div class="popup-buttons">
@@ -161,25 +162,25 @@
             <button data-status="paused">Paused</button>
             <button data-status="dropped">Dropped</button>
         </div>
-        <button class="close-popup" id="close-popup">Cancel</button>
+        <button class="close-popup" id="close-popup" type="button">Cancel</button>
     </div>
 </div>
 
 <!-- SHOW DETAIL MODAL -->
-<div class="show-modal-overlay" id="show-modal">
-    <div class="show-modal">
-        <button class="show-modal-close" id="close-show-modal">×</button>
+<div class="show-modal-overlay" id="show-modal" aria-hidden="true">
+    <div class="show-modal" role="dialog" aria-modal="true" aria-label="Show details" tabindex="-1">
+        <button class="show-modal-close" id="close-show-modal" type="button" aria-label="Close details">×</button>
         <div id="show-modal-content"></div>
     </div>
 </div>
 
 <!-- FAVORITES POPUP -->
-<div class="popup-overlay" id="favorites-popup">
-    <div class="popup favorites-popup-box">
+<div class="popup-overlay" id="favorites-popup" aria-hidden="true">
+    <div class="popup favorites-popup-box" role="dialog" aria-modal="true" aria-labelledby="favorites-popup-title" tabindex="-1">
         <h2 id="favorites-popup-title">Favorite Shows</h2>
         <p id="favorites-popup-description">Choose up to 8 favorite shows.</p>
         <div id="favorites-popup-content"></div>
-        <button class="close-popup" id="close-favorites-popup">Close</button>
+        <button class="close-popup" id="close-favorites-popup" type="button">Close</button>
     </div>
 </div>
 
@@ -205,6 +206,7 @@
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/provider-freshness.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
+<script src="{{ url_for('static', filename='js/interaction-quality.js') }}"></script>
 <script src="{{ url_for('static', filename='js/startup.js') }}"></script>
 
 </body>
