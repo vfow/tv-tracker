@@ -2,7 +2,7 @@
 
 Status: typed routing boundary active with repository-wide ownership gate; runtime ownership migration remains open
 
-Production baseline: `7324ce30a7d70da70b6a41894c1cb006db436e77`
+Production baseline: `3fcab4c16440ccd91cf08be88e0f5e144a124924`
 
 ## Goal
 
@@ -14,7 +14,7 @@ Migrate routing incrementally without creating a second history owner or changin
 
 `frontend/src/routing/router.ts` is the typed Vue-era adapter. It delegates route parsing and navigation to `window.TVTrackerRouter`; it does not call `history.pushState`, `history.replaceState`, or register `popstate` itself.
 
-A repository-wide source contract inventories browser-history ownership across `static/js` and `frontend/src`. The first run of that contract exposed four direct-history exceptions in addition to the canonical router: `static/js/app.js`, `static/js/settings.js`, `static/js/trending.js`, and `static/js/ui.js`. The Trending exception has now been burned down: `static/js/trending.js` delegates its path writes to `TVTrackerRouter.setPathRoute` and no longer writes browser history directly. The remaining explicit migration inventory is `static/js/app.js`, `static/js/settings.js`, and `static/js/ui.js`. CI fails if another direct History API writer or `popstate` owner appears.
+A repository-wide source contract inventories browser-history ownership across `static/js` and `frontend/src`. The first run of that contract exposed four direct-history exceptions in addition to the canonical router: `static/js/app.js`, `static/js/settings.js`, `static/js/trending.js`, and `static/js/ui.js`. Trending and Settings have now been burned down: both delegate their path writes to `TVTrackerRouter.setPathRoute` and no longer write browser history directly. The remaining explicit migration inventory is `static/js/app.js` and `static/js/ui.js`. CI fails if another direct History API writer or `popstate` owner appears.
 
 ## Invariants
 
@@ -22,9 +22,9 @@ A repository-wide source contract inventories browser-history ownership across `
 - `static/js/app-router.js` remains the only application `popstate` owner during this transition.
 - Canonicalization remains implemented by the existing router.
 - Vue callers must use the typed routing adapter when route ownership starts moving; they must not write browser history directly.
-- Trending route writes must delegate to `TVTrackerRouter.setPathRoute`; Trending must not become a History API owner.
+- Trending and Settings route writes must delegate to `TVTrackerRouter.setPathRoute`; neither may become a History API owner.
 - No Search, Discover, media-detail, Upcoming, tracker, History, or watched-state behavior moves in this slice.
-- No additional direct History API writer may be introduced while the three remaining legacy exceptions are being burned down.
+- No additional direct History API writer may be introduced while the two remaining legacy exceptions are being burned down.
 
 ## Exit gates for this slice
 
@@ -32,10 +32,10 @@ A repository-wide source contract inventories browser-history ownership across `
 2. The adapter delegates parsing, path writes, and route application to `TVTrackerRouter`.
 3. The adapter contains no direct History API calls and no `popstate` listener.
 4. Repository-wide ownership scanning finds exactly one application `popstate` owner: `static/js/app-router.js`.
-5. Repository-wide ownership scanning finds exactly the current direct-history inventory: `static/js/app-router.js`, `static/js/app.js`, `static/js/settings.js`, and `static/js/ui.js`.
-6. `static/js/trending.js` delegates path writes to `TVTrackerRouter.setPathRoute` and contains no direct `pushState` or `replaceState` call.
+5. Repository-wide ownership scanning finds exactly the current direct-history inventory: `static/js/app-router.js`, `static/js/app.js`, and `static/js/ui.js`.
+6. `static/js/trending.js` and `static/js/settings.js` delegate path writes to `TVTrackerRouter.setPathRoute` and contain no direct `pushState` or `replaceState` call.
 7. The full repository regression suite and diff-hygiene gate pass.
 
 ## Remaining Routing work
 
-Later Routing slices must burn down the three remaining direct-history exceptions one at a time by delegating their path writes to the canonical router, migrate actual Vue route callers through the typed adapter with their deterministic Vite outputs rebuilt, prove the direct/click/reload/Back/Forward matrix, and only then retire legacy routing code. Runtime ownership must move once, with no permanent dual router.
+Later Routing slices must burn down the two remaining direct-history exceptions one at a time by delegating their path writes to the canonical router, migrate actual Vue route callers through the typed adapter with their deterministic Vite outputs rebuilt, prove the direct/click/reload/Back/Forward matrix, and only then retire legacy routing code. Runtime ownership must move once, with no permanent dual router.
