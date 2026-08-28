@@ -5,6 +5,7 @@ import json
 from collections.abc import Sequence
 
 from tvtracker.database import connect_database
+from tvtracker.operations import collect_operational_baseline
 from tvtracker.tracker.state import cleanup_stored_tracker_data
 
 
@@ -15,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "operation",
-        choices=("cleanup-legacy",),
+        choices=("cleanup-legacy", "operational-check"),
         help="Maintenance operation to run.",
     )
     return parser
@@ -35,6 +36,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 separators=(",", ":"),
             )
         )
+        return 0
+
+    if args.operation == "operational-check":
+        result = collect_operational_baseline(connect_database)
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         return 0
 
     raise RuntimeError(f"Unsupported maintenance operation: {args.operation}")
