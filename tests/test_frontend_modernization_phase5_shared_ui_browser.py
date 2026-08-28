@@ -9,7 +9,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from flask import jsonify, redirect, request, session
+from flask import Response, jsonify, redirect, request, session
 from werkzeug.serving import make_server
 
 import app as tracker
@@ -125,12 +125,10 @@ class FrontendModernizationPhase5SharedUiBrowserTests(unittest.TestCase):
                 session["csrf_token"] = "phase5-browser-csrf"
                 return redirect("/app/settings/streaming")
 
-            @app.after_request
-            def inject_feedback_interaction(response):
-                if request.path != "/app/settings/streaming" or not response.content_type.startswith("text/html"):
-                    return response
-                script = """
-<script>
+            @app.get("/__phase5_shared_ui_driver.js")
+            def phase5_shared_ui_driver():
+                return Response(
+                    """
 (() => {
   const timer = window.setInterval(() => {
     const input = document.getElementById('settings-vue-region-input');
@@ -142,10 +140,17 @@ class FrontendModernizationPhase5SharedUiBrowserTests(unittest.TestCase):
     window.setTimeout(() => button.click(), 250);
   }, 100);
 })();
-</script>
-"""
+""",
+                    mimetype="application/javascript",
+                )
+
+            @app.after_request
+            def inject_feedback_interaction(response):
+                if request.path != "/app/settings/streaming" or not response.content_type.startswith("text/html"):
+                    return response
                 markup = response.get_data(as_text=True)
-                response.set_data(markup.replace("</body>", script + "</body>"))
+                driver = '<script src="/__phase5_shared_ui_driver.js"></script>\n'
+                response.set_data(markup.replace("</body>", driver + "</body>"))
                 return response
 
             server = make_server("127.0.0.1", 0, app)
