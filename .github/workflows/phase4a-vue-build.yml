@@ -1,0 +1,44 @@
+name: Phase 4A Vue Build Generator
+
+on:
+  push:
+    branches:
+      - frontend-modernization-phase4a-notifications
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase4a-vue-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --audit=false
+      - run: npm audit --audit-level=high
+      - run: npm run build:frontend
+      - run: node tests/test_frontend_modernization_phase4a.js
+      - name: Commit deterministic Vue assets
+        run: |
+          set -eu
+          git diff --check
+          if git diff --quiet -- static/vue; then
+            echo "Vue assets already match source."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/vue
+          git commit -m "Build Phase 4A Vue assets"
+          git push origin HEAD:frontend-modernization-phase4a-notifications
