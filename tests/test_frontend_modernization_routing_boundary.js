@@ -7,6 +7,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname,"..");
 const adapter = fs.readFileSync(path.join(ROOT,"frontend/src/routing/router.ts"),"utf8");
 const legacyRouter = fs.readFileSync(path.join(ROOT,"static/js/app-router.js"),"utf8");
+const settingsSource = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
 
 assert(adapter.includes("export const router = Object.freeze"),"Vue routing must expose one typed adapter");
 assert(adapter.includes("TVTrackerRouter"),"The typed adapter must delegate to the existing canonical router");
@@ -16,6 +17,11 @@ assert(adapter.includes("owner.applyRoute"),"Route application must remain deleg
 
 for(const forbidden of ["pushState(","replaceState(","addEventListener('popstate'",'addEventListener("popstate"',"onpopstate"]){
     assert(!adapter.includes(forbidden),`Typed routing adapter must not become a second history owner (${forbidden})`);
+}
+
+assert(settingsSource.includes("global.TVTrackerRouter.setPathRoute(route,options.replaceRoute === true)"),"Settings route writes must delegate to the canonical router");
+for(const forbidden of ["pushState(","replaceState("]){
+    assert(!settingsSource.includes(forbidden),`Settings must not directly write browser history (${forbidden})`);
 }
 
 const popstateOwners = (legacyRouter.match(/addEventListener\(["']popstate["']/g) || []).length;
@@ -59,7 +65,6 @@ assert.deepStrictEqual(
     [
         "static/js/app-router.js",
         "static/js/app.js",
-        "static/js/settings.js",
         "static/js/ui.js"
     ],
     "Routing migration must not introduce new direct browser-history writers; all remaining legacy exceptions are explicitly inventoried"
