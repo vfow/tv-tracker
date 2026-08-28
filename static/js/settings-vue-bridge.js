@@ -1,27 +1,30 @@
 (function(global){
     "use strict";
 
-    const legacy = global.TVTrackerSettings;
-    const VUE_CANARY_SECTIONS = new Set(["streaming"]);
-    VUE_CANARY_SECTIONS.add("notifications");
-    VUE_CANARY_SECTIONS.add("profile");
-    VUE_CANARY_SECTIONS.add("auth");
-    VUE_CANARY_SECTIONS.add("data");
-    VUE_CANARY_SECTIONS.add("danger-zone");
-    if(!legacy || typeof legacy.render !== "function" || typeof legacy.open !== "function"){
+    const routeState = global.TVTrackerSettings;
+    if(
+        !routeState ||
+        typeof routeState.open !== "function" ||
+        typeof routeState.current !== "function" ||
+        typeof routeState.normalizeSection !== "function"
+    ){
         return;
     }
 
+    const SETTINGS_SECTIONS = Object.freeze(
+        Array.from(routeState.sections || [],item=>String(item && item.id || "")).filter(Boolean)
+    );
+    const SETTINGS_SECTION_SET = new Set(SETTINGS_SECTIONS);
     let vueOwner = null;
 
     function currentSection(){
-        return typeof legacy.current === "function" ? legacy.current() : "profile";
+        return routeState.current();
     }
 
     function requestVue(section){
         if(
             !vueOwner &&
-            VUE_CANARY_SECTIONS.has(section) &&
+            SETTINGS_SECTION_SET.has(section) &&
             global.document &&
             typeof global.document.dispatchEvent === "function" &&
             typeof global.CustomEvent === "function"
@@ -30,38 +33,39 @@
         }
     }
 
+    function renderLoading(){
+        const root = global.document && global.document.getElementById
+            ? global.document.getElementById("settings-content")
+            : null;
+        if(!root){ return; }
+        root.innerHTML = '<div class="settings-v2-loading" data-tvtracker-settings-loading="true" role="status" aria-label="Loading settings"><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div><div class="settings-v2-skeleton-line"></div></div>';
+    }
+
     function render(){
         const section = currentSection();
-        if(vueOwner && typeof vueOwner.supports === "function" && vueOwner.supports(section)){
+        if(vueOwner){
             return vueOwner.render(section);
         }
-        if(vueOwner && typeof vueOwner.unmount === "function"){
-            vueOwner.unmount();
-        }
         requestVue(section);
-        return legacy.render();
+        renderLoading();
     }
 
     function open(section,options={}){
-        const normalized = typeof legacy.normalizeSection === "function"
-            ? legacy.normalizeSection(section)
-            : String(section || "profile");
-        requestVue(normalized);
-        const nextOptions = Object.assign({},options);
-        if(
-            vueOwner &&
-            typeof vueOwner.supports === "function" &&
-            vueOwner.supports(normalized) &&
-            nextOptions.skipShowPage === true
-        ){
-            nextOptions.skipShowPage = false;
+        const normalized = routeState.normalizeSection(section);
+        const result = routeState.open(normalized,options);
+        if(global.activePage === "settings"){
+            render();
         }
-        return legacy.open(normalized,nextOptions);
+        return result;
     }
 
     function attachVueOwner(owner){
         if(!owner || typeof owner.supports !== "function" || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
             throw new TypeError("Invalid Vue Settings owner");
+        }
+        const unsupported = SETTINGS_SECTIONS.filter(section=>!owner.supports(section));
+        if(unsupported.length){
+            throw new TypeError("Incomplete Vue Settings owner: " + unsupported.join(","));
         }
         vueOwner = owner;
         if(global.activePage === "settings"){
@@ -74,12 +78,12 @@
         render,
         open,
         current:currentSection,
-        normalizeSection:legacy.normalizeSection,
-        routeFor:legacy.routeFor,
-        sectionFromPath:legacy.sectionFromPath,
-        sections:legacy.sections,
-        legacy,
-        vueCanarySections:Object.freeze(Array.from(VUE_CANARY_SECTIONS))
+        normalizeSection:routeState.normalizeSection,
+        routeFor:routeState.routeFor,
+        sectionFromPath:routeState.sectionFromPath,
+        sections:routeState.sections,
+        routeState,
+        ownership:"vue"
     });
 
     global.TVTrackerSettingsBridge = bridge;
