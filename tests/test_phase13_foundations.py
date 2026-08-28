@@ -1752,36 +1752,29 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
                 "css:build": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --minify",
                 "build:css": "npm run css:build",
                 "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch",
+                "frontend:typecheck": "vue-tsc --noEmit -p frontend/tsconfig.json",
+                "frontend:build": "vite build --config frontend/vite.config.ts",
+                "build:frontend": "npm run frontend:typecheck && npm run frontend:build",
             },
         )
+        self.assertFalse(package.get("dependencies"), "Node runtime dependencies remain forbidden")
+        self.assertEqual(package["devDependencies"].get("vue"), "3.5.41")
+        self.assertEqual(package["devDependencies"].get("vite"), "7.3.6")
+        self.assertEqual(package["devDependencies"].get("typescript"), "6.0.3")
 
-        forbidden_packages = {"vue", "vite", "typescript", "@vitejs/plugin-vue"}
-        dependencies = set(package.get("dependencies", {}))
-        dependencies.update(package.get("devDependencies", {}))
-        self.assertTrue(dependencies.isdisjoint(forbidden_packages))
-
-        lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
-        locked_names = {
-            path.rsplit("node_modules/", 1)[-1]
-            for path in lock.get("packages", {})
-            if "node_modules/" in path
-        }
-        self.assertTrue(locked_names.isdisjoint(forbidden_packages))
-        self.assertFalse(any(name.startswith("@vue/") for name in locked_names))
-        self.assertFalse(any(name.startswith("@typescript/") for name in locked_names))
-
-        frontend = ROOT / "frontend"
-        modern = ROOT / "static/modern"
-        self.assertFalse(
-            frontend.exists() and any(path.is_file() for path in frontend.rglob("*"))
+        decision = (ROOT / "docs/architecture/FRONTEND_MODERNIZATION_DECISION_2026-08-28.md").read_text(
+            encoding="utf-8"
         )
-        self.assertFalse(
-            modern.exists() and any(path.is_file() for path in modern.rglob("*"))
-        )
+        self.assertIn("supersedes **L-04 Frontend**", decision)
+        self.assertIn("does not mount Vue", decision)
+        self.assertTrue((ROOT / "frontend/src/main.ts").is_file())
+        self.assertTrue((ROOT / "frontend/src/FoundationProbe.vue").is_file())
+        self.assertTrue((ROOT / "static/vue/manifest.json").is_file())
         self.assertTrue((ROOT / "static/js/core/foundation.js").is_file())
 
         parser = TemplateElements()
-        parser.feed((ROOT / "templates/index.html").read_text(encoding="utf-8"))
+        template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+        parser.feed(template)
         scripts = [attrs for tag, attrs in parser.elements if tag == "script"]
         core_source = "{{ url_for('static', filename='js/core/foundation.js') }}"
         feedback_source = "{{ url_for('static', filename='js/feedback.js') }}"
@@ -1792,6 +1785,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
             next(index for index, attrs in enumerate(scripts) if attrs.get("src") == feedback_source),
             next(index for index, attrs in enumerate(scripts) if attrs.get("src") == core_source),
         )
+        self.assertNotIn("static/vue/", template, "Vue remains inactive until a surface migration")
         self.assertFalse(
             any(attrs.get("id") == "tv-modern-root" for _tag, attrs in parser.elements)
         )
