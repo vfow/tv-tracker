@@ -7,6 +7,7 @@
     VUE_CANARY_SECTIONS.add("profile");
     VUE_CANARY_SECTIONS.add("auth");
     VUE_CANARY_SECTIONS.add("data");
+    VUE_CANARY_SECTIONS.add("danger-zone");
     if(!legacy || typeof legacy.render !== "function" || typeof legacy.open !== "function"){
         return;
     }
