@@ -12,6 +12,20 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tvtracker_test
+          POSTGRES_USER: tvtracker_test
+          POSTGRES_PASSWORD: tvtracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tvtracker_test -d tvtracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
@@ -34,6 +48,14 @@ jobs:
       - name: Run Shared UI browser canary against rebuilt bundle
         env:
           CI: 'true'
+          SECRET_KEY: phase5-shared-ui-test-secret
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_NAME: tvtracker_test
+          DB_USER: tvtracker_test
+          DB_PASSWORD: tvtracker_test
+          APP_USERNAME: phase5-admin
+          APP_PASSWORD_HASH: phase5-test-hash
         run: python -m unittest tests.test_frontend_modernization_phase5_shared_ui_browser -v
       - name: Check generated diff
         run: |
