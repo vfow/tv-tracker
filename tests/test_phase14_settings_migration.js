@@ -11,12 +11,27 @@ const settingsSource = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"
 const routerSource = fs.readFileSync(path.join(ROOT,"static/js/app-router.js"),"utf8");
 const template = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
 const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT,"package.json"),"utf8"));
+const frontendDecision = fs.readFileSync(path.join(ROOT,"docs/architecture/FRONTEND_MODERNIZATION_DECISION_2026-08-28.md"),"utf8");
 
 function loadedStaticScripts(markup){
     return (markup.match(/<script\b[^>]*>/gi) || []).flatMap(tag=>{
         const match = tag.match(/url_for\(\s*["']static["']\s*,\s*filename\s*=\s*["']([^"']+)["']\s*\)/i);
         return match ? [{filename:match[1],tag}] : [];
     });
+}
+
+function sourceFiles(root){
+    if(!fs.existsSync(root)){ return []; }
+    const files = [];
+    for(const entry of fs.readdirSync(root,{withFileTypes:true})){
+        const current = path.join(root,entry.name);
+        if(entry.isDirectory()){
+            files.push(...sourceFiles(current));
+        }else if(entry.isFile()){
+            files.push(current);
+        }
+    }
+    return files;
 }
 
 const scripts = loadedStaticScripts(template);
@@ -28,14 +43,24 @@ assert(scriptNames.indexOf("js/settings.js") < scriptNames.indexOf("js/app-route
 assert(!scriptNames.some(filename=>/(?:^|\/)(?:frontend|modern)(?:\/|$)|\.(?:ts|tsx|vue)$/i.test(filename)),"No framework or modern Settings bundle may be loaded");
 assert(!/\bid\s*=\s*["']tv-modern-root["']/i.test(template),"The removed framework mount must not return");
 
-const forbiddenPackages = new Set(["vue","vite","typescript","@vitejs/plugin-vue"]);
-const installedPackages = new Set([
-    ...Object.keys(packageJson.dependencies || {}),
-    ...Object.keys(packageJson.devDependencies || {})
-]);
-for(const packageName of forbiddenPackages){
-    assert(!installedPackages.has(packageName),`${packageName} must not reintroduce a duplicate Settings foundation`);
-}
+// Phase 2 formally permits an inactive Vue build foundation, but it must not
+// become a second Settings owner before the later surface migration is
+// explicitly approved and proven. Keep this gate focused on active ownership.
+assert.strictEqual(packageJson.devDependencies?.vue,"3.5.41","Vue must remain the approved build-time foundation version");
+assert(!packageJson.dependencies || Object.keys(packageJson.dependencies).length === 0,"The server runtime must not gain Node dependencies");
+assert(frontendDecision.includes("supersedes **L-04 Frontend**"),"The Vue foundation must be backed by the explicit frontend architecture decision");
+assert(frontendDecision.includes("does not mount Vue"),"Phase 2 must document that Vue stays inactive");
+assert(!template.includes("static/vue/"),"The production template must not load the Vue bundle during Phase 2");
+
+const frontendSources = sourceFiles(path.join(ROOT,"frontend","src"));
+const settingsVueOwners = frontendSources.filter(file=>{
+    const relative = path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/");
+    const source = fs.readFileSync(file,"utf8");
+    return /(?:^|\/)settings(?:\/|\.|$)/i.test(relative)
+        || /TVTrackerSettings\s*=/.test(source)
+        || /data-tvtracker-settings-root/i.test(source);
+});
+assert.deepStrictEqual(settingsVueOwners,[],"Vue foundation must not introduce a Settings component, mount, or publisher in Phase 2");
 
 const loadedSources = new Map();
 for(const script of scripts){
