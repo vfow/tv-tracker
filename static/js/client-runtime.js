@@ -11,6 +11,7 @@
     let activeSaveRequests = 0;
     let savedTimer = null;
     let storageWarningShown = false;
+    let sessionExpiryHandled = false;
 
     function csrfToken(){
         if(!global.document || typeof global.document.querySelector !== "function"){
@@ -176,6 +177,21 @@
         report({category:"storage",code:"persistent_storage_unavailable"});
     }
 
+    function handleSessionExpired(){
+        if(sessionExpiryHandled){ return; }
+        sessionExpiryHandled = true;
+        setSaveStatus("Session expired — sign in again","error");
+        const warning = ensureRuntimeWarning();
+        if(warning){ warning.textContent = "Your session expired. Sign in again to continue."; }
+        global.setTimeout(()=>{
+            if(global.location && typeof global.location.reload === "function"){
+                global.location.reload();
+            }else if(global.location && typeof global.location.assign === "function"){
+                global.location.assign("/login");
+            }
+        },0);
+    }
+
     function requestMeta(input,init){
         const rawUrl = typeof input === "string"
             ? input
@@ -261,6 +277,7 @@
                             ? response.headers.get("X-Request-ID")
                             : ""
                     });
+                    if(response.status === 401){ handleSessionExpired(); }
                 }
                 if(saveRequest){ observeSaveResponse(response); }
                 return response;
@@ -309,7 +326,8 @@
     global.TVTrackerClientRuntime = Object.freeze({
         report,
         surfaceFromPath,
-        setSaveStatus
+        setSaveStatus,
+        handleSessionExpired
     });
     initialize();
 })(window);
