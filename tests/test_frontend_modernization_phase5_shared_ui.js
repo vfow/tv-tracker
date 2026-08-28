@@ -17,10 +17,11 @@ assert(adapter.includes("export const feedback = Object.freeze"),"Vue must expos
 for(const method of ["success(message", "info(message", "warning(message", "error(message", "presentError"]){
     assert(adapter.includes(method),`Shared feedback adapter must expose ${method}`);
 }
-assert(adapter.includes("window.TVTrackerFeedback"),"The Vue adapter must delegate to the existing visible feedback owner");
-assert(adapter.includes("window.TVTrackerCore?.feedback"),"The Vue adapter must reuse the canonical error-classification boundary");
-assert(adapter.includes("surface.reportError"),"The Vue adapter must preserve the sanitized reportError fallback");
-assert(adapter.includes("window.showToast"),"The adapter may retain the legacy compatibility bridge while feedback.js remains authoritative");
+assert(adapter.includes("runtimeWindow.TVTrackerFeedback"),"The Vue adapter must delegate to the existing visible feedback owner");
+assert(adapter.includes("runtimeWindow.TVTrackerCore?.feedback"),"The Vue adapter must reuse the canonical error-classification boundary for background/fallback handling");
+assert(adapter.includes("surface.reportError"),"The Vue adapter must preserve the sanitized reportError path");
+assert(adapter.includes("runtimeWindow.showToast"),"The adapter may retain the legacy compatibility bridge while feedback.js remains authoritative");
+assert(!adapter.includes("declare global"),"The shared adapter must not create competing partial Window declarations");
 for(const forbiddenRendererToken of ["createElement(","appendChild(","insertAdjacentHTML(","innerHTML","tv-feedback-root","tv-offline-banner"]){
     assert(!adapter.includes(forbiddenRendererToken),`The Vue adapter must never render a second feedback surface (${forbiddenRendererToken})`);
 }
