@@ -1,0 +1,64 @@
+.tv-runtime-save-status,
+.tv-runtime-warning {
+    position: fixed;
+    right: 1rem;
+    z-index: 12000;
+    max-width: min(26rem, calc(100vw - 2rem));
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.75rem;
+    background: rgba(10, 10, 10, 0.96);
+    color: #ffffff;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+    font: 600 0.875rem/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.tv-runtime-save-status {
+    bottom: 1rem;
+    padding: 0.65rem 0.85rem;
+}
+
+.tv-runtime-save-status[data-state="saving"] {
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.tv-runtime-save-status[data-state="saved"] {
+    border-color: rgba(134, 239, 172, 0.55);
+}
+
+.tv-runtime-save-status[data-state="warning"] {
+    border-color: rgba(253, 224, 71, 0.65);
+}
+
+.tv-runtime-save-status[data-state="error"] {
+    border-color: rgba(252, 165, 165, 0.72);
+}
+
+.tv-runtime-warning {
+    top: 1rem;
+    padding: 0.8rem 1rem;
+    border-color: rgba(253, 224, 71, 0.65);
+}
+
+@media (max-width: 640px) {
+    .tv-runtime-save-status,
+    .tv-runtime-warning {
+        left: 0.75rem;
+        right: 0.75rem;
+        max-width: none;
+    }
+
+    .tv-runtime-save-status {
+        bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .tv-runtime-warning {
+        top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tv-runtime-save-status,
+    .tv-runtime-warning {
+        scroll-behavior: auto;
+    }
+}
