@@ -12,6 +12,7 @@
     const VALID = new Set(SECTIONS.map(item=>item.id));
     let activeSection = "profile";
     let regionRequest = 0;
+    let streamingOutsideClickHandler = null;
 
     function escapeHTML(value){
         if(typeof global.escapeHTML === "function") return global.escapeHTML(value);
@@ -44,6 +45,13 @@
         }
         if(typeof global.showToast === "function") return global.showToast(message,options);
         return null;
+    }
+
+    function cleanupStreamingBinding(){
+        if(streamingOutsideClickHandler && global.document && typeof global.document.removeEventListener === "function"){
+            global.document.removeEventListener("click",streamingOutsideClickHandler);
+        }
+        streamingOutsideClickHandler = null;
     }
 
     function shell(body){
@@ -114,9 +122,6 @@
             draft.adult_filter = adult ? adult.checked : true;
             const profile = ensureProfile();
             const previousAdultFilter = profile.adult_filter !== false;
-            // The legacy profile owner performs the one persistence write. Set the
-            // Adult Filter value before invoking it so the same profile snapshot is
-            // saved once instead of issuing a second Settings-owned save.
             profile.adult_filter = draft.adult_filter !== false;
             save.disabled = true;
             try{
@@ -173,10 +178,11 @@
         const regionApi = global.TVTrackerStreamingRegion;
         const region = regionApi && typeof regionApi.getStreamingRegion === "function" ? regionApi.getStreamingRegion() : String(ensureProfile().streaming_region || "");
         const label = regionApi && typeof regionApi.getCountryName === "function" ? regionApi.getCountryName(region) : region;
-        return `<section class="settings-v2-section"><h2>Streaming</h2><p class="settings-v2-copy">Choose the country used for Where to Watch and streaming-service filters.</p><div class="settings-v2-field"><label for="settings-v2-region-input">Streaming Region</label><div class="settings-v2-streaming-combobox"><input class="settings-v2-input" id="settings-v2-region-input" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" value="${escapeHTML(label)}" placeholder="Search countries"><div class="settings-v2-region-menu" id="settings-v2-region-menu" role="listbox" hidden></div></div></div><div class="settings-v2-actions"><button class="settings-v2-button" id="settings-v2-clear-region" type="button">Clear Region</button><button class="settings-v2-button settings-v2-button--primary" id="settings-v2-save-region" type="button">Save Region</button></div></section>`;
+        return `<section class="settings-v2-section"><h2>Streaming</h2><p class="settings-v2-copy">Choose the country used for Where to Watch and streaming-service filters.</p><div class="settings-v2-field"><label for="settings-v2-region-input">Streaming Region</label><div class="settings-v2-streaming-combobox"><input class="settings-v2-input" id="settings-v2-region-input" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="settings-v2-region-menu" aria-expanded="false" aria-activedescendant="" value="${escapeHTML(label)}" placeholder="Search countries"><div class="settings-v2-region-menu" id="settings-v2-region-menu" role="listbox" hidden></div></div></div><div class="settings-v2-actions"><button class="settings-v2-button" id="settings-v2-clear-region" type="button">Clear Region</button><button class="settings-v2-button settings-v2-button--primary" id="settings-v2-save-region" type="button">Save Region</button></div></section>`;
     }
 
     function bindStreaming(){
+        cleanupStreamingBinding();
         const api = global.TVTrackerStreamingRegion;
         const input = global.document.getElementById("settings-v2-region-input");
         const menu = global.document.getElementById("settings-v2-region-menu");
@@ -185,18 +191,91 @@
         if(!api || !input || !menu){ return; }
         let chosen = api.getStreamingRegion ? api.getStreamingRegion() : "";
         let countries = [];
+        let visibleCountries = [];
+        let activeIndex = -1;
         const requestId = ++regionRequest;
-        const close = ()=>{ menu.hidden=true; input.setAttribute("aria-expanded","false"); };
+        const optionId = item=>"settings-v2-region-option-" + String(item && item.code || "").toLowerCase().replace(/[^a-z0-9_-]/g,"");
+        const close = ()=>{
+            menu.hidden = true;
+            input.setAttribute("aria-expanded","false");
+            input.setAttribute("aria-activedescendant","");
+            activeIndex = -1;
+        };
         const draw = ()=>{
             if(requestId !== regionRequest) return;
             const filtered = typeof api.filterCountries === "function" ? api.filterCountries(input.value,countries) : countries;
-            menu.innerHTML = filtered.length ? filtered.slice(0,120).map(item=>`<button class="settings-v2-region-option" type="button" role="option" data-region="${escapeHTML(item.code)}"><span>${escapeHTML(item.name)}</span><span class="settings-v2-region-code">${escapeHTML(item.code)}</span></button>`).join("") : '<div class="settings-v2-region-empty">No countries found.</div>';
+            visibleCountries = filtered.slice(0,120);
+            if(activeIndex >= visibleCountries.length) activeIndex = visibleCountries.length ? visibleCountries.length - 1 : -1;
+            menu.innerHTML = visibleCountries.length ? visibleCountries.map((item,index)=>{
+                const active = index === activeIndex;
+                return `<button class="settings-v2-region-option${active ? " is-active" : ""}" id="${optionId(item)}" type="button" role="option" aria-selected="${active ? "true" : "false"}" data-region="${escapeHTML(item.code)}"><span>${escapeHTML(item.name)}</span><span class="settings-v2-region-code">${escapeHTML(item.code)}</span></button>`;
+            }).join("") : '<div class="settings-v2-region-empty">No countries found.</div>';
+            if(activeIndex >= 0 && visibleCountries[activeIndex]) input.setAttribute("aria-activedescendant",optionId(visibleCountries[activeIndex]));
+            else input.setAttribute("aria-activedescendant","");
         };
-        const open = ()=>{ menu.hidden=false; input.setAttribute("aria-expanded","true"); draw(); };
-        Promise.resolve(typeof api.loadCountries === "function" ? api.loadCountries() : []).then(items=>{ if(requestId===regionRequest){ countries=Array.isArray(items)?items:[]; if(chosen && !input.value && api.getCountryName) input.value=api.getCountryName(chosen); draw(); }}).catch(()=>{});
+        const open = ()=>{
+            menu.hidden = false;
+            input.setAttribute("aria-expanded","true");
+            draw();
+        };
+        const selectCountry = item=>{
+            if(!item) return;
+            chosen = String(item.code || "");
+            input.value = api.getCountryName ? api.getCountryName(chosen) : chosen;
+            close();
+        };
+        const moveActive = direction=>{
+            if(menu.hidden) open();
+            if(!visibleCountries.length){ draw(); }
+            if(!visibleCountries.length) return;
+            if(activeIndex < 0) activeIndex = direction > 0 ? 0 : visibleCountries.length - 1;
+            else activeIndex = (activeIndex + direction + visibleCountries.length) % visibleCountries.length;
+            draw();
+        };
+        Promise.resolve(typeof api.loadCountries === "function" ? api.loadCountries() : []).then(items=>{
+            if(requestId===regionRequest){
+                countries=Array.isArray(items)?items:[];
+                if(chosen && !input.value && api.getCountryName) input.value=api.getCountryName(chosen);
+                draw();
+            }
+        }).catch(()=>{});
         input.addEventListener("focus",open);
-        input.addEventListener("input",()=>{ chosen=""; open(); });
-        menu.addEventListener("click",event=>{ const option=event.target.closest&&event.target.closest("[data-region]"); if(!option)return; chosen=String(option.dataset.region||""); input.value=api.getCountryName?api.getCountryName(chosen):chosen; close(); });
+        input.addEventListener("input",()=>{ chosen=""; activeIndex=-1; open(); });
+        input.addEventListener("keydown",event=>{
+            if(event.key === "ArrowDown"){
+                event.preventDefault();
+                moveActive(1);
+            }else if(event.key === "ArrowUp"){
+                event.preventDefault();
+                moveActive(-1);
+            }else if(event.key === "Home" && !menu.hidden){
+                event.preventDefault();
+                if(visibleCountries.length){ activeIndex=0; draw(); }
+            }else if(event.key === "End" && !menu.hidden){
+                event.preventDefault();
+                if(visibleCountries.length){ activeIndex=visibleCountries.length-1; draw(); }
+            }else if(event.key === "Enter" && !menu.hidden && activeIndex >= 0){
+                event.preventDefault();
+                selectCountry(visibleCountries[activeIndex]);
+            }else if(event.key === "Escape" && !menu.hidden){
+                event.preventDefault();
+                close();
+            }else if(event.key === "Tab"){
+                close();
+            }
+        });
+        menu.addEventListener("mousemove",event=>{
+            const option=event.target.closest&&event.target.closest("[data-region]");
+            if(!option) return;
+            const index=visibleCountries.findIndex(item=>String(item.code||"")===String(option.dataset.region||""));
+            if(index >= 0 && index !== activeIndex){ activeIndex=index; draw(); }
+        });
+        menu.addEventListener("click",event=>{
+            const option=event.target.closest&&event.target.closest("[data-region]");
+            if(!option)return;
+            const item=visibleCountries.find(candidate=>String(candidate.code||"")===String(option.dataset.region||""));
+            selectCountry(item || {code:String(option.dataset.region||"")});
+        });
         if(clear) clear.addEventListener("click",()=>{ chosen=""; input.value=""; close(); input.focus(); });
         if(save) save.addEventListener("click",async()=>{
             let next = chosen;
@@ -216,7 +295,11 @@
                 notify("Couldn’t save your changes.",{severity:"error"});
             }finally{ if(save.isConnected) save.disabled=false; }
         });
-        global.document.addEventListener("click",event=>{ const box=input.closest(".settings-v2-streaming-combobox"); if(box && !box.contains(event.target)) close(); },{once:false});
+        streamingOutsideClickHandler = event=>{
+            const box=input.closest(".settings-v2-streaming-combobox");
+            if(box && !box.contains(event.target)) close();
+        };
+        global.document.addEventListener("click",streamingOutsideClickHandler);
     }
 
     function renderData(){
@@ -266,6 +349,7 @@
     function render(){
         const container = root();
         if(!container) return;
+        cleanupStreamingBinding();
         container.innerHTML = shell(bodyFor(activeSection));
         bindTabs();
         bindSection();
