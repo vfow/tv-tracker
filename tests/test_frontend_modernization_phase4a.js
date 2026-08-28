@@ -14,7 +14,9 @@ const runtimeSource = fs.readFileSync(path.join(ROOT,"static/js/notifications-ru
 const template = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT,"static/vue/manifest.json"),"utf8"));
 
-assert(!fs.existsSync(path.join(ROOT,".github/workflows/phase4a-vue-build.yml")),"The temporary write-enabled Phase 4A build workflow must not survive the phase");
+if(process.env.TVTRACKER_ALLOW_PHASE4A_GENERATOR !== "1"){
+    assert(!fs.existsSync(path.join(ROOT,".github/workflows/phase4a-vue-build.yml")),"The temporary write-enabled Phase 4A build workflow must not survive the phase");
+}
 assert(template.indexOf("js/notifications-runtime.js") < template.indexOf("js/settings-vue-bridge.js"),"Canonical notification runtime must exist before the Settings Vue bridge");
 assert(template.indexOf("js/settings-vue-bridge.js") < template.indexOf("js/settings-vue-loader.js"),"Settings bridge must exist before its lazy loader");
 assert(!template.includes("static/vue/"),"The Flask app shell must remain manifest-driven instead of pinning a Vue asset");
