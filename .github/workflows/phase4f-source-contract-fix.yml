@@ -30,48 +30,25 @@ jobs:
           path = Path('tests/test_source_contracts.py')
           source = path.read_text(encoding='utf-8')
 
-          old_source_test = '''    def test_source_section_removed(self):
-              ui = self.read('static/js/ui.js')
-              settings = self.read('static/js/settings.js')
-              self.assertNotIn('Metadata ' + 'Source', settings)
-              self.assertNotIn('Artwork ' + 'Source', ui)
-              self.assertNotIn('<h2>SOURCE</h2>', ui)
-              self.assertIn('Export, import, or create a readable report', settings)
-              self.assertNotIn('Simkl / Trakt', settings)
-          '''
-          new_source_test = '''    def test_source_section_removed(self):
-              ui = self.read('static/js/ui.js')
-              settings = self.read('static/js/settings.js')
-              data_settings = self.read('frontend/src/settings/SettingsData.vue')
-              self.assertNotIn('Metadata ' + 'Source', settings)
-              self.assertNotIn('Artwork ' + 'Source', ui)
-              self.assertNotIn('<h2>SOURCE</h2>', ui)
-              self.assertIn('Export, import, or create a readable report', data_settings)
-              self.assertNotIn('Simkl / Trakt', data_settings)
-          '''
-          if old_source_test not in source:
-              raise SystemExit('source-section contract block not found')
-          source = source.replace(old_source_test, new_source_test, 1)
+          source_anchor = "        settings = self.read('static/js/settings.js')\n        self.assertNotIn('Metadata ' + 'Source', settings)"
+          source_replacement = "        settings = self.read('static/js/settings.js')\n        data_settings = self.read('frontend/src/settings/SettingsData.vue')\n        self.assertNotIn('Metadata ' + 'Source', settings)"
+          if source_anchor not in source:
+              raise SystemExit('source-section ownership anchor not found')
+          source = source.replace(source_anchor, source_replacement, 1)
 
-          old_profile_test = '''    def test_profile_header_presets_survive_tailwind_purge(self):
-              config = self.read('tailwind.config.js')
-              source_css = self.read('static/css/tailwind-input.css')
-              built_css = self.read('static/css/tailwind.css')
-              settings = self.read('static/js/settings.js')
-              self.assertIn('profile-header-${preset}', settings)
-              for class_name in (
-          '''
-          new_profile_test = '''    def test_profile_header_presets_survive_tailwind_purge(self):
-              config = self.read('tailwind.config.js')
-              source_css = self.read('static/css/tailwind-input.css')
-              built_css = self.read('static/css/tailwind.css')
-              profile_settings = self.read('frontend/src/settings/SettingsProfile.vue')
-              self.assertIn('profile-header-${preset[0]}', profile_settings)
-              for class_name in (
-          '''
-          if old_profile_test not in source:
-              raise SystemExit('profile-header contract block not found')
-          source = source.replace(old_profile_test, new_profile_test, 1)
+          old_report_assert = "        self.assertIn('Export, import, or create a readable report', settings)"
+          old_simkl_assert = "        self.assertNotIn('Simkl / Trakt', settings)"
+          if old_report_assert not in source or old_simkl_assert not in source:
+              raise SystemExit('source-section presentation assertions not found')
+          source = source.replace(old_report_assert, "        self.assertIn('Export, import, or create a readable report', data_settings)", 1)
+          source = source.replace(old_simkl_assert, "        self.assertNotIn('Simkl / Trakt', data_settings)", 1)
+
+          profile_anchor = "        settings = self.read('static/js/settings.js')\n        self.assertIn('profile-header-${preset}', settings)"
+          profile_replacement = "        profile_settings = self.read('frontend/src/settings/SettingsProfile.vue')\n        self.assertIn('profile-header-${preset[0]}', profile_settings)"
+          if profile_anchor not in source:
+              raise SystemExit('profile-header ownership anchor not found')
+          source = source.replace(profile_anchor, profile_replacement, 1)
+
           path.write_text(source, encoding='utf-8')
           PY
       - name: Run source contracts
