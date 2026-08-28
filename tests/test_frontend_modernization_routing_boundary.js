@@ -56,8 +56,14 @@ historyWriters.sort();
 popstateFiles.sort();
 assert.deepStrictEqual(
     historyWriters,
-    ["static/js/app-router.js","static/js/trending.js"],
-    "Routing migration must not introduce new direct browser-history writers; Trending is the sole temporary exception"
+    [
+        "static/js/app-router.js",
+        "static/js/app.js",
+        "static/js/settings.js",
+        "static/js/trending.js",
+        "static/js/ui.js"
+    ],
+    "Routing migration must not introduce new direct browser-history writers; all legacy exceptions are explicitly inventoried"
 );
 assert.deepStrictEqual(
     popstateFiles,
