@@ -13,3 +13,19 @@ export function mountFoundationProbe(element: Element): () => void {
   app.mount(element);
   return () => app.unmount();
 }
+
+type VueFoundationBridge = Readonly<{
+  version: string;
+  mountProbe: typeof mountFoundationProbe;
+}>;
+
+declare global {
+  interface Window {
+    TVTrackerVueFoundation?: VueFoundationBridge;
+  }
+}
+
+window.TVTrackerVueFoundation = Object.freeze({
+  version: FRONTEND_FOUNDATION_VERSION,
+  mountProbe: mountFoundationProbe,
+});
