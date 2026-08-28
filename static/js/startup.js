@@ -7,7 +7,14 @@
         }
 
         const status = global.document.getElementById("tv-tracker-startup-status");
-        if(!status || status.querySelector("[data-startup-retry]")){
+        if(
+            !status ||
+            typeof status.querySelector !== "function" ||
+            typeof status.appendChild !== "function" ||
+            typeof global.document.createElement !== "function" ||
+            typeof global.document.createTextNode !== "function" ||
+            status.querySelector("[data-startup-retry]")
+        ){
             return;
         }
 
