@@ -1,0 +1,304 @@
+name: Routing completion helper
+
+on:
+  push:
+    branches: [frontend-modernization-routing-completion]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tvtracker_test
+          POSTGRES_USER: tvtracker_test
+          POSTGRES_PASSWORD: tvtracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tvtracker_test -d tvtracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-routing-completion
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install -r requirements.txt -r requirements-ci.txt
+      - run: npm ci --audit=false
+      - name: Apply narrowly asserted Routing completion patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              source = path.read_text(encoding='utf-8')
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one patch target, found {count}')
+              path.write_text(source.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              Path('static/js/app.js'),
+              '''function setAppHashRoute(route,replace=false){
+              const cleanRoute = String(route || "/app/list/watching");
+              const currentRoute = String(window.location.pathname || "") + String(window.location.search || "");
+
+              if(currentRoute === cleanRoute && !window.location.hash){
+                  return;
+              }
+
+              if(replace){
+                  history.replaceState({tvTrackerRoute:true},"",cleanRoute);
+              }else{
+                  history.pushState({tvTrackerRoute:true},"",cleanRoute);
+              }
+          }''',
+              '''function setAppHashRoute(route,replace=false){
+              const cleanRoute = String(route || "/app/list/watching");
+              const currentRoute = String(window.location.pathname || "") + String(window.location.search || "");
+
+              if(currentRoute === cleanRoute && !window.location.hash){
+                  return;
+              }
+
+              if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+                  window.TVTrackerRouter.setPathRoute(cleanRoute,replace === true);
+              }
+          }'''
+          )
+
+          replace_once(
+              Path('static/js/ui.js'),
+              '''    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+                  window.TVTrackerRouter.setPathRoute(route,true);
+              }else if(window.history && typeof window.history.replaceState === "function"){
+                  window.history.replaceState({tvTrackerRoute:true},"",route);
+              }
+          ''',
+              '''    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+                  window.TVTrackerRouter.setPathRoute(route,true);
+              }
+          '''
+          )
+
+          replace_once(
+              Path('tests/test_frontend_modernization_routing_boundary.js'),
+              '''    [
+                  "static/js/app-router.js",
+                  "static/js/app.js",
+                  "static/js/ui.js"
+              ],
+              "Routing migration must not introduce new direct browser-history writers; all remaining legacy exceptions are explicitly inventoried"''',
+              '''    ["static/js/app-router.js"],
+              "app-router.js must be the sole direct browser-history writer after Routing completion"'''
+          )
+          PY
+
+          cat > tests/test_frontend_modernization_routing_ui_fallback_scope.py <<'PYFILE'
+          from pathlib import Path
+
+
+          ROOT = Path(__file__).resolve().parents[1]
+          UI = ROOT / "static" / "js" / "ui.js"
+
+
+          def _search_navigation_owner(source: str) -> str:
+              start_marker = "// --TVT-search-navigation-owner-begin--"
+              end_marker = "// --TVT-search-navigation-owner-end--"
+              start = source.index(start_marker)
+              end = source.index(end_marker, start) + len(end_marker)
+              return source[start:end]
+
+
+          def test_ui_search_navigation_delegates_only_to_canonical_router():
+              ui_source = UI.read_text(encoding="utf-8")
+              owner_source = _search_navigation_owner(ui_source)
+
+              assert "window.TVTrackerRouter.setPathRoute(route,true)" in owner_source
+              assert "window.history.replaceState" not in ui_source
+              assert "window.history.pushState" not in ui_source
+
+
+          def test_ui_search_navigation_has_no_legacy_history_fallback():
+              owner_source = _search_navigation_owner(UI.read_text(encoding="utf-8"))
+
+              assert "else if(window.history" not in owner_source
+              assert "history.replaceState" not in owner_source
+              assert "history.pushState" not in owner_source
+          PYFILE
+          sed -i 's/^          //' tests/test_frontend_modernization_routing_ui_fallback_scope.py
+
+          cat > tests/test_frontend_modernization_routing_ui_readiness.py <<'PYFILE'
+          from pathlib import Path
+
+
+          ROOT = Path(__file__).resolve().parents[1]
+          INDEX = ROOT / "templates" / "index.html"
+          UI = ROOT / "static" / "js" / "ui.js"
+
+
+          def _script_position(source: str, filename: str) -> int:
+              marker = f"filename='js/{filename}'"
+              position = source.find(marker)
+              assert position >= 0, f"missing script tag for {filename}"
+              return position
+
+
+          def test_ui_route_delegation_is_ready_before_startup_activation():
+              index_source = INDEX.read_text(encoding="utf-8")
+              ui_source = UI.read_text(encoding="utf-8")
+
+              ui_position = _script_position(index_source, "ui.js")
+              app_position = _script_position(index_source, "app.js")
+              router_position = _script_position(index_source, "app-router.js")
+              startup_position = _script_position(index_source, "startup.js")
+
+              assert ui_position < app_position < router_position < startup_position
+              assert "window.TVTrackerRouter" in ui_source
+              assert "window.TVTrackerRouter.setPathRoute(route,true)" in ui_source
+
+
+          def test_ui_search_route_lock_uses_only_canonical_router():
+              ui_source = UI.read_text(encoding="utf-8")
+              function_start = ui_source.index("function lockSearchRouteBeforeResultOpen")
+              function_end = ui_source.index("\n}\n", function_start) + 2
+              function_source = ui_source[function_start:function_end]
+
+              assert "window.TVTrackerRouter.setPathRoute(route,true)" in function_source
+              assert "history.replaceState" not in function_source
+              assert "history.pushState" not in function_source
+          PYFILE
+          sed -i 's/^          //' tests/test_frontend_modernization_routing_ui_readiness.py
+
+          cat > tests/test_frontend_modernization_routing_completion.py <<'PYFILE'
+          from pathlib import Path
+          import re
+
+
+          ROOT = Path(__file__).resolve().parents[1]
+          APP = ROOT / "static" / "js" / "app.js"
+          UI = ROOT / "static" / "js" / "ui.js"
+          ROUTER = ROOT / "static" / "js" / "app-router.js"
+
+
+          def _function_source(source: str, name: str) -> str:
+              start = source.index(f"function {name}")
+              next_function = source.find("\nfunction ", start + 1)
+              return source[start: next_function if next_function >= 0 else len(source)]
+
+
+          def test_app_route_writes_delegate_to_canonical_router():
+              source = APP.read_text(encoding="utf-8")
+              function_source = _function_source(source, "setAppHashRoute")
+
+              assert "window.TVTrackerRouter.setPathRoute(cleanRoute,replace === true)" in function_source
+              assert "history.pushState" not in source
+              assert "history.replaceState" not in source
+
+
+          def test_ui_route_writes_delegate_to_canonical_router():
+              source = UI.read_text(encoding="utf-8")
+
+              assert "window.TVTrackerRouter.setPathRoute(route,true)" in source
+              assert "history.pushState" not in source
+              assert "history.replaceState" not in source
+
+
+          def test_app_router_is_the_only_direct_history_owner():
+              direct_history = re.compile(r"(?:\b(?:window|global)\.)?history\s*(?:\.\s*(?:pushState|replaceState)\s*\(|\[[^\]]+\]\s*\()")
+              sources = list((ROOT / "static" / "js").rglob("*.js"))
+              sources += list((ROOT / "frontend" / "src").rglob("*.ts"))
+              sources += list((ROOT / "frontend" / "src").rglob("*.vue"))
+              owners = sorted(
+                  path.relative_to(ROOT).as_posix()
+                  for path in sources
+                  if direct_history.search(path.read_text(encoding="utf-8"))
+              )
+
+              assert owners == ["static/js/app-router.js"]
+              router_source = ROUTER.read_text(encoding="utf-8")
+              assert "history.pushState" in router_source
+              assert "history.replaceState" in router_source
+          PYFILE
+          sed -i 's/^          //' tests/test_frontend_modernization_routing_completion.py
+
+          cat > docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md <<'DOC'
+          # Frontend Modernization — Routing
+
+          Status: canonical runtime history ownership consolidated; final PR/CI/merge gate pending
+
+          Production baseline before this completion slice: `f360969b1ed676f09470ded38660fde793d05f29`
+
+          ## Goal
+
+          Migrate routing incrementally without creating a second history owner or changing canonical URLs, direct loads, refresh, Back/Forward behavior, login return paths, or Flask route admission.
+
+          ## Canonical owner
+
+          `static/js/app-router.js` is the sole direct browser History API owner and the sole application `popstate` owner. It owns route parsing, canonical URL/history writes, route application, and Back/Forward handling.
+
+          `frontend/src/routing/router.ts` remains the typed Vue-era adapter. It delegates route parsing and navigation to `window.TVTrackerRouter`; it does not call `history.pushState`, `history.replaceState`, or register `popstate` itself.
+
+          The former direct-history exceptions have been burned down. `static/js/trending.js`, `static/js/settings.js`, `static/js/app.js`, and the search-navigation owner in `static/js/ui.js` now delegate their path writes to `TVTrackerRouter.setPathRoute`.
+
+          ## Invariants
+
+          - Flask route admission and redirects remain authoritative.
+          - `static/js/app-router.js` is the only application `popstate` owner and the only direct History API writer.
+          - Canonicalization remains implemented by the existing router.
+          - Vue callers use the typed routing adapter rather than writing browser history directly.
+          - Legacy runtime callers delegate path writes to `TVTrackerRouter.setPathRoute`.
+          - No Search, Discover, media-detail, Upcoming, tracker, History, or watched-state product behavior moves in this slice.
+          - No new direct History API writer may be introduced.
+
+          ## Completion gates
+
+          1. Vue strict type checking continues to pass with the routing adapter.
+          2. The typed adapter delegates parsing, path writes, and route application to `TVTrackerRouter`.
+          3. Repository-wide ownership scanning finds exactly one application `popstate` owner: `static/js/app-router.js`.
+          4. Repository-wide ownership scanning finds exactly one direct History API writer: `static/js/app-router.js`.
+          5. `static/js/app.js`, `static/js/ui.js`, `static/js/trending.js`, and `static/js/settings.js` contain no direct `pushState` or `replaceState` calls.
+          6. The Routing matrix contract proves direct loads, reload/startup shells, canonical push/replace writes, search-result click navigation, and Back/Forward regression coverage remain present.
+          7. The full repository regression suite and diff-hygiene gate pass on the exact PR head.
+
+          ## Next phase
+
+          After this slice is merged and deployed successfully, Routing is complete and the modernization roadmap advances to Search / Discover.
+          DOC
+          sed -i 's/^          //' docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md
+      - name: Run Routing completion contracts
+        run: |
+          node tests/test_frontend_modernization_routing_boundary.js
+          node tests/test_frontend_modernization_routing_matrix_contract.js
+          python -m pytest -q \
+            tests/test_frontend_modernization_routing_ui_readiness.py \
+            tests/test_frontend_modernization_routing_ui_fallback_scope.py \
+            tests/test_frontend_modernization_routing_completion.py
+      - name: Run full regression suite
+        env:
+          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
+        run: python tests/run_all.py
+      - name: Verify diff hygiene
+        run: git diff --check
+      - name: Commit validated Routing completion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/js/app.js static/js/ui.js tests/test_frontend_modernization_routing_boundary.js tests/test_frontend_modernization_routing_ui_readiness.py tests/test_frontend_modernization_routing_ui_fallback_scope.py tests/test_frontend_modernization_routing_completion.py docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md
+          git diff --cached --exit-code && exit 1 || true
+          git commit -m "Complete canonical routing ownership"
+          git push origin HEAD:frontend-modernization-routing-completion
