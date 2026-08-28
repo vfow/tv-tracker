@@ -29,7 +29,7 @@ declare global {
   }
 }
 
-const api = window.TVTrackerStreamingRegion;
+const api = window.TVTrackerStreamingRegion as StreamingApi;
 if (!api) {
   throw new Error('Streaming Settings API unavailable.');
 }
