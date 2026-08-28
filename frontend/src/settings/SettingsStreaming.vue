@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { feedback } from '../ui/feedback';
 
 type Country = Readonly<{ code: string; name: string }>;
-type FeedbackOptions = Readonly<{ severity?: string; actionLabel?: string; onAction?: () => void }>;
 type StreamingApi = Readonly<{
   getStreamingRegion: () => string;
   setStreamingRegion: (value: string) => string;
@@ -22,8 +22,6 @@ declare global {
   interface Window {
     TVTrackerStreamingRegion?: StreamingApi;
     TVTrackerSettings?: SettingsOwner;
-    TVTrackerFeedback?: { notify?: (message: string, options?: FeedbackOptions) => unknown };
-    showToast?: (message: string, options?: FeedbackOptions) => unknown;
     saveData?: (options?: { stateKeys?: string[] }) => Promise<unknown>;
     TVTrackerClientRuntime?: { report?: (details: Record<string, unknown>) => Promise<unknown> | unknown };
   }
@@ -59,14 +57,6 @@ const activeOptionId = computed(() => {
   const item = activeIndex.value >= 0 ? visibleCountries.value[activeIndex.value] : undefined;
   return item ? optionId(item) : '';
 });
-
-function notify(message: string, options: FeedbackOptions = {}): void {
-  if (window.TVTrackerFeedback?.notify) {
-    window.TVTrackerFeedback.notify(message, options);
-    return;
-  }
-  window.showToast?.(message, options);
-}
 
 function optionId(item: Country): string {
   return `settings-vue-region-option-${item.code.toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
@@ -129,13 +119,13 @@ function resolveInput(): string | null {
 async function saveRegion(): Promise<void> {
   const next = resolveInput();
   if (next === null) {
-    notify('Choose a country from the streaming region list or clear the field.', { severity: 'warning' });
+    feedback.warning('Choose a country from the streaming region list or clear the field.');
     await openMenu();
     inputElement.value?.focus();
     return;
   }
   if (typeof window.saveData !== 'function') {
-    notify('Couldn’t save your changes.', { severity: 'error' });
+    feedback.error('Couldn’t save your changes.');
     return;
   }
 
@@ -147,12 +137,12 @@ async function saveRegion(): Promise<void> {
     chosen.value = next;
     query.value = countryLabel(next);
     if (before !== next) api.resetProviderRuntime();
-    notify('Settings saved', { severity: 'success' });
-  } catch {
+    feedback.success('Settings saved');
+  } catch (error) {
     api.setStreamingRegion(before);
     chosen.value = before;
     query.value = countryLabel(before);
-    notify('Couldn’t save your changes.', { severity: 'error' });
+    feedback.presentError(error, 'Couldn’t save your changes.', { context: 'streaming region save' });
   } finally {
     saving.value = false;
   }
