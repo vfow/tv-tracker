@@ -110,6 +110,7 @@ jobs:
 
           cat > tests/test_frontend_modernization_routing_ui_fallback_scope.py <<'PYFILE'
           from pathlib import Path
+          import unittest
 
 
           ROOT = Path(__file__).resolve().parents[1]
@@ -124,26 +125,31 @@ jobs:
               return source[start:end]
 
 
-          def test_ui_search_navigation_delegates_only_to_canonical_router():
-              ui_source = UI.read_text(encoding="utf-8")
-              owner_source = _search_navigation_owner(ui_source)
+          class RoutingUiFallbackScopeTests(unittest.TestCase):
+              def test_ui_search_navigation_delegates_only_to_canonical_router(self):
+                  ui_source = UI.read_text(encoding="utf-8")
+                  owner_source = _search_navigation_owner(ui_source)
 
-              assert "window.TVTrackerRouter.setPathRoute(route,true)" in owner_source
-              assert "window.history.replaceState" not in ui_source
-              assert "window.history.pushState" not in ui_source
+                  self.assertIn("window.TVTrackerRouter.setPathRoute(route,true)", owner_source)
+                  self.assertNotIn("window.history.replaceState", ui_source)
+                  self.assertNotIn("window.history.pushState", ui_source)
+
+              def test_ui_search_navigation_has_no_legacy_history_fallback(self):
+                  owner_source = _search_navigation_owner(UI.read_text(encoding="utf-8"))
+
+                  self.assertNotIn("else if(window.history", owner_source)
+                  self.assertNotIn("history.replaceState", owner_source)
+                  self.assertNotIn("history.pushState", owner_source)
 
 
-          def test_ui_search_navigation_has_no_legacy_history_fallback():
-              owner_source = _search_navigation_owner(UI.read_text(encoding="utf-8"))
-
-              assert "else if(window.history" not in owner_source
-              assert "history.replaceState" not in owner_source
-              assert "history.pushState" not in owner_source
+          if __name__ == "__main__":
+              unittest.main()
           PYFILE
           sed -i 's/^          //' tests/test_frontend_modernization_routing_ui_fallback_scope.py
 
           cat > tests/test_frontend_modernization_routing_ui_readiness.py <<'PYFILE'
           from pathlib import Path
+          import unittest
 
 
           ROOT = Path(__file__).resolve().parents[1]
@@ -154,87 +160,96 @@ jobs:
           def _script_position(source: str, filename: str) -> int:
               marker = f"filename='js/{filename}'"
               position = source.find(marker)
-              assert position >= 0, f"missing script tag for {filename}"
+              if position < 0:
+                  raise AssertionError(f"missing script tag for {filename}")
               return position
 
 
-          def test_ui_route_delegation_is_ready_before_startup_activation():
-              index_source = INDEX.read_text(encoding="utf-8")
-              ui_source = UI.read_text(encoding="utf-8")
+          class RoutingUiReadinessTests(unittest.TestCase):
+              def test_ui_route_delegation_is_ready_before_startup_activation(self):
+                  index_source = INDEX.read_text(encoding="utf-8")
+                  ui_source = UI.read_text(encoding="utf-8")
 
-              ui_position = _script_position(index_source, "ui.js")
-              app_position = _script_position(index_source, "app.js")
-              router_position = _script_position(index_source, "app-router.js")
-              startup_position = _script_position(index_source, "startup.js")
+                  ui_position = _script_position(index_source, "ui.js")
+                  app_position = _script_position(index_source, "app.js")
+                  router_position = _script_position(index_source, "app-router.js")
+                  startup_position = _script_position(index_source, "startup.js")
 
-              assert ui_position < app_position < router_position < startup_position
-              assert "window.TVTrackerRouter" in ui_source
-              assert "window.TVTrackerRouter.setPathRoute(route,true)" in ui_source
+                  self.assertLess(ui_position, app_position)
+                  self.assertLess(app_position, router_position)
+                  self.assertLess(router_position, startup_position)
+                  self.assertIn("window.TVTrackerRouter.setPathRoute(route,true)", ui_source)
+
+              def test_ui_search_route_lock_uses_only_canonical_router(self):
+                  ui_source = UI.read_text(encoding="utf-8")
+                  function_start = ui_source.index("function lockSearchRouteBeforeResultOpen")
+                  function_end = ui_source.index("\n}\n", function_start) + 2
+                  function_source = ui_source[function_start:function_end]
+
+                  self.assertIn("window.TVTrackerRouter.setPathRoute(route,true)", function_source)
+                  self.assertNotIn("history.replaceState", function_source)
+                  self.assertNotIn("history.pushState", function_source)
 
 
-          def test_ui_search_route_lock_uses_only_canonical_router():
-              ui_source = UI.read_text(encoding="utf-8")
-              function_start = ui_source.index("function lockSearchRouteBeforeResultOpen")
-              function_end = ui_source.index("\n}\n", function_start) + 2
-              function_source = ui_source[function_start:function_end]
-
-              assert "window.TVTrackerRouter.setPathRoute(route,true)" in function_source
-              assert "history.replaceState" not in function_source
-              assert "history.pushState" not in function_source
+          if __name__ == "__main__":
+              unittest.main()
           PYFILE
           sed -i 's/^          //' tests/test_frontend_modernization_routing_ui_readiness.py
 
-          cat > tests/test_frontend_modernization_routing_completion.py <<'PYFILE'
-          from pathlib import Path
-          import re
+          cat > tests/test_frontend_modernization_routing_completion.js <<'JSFILE'
+          const fs = require('fs');
+          const path = require('path');
+          const assert = require('assert');
 
+          const ROOT = path.resolve(__dirname, '..');
+          const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
+          const app = read('static/js/app.js');
+          const ui = read('static/js/ui.js');
+          const router = read('static/js/app-router.js');
 
-          ROOT = Path(__file__).resolve().parents[1]
-          APP = ROOT / "static" / "js" / "app.js"
-          UI = ROOT / "static" / "js" / "ui.js"
-          ROUTER = ROOT / "static" / "js" / "app-router.js"
+          assert(
+            app.includes('window.TVTrackerRouter.setPathRoute(cleanRoute,replace === true)'),
+            'app.js route writes must delegate to the canonical router with replace intent preserved'
+          );
+          assert(!app.includes('history.pushState'), 'app.js must not directly call history.pushState');
+          assert(!app.includes('history.replaceState'), 'app.js must not directly call history.replaceState');
 
+          assert(
+            ui.includes('window.TVTrackerRouter.setPathRoute(route,true)'),
+            'ui.js search navigation must delegate to the canonical router'
+          );
+          assert(!ui.includes('history.pushState'), 'ui.js must not directly call history.pushState');
+          assert(!ui.includes('history.replaceState'), 'ui.js must not directly call history.replaceState');
 
-          def _function_source(source: str, name: str) -> str:
-              start = source.index(f"function {name}")
-              next_function = source.find("\nfunction ", start + 1)
-              return source[start: next_function if next_function >= 0 else len(source)]
+          const sourceFiles = [];
+          function collect(dir) {
+            if (!fs.existsSync(dir)) return;
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) collect(full);
+              else if (/\.(js|ts|vue)$/.test(entry.name)) sourceFiles.push(full);
+            }
+          }
+          collect(path.join(ROOT, 'static/js'));
+          collect(path.join(ROOT, 'frontend/src'));
 
+          const directHistory = /(?:\b(?:window|global)\.)?history\s*(?:\.\s*(?:pushState|replaceState)\s*\(|\[[^\]]+\]\s*\()/;
+          const owners = sourceFiles
+            .filter(file => directHistory.test(fs.readFileSync(file, 'utf8')))
+            .map(file => path.relative(ROOT, file).split(path.sep).join('/'))
+            .sort();
 
-          def test_app_route_writes_delegate_to_canonical_router():
-              source = APP.read_text(encoding="utf-8")
-              function_source = _function_source(source, "setAppHashRoute")
+          assert.deepStrictEqual(
+            owners,
+            ['static/js/app-router.js'],
+            'app-router.js must be the sole direct browser-history writer'
+          );
+          assert(router.includes('history.pushState'), 'canonical router must retain pushState ownership');
+          assert(router.includes('history.replaceState'), 'canonical router must retain replaceState ownership');
 
-              assert "window.TVTrackerRouter.setPathRoute(cleanRoute,replace === true)" in function_source
-              assert "history.pushState" not in source
-              assert "history.replaceState" not in source
-
-
-          def test_ui_route_writes_delegate_to_canonical_router():
-              source = UI.read_text(encoding="utf-8")
-
-              assert "window.TVTrackerRouter.setPathRoute(route,true)" in source
-              assert "history.pushState" not in source
-              assert "history.replaceState" not in source
-
-
-          def test_app_router_is_the_only_direct_history_owner():
-              direct_history = re.compile(r"(?:\b(?:window|global)\.)?history\s*(?:\.\s*(?:pushState|replaceState)\s*\(|\[[^\]]+\]\s*\()")
-              sources = list((ROOT / "static" / "js").rglob("*.js"))
-              sources += list((ROOT / "frontend" / "src").rglob("*.ts"))
-              sources += list((ROOT / "frontend" / "src").rglob("*.vue"))
-              owners = sorted(
-                  path.relative_to(ROOT).as_posix()
-                  for path in sources
-                  if direct_history.search(path.read_text(encoding="utf-8"))
-              )
-
-              assert owners == ["static/js/app-router.js"]
-              router_source = ROUTER.read_text(encoding="utf-8")
-              assert "history.pushState" in router_source
-              assert "history.replaceState" in router_source
-          PYFILE
-          sed -i 's/^          //' tests/test_frontend_modernization_routing_completion.py
+          console.log('Frontend modernization Routing completion contracts passed.');
+          JSFILE
+          sed -i 's/^          //' tests/test_frontend_modernization_routing_completion.js
 
           cat > docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md <<'DOC'
           # Frontend Modernization — Routing
@@ -282,12 +297,11 @@ jobs:
           sed -i 's/^          //' docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md
       - name: Run Routing completion contracts
         run: |
+          npm run frontend:typecheck
           node tests/test_frontend_modernization_routing_boundary.js
           node tests/test_frontend_modernization_routing_matrix_contract.js
-          python -m pytest -q \
-            tests/test_frontend_modernization_routing_ui_readiness.py \
-            tests/test_frontend_modernization_routing_ui_fallback_scope.py \
-            tests/test_frontend_modernization_routing_completion.py
+          node tests/test_frontend_modernization_routing_completion.js
+          python -m unittest discover -s tests -p 'test_frontend_modernization_routing_ui_*.py' -v
       - name: Run full regression suite
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
@@ -298,7 +312,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add static/js/app.js static/js/ui.js tests/test_frontend_modernization_routing_boundary.js tests/test_frontend_modernization_routing_ui_readiness.py tests/test_frontend_modernization_routing_ui_fallback_scope.py tests/test_frontend_modernization_routing_completion.py docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md
+          git add static/js/app.js static/js/ui.js tests/test_frontend_modernization_routing_boundary.js tests/test_frontend_modernization_routing_ui_readiness.py tests/test_frontend_modernization_routing_ui_fallback_scope.py tests/test_frontend_modernization_routing_completion.js docs/architecture/FRONTEND_MODERNIZATION_ROUTING.md
           git diff --cached --exit-code && exit 1 || true
           git commit -m "Complete canonical routing ownership"
           git push origin HEAD:frontend-modernization-routing-completion
