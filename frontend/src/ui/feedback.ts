@@ -86,10 +86,10 @@ function presentError(
 
   return notify(userMessage, {
     severity: 'error',
-    actionLabel: options.actionLabel,
-    onAction: options.onAction,
-    dismissible: options.dismissible,
-    key: options.key
+    ...(options.actionLabel === undefined ? {} : { actionLabel: options.actionLabel }),
+    ...(options.onAction === undefined ? {} : { onAction: options.onAction }),
+    ...(options.dismissible === undefined ? {} : { dismissible: options.dismissible }),
+    ...(options.key === undefined ? {} : { key: options.key })
   });
 }
 
