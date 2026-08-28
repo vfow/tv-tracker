@@ -58,17 +58,25 @@ const settingsVueOwners = frontendSources.filter(file=>{
     const relative = path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/");
     const source = fs.readFileSync(file,"utf8");
     return /(?:^|\/)settings(?:\/|\.|$)/i.test(relative)
-        || /data-tvtracker-vue-settings/i.test(source);
+        || /data-tvtracker-vue-(?:settings|notifications-settings|profile-settings)/i.test(source);
 });
 assert.deepStrictEqual(
-    settingsVueOwners.map(file=>path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/")),
-    ["settings/SettingsStreaming.vue"],
-    "Phase 3 may introduce only the Streaming Settings Vue canary"
+    settingsVueOwners
+        .map(file=>path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/"))
+        .sort(),
+    [
+        "notifications/SettingsNotifications.vue",
+        "settings/SettingsProfile.vue",
+        "settings/SettingsStreaming.vue"
+    ],
+    "Only the explicitly staged Streaming, Notifications, and Profile Vue Settings owners may exist in Phase 4B"
 );
 
-assert(bridgeSource.includes('new Set(["streaming"])'),"The bridge canary allowlist must contain only Streaming Settings");
-for(const legacySection of ["profile","auth","notifications","data","danger-zone"]){
-    assert(!bridgeSource.includes(`new Set(["${legacySection}"]`),`${legacySection} must not become a Vue canary in this phase`);
+assert(bridgeSource.includes('const VUE_CANARY_SECTIONS = new Set(["streaming"]);'),"The guarded migration must preserve Streaming as the first Vue Settings canary");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("notifications");'),"The guarded migration must preserve Notifications as the second Vue Settings canary");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("profile");'),"Phase 4B must add Profile as the third Vue Settings canary");
+for(const legacySection of ["auth","data","danger-zone"]){
+    assert(!bridgeSource.includes(`VUE_CANARY_SECTIONS.add("${legacySection}");`),`${legacySection} must remain legacy-owned in Phase 4B`);
 }
 assert(loaderSource.includes('"/static/vue/manifest.json"'),"The Vue canary must load through the committed manifest");
 assert(loaderSource.includes('cache:"no-store"'),"The manifest request must avoid stale cross-release caching");
@@ -211,4 +219,4 @@ assert(!loadedSources.get("js/ui.js").includes("function renderSettings()"),"The
 assert(!loadedSources.get("js/streaming-region.js").includes("MutationObserver"),"streaming-region.js must not reintroduce Settings DOM patching");
 assert(!loadedSources.get("js/provider-freshness.js").includes("installSettingsCleanup"),"provider-freshness.js must not patch Settings cleanup");
 
-console.log("Phase 14 Settings ownership contracts passed with the guarded Vue Streaming canary.");
+console.log("Phase 14 Settings ownership contracts passed with the guarded Streaming, Notifications, and Profile Vue canaries.");
