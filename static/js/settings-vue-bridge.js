@@ -6,6 +6,7 @@
     VUE_CANARY_SECTIONS.add("notifications");
     VUE_CANARY_SECTIONS.add("profile");
     VUE_CANARY_SECTIONS.add("auth");
+    VUE_CANARY_SECTIONS.add("data");
     if(!legacy || typeof legacy.render !== "function" || typeof legacy.open !== "function"){
         return;
     }
