@@ -8,6 +8,7 @@ const sourcePath = process.env.NOTIFICATIONS_FINAL_SOURCE || path.join(ROOT,"sta
 const source = fs.readFileSync(sourcePath,"utf8");
 const runtime = fs.readFileSync(path.join(ROOT,"static/js/notifications-runtime.js"),"utf8");
 const settings = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
+const notificationsSettings = fs.readFileSync(path.join(ROOT,"frontend/src/notifications/SettingsNotifications.vue"),"utf8");
 const settingsRuntimeStart = runtime.indexOf('const CANONICAL_SETTINGS_ROUTE = "/app/settings/notifications";');
 const settingsRuntime = runtime.slice(settingsRuntimeStart);
 const rendererStart = settingsRuntime.indexOf("async function renderNotificationControls");
@@ -18,11 +19,14 @@ function occurrences(value,needle){
     return value.split(needle).length - 1;
 }
 
-// Account Settings is now the sole owner of the Notifications settings surface.
-assert(settings.includes('function renderNotifications()'));
-assert(settings.includes('id="settings-v2-notification-list"'));
-assert(settings.includes('const api = global.TVTrackerNotificationsRuntime;'));
-assert(settings.includes('api.renderNotificationControls(list);'));
+// Vue Account Settings is now the sole presentation owner of the Notifications
+// settings surface while the existing notifications runtime remains the canonical
+// controls/service owner.
+assert(!settings.includes('function renderNotifications()'),"route/state Settings facade must not retain Notifications presentation ownership");
+assert(notificationsSettings.includes('data-tvtracker-vue-notifications-settings="notifications"'));
+assert(notificationsSettings.includes('id="settings-v2-notification-list"'));
+assert(notificationsSettings.includes('const runtime = window.TVTrackerNotificationsRuntime;'));
+assert(notificationsSettings.includes('await runtime.renderNotificationControls(list);'));
 assert(settingsRuntimeStart > 0);
 assert(rendererStart > 0 && rendererEnd > rendererStart);
 assert(!runtime.includes('section.id = "settings-notifications"'));
