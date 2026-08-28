@@ -34,6 +34,9 @@
         })
         .catch(()=>{
             reportFailure("vue_settings_load_failed");
+            if(global.TVTrackerSettingsBridge && typeof global.TVTrackerSettingsBridge.renderLoadFailure === "function"){
+                global.TVTrackerSettingsBridge.renderLoadFailure();
+            }
             loadPromise = null;
             return null;
         });
@@ -41,7 +44,7 @@
     }
 
     document.addEventListener("tvtracker:settings-vue-needed",loadVueSettings);
-    if(/^\/app\/settings\/streaming\/?$/.test(String(global.location && global.location.pathname || ""))){
+    if(/^\/app\/settings(?:\/(?:profile|auth|notifications|streaming|data|danger-zone))?\/?$/.test(String(global.location && global.location.pathname || ""))){
         loadVueSettings();
     }
 })(window);

@@ -47,15 +47,24 @@ assert(/function\s+renderHistory\s*\(/.test(historyActivitySource),"history-acti
 const templateSource = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
 assert(templateSource.indexOf("js/ui.js") < templateSource.indexOf("js/history-activity.js"),"ui.js must load before history-activity.js");
 
-// --- C2: settings.js intercepts the logout form and clears client storage first.
+// --- C2: Vue Auth Settings owns logout cleanup while preserving the native POST.
 const settingsSource = readScript("settings.js");
-const bindAuthStart = settingsSource.indexOf("function bindAuth(){");
-const bindAuthEnd = settingsSource.indexOf("function renderNotifications(){",bindAuthStart);
-assert(bindAuthStart >= 0 && bindAuthEnd > bindAuthStart);
-const bindAuthSource = settingsSource.slice(bindAuthStart,bindAuthEnd);
-assert(bindAuthSource.includes('form[action="/logout"]'),"logout form must be intercepted");
-assert(bindAuthSource.includes("clearOnLogout"),"logout submit must invoke clearClientStorageOnLogout");
-assert(!bindAuthSource.includes("preventDefault()") || bindAuthSource.indexOf("admin-account-form") < bindAuthSource.indexOf("preventDefault"),"logout interception must not block the native POST");
+const authSettingsSource = fs.readFileSync(
+    path.join(ROOT,"frontend/src/settings/SettingsAuth.vue"),
+    "utf8"
+);
+assert(!settingsSource.includes('form[action="/logout"]'),"route/state Settings facade must not retain logout presentation ownership");
+assert(authSettingsSource.includes('action="/logout"'),"Vue Auth Settings must render the native logout POST form");
+assert(authSettingsSource.includes('@submit="cleanupLogout"'),"logout submit must invoke cleanup before the native POST");
+assert(authSettingsSource.includes('name="csrf_token"'),"logout form must preserve CSRF submission");
+assert(authSettingsSource.includes(':value="csrfToken()"'),"logout form must submit the current CSRF token");
+const cleanupStart = authSettingsSource.indexOf("function cleanupLogout(): void {");
+const cleanupEnd = authSettingsSource.indexOf("\nonMounted(",cleanupStart);
+assert(cleanupStart >= 0 && cleanupEnd > cleanupStart,"Vue Auth Settings must own logout cleanup");
+const cleanupSource = authSettingsSource.slice(cleanupStart,cleanupEnd);
+assert(cleanupSource.includes("clientStorage.clearOnLogout()"),"logout submit must invoke clearClientStorageOnLogout");
+assert(!cleanupSource.includes("preventDefault"),"logout cleanup must not block the native POST");
+assert(cleanupSource.includes("try {") && cleanupSource.includes("catch {"),"best-effort client cleanup failure must not block logout");
 
 // --- Runtime behavior of clearClientStorageOnLogout.
 function makeStorage(initial){

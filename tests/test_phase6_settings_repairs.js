@@ -7,6 +7,7 @@ const vm = require("vm");
 
 const ROOT = path.resolve(__dirname,"..");
 const settingsSource = fs.readFileSync(path.join(ROOT,"static/js/settings.js"),"utf8");
+const profileSource = fs.readFileSync(path.join(ROOT,"frontend/src/settings/SettingsProfile.vue"),"utf8");
 const adultSource = fs.readFileSync(path.join(ROOT,"static/js/adult-filter.js"),"utf8");
 
 // Settings must not publish routes that do not exist yet. Legal/public pages are
@@ -16,19 +17,37 @@ assert(!settingsSource.includes('href="/privacy"'));
 assert(!settingsSource.includes('href="/terms"'));
 assert(!settingsSource.includes('href="/about"'));
 
-// Profile persistence has one owner. Settings sets the Adult Filter value in the
-// profile snapshot before delegating to saveProfileSettings(), which performs the
-// single save and existing success feedback.
-const profileSaveStart = settingsSource.indexOf('if(save) save.addEventListener("click",async()=>{');
-const profileSaveEnd = settingsSource.indexOf('        updateProfilePreview();',profileSaveStart);
-assert(profileSaveStart > 0 && profileSaveEnd > profileSaveStart);
-const profileSaveSource = settingsSource.slice(profileSaveStart,profileSaveEnd);
-const adultAssignment = profileSaveSource.indexOf('profile.adult_filter = draft.adult_filter !== false;');
-const ownerSave = profileSaveSource.indexOf('await global.saveProfileSettings(draft);');
-assert(adultAssignment >= 0 && ownerSave > adultAssignment,"Adult Filter must be included before the one profile persistence call");
-assert(!profileSaveSource.includes('global.saveData'),"Settings profile save must not issue a second persistence call");
-assert(!profileSaveSource.includes('notify("Settings saved"'),"Settings must not emit a duplicate success message after the profile owner succeeds");
-assert(profileSaveSource.includes('profile.adult_filter = previousAdultFilter;'),"A failed profile save must restore the previous Adult Filter value");
+// Profile persistence has one owner. Vue Profile copies the Adult Filter into
+// the canonical profile draft/live snapshot before delegating once to
+// saveProfileSettings(), and restores both values if the save fails.
+assert(!settingsSource.includes('id="save-profile-settings"'),"route/state Settings facade must not retain Profile presentation ownership");
+assert(profileSource.includes('id="adult-filter-input"'),"Vue Profile must retain the Adult Filter control contract");
+assert(profileSource.includes('id="save-profile-settings"'),"Vue Profile must retain the Profile save control contract");
+const profileSaveStart = profileSource.indexOf("async function saveProfile(): Promise<void> {");
+const profileSaveEnd = profileSource.indexOf("\nonMounted(",profileSaveStart);
+assert(profileSaveStart >= 0 && profileSaveEnd > profileSaveStart);
+const profileSaveSource = profileSource.slice(profileSaveStart,profileSaveEnd);
+const adultDraftAssignment = profileSaveSource.indexOf("draft.adult_filter = adultFilter.value;");
+const liveAdultAssignment = profileSaveSource.indexOf("if (liveProfile) liveProfile.adult_filter = adultFilter.value;");
+const ownerSave = profileSaveSource.indexOf("await window.saveProfileSettings(draft);");
+assert(
+    adultDraftAssignment >= 0 && liveAdultAssignment > adultDraftAssignment && ownerSave > liveAdultAssignment,
+    "Adult Filter must be included before the one canonical profile persistence call"
+);
+assert(!profileSaveSource.includes("saveData("),"Vue Profile save must not issue a second persistence call");
+assert.strictEqual(
+    (profileSaveSource.match(/await window\.saveProfileSettings\(draft\);/g) || []).length,
+    1,
+    "Vue Profile must delegate persistence exactly once per save attempt"
+);
+assert(
+    profileSaveSource.includes("if (liveProfile) liveProfile.adult_filter = previousAdultFilter;"),
+    "A failed profile save must restore the previous live Adult Filter value"
+);
+assert(
+    profileSaveSource.includes("draft.adult_filter = previousAdultFilter;"),
+    "A failed profile save must restore the previous draft Adult Filter value"
+);
 
 // Existing tracked titles without an Adult classification are enriched only via
 // a TMDB search result whose returned id exactly equals the tracked TMDB id.

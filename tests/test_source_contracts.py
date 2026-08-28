@@ -37,11 +37,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_source_section_removed(self):
         ui = self.read('static/js/ui.js')
         settings = self.read('static/js/settings.js')
+        data_settings = self.read('frontend/src/settings/SettingsData.vue')
         self.assertNotIn('Metadata ' + 'Source', settings)
         self.assertNotIn('Artwork ' + 'Source', ui)
         self.assertNotIn('<h2>SOURCE</h2>', ui)
-        self.assertIn('Export, import, or create a readable report', settings)
-        self.assertNotIn('Simkl / Trakt', settings)
+        self.assertIn('Export, import, or create a readable report', data_settings)
+        self.assertNotIn('Simkl / Trakt', data_settings)
 
     def test_episode_logging_auto_completion_rules_exist(self):
         app_js = self.read('static/js/app.js')
@@ -348,8 +349,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         config = self.read('tailwind.config.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        settings = self.read('static/js/settings.js')
-        self.assertIn('profile-header-${preset}', settings)
+        profile_settings = self.read('frontend/src/settings/SettingsProfile.vue')
+        self.assertIn('profile-header-${preset[0]}', profile_settings)
         for class_name in (
             'profile-header-default',
             'profile-header-blue',
