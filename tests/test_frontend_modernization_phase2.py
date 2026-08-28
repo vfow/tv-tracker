@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -40,10 +41,19 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
             main_source,
             "Phase 2 must remain the recorded lineage for later incremental migrations",
         )
+        version_match = re.search(
+            r"FRONTEND_FOUNDATION_VERSION\s*=\s*'([^']+)'",
+            main_source,
+        )
+        self.assertIsNotNone(
+            version_match,
+            "The Vue entry must declare the active incremental migration version",
+        )
+        active_version = version_match.group(1)
         self.assertIn(
-            "phase3-settings-streaming-canary",
+            active_version,
             bundle.read_text(encoding="utf-8"),
-            "The committed bundle marker should describe the currently active migration phase",
+            "The committed bundle marker should match the active migration version declared by source",
         )
 
         template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
