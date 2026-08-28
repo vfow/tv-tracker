@@ -1,0 +1,48 @@
+name: Phase 4B Vue Asset Generator
+
+on:
+  push:
+    branches:
+      - frontend-modernization-phase4b-profile
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-phase4b-profile
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked frontend dependencies
+        run: npm ci --audit=false
+      - name: Audit frontend build dependencies
+        run: npm audit
+      - name: Type-check and build Vue assets
+        run: npm run build:frontend
+      - name: Run focused Settings ownership contracts
+        env:
+          TVTRACKER_ALLOW_PHASE4B_GENERATOR: '1'
+        run: |
+          node tests/test_frontend_modernization_phase4a.js
+          node tests/test_frontend_modernization_phase4b.js
+      - name: Commit deterministic Vue assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/vue
+          if git diff --cached --quiet; then
+            echo "No Vue asset changes to commit"
+            exit 0
+          fi
+          git commit -m "Build Profile Settings Vue assets"
+          git push origin HEAD:frontend-modernization-phase4b-profile
