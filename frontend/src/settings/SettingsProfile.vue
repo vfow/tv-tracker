@@ -168,8 +168,12 @@ async function saveProfile(): Promise<void> {
     if (liveProfile) liveProfile.adult_filter = previousAdultFilter;
     adultFilter.value = previousAdultFilter;
     draft.adult_filter = previousAdultFilter;
-    feedback.presentError(error, 'Couldn’t save your changes.', { context: 'profile settings save' });
-    feedback.error('Couldn’t save your changes.', { key: 'profile-save-retry', actionLabel: 'Retry', onAction: () => void saveProfile() });
+    feedback.presentError(error, 'Couldn’t save your changes.', {
+      context: 'profile settings save',
+      key: 'profile-save-retry',
+      actionLabel: 'Retry',
+      onAction: () => void saveProfile()
+    });
   } finally {
     saving.value = false;
   }
