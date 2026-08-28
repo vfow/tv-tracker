@@ -25,7 +25,7 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
         self.assertEqual(lock["packages"]["node_modules/vite"]["version"], "7.3.6")
         self.assertEqual(lock["packages"]["node_modules/typescript"]["version"], "6.0.3")
 
-    def test_vite_output_is_hashed_committed_and_inactive(self):
+    def test_vite_output_is_hashed_committed_and_manifest_driven(self):
         manifest = json.loads((ROOT / "static/vue/manifest.json").read_text(encoding="utf-8"))
         entry = manifest["frontend/src/main.ts"]
         self.assertTrue(entry["isEntry"])
@@ -33,7 +33,18 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
         bundle = ROOT / "static/vue" / entry["file"]
         self.assertTrue(bundle.is_file())
         self.assertGreater(bundle.stat().st_size, 10_000)
-        self.assertIn("phase2-vue-foundation", bundle.read_text(encoding="utf-8"))
+
+        main_source = (ROOT / "frontend/src/main.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            "FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation'",
+            main_source,
+            "Phase 2 must remain the recorded lineage for later incremental migrations",
+        )
+        self.assertIn(
+            "phase3-settings-streaming-canary",
+            bundle.read_text(encoding="utf-8"),
+            "The committed bundle marker should describe the currently active migration phase",
+        )
 
         template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
         self.assertNotIn("static/vue/", template)
