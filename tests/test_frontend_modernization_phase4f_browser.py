@@ -142,7 +142,7 @@ class FrontendModernizationPhase4FBrowserTests(unittest.TestCase):
                     "the completed manifest-driven Vue owner must mount on a direct Profile route",
                 )
                 self.assertIn('id="profile-username-input"', dom)
-                self.assertIn("Phase 4F Profile", dom)
+                self.assertIn("Update how your profile appears in TV Tracker.", dom)
                 self.assertIn('data-tv-tracker-app-ready="true"', dom)
                 self.assertNotIn('data-tvtracker-settings-loading="true"', dom)
                 self.assertNotIn('data-tvtracker-settings-load-failed="true"', dom)
