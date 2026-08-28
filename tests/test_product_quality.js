@@ -136,17 +136,20 @@ async function testStartupRecovery(){
     let reloaded = false;
     const window = {
         document,
+        TVTrackerStartup:{status:"starting"},
         location:{reload(){ reloaded = true; }},
         startTVTrackerApp(){ return Promise.reject(new Error("startup failed")); },
         handleTVTrackerStartupFailure(){
             handled = true;
+            window.TVTrackerStartup.status = "failed";
             status.hidden = false;
             status.textContent = "TV Tracker could not start. Refresh the page to try again.";
+            return false;
         }
     };
     const source = fs.readFileSync(path.join(ROOT,"static/js/startup.js"),"utf8");
     vm.runInNewContext(source,{window,Promise});
-    await window.TVTrackerStartupPromise;
+    assert.strictEqual(await window.TVTrackerStartupPromise,false,"canonical failure result is preserved");
 
     assert.strictEqual(handled,true,"startup failure still uses the canonical failure handler");
     const retry = status.querySelector("[data-startup-retry]");
@@ -154,6 +157,28 @@ async function testStartupRecovery(){
     assert.strictEqual(retry.textContent,"RELOAD APP");
     retry.dispatch("click");
     assert.strictEqual(reloaded,true,"startup recovery reloads the application");
+}
+
+async function testStartupRecoveryDoesNotAppearOnSuccess(){
+    const status = element("tv-tracker-startup-status");
+    status.children = [];
+    status.appendChild = function(child){ this.children.push(child); return child; };
+    status.querySelector = function(){ return null; };
+    const document = {
+        getElementById(id){ return id === "tv-tracker-startup-status" ? status : null; },
+        createElement(){ throw new Error("success must not create a recovery control"); },
+        createTextNode(){ throw new Error("success must not create recovery text"); }
+    };
+    const window = {
+        document,
+        TVTrackerStartup:{status:"ready"},
+        startTVTrackerApp(){ return Promise.resolve(true); },
+        handleTVTrackerStartupFailure(){ throw new Error("success must not invoke failure handler"); }
+    };
+    const source = fs.readFileSync(path.join(ROOT,"static/js/startup.js"),"utf8");
+    vm.runInNewContext(source,{window,Promise});
+    assert.strictEqual(await window.TVTrackerStartupPromise,true);
+    assert.strictEqual(status.children.length,0,"successful startup has no recovery control");
 }
 
 function testInteractionQualityBootsWithoutAnOpenDialog(){
@@ -187,6 +212,7 @@ function testInteractionQualityBootsWithoutAnOpenDialog(){
 (async()=>{
     testLoginInteraction();
     await testStartupRecovery();
+    await testStartupRecoveryDoesNotAppearOnSuccess();
     testInteractionQualityBootsWithoutAnOpenDialog();
     console.log("Product quality interaction tests passed.");
 })().catch(error=>{

@@ -2,7 +2,7 @@
     "use strict";
 
     function installStartupRecovery(){
-        if(!global.document){
+        if(!global.document || !global.TVTrackerStartup || global.TVTrackerStartup.status !== "failed"){
             return;
         }
 
@@ -28,13 +28,9 @@
 
     global.TVTrackerStartupPromise = Promise.resolve()
     .then(()=>global.startTVTrackerApp())
-    .catch(error=>{
-        let result;
-        try{
-            result = global.handleTVTrackerStartupFailure(error);
-        }finally{
-            installStartupRecovery();
-        }
+    .catch(error=>global.handleTVTrackerStartupFailure(error))
+    .then(result=>{
+        installStartupRecovery();
         return result;
     });
 })(window);
