@@ -38,6 +38,7 @@ from tvtracker.backup.validation import (
     validate_sync_delta_payload,
     validate_tracker_data,
 )
+from tvtracker.infrastructure.client_errors import install_client_error_reporting
 from tvtracker.infrastructure.static_assets import install_static_asset_versioning
 from tvtracker.media.tmdb_client import fetch_tmdb_notification_json
 from tvtracker.media.tmdb_proxy import (
@@ -303,6 +304,12 @@ def create_app() -> Flask:
 
     ensure_schema()
     register_routes(app, deps=sys.modules[__name__])
+    install_client_error_reporting(
+        app,
+        login_required=login_required,
+        check_csrf=check_csrf,
+        release_sha=RELEASE_SHA,
+    )
     install_static_asset_versioning(app)
     return app
 
