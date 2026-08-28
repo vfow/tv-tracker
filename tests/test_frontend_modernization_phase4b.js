@@ -17,14 +17,14 @@ if(process.env.TVTRACKER_ALLOW_PHASE4B_GENERATOR !== "1"){
     assert(!fs.existsSync(path.join(ROOT,".github/workflows/phase4b-vue-build.yml")),"The temporary write-enabled Phase 4B build workflow must not survive the phase");
 }
 
-assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("profile");'),"Phase 4B must add only Profile to the guarded Vue Settings lineage");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("profile");'),"Phase 4B must preserve Profile in the guarded Vue Settings lineage");
 assert(bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("notifications");') < bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("profile");'),"Profile must extend the established Settings canary sequence rather than replace it");
 assert(bridgeSource.includes("return legacy.render();"),"Legacy Settings rendering must remain the fail-safe fallback");
 
 assert(mainSource.includes("import SettingsProfile from './settings/SettingsProfile.vue';"),"Profile must have a dedicated Vue component");
 assert(mainSource.includes("section === 'profile'"),"The guarded Vue owner must explicitly recognize Profile");
 assert(mainSource.includes("createApp(SettingsProfile)"),"Profile must mount through its dedicated Vue app");
-assert(mainSource.includes("phase4b-settings-profile-canary"),"The compiled frontend must identify the Phase 4B Profile canary");
+assert(mainSource.includes("FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation'"),"Later Settings canaries must preserve the Phase 2 frontend foundation lineage");
 
 assert(profileSource.includes('data-tvtracker-vue-profile-settings="profile"'),"Profile Vue must expose an E2E ownership marker");
 assert(profileSource.includes('id="profile-username-input"'),"Profile Vue must preserve the legacy username element contract");
@@ -80,7 +80,7 @@ bridge.render();
 assert.strictEqual(legacyRenderCalls,1,"Before Vue loads, Profile must render through the legacy fallback");
 assert.strictEqual(dispatched.length,1,"Profile fallback must request the lazy Vue owner");
 assert.strictEqual(dispatched[0].detail.section,"profile");
-assert.deepStrictEqual(Array.from(bridge.vueCanarySections),["streaming","notifications","profile"],"Only the three proven canary sections may be Vue-owned in Phase 4B");
+assert.deepStrictEqual(Array.from(bridge.vueCanarySections).slice(0,3),["streaming","notifications","profile"],"Streaming, Notifications, and Profile must remain the first three proven Settings canaries");
 
 const vueRenders = [];
 let vueUnmountCalls = 0;
@@ -99,8 +99,8 @@ assert.deepStrictEqual(vueRenders,["profile","notifications"],"Switching from Pr
 
 section = "auth";
 bridge.render();
-assert.strictEqual(vueUnmountCalls,1,"Leaving the Vue allowlist must unmount Profile before legacy rendering resumes");
-assert.strictEqual(legacyRenderCalls,2,"Auth must remain legacy-owned in Phase 4B");
+assert.strictEqual(vueUnmountCalls,1,"A Vue owner that does not support Auth must unmount before legacy rendering resumes");
+assert.strictEqual(legacyRenderCalls,2,"Legacy Auth fallback must remain usable by earlier-stage owners");
 
 section = "profile";
 bridge.open("profile",{fromRoute:true,skipShowPage:true});
