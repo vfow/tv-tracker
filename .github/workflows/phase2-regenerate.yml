@@ -1,0 +1,106 @@
+name: Phase 2 regeneration
+
+on:
+  push:
+    branches: [frontend-modernization-phase2-vue-foundation]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-phase2-vue-foundation
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Update superseded Phase 13 frontend contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('tests/test_phase13_foundations.py')
+          source = path.read_text(encoding='utf-8')
+          replacement = '''    def test_browser_core_is_the_only_frontend_foundation(self):
+                  package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+                  self.assertEqual(
+                      package["scripts"],
+                      {
+                          "css:build": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --minify",
+                          "build:css": "npm run css:build",
+                          "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch",
+                          "frontend:typecheck": "vue-tsc --noEmit -p frontend/tsconfig.json",
+                          "frontend:build": "vite build --config frontend/vite.config.ts",
+                          "build:frontend": "npm run frontend:typecheck && npm run frontend:build",
+                      },
+                  )
+                  self.assertFalse(package.get("dependencies"), "Node runtime dependencies remain forbidden")
+                  self.assertEqual(package["devDependencies"].get("vue"), "3.5.41")
+                  self.assertEqual(package["devDependencies"].get("vite"), "7.3.6")
+                  self.assertEqual(package["devDependencies"].get("typescript"), "6.0.3")
+
+                  decision = (ROOT / "docs/architecture/FRONTEND_MODERNIZATION_DECISION_2026-08-28.md").read_text(
+                      encoding="utf-8"
+                  )
+                  self.assertIn("supersedes **L-04 Frontend**", decision)
+                  self.assertIn("does not mount Vue", decision)
+                  self.assertTrue((ROOT / "frontend/src/main.ts").is_file())
+                  self.assertTrue((ROOT / "frontend/src/FoundationProbe.vue").is_file())
+                  self.assertTrue((ROOT / "static/vue/manifest.json").is_file())
+                  self.assertTrue((ROOT / "static/js/core/foundation.js").is_file())
+
+                  parser = TemplateElements()
+                  template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+                  parser.feed(template)
+                  scripts = [attrs for tag, attrs in parser.elements if tag == "script"]
+                  core_source = "{{ url_for('static', filename='js/core/foundation.js') }}"
+                  feedback_source = "{{ url_for('static', filename='js/feedback.js') }}"
+                  core_scripts = [attrs for attrs in scripts if attrs.get("src") == core_source]
+                  self.assertEqual(len(core_scripts), 1)
+                  self.assertNotEqual(core_scripts[0].get("type"), "module")
+                  self.assertLess(
+                      next(index for index, attrs in enumerate(scripts) if attrs.get("src") == feedback_source),
+                      next(index for index, attrs in enumerate(scripts) if attrs.get("src") == core_source),
+                  )
+                  self.assertNotIn("static/vue/", template, "Vue remains inactive until a surface migration")
+                  self.assertFalse(
+                      any(attrs.get("id") == "tv-modern-root" for _tag, attrs in parser.elements)
+                  )
+                  self.assertFalse(
+                      any("modern/" in str(attrs.get("src") or "") for attrs in scripts)
+                  )
+
+          '''
+          pattern = re.compile(
+              r"    def test_browser_core_is_the_only_frontend_foundation\(self\):\n.*?(?=    def test_ci_and_deploy_build_tailwind_and_run_migrations\(self\):)",
+              re.S,
+          )
+          updated, count = pattern.subn(replacement, source)
+          if count != 1:
+              raise SystemExit(f'expected one Phase 13 frontend contract, replaced {count}')
+          path.write_text(updated, encoding='utf-8')
+          PY
+      - name: Refresh deterministic npm lock
+        run: npm install --package-lock-only --ignore-scripts --audit=false
+      - name: Install and audit frontend build dependencies
+        run: |
+          npm ci --audit=false
+          npm audit --audit-level=high
+      - name: Build real inactive Vue foundation
+        run: npm run build:frontend
+      - name: Commit compatibility and generated artifacts
+        run: |
+          set -eu
+          git add tests/test_phase13_foundations.py package-lock.json static/vue
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Align contracts with Vue foundation'
+          git push origin HEAD:frontend-modernization-phase2-vue-foundation
