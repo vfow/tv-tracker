@@ -22,4 +22,47 @@ const popstateOwners = (legacyRouter.match(/addEventListener\(["']popstate["']/g
 assert.strictEqual(popstateOwners,1,"Legacy app-router must remain the sole popstate owner during this slice");
 assert(legacyRouter.includes("window.TVTrackerRouter = {"),"Legacy app-router must remain the runtime routing owner");
 
+function sourceFiles(root){
+    const files = [];
+    if(!fs.existsSync(root)){ return files; }
+    for(const entry of fs.readdirSync(root,{withFileTypes:true})){
+        const full = path.join(root,entry.name);
+        if(entry.isDirectory()){
+            files.push(...sourceFiles(full));
+        }else if(/\.(?:js|ts|vue)$/.test(entry.name)){
+            files.push(full);
+        }
+    }
+    return files;
+}
+
+const routingSources = [
+    ...sourceFiles(path.join(ROOT,"static/js")),
+    ...sourceFiles(path.join(ROOT,"frontend/src"))
+];
+const directHistoryPattern = /(?:\b(?:window|global)\.)?history\s*(?:\.\s*(?:pushState|replaceState)\s*\(|\[[^\]]+\]\s*\()/;
+const popstatePattern = /(?:addEventListener\s*\(\s*["']popstate["']|\bonpopstate\b)/;
+const historyWriters = [];
+const popstateFiles = [];
+
+for(const file of routingSources){
+    const source = fs.readFileSync(file,"utf8");
+    const relative = path.relative(ROOT,file).split(path.sep).join("/");
+    if(directHistoryPattern.test(source)){ historyWriters.push(relative); }
+    if(popstatePattern.test(source)){ popstateFiles.push(relative); }
+}
+
+historyWriters.sort();
+popstateFiles.sort();
+assert.deepStrictEqual(
+    historyWriters,
+    ["static/js/app-router.js","static/js/trending.js"],
+    "Routing migration must not introduce new direct browser-history writers; Trending is the sole temporary exception"
+);
+assert.deepStrictEqual(
+    popstateFiles,
+    ["static/js/app-router.js"],
+    "app-router.js must remain the sole application popstate owner"
+);
+
 console.log("Frontend modernization Routing boundary ownership contracts passed.");
