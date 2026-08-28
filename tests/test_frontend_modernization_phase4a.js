@@ -22,15 +22,15 @@ assert(template.indexOf("js/settings-vue-bridge.js") < template.indexOf("js/sett
 assert(!template.includes("static/vue/"),"The Flask app shell must remain manifest-driven instead of pinning a Vue asset");
 
 assert(bridgeSource.includes('const VUE_CANARY_SECTIONS = new Set(["streaming"]);'),"Phase 3 Streaming lineage must remain explicit");
-assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("notifications");'),"Phase 4A must add only Notifications to the guarded Vue allowlist");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("notifications");'),"Phase 4A Notifications lineage must remain explicit in the guarded Vue allowlist");
 assert(bridgeSource.includes("return legacy.render();"),"Legacy Settings rendering must remain the fail-safe fallback");
 assert(loaderSource.includes("vue_settings_load_failed"),"Lazy Vue load failures must remain observable through privacy-safe telemetry");
 
 assert(mainSource.includes("return section === 'streaming';"),"Streaming Vue ownership from Phase 3 must remain intact");
-assert(mainSource.includes("section === 'notifications'"),"The Vue Settings owner must explicitly recognize Notifications");
+assert(mainSource.includes("section === 'notifications'"),"The Vue Settings owner must continue recognizing Notifications");
 assert(mainSource.includes("settingsSection === section"),"The owner must distinguish which Vue Settings section is currently mounted");
 assert(mainSource.includes("createApp(SettingsStreaming)"),"Streaming must continue mounting its dedicated component");
-assert(mainSource.includes("createApp(SettingsNotifications)"),"Notifications must mount its dedicated Vue component");
+assert(mainSource.includes("createApp(SettingsNotifications)"),"Notifications must continue mounting its dedicated Vue component");
 assert(mainSource.includes("settingsSection = ''"),"Unmount must clear the Vue Settings section identity");
 
 assert(notificationsSource.includes('data-tvtracker-vue-notifications-settings="notifications"'),"Notifications Vue shell must expose an E2E ownership marker");
@@ -56,11 +56,12 @@ const legacy = {
     render(){ legacyRenderCalls += 1; },
     open(next,options){ section = next; legacyOpenCalls.push({next,options}); },
     current(){ return section; },
-    normalizeSection(value){ return ["profile","notifications","streaming"].includes(value) ? value : "profile"; },
+    normalizeSection(value){ return ["profile","auth","notifications","streaming"].includes(value) ? value : "profile"; },
     routeFor(value){ return `/app/settings/${value}`; },
     sectionFromPath(){ return section; },
     sections:[
         {id:"profile",label:"PROFILE"},
+        {id:"auth",label:"AUTH"},
         {id:"notifications",label:"NOTIFICATIONS"},
         {id:"streaming",label:"STREAMING"}
     ]
@@ -79,7 +80,7 @@ bridge.render();
 assert.strictEqual(legacyRenderCalls,1,"Before Vue loads, Notifications must render through the legacy fallback");
 assert.strictEqual(dispatched.length,1,"Notifications fallback must request the lazy Vue owner");
 assert.strictEqual(dispatched[0].detail.section,"notifications");
-assert.deepStrictEqual(Array.from(bridge.vueCanarySections),["streaming","notifications"],"Only Streaming and Notifications may be Vue-owned in Phase 4A");
+assert.deepStrictEqual(Array.from(bridge.vueCanarySections).slice(0,2),["streaming","notifications"],"Streaming and Notifications must remain the first guarded Vue Settings lineage");
 
 const vueRenders = [];
 let vueUnmountCalls = 0;
@@ -94,13 +95,13 @@ assert.strictEqual(legacyRenderCalls,1,"Vue handoff must not render legacy Notif
 
 section = "streaming";
 bridge.render();
-assert.deepStrictEqual(vueRenders,["notifications","streaming"],"Switching between Vue Settings sections must stay inside the guarded Vue owner");
+assert.deepStrictEqual(vueRenders,["notifications","streaming"],"Switching between the Phase 3/4A Vue Settings sections must stay inside the guarded Vue owner");
 assert.strictEqual(vueUnmountCalls,0,"Bridge must let the Vue owner perform its own section-to-section remount");
 
-section = "profile";
+section = "auth";
 bridge.render();
-assert.strictEqual(vueUnmountCalls,1,"Leaving the Vue allowlist must unmount Vue before legacy rendering resumes");
-assert.strictEqual(legacyRenderCalls,2,"Profile must remain legacy-owned");
+assert.strictEqual(vueUnmountCalls,1,"Leaving the Phase 3/4A Vue owner must unmount Vue before legacy rendering resumes");
+assert.strictEqual(legacyRenderCalls,2,"Auth must remain available through the legacy fallback");
 
 section = "notifications";
 bridge.open("notifications",{fromRoute:true,skipShowPage:true});

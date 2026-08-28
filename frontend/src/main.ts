@@ -2,10 +2,11 @@ import { createApp, type App as VueApp } from 'vue';
 
 import FoundationProbe from './FoundationProbe.vue';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
+import SettingsProfile from './settings/SettingsProfile.vue';
 import SettingsStreaming from './settings/SettingsStreaming.vue';
 
 export const FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation';
-export const FRONTEND_FOUNDATION_VERSION = 'phase4a-settings-notifications-canary';
+export const FRONTEND_FOUNDATION_VERSION = 'phase4b-settings-profile-canary';
 
 export function createFoundationProbe(): VueApp<Element> {
   return createApp(FoundationProbe);
@@ -55,7 +56,7 @@ function supportsPhase3Streaming(section: string): boolean {
 }
 
 function supportsSettingsSection(section: string): boolean {
-  return supportsPhase3Streaming(section) || section === 'notifications';
+  return supportsPhase3Streaming(section) || section === 'notifications' || section === 'profile';
 }
 
 const settingsOwner: SettingsVueOwner = Object.freeze({
@@ -74,9 +75,13 @@ const settingsOwner: SettingsVueOwner = Object.freeze({
     root.replaceChildren();
     settingsRoot = root;
     settingsSection = section;
-    settingsApp = supportsPhase3Streaming(section)
-      ? createApp(SettingsStreaming)
-      : createApp(SettingsNotifications);
+    if (supportsPhase3Streaming(section)) {
+      settingsApp = createApp(SettingsStreaming);
+    } else if (section === 'notifications') {
+      settingsApp = createApp(SettingsNotifications);
+    } else {
+      settingsApp = createApp(SettingsProfile);
+    }
     settingsApp.mount(root);
   },
   unmount: unmountSettings
