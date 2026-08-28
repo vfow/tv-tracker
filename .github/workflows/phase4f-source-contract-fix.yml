@@ -1,0 +1,85 @@
+name: Phase 4F Source Contract Fix
+
+on:
+  push:
+    branches:
+      - frontend-modernization-phase4f-settings-completion
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-phase4f-settings-completion
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
+        with:
+          python-version: '3.12'
+      - name: Update ownership-aware source contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test_source_contracts.py')
+          source = path.read_text(encoding='utf-8')
+
+          old_source_test = '''    def test_source_section_removed(self):
+              ui = self.read('static/js/ui.js')
+              settings = self.read('static/js/settings.js')
+              self.assertNotIn('Metadata ' + 'Source', settings)
+              self.assertNotIn('Artwork ' + 'Source', ui)
+              self.assertNotIn('<h2>SOURCE</h2>', ui)
+              self.assertIn('Export, import, or create a readable report', settings)
+              self.assertNotIn('Simkl / Trakt', settings)
+          '''
+          new_source_test = '''    def test_source_section_removed(self):
+              ui = self.read('static/js/ui.js')
+              settings = self.read('static/js/settings.js')
+              data_settings = self.read('frontend/src/settings/SettingsData.vue')
+              self.assertNotIn('Metadata ' + 'Source', settings)
+              self.assertNotIn('Artwork ' + 'Source', ui)
+              self.assertNotIn('<h2>SOURCE</h2>', ui)
+              self.assertIn('Export, import, or create a readable report', data_settings)
+              self.assertNotIn('Simkl / Trakt', data_settings)
+          '''
+          if old_source_test not in source:
+              raise SystemExit('source-section contract block not found')
+          source = source.replace(old_source_test, new_source_test, 1)
+
+          old_profile_test = '''    def test_profile_header_presets_survive_tailwind_purge(self):
+              config = self.read('tailwind.config.js')
+              source_css = self.read('static/css/tailwind-input.css')
+              built_css = self.read('static/css/tailwind.css')
+              settings = self.read('static/js/settings.js')
+              self.assertIn('profile-header-${preset}', settings)
+              for class_name in (
+          '''
+          new_profile_test = '''    def test_profile_header_presets_survive_tailwind_purge(self):
+              config = self.read('tailwind.config.js')
+              source_css = self.read('static/css/tailwind-input.css')
+              built_css = self.read('static/css/tailwind.css')
+              profile_settings = self.read('frontend/src/settings/SettingsProfile.vue')
+              self.assertIn('profile-header-${preset[0]}', profile_settings)
+              for class_name in (
+          '''
+          if old_profile_test not in source:
+              raise SystemExit('profile-header contract block not found')
+          source = source.replace(old_profile_test, new_profile_test, 1)
+          path.write_text(source, encoding='utf-8')
+          PY
+      - name: Run source contracts
+        run: python tests/test_source_contracts.py
+      - name: Commit source contract fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_source_contracts.py
+          git commit -m "Update Settings source ownership contracts"
+          git push origin HEAD:frontend-modernization-phase4f-settings-completion
