@@ -1,0 +1,51 @@
+name: Phase 4F Tailwind Generator
+
+on:
+  push:
+    branches:
+      - frontend-modernization-phase4f-settings-completion
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-phase4f-settings-completion
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked frontend dependencies
+        run: npm ci --audit=false
+      - name: Audit frontend build dependencies
+        run: npm audit --audit-level=high
+      - name: Build committed Tailwind CSS
+        run: npm run build:css
+      - name: Run focused Settings ownership contracts
+        run: |
+          node tests/test_frontend_modernization_phase4a.js
+          node tests/test_frontend_modernization_phase4b.js
+          node tests/test_frontend_modernization_phase4c.js
+          node tests/test_frontend_modernization_phase4d.js
+          node tests/test_frontend_modernization_phase4e.js
+          node tests/test_frontend_modernization_phase4f.js
+          node tests/test_phase14_settings_migration.js
+      - name: Commit deterministic Tailwind artifact
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/css/tailwind.css
+          if git diff --cached --quiet; then
+            echo "No Tailwind artifact changes to commit"
+            exit 0
+          fi
+          git commit -m "Build Phase 4F Tailwind CSS"
+          git push origin HEAD:frontend-modernization-phase4f-settings-completion
