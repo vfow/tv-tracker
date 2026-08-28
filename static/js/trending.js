@@ -247,9 +247,8 @@
     }
 
     function setRoute(config,replace=false){
-        if(!config || !global.history){ return; }
-        const method = replace ? "replaceState" : "pushState";
-        global.history[method]({tvTrackerRoute:true,trending:true},"",routeFor(config.key));
+        if(!config || !global.TVTrackerRouter || typeof global.TVTrackerRouter.setPathRoute !== "function"){ return; }
+        global.TVTrackerRouter.setPathRoute(routeFor(config.key),replace);
         if(typeof global.rememberRouteNavContext === "function"){
             global.rememberRouteNavContext(routeFor(config.key),"discover");
         }

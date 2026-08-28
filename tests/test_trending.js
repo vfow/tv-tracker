@@ -59,6 +59,9 @@ assert.ok(source.includes("tmdbFetchJSON"),"Trending should use the existing TMD
 assert.ok(!source.includes("sortBrowseResultsForDisplay"),"Trending must not re-sort TMDB ranking");
 assert.ok(!source.includes("renderBrowseControlsHTML"),"Trending full pages must not expose normal Discover browse filters");
 assert.ok(source.includes("registerRouteHandler"),"Trending must register its routes through the shared router extension point");
+assert.ok(source.includes("TVTrackerRouter.setPathRoute"),"Trending route writes must delegate to the canonical router");
+assert.ok(!source.includes("pushState("),"Trending must not write pushState directly");
+assert.ok(!source.includes("replaceState("),"Trending must not write replaceState directly");
 assert.ok(!source.includes("stopImmediatePropagation"),"Trending must not intercept events that belong to the shared router");
 assert.ok(!source.includes("document.addEventListener"),"Trending must not install its own document-level click interceptor");
 assert.ok(!source.includes('addEventListener("popstate"'),"Trending must not install its own popstate handler");
