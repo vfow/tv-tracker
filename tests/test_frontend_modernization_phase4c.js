@@ -16,14 +16,14 @@ if(process.env.TVTRACKER_ALLOW_PHASE4C_GENERATOR !== "1"){
     assert(!fs.existsSync(path.join(ROOT,".github/workflows/phase4c-vue-build.yml")),"The temporary write-enabled Phase 4C build workflow must not survive the phase");
 }
 
-assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("auth");'),"Phase 4C must add Auth to the guarded Vue Settings lineage");
-assert(bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("profile");') < bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("auth");'),"Auth must extend the proven Settings canary sequence rather than replace it");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("auth");'),"Phase 4C must preserve Auth in the guarded Vue Settings lineage");
+assert(bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("profile");') < bridgeSource.indexOf('VUE_CANARY_SECTIONS.add("auth");'),"Auth must remain after Profile in the proven Settings canary sequence");
 assert(bridgeSource.includes("return legacy.render();"),"Legacy Settings rendering must remain the fail-safe fallback");
 
 assert(mainSource.includes("import SettingsAuth from './settings/SettingsAuth.vue';"),"Auth must have a dedicated Vue component");
 assert(mainSource.includes("section === 'auth'"),"The guarded Vue owner must explicitly recognize Auth");
 assert(mainSource.includes("createApp(SettingsAuth)"),"Auth must mount through its dedicated Vue app");
-assert(mainSource.includes("phase4c-settings-auth-canary"),"The compiled frontend must identify the Phase 4C Auth canary");
+assert(mainSource.includes("FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation'"),"Later Settings canaries must preserve the Phase 2 frontend foundation lineage");
 
 assert(authSource.includes('data-tvtracker-vue-auth-settings="auth"'),"Auth Vue must expose an E2E ownership marker");
 for(const id of [
@@ -88,7 +88,7 @@ bridge.render();
 assert.strictEqual(legacyRenderCalls,1,"Before Vue loads, Auth must render through the legacy fallback");
 assert.strictEqual(dispatched.length,1,"Auth fallback must request the lazy Vue owner");
 assert.strictEqual(dispatched[0].detail.section,"auth");
-assert.deepStrictEqual(Array.from(bridge.vueCanarySections),["streaming","notifications","profile","auth"],"Only the four proven Settings sections may be Vue-owned in Phase 4C");
+assert.deepStrictEqual(Array.from(bridge.vueCanarySections).slice(0,4),["streaming","notifications","profile","auth"],"Streaming, Notifications, Profile, and Auth must remain the first four proven Settings canaries");
 
 const vueRenders = [];
 let vueUnmountCalls = 0;
@@ -108,8 +108,8 @@ assert.strictEqual(vueUnmountCalls,0,"The Vue owner must control its own section
 
 section = "data";
 bridge.render();
-assert.strictEqual(vueUnmountCalls,1,"Leaving the Phase 4C allowlist must unmount Vue before legacy rendering resumes");
-assert.strictEqual(legacyRenderCalls,2,"Data must remain legacy-owned in Phase 4C");
+assert.strictEqual(vueUnmountCalls,1,"A Vue owner that does not support Data must unmount before legacy rendering resumes");
+assert.strictEqual(legacyRenderCalls,2,"Legacy Data fallback must remain usable by earlier-stage owners");
 
 section = "auth";
 bridge.open("auth",{fromRoute:true,skipShowPage:true});
