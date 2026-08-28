@@ -10,7 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class FrontendModernizationPhase2Tests(unittest.TestCase):
     def test_vue_vite_typescript_toolchain_is_locked(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(package["dependencies"]["vue"], "3.5.41")
+        self.assertFalse(package.get("dependencies"))
+        self.assertEqual(package["devDependencies"]["vue"], "3.5.41")
         self.assertEqual(package["devDependencies"]["vite"], "7.3.6")
         self.assertEqual(package["devDependencies"]["@vitejs/plugin-vue"], "6.0.8")
         self.assertEqual(package["devDependencies"]["typescript"], "6.0.3")
@@ -20,6 +21,7 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
 
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual(lock["packages"]["node_modules/vue"]["version"], "3.5.41")
+        self.assertTrue(lock["packages"]["node_modules/vue"].get("dev"))
         self.assertEqual(lock["packages"]["node_modules/vite"]["version"], "7.3.6")
         self.assertEqual(lock["packages"]["node_modules/typescript"]["version"], "6.0.3")
 
@@ -28,7 +30,10 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
         entry = manifest["frontend/src/main.ts"]
         self.assertTrue(entry["isEntry"])
         self.assertRegex(entry["file"], r"^assets/main-[A-Za-z0-9_-]+\.js$")
-        self.assertTrue((ROOT / "static/vue" / entry["file"]).is_file())
+        bundle = ROOT / "static/vue" / entry["file"]
+        self.assertTrue(bundle.is_file())
+        self.assertGreater(bundle.stat().st_size, 10_000)
+        self.assertIn("phase2-vue-foundation", bundle.read_text(encoding="utf-8"))
 
         template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
         self.assertNotIn("static/vue/", template)
