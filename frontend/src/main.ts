@@ -3,12 +3,13 @@ import { createApp, type App as VueApp } from 'vue';
 import FoundationProbe from './FoundationProbe.vue';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import SettingsAuth from './settings/SettingsAuth.vue';
+import SettingsDanger from './settings/SettingsDanger.vue';
 import SettingsData from './settings/SettingsData.vue';
 import SettingsProfile from './settings/SettingsProfile.vue';
 import SettingsStreaming from './settings/SettingsStreaming.vue';
 
 export const FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation';
-export const FRONTEND_FOUNDATION_VERSION = 'phase4d-settings-data-canary';
+export const FRONTEND_FOUNDATION_VERSION = 'phase4e-settings-danger-canary';
 
 export function createFoundationProbe(): VueApp<Element> {
   return createApp(FoundationProbe);
@@ -62,7 +63,8 @@ function supportsSettingsSection(section: string): boolean {
     || section === 'notifications'
     || section === 'profile'
     || section === 'auth'
-    || section === 'data';
+    || section === 'data'
+    || section === 'danger-zone';
 }
 
 const settingsOwner: SettingsVueOwner = Object.freeze({
@@ -89,8 +91,10 @@ const settingsOwner: SettingsVueOwner = Object.freeze({
       settingsApp = createApp(SettingsProfile);
     } else if (section === 'auth') {
       settingsApp = createApp(SettingsAuth);
-    } else {
+    } else if (section === 'data') {
       settingsApp = createApp(SettingsData);
+    } else {
+      settingsApp = createApp(SettingsDanger);
     }
     settingsApp.mount(root);
   },

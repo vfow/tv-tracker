@@ -58,7 +58,7 @@ const settingsVueOwners = frontendSources.filter(file=>{
     const relative = path.relative(path.join(ROOT,"frontend","src"),file).replaceAll(path.sep,"/");
     const source = fs.readFileSync(file,"utf8");
     return /(?:^|\/)settings(?:\/|\.|$)/i.test(relative)
-        || /data-tvtracker-vue-(?:settings|notifications-settings|profile-settings|auth-settings|data-settings)/i.test(source);
+        || /data-tvtracker-vue-(?:settings|notifications-settings|profile-settings|auth-settings|data-settings|danger-settings)/i.test(source);
 });
 assert.deepStrictEqual(
     settingsVueOwners
@@ -67,21 +67,20 @@ assert.deepStrictEqual(
     [
         "notifications/SettingsNotifications.vue",
         "settings/SettingsAuth.vue",
+        "settings/SettingsDanger.vue",
         "settings/SettingsData.vue",
         "settings/SettingsProfile.vue",
         "settings/SettingsStreaming.vue"
     ],
-    "Only the explicitly staged Streaming, Notifications, Profile, Auth, and Data Vue Settings owners may exist in Phase 4D"
+    "Only the six explicitly staged current Vue Settings owners may exist in Phase 4E"
 );
 
 assert(bridgeSource.includes('const VUE_CANARY_SECTIONS = new Set(["streaming"]);'),"The guarded migration must preserve Streaming as the first Vue Settings canary");
 assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("notifications");'),"The guarded migration must preserve Notifications as the second Vue Settings canary");
 assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("profile");'),"The guarded migration must preserve Profile as the third Vue Settings canary");
 assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("auth");'),"The guarded migration must preserve Auth as the fourth Vue Settings canary");
-assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("data");'),"Phase 4D must add Data as the fifth Vue Settings canary");
-for(const legacySection of ["danger-zone"]){
-    assert(!bridgeSource.includes(`VUE_CANARY_SECTIONS.add("${legacySection}");`),`${legacySection} must remain legacy-owned in Phase 4D`);
-}
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("data");'),"The guarded migration must preserve Data as the fifth Vue Settings canary");
+assert(bridgeSource.includes('VUE_CANARY_SECTIONS.add("danger-zone");'),"Phase 4E must add Danger Zone as the sixth Vue Settings canary");
 assert(loaderSource.includes('"/static/vue/manifest.json"'),"The Vue canary must load through the committed manifest");
 assert(loaderSource.includes('cache:"no-store"'),"The manifest request must avoid stale cross-release caching");
 assert(loaderSource.includes("vue_settings_load_failed"),"Lazy-load failure must be observable without exposing user data");
@@ -195,9 +194,9 @@ function loadRouter(pathname){
     return {router:context.window.TVTrackerRouter,ownerCalls};
 }
 
-const routerRuntime = loadRouter("/app/settings/data");
+const routerRuntime = loadRouter("/app/settings/danger-zone");
 assert.strictEqual(routerRuntime.ownerCalls.length,1,"Initial Settings routing must delegate once to the browser owner");
-assert.strictEqual(routerRuntime.ownerCalls[0].section,"data");
+assert.strictEqual(routerRuntime.ownerCalls[0].section,"danger-zone");
 assert.strictEqual(routerRuntime.ownerCalls[0].options.fromRoute,true);
 assert.strictEqual(routerRuntime.ownerCalls[0].options.skipShowPage,true);
 
@@ -223,4 +222,4 @@ assert(!loadedSources.get("js/ui.js").includes("function renderSettings()"),"The
 assert(!loadedSources.get("js/streaming-region.js").includes("MutationObserver"),"streaming-region.js must not reintroduce Settings DOM patching");
 assert(!loadedSources.get("js/provider-freshness.js").includes("installSettingsCleanup"),"provider-freshness.js must not patch Settings cleanup");
 
-console.log("Phase 14 Settings ownership contracts passed with the guarded Streaming, Notifications, Profile, Auth, and Data Vue canaries.");
+console.log("Phase 14 Settings ownership contracts passed with all six current guarded Vue Settings canaries.");

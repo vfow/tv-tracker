@@ -23,7 +23,7 @@ assert(bridgeSource.includes("return legacy.render();"),"Legacy Settings renderi
 assert(mainSource.includes("import SettingsData from './settings/SettingsData.vue';"),"Data must have a dedicated Vue component");
 assert(mainSource.includes("section === 'data'"),"The guarded Vue owner must explicitly recognize Data");
 assert(mainSource.includes("createApp(SettingsData)"),"Data must mount through its dedicated Vue app");
-assert(mainSource.includes("phase4d-settings-data-canary"),"The compiled frontend must identify the Phase 4D Data canary");
+assert(mainSource.includes("FRONTEND_FOUNDATION_VERSION"),"The compiled frontend must retain explicit foundation versioning after Phase 4D");
 
 assert(dataSource.includes('data-tvtracker-vue-data-settings="data"'),"Data Vue must expose an E2E ownership marker");
 for(const id of [
@@ -85,7 +85,7 @@ bridge.render();
 assert.strictEqual(legacyRenderCalls,1,"Before Vue loads, Data must render through the legacy fallback");
 assert.strictEqual(dispatched.length,1,"Data fallback must request the lazy Vue owner");
 assert.strictEqual(dispatched[0].detail.section,"data");
-assert.deepStrictEqual(Array.from(bridge.vueCanarySections),["streaming","notifications","profile","auth","data"],"Only the five proven Settings sections may be Vue-owned in Phase 4D");
+assert.deepStrictEqual(Array.from(bridge.vueCanarySections).slice(0,5),["streaming","notifications","profile","auth","data"],"The first five proven Settings canaries must preserve the Phase 4D lineage");
 
 const vueRenders = [];
 let vueUnmountCalls = 0;
@@ -103,10 +103,10 @@ bridge.render();
 assert.deepStrictEqual(vueRenders,["data","auth"],"Switching between Data and Auth must stay inside the guarded Vue owner");
 assert.strictEqual(vueUnmountCalls,0,"The Vue owner must control its own section-to-section remount");
 
-section = "danger-zone";
+section = "billing";
 bridge.render();
-assert.strictEqual(vueUnmountCalls,1,"Leaving the Phase 4D allowlist must unmount Vue before legacy rendering resumes");
-assert.strictEqual(legacyRenderCalls,2,"Danger Zone must remain legacy-owned in Phase 4D");
+assert.strictEqual(vueUnmountCalls,1,"Unsupported Settings values must still unmount Vue before legacy rendering resumes");
+assert.strictEqual(legacyRenderCalls,2,"The legacy renderer must remain reachable as a fail-safe after Phase 4D");
 
 section = "data";
 bridge.open("data",{fromRoute:true,skipShowPage:true});
