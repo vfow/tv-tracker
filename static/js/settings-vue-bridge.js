@@ -3,6 +3,7 @@
 
     const legacy = global.TVTrackerSettings;
     const VUE_CANARY_SECTIONS = new Set(["streaming"]);
+    VUE_CANARY_SECTIONS.add("notifications");
     if(!legacy || typeof legacy.render !== "function" || typeof legacy.open !== "function"){
         return;
     }
