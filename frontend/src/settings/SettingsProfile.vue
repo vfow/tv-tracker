@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
+import { feedback } from '../ui/feedback';
 
 type ProfileDraft = {
   username?: string;
@@ -12,7 +13,6 @@ type ProfileDraft = {
   adult_filter?: boolean;
   [key: string]: unknown;
 };
-type FeedbackOptions = Readonly<{ severity?: string; actionLabel?: string; onAction?: () => void }>;
 type SettingsOwner = Readonly<{
   open: (section: string, options?: Record<string, unknown>) => unknown;
   routeFor: (section: string) => string;
@@ -34,8 +34,6 @@ declare global {
     saveProfileSettings?: (settings: ProfileDraft) => Promise<unknown>;
     TVTrackerAdultPolicy?: { refresh?: () => unknown };
     TVTrackerSettings?: SettingsOwner;
-    TVTrackerFeedback?: { notify?: (message: string, options?: FeedbackOptions) => unknown };
-    showToast?: (message: string, options?: FeedbackOptions) => unknown;
     TVTrackerClientRuntime?: { report?: (details: Record<string, unknown>) => Promise<unknown> | unknown };
   }
 }
@@ -73,14 +71,6 @@ const headerPresets = [
   ['amber', 'Amber'],
   ['monochrome', 'Monochrome']
 ] as const;
-
-function notify(message: string, options: FeedbackOptions = {}): void {
-  if (window.TVTrackerFeedback?.notify) {
-    window.TVTrackerFeedback.notify(message, options);
-    return;
-  }
-  window.showToast?.(message, options);
-}
 
 function routeFor(section: string): string {
   return window.TVTrackerSettings?.routeFor(section) ?? `/app/settings/${section}`;
@@ -121,7 +111,7 @@ function presetSvg(preset: string): string {
 function uploadAvatar(): void {
   if (typeof window.openAvatarFilePicker !== 'function') {
     bridgeUnavailable.value = true;
-    notify('Avatar upload is temporarily unavailable.', { severity: 'error' });
+    feedback.error('Avatar upload is temporarily unavailable.');
     return;
   }
   window.openAvatarFilePicker();
@@ -143,7 +133,7 @@ function chooseHeaderPreset(preset: string): void {
 function uploadHeader(): void {
   if (typeof window.openProfileHeaderFilePicker !== 'function') {
     bridgeUnavailable.value = true;
-    notify('Header upload is temporarily unavailable.', { severity: 'error' });
+    feedback.error('Header upload is temporarily unavailable.');
     return;
   }
   window.openProfileHeaderFilePicker();
@@ -159,7 +149,7 @@ function removeHeader(): void {
 async function saveProfile(): Promise<void> {
   if (typeof window.saveProfileSettings !== 'function') {
     bridgeUnavailable.value = true;
-    notify('Couldn’t save your changes.', { severity: 'error' });
+    feedback.error('Couldn’t save your changes.');
     return;
   }
 
@@ -173,12 +163,17 @@ async function saveProfile(): Promise<void> {
   try {
     await window.saveProfileSettings(draft);
     window.TVTrackerAdultPolicy?.refresh?.();
-    notify('Settings saved', { severity: 'success' });
-  } catch {
+    feedback.success('Settings saved');
+  } catch (error) {
     if (liveProfile) liveProfile.adult_filter = previousAdultFilter;
     adultFilter.value = previousAdultFilter;
     draft.adult_filter = previousAdultFilter;
-    notify('Couldn’t save your changes.', { severity: 'error', actionLabel: 'Retry', onAction: () => void saveProfile() });
+    feedback.presentError(error, 'Couldn’t save your changes.', {
+      context: 'profile settings save',
+      key: 'profile-save-retry',
+      actionLabel: 'Retry',
+      onAction: () => void saveProfile()
+    });
   } finally {
     saving.value = false;
   }

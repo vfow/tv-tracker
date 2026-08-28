@@ -9,7 +9,7 @@ import SettingsProfile from './settings/SettingsProfile.vue';
 import SettingsStreaming from './settings/SettingsStreaming.vue';
 
 export const FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation';
-export const FRONTEND_FOUNDATION_VERSION = 'phase4e-settings-danger-canary';
+export const FRONTEND_FOUNDATION_VERSION = 'phase5-shared-ui-feedback';
 
 export function createFoundationProbe(): VueApp<Element> {
   return createApp(FoundationProbe);
