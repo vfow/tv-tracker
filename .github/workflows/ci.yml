@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -28,125 +28,15 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Export Search cleanup sources
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          ref: ${{ github.head_ref }}
-      - name: Apply bounded Search renderer cleanup
-        if: github.actor != 'github-actions[bot]'
-        run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          ui_path = Path('static/js/ui.js')
-          ui = ui_path.read_text(encoding='utf-8')
-
-          def remove_function(text, name):
-              match = re.search(rf'(?m)^function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{', text)
-              if not match:
-                  raise RuntimeError(f'missing function: {name}')
-              start = match.start()
-              brace = text.find('{', match.start())
-              depth = 0
-              quote = None
-              escaped = False
-              i = brace
-              while i < len(text):
-                  ch = text[i]
-                  if quote:
-                      if escaped:
-                          escaped = False
-                      elif ch == '\\':
-                          escaped = True
-                      elif ch == quote:
-                          quote = None
-                      i += 1
-                      continue
-                  if ch in ('"', "'", '`'):
-                      quote = ch
-                      i += 1
-                      continue
-                  if ch == '{':
-                      depth += 1
-                  elif ch == '}':
-                      depth -= 1
-                      if depth == 0:
-                          end = i + 1
-                          while end < len(text) and text[end] in ' \t':
-                              end += 1
-                          if end < len(text) and text[end] == '\r':
-                              end += 1
-                          if end < len(text) and text[end] == '\n':
-                              end += 1
-                          if end < len(text) and text[end] == '\n':
-                              end += 1
-                          return text[:start] + text[end:]
-                  i += 1
-              raise RuntimeError(f'unbalanced function: {name}')
-
-          removed = [
-              'renderSearchTabButtonHTML',
-              'renderSearchResultPosterCard',
-              'renderSearchPersonCard',
-              'renderSearchResults',
-          ]
-          for name in removed:
-              ui = remove_function(ui, name)
-          for name in removed:
-              if re.search(rf'(?m)^function\s+{re.escape(name)}\s*\(', ui):
-                  raise RuntimeError(f'legacy Search renderer declaration remains: {name}')
-          if 'function lockSearchRouteBeforeResultOpen' not in ui:
-              raise RuntimeError('shared Search back-route helper was removed')
-          ui_path.write_text(ui, encoding='utf-8')
-
-          contracts_path = Path('tests/test_source_contracts.py')
-          contracts = contracts_path.read_text(encoding='utf-8')
-          old = """        self.assertIn('renderSearchResults', ui)\n        self.assertIn('renderDiscoverGenreSection', ui)\n        self.assertIn('renderSearchTabButtonHTML', ui)\n        self.assertIn('data-person-role=\"person\"', ui)\n        self.assertIn('renderShowThemesDetailsHTML', ui)\n"""
-          new = """        self.assertNotIn('function renderSearchResults(', ui)\n        self.assertIn('renderDiscoverGenreSection', ui)\n        self.assertNotIn('function renderSearchTabButtonHTML(', ui)\n        self.assertNotIn('function renderSearchResultPosterCard(', ui)\n        self.assertNotIn('function renderSearchPersonCard(', ui)\n        search_bridge = self.read('static/js/search-state-bridge.js')\n        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')\n        self.assertIn('global.renderSearchResults = render;', search_bridge)\n        self.assertIn('data-tvtracker-search-owner=\"vue\"', search_vue)\n        self.assertIn('data-person-role=\"person\"', search_vue)\n        self.assertIn('renderShowThemesDetailsHTML', ui)\n"""
-          if contracts.count(old) != 1:
-              raise RuntimeError('unexpected source-contract Search assertion block')
-          contracts_path.write_text(contracts.replace(old, new, 1), encoding='utf-8')
-
-          doc_path = Path('docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md')
-          doc = doc_path.read_text(encoding='utf-8')
-          replacements = [
-              (
-                  'Status: characterization and read-only Search state bridge are complete in production; bounded Vue Search renderer ownership slice active',
-                  'Status: Vue Search renderer ownership is production-verified; legacy Search DOM renderer cleanup active'
-              ),
-              (
-                  'Production baseline: `0ab25968fccedc61e6915e458f422b9c648fb834` (PR #66 / deploy #142)',
-                  'Production baseline: `c70325d247ddc9d583a1bf78a73ce2b8fdc3f5da` (PR #67 / deploy #143)'
-              ),
-              (
-                  'The characterization and read-only state-bridge slices are complete in production. The current slice moves only the Search results DOM renderer to Vue while preserving the existing legacy Search state, requests, filtering semantics, route generation, and detail-opening actions.',
-                  'The characterization, read-only state bridge, and Vue Search renderer ownership slices are complete in production. The current cleanup removes only the now-inert legacy Search DOM renderer/card wiring while preserving legacy Search state, requests, filtering semantics, route generation, detail-opening actions, and shared helpers still used by Vue or Discover.'
-              ),
-              (
-                  '- `static/js/ui.js` continues to own the Discover hub renderer and Discover stability gate. Its former `renderSearchResults` implementation remains physically present for this bounded rollout but is no longer the runtime Search renderer because the bridge replaces `window.renderSearchResults` after `app.js` loads.',
-                  '- `static/js/ui.js` continues to own the Discover hub renderer, Discover stability gate, and shared Search navigation/filter helpers still consumed by the Vue bridge. The legacy Search DOM renderer/card functions have been removed.'
-              ),
-              (
-                  '- The legacy `ui.js` Search renderer is inert at runtime and must not regain ownership.',
-                  '- The legacy `ui.js` Search DOM renderer/card functions are absent and must not be reintroduced; Vue remains the sole Search DOM owner.'
-              ),
-              (
-                  '## Next slice\n\nAfter this renderer ownership slice is production-verified, remove the now-inert legacy Search renderer/card-wiring code that is no longer referenced. Keep shared helpers that are still used by Discover or other surfaces. Then begin the bounded Discover migration, starting with a typed/read-only hub model before moving Discover DOM ownership. Runtime ownership must continue to move once; no permanent competing Search renderer is allowed.',
-                  '## Cleanup gate\n\nThe cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, and `renderSearchPersonCard` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen` and eye-filter logic remain because the Vue bridge still consumes them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.\n\n## Next slice\n\nBegin the bounded Discover migration with a typed/read-only hub model before moving Discover DOM ownership. Keep the existing Discover stability gate and renderer authoritative until parity is proven. Runtime ownership must continue to move once; no permanent competing renderer is allowed.'
-              ),
-          ]
-          for old_text, new_text in replacements:
-              if old_text not in doc:
-                  raise RuntimeError('architecture text drifted: ' + old_text[:80])
-              doc = doc.replace(old_text, new_text, 1)
-          doc_path.write_text(doc, encoding='utf-8')
-          PY
-          git diff --check
-          git diff -- static/js/ui.js tests/test_source_contracts.py docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add static/js/ui.js tests/test_source_contracts.py docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md
-          git commit -m 'Remove legacy Search renderer implementation'
-          git push origin HEAD:${{ github.head_ref }}
+          name: search-cleanup-source
+          path: |
+            static/js/ui.js
+            tests/test_source_contracts.py
+            docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md
+          if-no-files-found: error
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
