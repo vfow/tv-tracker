@@ -78,7 +78,6 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
 
     def test_frontend_build_is_reproducible(self):
         subprocess.run(["npm", "run", "build:frontend"], cwd=ROOT, check=True)
-        subprocess.run(["git", "diff", "--", "static/vue"], cwd=ROOT, check=True)
         subprocess.run(
             ["git", "diff", "--exit-code", "--", "static/vue"],
             cwd=ROOT,
