@@ -644,15 +644,6 @@ function renderTrackerPosterSkeletonCards(count=12){
     `).join("");
 }
 
-function renderTrackerPersonSkeletonCards(count=12){
-    return Array.from({length:count}).map(()=>`
-        <div class="search-person-card search-person-skeleton-card" aria-hidden="true">
-            <div class="tt-skeleton-poster"></div>
-            <div class="tt-skeleton-line tt-skeleton-line-title"></div>
-        </div>
-    `).join("");
-}
-
 function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-back-button"){
     const label = kind === "movie" ? "MOVIE" : "SHOW";
     return `
@@ -1119,17 +1110,6 @@ function renderMovieTitleWithAdultBadgeHTML(title,item,media="movie"){
     }
     return `<span class="movie-title-with-adult-badge"><span class="movie-title-text">${escapeHTML(title)}</span>${badge}</span>`;
 }
-
-function renderInactiveEyeFilterControlHTML(extraClass=""){
-    return `
-        <div class="browse-menu eye-filter-menu eye-filter-menu-inactive ${escapeHTML(extraClass)}" aria-hidden="true">
-            <span class="browse-bar-button eye-filter-button" aria-label="Tracked filters inactive">
-                <img src="/static/assets/icons/eye-open.png" alt="" aria-hidden="true" class="eye-filter-icon">
-            </span>
-        </div>
-    `;
-}
-
 
 // --TVT-search-navigation-owner-begin--
 function lockSearchRouteBeforeResultOpen(){

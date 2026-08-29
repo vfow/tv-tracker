@@ -100,7 +100,7 @@ The Vue component renders the established CSS classes and data attributes so cur
 
 ## Cleanup gate
 
-The cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, and `renderSearchPersonCard` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen` and eye-filter logic remain because the Vue bridge still consumes them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.
+The cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, `renderSearchPersonCard`, `renderInactiveEyeFilterControlHTML`, and `renderTrackerPersonSkeletonCards` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen`, `getEyeFilteredRenderItems`, poster placeholders, collection rendering, and the active eye-filter control remain because Vue, Discover, or other surfaces still consume them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.
 
 ## Next slice
 
