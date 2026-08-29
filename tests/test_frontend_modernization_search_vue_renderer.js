@@ -163,7 +163,7 @@ const ui = fs.readFileSync('static/js/ui.js', 'utf8');
     assert(main.includes("FRONTEND_FOUNDATION_VERSION = 'phase5-shared-ui-feedback'"));
     assert(main.includes('createApp(SearchResults'));
     assert(main.includes('window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);'));
-    assert(ui.includes('function renderSearchResults(resultsList)'), 'legacy renderer may remain physically during this bounded ownership slice');
+    assert(!ui.includes('function renderSearchResults(resultsList)'), 'legacy Search renderer must stay deleted after Vue ownership transfer');
     assert(bridgeSource.includes('global.renderSearchResults = render'), 'runtime Search renderer ownership must move to Vue bridge');
 
     console.log('Frontend modernization Vue Search renderer parity checks passed.');
