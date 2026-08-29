@@ -154,7 +154,7 @@ assert(trending.includes('TVTrackerRouter'));
 assert(settings.includes('TVTrackerRouter'));
 assert(releaseTiming.includes('TVTrackerReleaseTiming'));
 assert(notificationsRuntime.includes('TVTrackerNotifications'));
-assert(discoverBrowse.includes('TVTrackerDiscoverBrowse'));
+assert(discoverBrowse.includes('TVTrackerBrowse'));
 assert(showDetailFilters.includes('TVTrackerShowDetailFilters'));
 assert(episodeCrew.includes('TVTrackerEpisodeCrew'));
 assert(interactionQuality.includes('function ensureDialogAccessibility'));
