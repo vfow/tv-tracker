@@ -447,7 +447,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('search/tv', app_js)
         self.assertIn('search/movie', app_js)
         self.assertIn('search/person', app_js)
-        self.assertIn('replaceState({tvTrackerRoute:true}', app_js)
+        self.assertIn('replaceState({tvTrackerRoute:true}', router)
         self.assertIn('getSearchRoute(query="",media="tv")', app_js)
         self.assertIn('&type=${encodeURIComponent(cleanMedia)}', app_js)
         self.assertIn('currentSearchMediaType', router)

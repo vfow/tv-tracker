@@ -1231,8 +1231,6 @@ function lockSearchRouteBeforeResultOpen(){
 
     if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
         window.TVTrackerRouter.setPathRoute(route,true);
-    }else if(window.history && typeof window.history.replaceState === "function"){
-        window.history.replaceState({tvTrackerRoute:true},"",route);
     }
 
     return route;

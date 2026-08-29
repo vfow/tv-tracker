@@ -53,7 +53,7 @@ function load(overrides={}){
     });
     const route = win.lockSearchRouteBeforeResultOpen();
     assert.strictEqual(route,"/app/search?q=Dune&type=movie&fadeWatched=1");
-    assert.deepStrictEqual(calls,[route]);
+    assert.deepStrictEqual(calls,[]);
 }
 
 assert.ok(source.includes("window.TVTrackerRouter"),"the folded search navigation logic must live in ui.js and use window-scoped refs");

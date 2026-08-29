@@ -1,4 +1,5 @@
 from pathlib import Path
+import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,22 +14,22 @@ def _search_navigation_owner(source: str) -> str:
     return source[start:end]
 
 
-def test_ui_history_fallback_is_single_and_scoped_to_search_navigation_owner():
-    """Keep ui.js's final History API debt isolated until its removal slice lands."""
-    ui_source = UI.read_text(encoding="utf-8")
-    owner_source = _search_navigation_owner(ui_source)
+class RoutingUiFallbackScopeTests(unittest.TestCase):
+    def test_ui_search_navigation_delegates_only_to_canonical_router(self):
+        ui_source = UI.read_text(encoding="utf-8")
+        owner_source = _search_navigation_owner(ui_source)
 
-    assert ui_source.count("window.history.replaceState") == 1
-    assert "window.history.replaceState" in owner_source
-    assert "window.history.pushState" not in ui_source
+        self.assertIn("window.TVTrackerRouter.setPathRoute(route,true)", owner_source)
+        self.assertNotIn("window.history.replaceState", ui_source)
+        self.assertNotIn("window.history.pushState", ui_source)
+
+    def test_ui_search_navigation_has_no_legacy_history_fallback(self):
+        owner_source = _search_navigation_owner(UI.read_text(encoding="utf-8"))
+
+        self.assertNotIn("else if(window.history", owner_source)
+        self.assertNotIn("history.replaceState", owner_source)
+        self.assertNotIn("history.pushState", owner_source)
 
 
-def test_ui_history_fallback_remains_secondary_to_canonical_router():
-    """The known temporary fallback must never outrank the canonical router."""
-    owner_source = _search_navigation_owner(UI.read_text(encoding="utf-8"))
-
-    canonical = owner_source.index("window.TVTrackerRouter.setPathRoute(route,true)")
-    fallback = owner_source.index("window.history.replaceState")
-
-    assert canonical < fallback
-    assert "else if(window.history" in owner_source
+if __name__ == "__main__":
+    unittest.main()

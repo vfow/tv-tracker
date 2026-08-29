@@ -73,7 +73,7 @@ assert(ui.includes('setSelectOptions(yearSelect,"All Years",buildLibraryOptionCo
 
 const libraryFilterSource = ui.slice(
   ui.indexOf('function getLibraryGenreFilter'),
-  ui.indexOf('function removeLibrarySearchControl')
+  ui.indexOf('function renderLibrarySearchControl')
 );
 const libraryFilterContext = {
   console,
@@ -155,7 +155,9 @@ assert(db.includes('const SYNC_CHANGE_PAGE_LIMIT = 50;'));
 assert(db.includes('baseRevision:Number(SERVER_REVISION || 0)'));
 assert(db.includes('let requestRevision = Number(operation.baseRevision || 0);'));
 assert(db.includes('operation.baseRevision = Number(SERVER_REVISION || 0);'));
-assert(app.includes('history.pushState'));
+assert(router.includes('history.pushState'));
+assert(!app.includes('history.pushState'));
+assert(!app.includes('history.replaceState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
 assert(template.includes('history-activity.js'));
 assert(template.indexOf('js/app.js') < template.indexOf('js/history-activity.js'));
