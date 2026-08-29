@@ -81,7 +81,7 @@ assert(!tmdb.includes('api.themoviedb.org'));
 
 assert(ui.includes('function safeExternalURL'));
 assert(ui.includes('function getCheckSuccessAnimationTarget'));
-assert(ui.includes('function openGlobalSearchResult'));
+assert(ui.includes('function lockSearchRouteBeforeResultOpen'));
 assert(ui.includes('// --TVT-search-navigation-owner-begin--'));
 assert(ui.includes('// --TVT-search-navigation-owner-end--'));
 assert(ui.includes('window.TVTrackerRouter.setPathRoute(route,true)'));
