@@ -28,6 +28,59 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Diagnose legacy Search renderer cleanup
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path('static/js/ui.js').read_text(encoding='utf-8')
+          declarations = re.findall(r'(?m)^function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(', text)
+          search_names = [name for name in declarations if 'search' in name.lower()]
+          print('SEARCH_FUNCTIONS=' + ','.join(search_names))
+
+          def extract_function(name):
+              match = re.search(rf'(?m)^function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{', text)
+              if not match:
+                  return ''
+              start = match.start()
+              brace = text.find('{', match.start())
+              depth = 0
+              quote = None
+              escaped = False
+              template_expr = 0
+              i = brace
+              while i < len(text):
+                  ch = text[i]
+                  if quote:
+                      if escaped:
+                          escaped = False
+                      elif ch == '\\':
+                          escaped = True
+                      elif ch == quote:
+                          quote = None
+                      i += 1
+                      continue
+                  if ch in ('"', "'", '`'):
+                      quote = ch
+                      i += 1
+                      continue
+                  if ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return text[start:i+1]
+                  i += 1
+              raise RuntimeError(name)
+
+          body = extract_function('renderSearchResults')
+          calls = sorted(set(re.findall(r'\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(', body)))
+          local_calls = [name for name in calls if name in declarations]
+          print('RENDER_SEARCH_RESULTS_LOCAL_CALLS=' + ','.join(local_calls))
+          for name in search_names:
+              print(f'REFCOUNT {name}={len(re.findall(rf"\\b{re.escape(name)}\\b", text))}')
+          PY
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
