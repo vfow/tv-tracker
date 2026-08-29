@@ -1,14 +1,14 @@
 # Frontend Modernization — Search / Discover
 
-Status: characterization and read-only Search state bridge are complete in production; bounded Vue Search renderer ownership slice active
+Status: Vue Search renderer ownership is production-verified; legacy Search DOM renderer cleanup active
 
-Production baseline: `0ab25968fccedc61e6915e458f422b9c648fb834` (PR #66 / deploy #142)
+Production baseline: `c70325d247ddc9d583a1bf78a73ce2b8fdc3f5da` (PR #67 / deploy #143)
 
 ## Goal
 
 Migrate Search / Discover incrementally to Vue 3 + TypeScript without changing canonical URLs, TMDB identity, search media semantics, adult filtering, eye-filter behavior, tracker labels, streaming-region behavior, Discover stability, or Back/Forward behavior.
 
-The characterization and read-only state-bridge slices are complete in production. The current slice moves only the Search results DOM renderer to Vue while preserving the existing legacy Search state, requests, filtering semantics, route generation, and detail-opening actions.
+The characterization, read-only state bridge, and Vue Search renderer ownership slices are complete in production. The current cleanup removes only the now-inert legacy Search DOM renderer/card wiring while preserving legacy Search state, requests, filtering semantics, route generation, detail-opening actions, and shared helpers still used by Vue or Discover.
 
 ## Current runtime owners
 
@@ -16,7 +16,7 @@ The characterization and read-only state-bridge slices are complete in productio
 - `static/js/search-state-bridge.js` preserves the detached read-only `TVTrackerSearchStateBridge` snapshot and now also owns the bounded Search renderer handoff/model adapter through `TVTrackerSearchVueBridge`.
 - `frontend/src/search-discover/SearchResults.vue` owns the runtime DOM for Search result tabs, eye-filter controls, TV/movie result grids, person results, collection results, loading/empty states, and VIEW MORE.
 - `frontend/src/search-discover/searchViewModel.ts` owns the strict TypeScript renderer model/action contract.
-- `static/js/ui.js` continues to own the Discover hub renderer and Discover stability gate. Its former `renderSearchResults` implementation remains physically present for this bounded rollout but is no longer the runtime Search renderer because the bridge replaces `window.renderSearchResults` after `app.js` loads.
+- `static/js/ui.js` continues to own the Discover hub renderer, Discover stability gate, and shared Search navigation/filter helpers still consumed by the Vue bridge. The legacy Search DOM renderer/card functions have been removed.
 - `static/js/trending.js` continues to own trending-feed configuration, cache/load behavior, hub-row merging, and trending full-page behavior.
 - `static/js/app-router.js` remains the sole canonical browser route/History owner.
 
@@ -85,7 +85,7 @@ The Vue component renders the established CSS classes and data attributes so cur
 - Discover remains legacy-owned in this slice.
 - Trending, Discover stability, streaming region, and Discover cache behavior are unchanged.
 - `TVTrackerSearchStateBridge` remains detached/read-only even though the same bridge file now also hosts the Vue renderer handoff.
-- The legacy `ui.js` Search renderer is inert at runtime and must not regain ownership.
+- The legacy `ui.js` Search DOM renderer/card functions are absent and must not be reintroduced; Vue remains the sole Search DOM owner.
 
 ## Exit gates for this slice
 
@@ -98,6 +98,10 @@ The Vue component renders the established CSS classes and data attributes so cur
 7. The full repository regression suite and diff-hygiene gate pass on the exact PR head.
 8. Production deployment, restart, and public health verification pass after merge.
 
+## Cleanup gate
+
+The cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, and `renderSearchPersonCard` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen` and eye-filter logic remain because the Vue bridge still consumes them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.
+
 ## Next slice
 
-After this renderer ownership slice is production-verified, remove the now-inert legacy Search renderer/card-wiring code that is no longer referenced. Keep shared helpers that are still used by Discover or other surfaces. Then begin the bounded Discover migration, starting with a typed/read-only hub model before moving Discover DOM ownership. Runtime ownership must continue to move once; no permanent competing Search renderer is allowed.
+Begin the bounded Discover migration with a typed/read-only hub model before moving Discover DOM ownership. Keep the existing Discover stability gate and renderer authoritative until parity is proven. Runtime ownership must continue to move once; no permanent competing renderer is allowed.
