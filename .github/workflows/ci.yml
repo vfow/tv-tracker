@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -28,6 +28,8 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
@@ -49,12 +51,14 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
         run: python tests/run_all.py
-      - name: Upload diagnostic Vue build output
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: diagnostic-static-vue
-          path: static/vue
-          if-no-files-found: error
+      - name: Commit generated Vue assets for diagnostic fix
+        if: failure() && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git add -A static/vue
+          git diff --cached --exit-code && exit 1 || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build: refresh committed Vue assets"
+          git push origin HEAD:${{ github.head_ref }}
       - name: Check repository diff hygiene
         run: git diff --check
