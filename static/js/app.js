@@ -6806,10 +6806,8 @@ function setAppHashRoute(route,replace=false){
         return;
     }
 
-    if(replace){
-        history.replaceState({tvTrackerRoute:true},"",cleanRoute);
-    }else{
-        history.pushState({tvTrackerRoute:true},"",cleanRoute);
+    if(window.TVTrackerRouter && typeof window.TVTrackerRouter.setPathRoute === "function"){
+        window.TVTrackerRouter.setPathRoute(cleanRoute,replace === true);
     }
 }
 
