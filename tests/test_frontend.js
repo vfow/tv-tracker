@@ -162,7 +162,7 @@ assert(interactionQuality.includes('TVTrackerInteractionQuality'));
 assert(startup.includes('TVTrackerApp'));
 assert(feedback.includes('TVTrackerFeedback'));
 assert(providerFreshness.includes('TVTrackerProviderFreshness'));
-assert(adultFilter.includes('TVTrackerAdultFilter'));
+assert(adultFilter.includes('TVTrackerAdultPolicy'));
 assert(settingsVueBridge.includes('TVTrackerSettingsVue'));
 assert(settingsVueLoader.includes('TVTrackerSettingsVueLoader'));
 assert(pendingSaveStore.includes('TVTrackerPendingSaveStore'));
