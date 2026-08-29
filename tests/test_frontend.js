@@ -195,42 +195,16 @@ const historyActivityContext = {
   isMovieHistoryEntry(entry){
     return entry && String(entry.media_type || '').toLowerCase() === 'movie';
   },
-  getShowByTMDB(id){
-    return this.DATA.shows[String(id)] || null;
-  },
-  getMovieByTMDB(id){
-    return String(id) === '10' ? {tmdb_id:'10',title:'Movie One',backdrop_path:'/movie-backdrop.jpg'} : null;
-  },
-  getShowDisplayData(show){
-    return {title:show && show.title || 'Unknown Show'};
-  },
-  getMovieHistoryDisplayData(entry){
-    return {title:entry && entry.title || 'Unknown Movie'};
-  },
-  getMovieDetailRoute(id,title){
-    return `/app/movie/${id}-${String(title || '').toLowerCase().replace(/\s+/g,'-')}`;
-  },
-  getShowDetailRoute(id,title){
-    return `/app/show/${id}-${String(title || '').toLowerCase().replace(/\s+/g,'-')}`;
-  },
-  getEpisodeDetailRoute(id,title,season,episode){
-    return `/app/show/${id}-${String(title || '').toLowerCase().replace(/\s+/g,'-')}/season/${season}/episode/${episode}`;
-  },
-  getActivityTimestamp(entry){
-    return Date.parse(entry && entry.watched_at || 0) || 0;
-  },
-  isEpisodeReleased(entry){
-    return !entry || !entry.air_date || entry.air_date < '2099-01-01';
+  isEpisodeAired(airDate){
+    return String(airDate || '') < '2099-01-01';
   }
 };
 vm.createContext(historyActivityContext);
 vm.runInContext(historyActivityRuleSource, historyActivityContext);
 const activityEntries = historyActivityContext.getActivityHistoryEntries();
 assert.strictEqual(activityEntries.length,2,'future TV episodes must not appear in activity History');
-assert.strictEqual(activityEntries[0].mediaType,'movie','newest History item should remain first');
-assert.strictEqual(activityEntries[0].route,'/app/movie/10-movie-one');
-assert.strictEqual(activityEntries[0].imagePath,'/movie-backdrop.jpg');
-assert.strictEqual(activityEntries[1].mediaType,'tv');
+assert.strictEqual(activityEntries[0].id,'movie-1','newest released History item should remain first');
+assert.strictEqual(activityEntries[1].id,'tv-1');
 
 assert(trending.includes('TVTrackerRouter'));
 assert(settings.includes('TVTrackerRouter'));
