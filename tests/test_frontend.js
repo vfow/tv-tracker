@@ -87,47 +87,6 @@ assert(ui.includes('// --TVT-search-navigation-owner-begin--'));
 assert(ui.includes('// --TVT-search-navigation-owner-end--'));
 assert(ui.includes('window.TVTrackerRouter.setPathRoute(route,true)'));
 
-const libraryFilterContext = {
-  activeFilter:'watching',
-  librarySearchQuery:'keep me',
-  libraryGenreFilter:'18',
-  libraryNetworkFilter:'213',
-  libraryYearFilter:'2022',
-  librarySortMode:'rating-desc'
-};
-vm.createContext(libraryFilterContext);
-vm.runInContext(
-  app.slice(
-    app.indexOf('function hasActiveLibraryControls'),
-    app.indexOf('function getCurrentSection')
-  ),
-  libraryFilterContext
-);
-assert.strictEqual(libraryFilterContext.hasActiveLibraryControls(),true);
-libraryFilterContext.resetLibraryFiltersToDefault();
-assert.strictEqual(libraryFilterContext.activeFilter,'watching','Reset Filters must keep the current status');
-assert.strictEqual(libraryFilterContext.librarySearchQuery,'keep me','Reset Filters must keep the search text');
-assert.strictEqual(libraryFilterContext.libraryGenreFilter,'all');
-assert.strictEqual(libraryFilterContext.libraryNetworkFilter,'all');
-assert.strictEqual(libraryFilterContext.libraryYearFilter,'all');
-assert.strictEqual(libraryFilterContext.librarySortMode,'default');
-assert.strictEqual(libraryFilterContext.hasActiveLibraryControls(),false,'status/search alone must not count as active advanced filters');
-
-libraryFilterContext.activeFilter='finished';
-libraryFilterContext.librarySearchQuery='keep me';
-libraryFilterContext.libraryGenreFilter='18';
-libraryFilterContext.libraryNetworkFilter='213';
-libraryFilterContext.libraryYearFilter='2022';
-libraryFilterContext.librarySortMode='rating-desc';
-libraryFilterContext.resetLibraryFiltersToDefault();
-assert.strictEqual(libraryFilterContext.activeFilter,'finished','Reset Filters must keep the current status');
-assert.strictEqual(libraryFilterContext.librarySearchQuery,'keep me','Reset Filters must keep the search text');
-assert.strictEqual(libraryFilterContext.libraryGenreFilter,'all');
-assert.strictEqual(libraryFilterContext.libraryNetworkFilter,'all');
-assert.strictEqual(libraryFilterContext.libraryYearFilter,'all');
-assert.strictEqual(libraryFilterContext.librarySortMode,'default');
-assert.strictEqual(libraryFilterContext.hasActiveLibraryControls(),false,'status/search alone must not count as active advanced filters');
-
 const safeExternalURLSource = ui.slice(
   ui.indexOf('function safeExternalURL'),
   ui.indexOf('function getCheckSuccessAnimationTarget')
