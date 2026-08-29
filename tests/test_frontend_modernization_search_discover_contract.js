@@ -33,7 +33,7 @@ assert(ui.includes('function renderSearchResults(resultsList)'));
 assert(ui.includes('function renderDiscoverHubContent()'));
 assert(ui.includes('window.renderDiscoverHub = renderDiscoverHub'));
 assert(trending.includes('global.TVTrackerTrending = Object.freeze({'));
-assert(router.includes('openSearchPage(query'));
-assert(router.includes('openDiscoverHomePage'));
+assert(router.includes('openSearchPage(params.query || "",{fromRoute:true'));
+assert(router.includes('openDiscoverHomePage({fromRoute:true})'));
 
 console.log('Frontend modernization Search/Discover contract and ownership checks passed.');
