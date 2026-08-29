@@ -29,6 +29,7 @@ const router = fs.readFileSync('static/js/app-router.js','utf8');
 const template = fs.readFileSync('templates/index.html','utf8');
 const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
+const config = fs.readFileSync('static/js/config.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
@@ -72,7 +73,8 @@ assert(login.includes('data-auth-tab="signup"'));
 assert(login.includes('id="login-panel" role="tabpanel" aria-labelledby="login-tab"'));
 assert(login.includes('id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"'));
 
-assert(tmdb.includes('/api/tmdb/'));
+assert(config.includes('const TMDB_API_BASE = "/api/tmdb";'));
+assert(tmdb.includes('TMDB_API_BASE'));
 assert(!tmdb.includes('api_key='));
 assert(!tmdb.includes('TMDB_API_KEY'));
 assert(!tmdb.includes('api.themoviedb.org'));
