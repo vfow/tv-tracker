@@ -69,8 +69,8 @@ assert(template.indexOf("filename='js/settings-vue-loader.js'") < template.index
 
 assert(login.includes('data-auth-tab="login"'));
 assert(login.includes('data-auth-tab="signup"'));
-assert(login.includes('data-auth-panel="login"'));
-assert(login.includes('data-auth-panel="signup"'));
+assert(login.includes('id="login-panel" role="tabpanel" aria-labelledby="login-tab"'));
+assert(login.includes('id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"'));
 
 assert(tmdb.includes('/api/tmdb/'));
 assert(!tmdb.includes('api_key='));
