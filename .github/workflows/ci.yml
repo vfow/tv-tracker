@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -28,81 +28,6 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.head_ref }}
-      - name: Complete verified Search cleanup
-        if: github.actor != 'github-actions[bot]'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          ui_path = Path('static/js/ui.js')
-          ui = ui_path.read_text(encoding='utf-8')
-
-          def remove_between(text, start_marker, end_marker):
-              start = text.index(start_marker)
-              end = text.index(end_marker, start)
-              return text[:start] + text[end:]
-
-          ui = remove_between(
-              ui,
-              'function renderTrackerPersonSkeletonCards(count=12){',
-              'function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-back-button"){',
-          )
-          ui = remove_between(
-              ui,
-              'function renderInactiveEyeFilterControlHTML(extraClass=""){',
-              '// --TVT-search-navigation-owner-begin--',
-          )
-
-          removed = (
-              'renderTrackerPersonSkeletonCards',
-              'renderSearchTabButtonHTML',
-              'renderInactiveEyeFilterControlHTML',
-              'renderSearchResultPosterCard',
-              'renderSearchPersonCard',
-              'renderSearchResults',
-          )
-          for name in removed:
-              if name in ui:
-                  raise RuntimeError(f'legacy Search renderer reference remains: {name}')
-          for required in (
-              'function lockSearchRouteBeforeResultOpen',
-              'window.lockSearchRouteBeforeResultOpen = lockSearchRouteBeforeResultOpen;',
-              'function renderEyeFilterControlHTML',
-              'function getEyeFilteredRenderItems',
-              'function renderCollectionCard',
-              'function renderTrackerPosterSkeletonCards',
-              'function renderMediaPosterPlaceholderHTML',
-          ):
-              if required not in ui:
-                  raise RuntimeError(f'shared helper removed: {required}')
-          ui_path.write_text(ui, encoding='utf-8')
-
-          contracts_path = Path('tests/test_source_contracts.py')
-          contracts = contracts_path.read_text(encoding='utf-8')
-          old = '''        self.assertNotIn('function renderSearchPersonCard(', ui)\n        search_bridge = self.read('static/js/search-state-bridge.js')\n        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')\n        self.assertIn('global.renderSearchResults = render;', search_bridge)\n        self.assertIn('data-tvtracker-search-owner="vue"', search_vue)\n'''
-          new = '''        self.assertNotIn('function renderSearchPersonCard(', ui)\n        self.assertNotIn('function renderInactiveEyeFilterControlHTML(', ui)\n        self.assertNotIn('function renderTrackerPersonSkeletonCards(', ui)\n        self.assertIn('function lockSearchRouteBeforeResultOpen', ui)\n        search_bridge = self.read('static/js/search-state-bridge.js')\n        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')\n        self.assertIn('global.renderSearchResults = render;', search_bridge)\n        self.assertIn('global.lockSearchRouteBeforeResultOpen', search_bridge)\n        self.assertIn('global.getEyeFilteredRenderItems', search_bridge)\n        self.assertIn('data-tvtracker-search-owner="vue"', search_vue)\n'''
-          if contracts.count(old) != 1:
-              raise RuntimeError('unexpected current Search source-contract block')
-          contracts_path.write_text(contracts.replace(old, new, 1), encoding='utf-8')
-
-          doc_path = Path('docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md')
-          doc = doc_path.read_text(encoding='utf-8')
-          old_doc = 'The cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, and `renderSearchPersonCard` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen` and eye-filter logic remain because the Vue bridge still consumes them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.'
-          new_doc = 'The cleanup removes `renderSearchResults`, `renderSearchTabButtonHTML`, `renderSearchResultPosterCard`, `renderSearchPersonCard`, `renderInactiveEyeFilterControlHTML`, and `renderTrackerPersonSkeletonCards` from `static/js/ui.js`. Shared helpers such as `lockSearchRouteBeforeResultOpen`, `getEyeFilteredRenderItems`, poster placeholders, collection rendering, and the active eye-filter control remain because Vue, Discover, or other surfaces still consume them. Source contracts now assert Vue/bridge ownership directly instead of requiring the legacy renderer to exist.'
-          if doc.count(old_doc) != 1:
-              raise RuntimeError('unexpected current cleanup-gate text')
-          doc_path.write_text(doc.replace(old_doc, new_doc, 1), encoding='utf-8')
-          PY
-          node --check static/js/ui.js
-          python -m py_compile tests/test_source_contracts.py
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add static/js/ui.js tests/test_source_contracts.py docs/architecture/FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md
-          git commit -m 'Complete legacy Search renderer cleanup'
-          git push origin HEAD:${{ github.head_ref }}
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
