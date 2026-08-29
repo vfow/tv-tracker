@@ -160,7 +160,7 @@ const ui = fs.readFileSync('static/js/ui.js', 'utf8');
     assert(component.includes('Try another tab or another search.'));
     assert(!component.includes('fetch('), 'Vue Search renderer must not own network requests');
     assert(!component.includes('history.'), 'Vue Search renderer must not own browser History');
-    assert(main.includes("FRONTEND_FOUNDATION_VERSION = 'phase9-search-renderer'"));
+    assert(main.includes("FRONTEND_FOUNDATION_VERSION = 'phase5-shared-ui-feedback'"));
     assert(main.includes('createApp(SearchResults'));
     assert(main.includes('window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);'));
     assert(ui.includes('function renderSearchResults(resultsList)'), 'legacy renderer may remain physically during this bounded ownership slice');
