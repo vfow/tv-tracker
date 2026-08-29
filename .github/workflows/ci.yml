@@ -34,72 +34,56 @@ jobs:
         if: github.actor != 'github-actions[bot]'
         run: |
           python - <<'PY'
-          import re
           from pathlib import Path
 
           ui_path = Path('static/js/ui.js')
           ui = ui_path.read_text(encoding='utf-8')
 
-          def remove_function(text, name):
-              match = re.search(rf'(?m)^function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{', text)
-              if not match:
-                  raise RuntimeError(f'missing function: {name}')
-              start = match.start()
-              brace = text.find('{', match.start())
-              depth = 0
-              quote = None
-              escaped = False
-              i = brace
-              while i < len(text):
-                  ch = text[i]
-                  if quote:
-                      if escaped:
-                          escaped = False
-                      elif ch == '\\':
-                          escaped = True
-                      elif ch == quote:
-                          quote = None
-                      i += 1
-                      continue
-                  if ch in ('"', "'", '`'):
-                      quote = ch
-                      i += 1
-                      continue
-                  if ch == '{':
-                      depth += 1
-                  elif ch == '}':
-                      depth -= 1
-                      if depth == 0:
-                          end = i + 1
-                          while end < len(text) and text[end] in ' \t':
-                              end += 1
-                          if end < len(text) and text[end] == '\r':
-                              end += 1
-                          if end < len(text) and text[end] == '\n':
-                              end += 1
-                          if end < len(text) and text[end] == '\n':
-                              end += 1
-                          return text[:start] + text[end:]
-                  i += 1
-              raise RuntimeError(f'unbalanced function: {name}')
+          def remove_between(text, start_marker, end_marker):
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              return text[:start] + text[end:]
 
-          removed = [
+          ui = remove_between(
+              ui,
+              'function renderTrackerPersonSkeletonCards(count=12){',
+              'function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-back-button"){',
+          )
+          ui = remove_between(
+              ui,
+              'function renderSearchTabButtonHTML(type,label,isActive){',
+              'function getMediaPosterTitle(item,media="movie"){',
+          )
+          ui = remove_between(
+              ui,
+              'function renderInactiveEyeFilterControlHTML(extraClass=""){',
+              '// --TVT-search-navigation-owner-begin--',
+          )
+          ui = remove_between(
+              ui,
+              'function renderSearchResults(resultsList){',
+              'function getShowDetailFilters(){',
+          )
+
+          removed = (
               'renderTrackerPersonSkeletonCards',
               'renderSearchTabButtonHTML',
               'renderInactiveEyeFilterControlHTML',
               'renderSearchResultPosterCard',
               'renderSearchPersonCard',
               'renderSearchResults',
-          ]
-          for name in removed:
-              ui = remove_function(ui, name)
+          )
           for name in removed:
               if name in ui:
                   raise RuntimeError(f'legacy Search renderer reference remains: {name}')
           for required in (
               'function lockSearchRouteBeforeResultOpen',
+              'window.lockSearchRouteBeforeResultOpen = lockSearchRouteBeforeResultOpen;',
               'function renderEyeFilterControlHTML',
               'function getEyeFilteredRenderItems',
+              'function renderCollectionCard',
+              'function renderTrackerPosterSkeletonCards',
+              'function renderMediaPosterPlaceholderHTML',
           ):
               if required not in ui:
                   raise RuntimeError(f'shared helper removed: {required}')
