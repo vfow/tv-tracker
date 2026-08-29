@@ -1,0 +1,17 @@
+name: Routing frontend regression helper
+
+on:
+  push:
+    branches: [frontend-modernization-routing-completion]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Run legacy frontend regression contract
+        run: node tests/test_frontend.js
