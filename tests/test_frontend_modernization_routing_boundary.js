@@ -62,12 +62,8 @@ historyWriters.sort();
 popstateFiles.sort();
 assert.deepStrictEqual(
     historyWriters,
-    [
-        "static/js/app-router.js",
-        "static/js/app.js",
-        "static/js/ui.js"
-    ],
-    "Routing migration must not introduce new direct browser-history writers; all remaining legacy exceptions are explicitly inventoried"
+    ["static/js/app-router.js"],
+    "app-router.js must be the sole direct browser-history writer after Routing completion"
 );
 assert.deepStrictEqual(
     popstateFiles,
