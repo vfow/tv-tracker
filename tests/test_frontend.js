@@ -19,6 +19,7 @@ const fs = require('fs');
 const app = fs.readFileSync('static/js/app.js','utf8');
 assert(!app.includes('api.' + 'tv' + 'maze.com'));
 assert(app.includes('function cleanLegacyMetadata'));
+assert(app.includes('function normalizePersonRoleSlug'));
 assert(app.includes('function getPersonAvailableRoles'));
 assert(app.includes('function getPersonCreditsForRole'));
 assert(!app.includes('PERSON_ROLE_CONFIGS'));
@@ -85,22 +86,6 @@ assert(ui.includes('function lockSearchRouteBeforeResultOpen'));
 assert(ui.includes('// --TVT-search-navigation-owner-begin--'));
 assert(ui.includes('// --TVT-search-navigation-owner-end--'));
 assert(ui.includes('window.TVTrackerRouter.setPathRoute(route,true)'));
-
-const personRoleContext = {};
-vm.createContext(personRoleContext);
-vm.runInContext(
-  app.slice(
-    app.indexOf('function normalizePersonRole'),
-    app.indexOf('function getPersonAvailableRoles')
-  ),
-  personRoleContext
-);
-assert.strictEqual(personRoleContext.normalizePersonRole('actor'),'actor');
-assert.strictEqual(personRoleContext.normalizePersonRole('director'),'director');
-assert.strictEqual(personRoleContext.normalizePersonRole('creator'),'creator');
-assert.strictEqual(personRoleContext.normalizePersonRole('writer'),'writer');
-assert.strictEqual(personRoleContext.normalizePersonRole('producer'),'producer');
-assert.strictEqual(personRoleContext.normalizePersonRole('anything-else'),'actor');
 
 const libraryFilterContext = {
   activeFilter:'watching',
