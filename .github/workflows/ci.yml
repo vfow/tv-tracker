@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -28,8 +28,6 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.head_ref }}
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
@@ -43,21 +41,10 @@ jobs:
       - run: npm ci --audit=false
       - name: Verify npm build dependency security
         run: npm audit --audit-level=high
-      - name: Refresh committed Tailwind CSS
-        run: npm run build:css
-      - name: Commit generated Tailwind CSS
-        if: github.actor != 'github-actions[bot]'
+      - name: Build and verify committed Tailwind CSS
         run: |
-          git add static/css/tailwind.css
-          staged="$(git diff --cached --name-only)"
-          test "$staged" = "static/css/tailwind.css"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'build: refresh committed Tailwind CSS'
-          git push origin HEAD:${{ github.head_ref }}
-      - name: Verify committed Tailwind CSS
-        if: github.actor == 'github-actions[bot]'
-        run: git diff --exit-code -- static/css/tailwind.css
+          npm run build:css
+          git diff --exit-code -- static/css/tailwind.css
       - name: Run full regression suite
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
