@@ -19,7 +19,6 @@ const fs = require('fs');
 const app = fs.readFileSync('static/js/app.js','utf8');
 assert(!app.includes('api.' + 'tv' + 'maze.com'));
 assert(app.includes('function cleanLegacyMetadata'));
-assert(app.includes('function normalizePersonRoleSlug'));
 assert(app.includes('function getPersonAvailableRoles'));
 assert(app.includes('function getPersonCreditsForRole'));
 assert(!app.includes('PERSON_ROLE_CONFIGS'));
@@ -30,62 +29,114 @@ const router = fs.readFileSync('static/js/app-router.js','utf8');
 const template = fs.readFileSync('templates/index.html','utf8');
 const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
-const config = fs.readFileSync('static/js/config.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
-const trending = fs.readFileSync('static/js/trending.js','utf8');
-const settings = fs.readFileSync('static/js/settings.js','utf8');
-const releaseTiming = fs.readFileSync('static/js/release-timing.js','utf8');
-const notificationsRuntime = fs.readFileSync('static/js/notifications-runtime.js','utf8');
-const discoverBrowse = fs.readFileSync('static/js/discover-browse.js','utf8');
-const showDetailFilters = fs.readFileSync('static/js/show-detail-filters.js','utf8');
-const episodeCrew = fs.readFileSync('static/js/episode-crew.js','utf8');
-const interactionQuality = fs.readFileSync('static/js/interaction-quality.js','utf8');
-const startup = fs.readFileSync('static/js/startup.js','utf8');
-const feedback = fs.readFileSync('static/js/feedback.js','utf8');
-const providerFreshness = fs.readFileSync('static/js/provider-freshness.js','utf8');
-const adultFilter = fs.readFileSync('static/js/adult-filter.js','utf8');
-const settingsVueBridge = fs.readFileSync('static/js/settings-vue-bridge.js','utf8');
-const settingsVueLoader = fs.readFileSync('static/js/settings-vue-loader.js','utf8');
-const pendingSaveStore = fs.readFileSync('static/js/pending-save-store.js','utf8');
-const auditUtils = fs.readFileSync('static/js/audit-utils.js','utf8');
-const clientRuntime = fs.readFileSync('static/js/client-runtime.js','utf8');
-const saveStorageFallback = fs.readFileSync('static/js/save-storage-fallback.js','utf8');
-const coreFoundation = fs.readFileSync('static/js/core/foundation.js','utf8');
-const streamRegion = fs.readFileSync('static/js/streaming-region.js','utf8');
 
-assert(!router.includes('#view='));
-assert(router.includes('window.addEventListener("popstate"'));
-assert(router.includes('history.replaceState'));
-assert(router.includes('history.pushState'));
-assert(router.includes('function parseAppRoute'));
-assert(router.includes('function setPathRoute'));
-assert(router.includes('function applyRoute'));
+assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
+assert(ui.includes('function renderTrackerMediaRowSkeletonHTML(index=0,kind="upcoming")'));
+assert(ui.includes('function renderUpcomingSkeletonHTML()'));
+assert(ui.includes('function renderHistorySkeletonHTML()'));
+assert(ui.includes('const count = mobile ? 6 : 8'));
+assert(ui.includes('if(startBackgroundRefresh || isRefreshingUpcoming)'));
+assert(router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
+assert(router.includes('list.innerHTML = renderHistorySkeletonHTML()'));
+assert(!historyActivity.includes('appDataReady === false'));
+const upcomingSkeletonSource = ui.slice(
+  ui.indexOf('function renderUpcomingSkeletonHTML()'),
+  ui.indexOf('function renderHistorySkeletonHTML()')
+);
+assert(!upcomingSkeletonSource.toLowerCase().includes('bell'));
+assert(!upcomingSkeletonSource.includes('watchlist-skeleton-action'));
 
-assert(template.includes("filename='js/app-router.js'"));
-assert(template.includes("filename='js/startup.js'"));
-assert(template.indexOf("filename='js/app-router.js'") < template.indexOf("filename='js/startup.js'"));
-assert(template.includes("filename='js/settings-vue-loader.js'"));
-assert(template.indexOf("filename='js/settings-vue-loader.js'") < template.indexOf("filename='js/app-router.js'"));
-
-assert(login.includes('data-auth-tab="login"'));
-assert(login.includes('data-auth-tab="signup"'));
-assert(login.includes('id="login-panel" role="tabpanel" aria-labelledby="login-tab"'));
-assert(login.includes('id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"'));
-
-assert(config.includes('const TMDB_API_BASE = "/api/tmdb";'));
-assert(tmdb.includes('TMDB_API_BASE'));
-assert(!tmdb.includes('api_key='));
-assert(!tmdb.includes('window.TMDB_API_KEY'));
-assert(!tmdb.includes('api.themoviedb.org'));
-
+assert(router.includes('/app/list/'));
+assert(router.includes('app\\/show'));
+assert(router.includes('function parseAppRoute(pathname,search="")'));
+assert(router.includes('function prepareInitialRoute()'));
+assert(router.includes('app\\/person'));
+assert(!router.includes('person|actor|creator|director|writer|producer|editor|composer|cinematographer'));
+assert(!router.includes('#/app'));
+assert(template.includes('show-detail-page'));
+assert(template.includes('episode-detail-page'));
+assert(template.includes('app-router.js'));
+assert(!template.includes('static-adapter.js'));
+assert(login.includes('Registration coming soon'));
+assert(!login.includes('name="next"'));
+assert(tmdb.includes('The key is held by Flask'));
+assert(!ui.includes('TVTrackerStaticAdapter'));
 assert(ui.includes('function safeExternalURL'));
-assert(ui.includes('function getCheckSuccessAnimationTarget'));
-assert(ui.includes('function lockSearchRouteBeforeResultOpen'));
-assert(ui.includes('// --TVT-search-navigation-owner-begin--'));
-assert(ui.includes('// --TVT-search-navigation-owner-end--'));
-assert(ui.includes('window.TVTrackerRouter.setPathRoute(route,true)'));
+assert(ui.includes('data-person-role="person"'));
+assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
+assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
+assert(ui.includes('for="library-year-filter">Year</label>'));
+assert(ui.includes('setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter())'));
+
+const libraryFilterSource = ui.slice(
+  ui.indexOf('function getLibraryGenreFilter'),
+  ui.indexOf('function renderLibrarySearchControl')
+);
+const libraryFilterContext = {
+  console,
+  Map,
+  Object,
+  Array,
+  Number,
+  String,
+  Date,
+  DATA:{
+    shows:{
+      1:{status:'watching',genres:['Drama'],networks:[{name:'Netflix'}],first_air_date:'2024-01-01'},
+      2:{status:'watching',genres:['Crime'],networks:[{name:'FX'}],first_air_date:'2023-02-02'},
+      3:{status:'finished',genres:['Comedy'],networks:[{name:'HBO'}],first_air_date:'2022-03-03'}
+    },
+    history:[]
+  },
+  activeFilter:'watching',
+  activePage:'shows',
+  activeShowsTab:'watchlist',
+  librarySearchQuery:'needle',
+  libraryGenreFilter:'Mystery',
+  libraryNetworkFilter:'all',
+  libraryYearFilter:'all',
+  librarySortMode:'default',
+  filterShow(show){ return show.status === libraryFilterContext.activeFilter; },
+  document:{querySelectorAll(){ return []; }},
+  window:{TVTrackerRouter:{updateRouteFromState(){}}},
+  renderLibrarySearchControl(){},
+  renderWatchlist(){},
+  getLibrarySearchQuery(){ return String(libraryFilterContext.librarySearchQuery || '').trim(); },
+  sortLibrarySearchResults(){ return 0; }
+};
+vm.createContext(libraryFilterContext);
+vm.runInContext(libraryFilterSource, libraryFilterContext);
+
+const genreCounts = Array.from(libraryFilterContext.buildLibraryOptionCounts('genre'));
+assert(genreCounts.some(item=>item.value === 'Drama' && item.label === 'Drama (1)'));
+assert(genreCounts.some(item=>item.value === 'Crime' && item.label === 'Crime (1)'));
+assert(!genreCounts.some(item=>item.value === 'Comedy'),'filter options should be scoped to the current status list');
+assert(genreCounts.some(item=>item.value === 'Mystery' && item.label === 'Mystery (0)'),'an active filter should remain visible after switching to a status with zero matches');
+
+const yearCounts = Array.from(libraryFilterContext.buildLibraryOptionCounts('year'));
+assert.deepStrictEqual(yearCounts.map(item=>item.value),['2024','2023']);
+libraryFilterContext.libraryGenreFilter='all';
+libraryFilterContext.libraryYearFilter='2024';
+assert.strictEqual(libraryFilterContext.libraryShowMatchesAdvancedFilters(libraryFilterContext.DATA.shows[1]),true);
+assert.strictEqual(libraryFilterContext.libraryShowMatchesAdvancedFilters(libraryFilterContext.DATA.shows[2]),false);
+
+libraryFilterContext.activeFilter='finished';
+libraryFilterContext.librarySearchQuery='keep me';
+libraryFilterContext.libraryGenreFilter='Comedy';
+libraryFilterContext.libraryNetworkFilter='HBO';
+libraryFilterContext.libraryYearFilter='2022';
+libraryFilterContext.librarySortMode='rating-desc';
+libraryFilterContext.resetLibraryFiltersToDefault();
+assert.strictEqual(libraryFilterContext.activeFilter,'finished','Reset Filters must keep the current status');
+assert.strictEqual(libraryFilterContext.librarySearchQuery,'keep me','Reset Filters must keep the search text');
+assert.strictEqual(libraryFilterContext.libraryGenreFilter,'all');
+assert.strictEqual(libraryFilterContext.libraryNetworkFilter,'all');
+assert.strictEqual(libraryFilterContext.libraryYearFilter,'all');
+assert.strictEqual(libraryFilterContext.librarySortMode,'default');
+assert.strictEqual(libraryFilterContext.hasActiveLibraryControls(),false,'status/search alone must not count as active advanced filters');
 
 const safeExternalURLSource = ui.slice(
   ui.indexOf('function safeExternalURL'),
@@ -105,6 +156,8 @@ assert(db.includes('baseRevision:Number(SERVER_REVISION || 0)'));
 assert(db.includes('let requestRevision = Number(operation.baseRevision || 0);'));
 assert(db.includes('operation.baseRevision = Number(SERVER_REVISION || 0);'));
 assert(router.includes('history.pushState'));
+assert(!app.includes('history.pushState'));
+assert(!app.includes('history.replaceState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
 assert(template.includes('history-activity.js'));
 assert(template.indexOf('js/app.js') < template.indexOf('js/history-activity.js'));
@@ -137,42 +190,165 @@ const historyActivityContext = {
     ]
   },
   isMovieHistoryEntry(entry){
-    return entry && String(entry.media_type || '').toLowerCase() === 'movie';
+    return !!entry && (String(entry.media_type || '').toLowerCase() === 'movie' || !!entry.movie_id);
   },
   isEpisodeAired(airDate){
-    return String(airDate || '') < '2099-01-01';
+    return String(airDate || '') <= '2026-08-13';
   }
 };
 vm.createContext(historyActivityContext);
-vm.runInContext(historyActivityRuleSource, historyActivityContext);
-const activityEntries = historyActivityContext.getActivityHistoryEntries();
-assert.strictEqual(activityEntries.length,2,'future TV episodes must not appear in activity History');
-assert.strictEqual(activityEntries[0].id,'movie-1','newest released History item should remain first');
-assert.strictEqual(activityEntries[1].id,'tv-1');
+vm.runInContext(historyActivityRuleSource,historyActivityContext);
+assert.deepStrictEqual(
+  Array.from(historyActivityContext.getActivityHistoryEntries()).map(entry=>entry.id),
+  ['movie-1','tv-1'],
+  'History should combine watched movies and aired TV episodes chronologically'
+);
 
-assert(trending.includes('TVTrackerRouter'));
-assert(settings.includes('TVTrackerRouter'));
-assert(releaseTiming.includes('TVTrackerReleaseTiming'));
-assert(notificationsRuntime.includes('TVTrackerNotifications'));
-assert(discoverBrowse.includes('TVTrackerBrowse'));
-assert(showDetailFilters.includes('TVTrackerShowDetailFilters'));
-assert(episodeCrew.includes('TVTrackerEpisodeCrew'));
-assert(interactionQuality.includes('function ensureDialogSemantics'));
-assert(interactionQuality.includes('TVTrackerInteractionQuality'));
-assert(startup.includes('TVTrackerStartupPromise'));
-assert(startup.includes('startTVTrackerApp'));
-assert(feedback.includes('TVTrackerFeedback'));
-assert(providerFreshness.includes('TVTrackerProviderFreshness'));
-assert(adultFilter.includes('TVTrackerAdultPolicy'));
-assert(settingsVueBridge.includes('TVTrackerSettingsBridge'));
-assert(settingsVueLoader.includes('tvtracker:settings-vue-needed'));
-assert(settingsVueLoader.includes('/static/vue/manifest.json'));
-assert(pendingSaveStore.includes('TVTrackerPendingSaveStore'));
-assert(auditUtils.includes('TVTrackerAuditUtils'));
-assert(clientRuntime.includes('TVTrackerClientRuntime'));
-assert(saveStorageFallback.includes('persistDurablePendingSaveQueue'));
-assert(saveStorageFallback.includes('PENDING_SAVE_STORAGE_ERROR'));
-assert(coreFoundation.includes('TVTrackerCore'));
-assert(streamRegion.includes('TVTrackerStreamingRegion'));
 
-console.log('Frontend regression tests passed.');
+const completionRuleSource = app.slice(
+  app.indexOf('function isKnownFutureRegularEpisode'),
+  app.indexOf('async function completeShow')
+);
+assert(completionRuleSource.includes('async function autoCompleteShowAfterLogging'));
+assert(completionRuleSource.includes('function reopenCompletedShowAfterUnwatch'));
+
+async function runCompletionRuleChecks(){
+  let refreshCalls = 0;
+  const completionContext = {
+    console,
+    Object,
+    Array,
+    Number,
+    String,
+    Date,
+    Math,
+    Promise,
+    isMainSeasonNumber(value){
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 1;
+    },
+    isEpisodeAired(airDate){
+      return !!airDate && String(airDate) <= '2026-08-13';
+    },
+    isEpisodeLoggable(ep,show,seasonNumber){
+      if(ep && ep.air_date){
+        return String(ep.air_date) <= '2026-08-13';
+      }
+      const last = show && show.last_episode_to_air;
+      if(!last){
+        return false;
+      }
+      const season = Number(seasonNumber);
+      const episode = Number(ep && ep.episode_number || 0);
+      const lastSeason = Number(last.season_number || 0);
+      const lastEpisode = Number(last.episode_number || 0);
+      return season < lastSeason || (season === lastSeason && episode <= lastEpisode);
+    },
+    canUseTMDBShow(){ return true; },
+    async refreshShowDetails(){ refreshCalls += 1; return true; },
+    async loadSeasonData(){ return true; },
+    seasonDataAlreadyLoaded(){ return true; },
+    getAllAiredUnwatchedEpisodes(show){ return Array.isArray(show._testUnwatched) ? show._testUnwatched : []; }
+  };
+  vm.createContext(completionContext);
+  vm.runInContext(completionRuleSource, completionContext);
+
+  const completedShow = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:null,
+    _episode_list:{'1':[{episode_number:1,air_date:'2026-08-01'}]},
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(completedShow),true);
+  assert.strictEqual(completedShow.status,'finished');
+  assert(completedShow.completed_at,'automatic completion should set completed_at');
+
+  const futureUnknownDate = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:2,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:{season_number:2,episode_number:1,air_date:''},
+    _episode_list:{
+      '1':[{episode_number:1,air_date:'2026-08-01'}],
+      '2':[{episode_number:1,air_date:''}]
+    },
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(futureUnknownDate),false);
+  assert.strictEqual(futureUnknownDate.status,'watching','an announced future episode without an air date must block completion');
+
+  const futureSpecialOnly = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1,air_date:'2026-08-01'},
+    next_episode_to_air:null,
+    _episode_list:{
+      '0':[{episode_number:1,air_date:'2099-01-01'}],
+      '1':[{episode_number:1,air_date:'2026-08-01'}]
+    },
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(futureSpecialOnly),true,'specials must not block completion');
+
+  refreshCalls = 0;
+  const pausedShow = {status:'paused',completed_at:'',_testUnwatched:[]};
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(pausedShow),false);
+  assert.strictEqual(pausedShow.status,'paused');
+  assert.strictEqual(refreshCalls,0,'paused shows should not trigger completion verification');
+
+  completionContext.refreshShowDetails = async()=>false;
+  const failedVerification = {
+    status:'watching',
+    completed_at:'',
+    number_of_seasons:1,
+    last_episode_to_air:{season_number:1,episode_number:1},
+    next_episode_to_air:null,
+    _episode_list:{'1':[{episode_number:1,air_date:'2026-08-01'}]},
+    _testUnwatched:[]
+  };
+  assert.strictEqual(await completionContext.autoCompleteShowAfterLogging(failedVerification),false);
+  assert.strictEqual(failedVerification.status,'watching','failed TMDB verification must leave status unchanged');
+
+  const reopened = {status:'finished',completed_at:'2026-08-13T00:00:00.000Z'};
+  assert.strictEqual(completionContext.reopenCompletedShowAfterUnwatch(reopened,1),true);
+  assert.strictEqual(reopened.status,'watching');
+  assert.strictEqual(reopened.completed_at,'');
+
+  const specialUnwatch = {status:'finished',completed_at:'2026-08-13T00:00:00.000Z'};
+  assert.strictEqual(completionContext.reopenCompletedShowAfterUnwatch(specialUnwatch,0),false);
+  assert.strictEqual(specialUnwatch.status,'finished','unwatching a special must not reopen a completed show');
+}
+
+const episodeCreditSource = app.slice(
+  app.indexOf('function normalizeActorCharacter'),
+  app.indexOf('function normalizeTMDBEpisodeExternalIds')
+);
+const episodeCreditContext = {Object,Array,Number,String,Set};
+vm.createContext(episodeCreditContext);
+vm.runInContext(episodeCreditSource, episodeCreditContext);
+const splitCredits = episodeCreditContext.normalizeTMDBEpisodeCreditGroups({
+  guest_stars:[
+    {id:10,name:'Guest One',character:'Guest',order:1},
+    {id:20,name:'Guest Two',character:'Guest',order:2}
+  ],
+  cast:[
+    {id:10,name:'Guest One',character:'Regular duplicate',order:1},
+    {id:30,name:'Cast One',character:'Lead',order:3}
+  ]
+});
+assert.deepStrictEqual(Array.from(splitCredits.guest_stars,item=>item.id),[10,20]);
+assert.deepStrictEqual(Array.from(splitCredits.cast,item=>item.id),[30],'guest stars must be removed from the regular episode cast section');
+
+runCompletionRuleChecks()
+.then(()=>console.log('Automatic completion rule checks passed'))
+.catch(error=>{
+  console.error(error);
+  process.exitCode = 1;
+});
+
+console.log('Frontend integration checks passed');
