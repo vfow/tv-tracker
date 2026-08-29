@@ -59,7 +59,7 @@ assert(router.includes('history.replaceState'));
 assert(router.includes('history.pushState'));
 assert(router.includes('function parseAppRoute'));
 assert(router.includes('function setPathRoute'));
-assert(router.includes('function applyLocationRoute'));
+assert(router.includes('function applyRoute'));
 
 assert(template.includes("filename='js/app-router.js'"));
 assert(template.includes("filename='js/startup.js'"));
