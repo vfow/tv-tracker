@@ -1,8 +1,8 @@
 # Frontend Modernization — Routing
 
-Status: canonical runtime history ownership consolidated; final PR/CI/merge gate pending
+Status: complete in production
 
-Production baseline before this completion slice: `f360969b1ed676f09470ded38660fde793d05f29`
+Production completion merge: `55ae81d4ffe3223675fbb9fbbdb6d198eb382ff5` (PR #64)
 
 ## Goal
 
@@ -14,7 +14,7 @@ Migrate routing incrementally without creating a second history owner or changin
 
 `frontend/src/routing/router.ts` remains the typed Vue-era adapter. It delegates route parsing and navigation to `window.TVTrackerRouter`; it does not call `history.pushState`, `history.replaceState`, or register `popstate` itself.
 
-The former direct-history exceptions have been burned down. `static/js/trending.js`, `static/js/settings.js`, `static/js/app.js`, and the search-navigation owner in `static/js/ui.js` now delegate their path writes to `TVTrackerRouter.setPathRoute`.
+The former direct-history exceptions have been burned down. `static/js/trending.js`, `static/js/settings.js`, `static/js/app.js`, and the search-navigation owner in `static/js/ui.js` delegate their path writes to `TVTrackerRouter.setPathRoute`.
 
 ## Invariants
 
@@ -23,19 +23,18 @@ The former direct-history exceptions have been burned down. `static/js/trending.
 - Canonicalization remains implemented by the existing router.
 - Vue callers use the typed routing adapter rather than writing browser history directly.
 - Legacy runtime callers delegate path writes to `TVTrackerRouter.setPathRoute`.
-- No Search, Discover, media-detail, Upcoming, tracker, History, or watched-state product behavior moves in this slice.
 - No new direct History API writer may be introduced.
 
-## Completion gates
+## Completion evidence
 
-1. Vue strict type checking continues to pass with the routing adapter.
+1. Vue strict type checking passed with the routing adapter.
 2. The typed adapter delegates parsing, path writes, and route application to `TVTrackerRouter`.
 3. Repository-wide ownership scanning finds exactly one application `popstate` owner: `static/js/app-router.js`.
 4. Repository-wide ownership scanning finds exactly one direct History API writer: `static/js/app-router.js`.
 5. `static/js/app.js`, `static/js/ui.js`, `static/js/trending.js`, and `static/js/settings.js` contain no direct `pushState` or `replaceState` calls.
-6. The Routing matrix contract proves direct loads, reload/startup shells, canonical push/replace writes, search-result click navigation, and Back/Forward regression coverage remain present.
-7. The full repository regression suite and diff-hygiene gate pass on the exact PR head.
+6. The Routing matrix locks direct loads, reload/startup shells, canonical push/replace writes, search-result click navigation, and Back/Forward behavior.
+7. Exact-head PR CI passed before merge, and deployment #140 passed the full regression suite, release provenance, production activation, restart, and public health check.
 
 ## Next phase
 
-After this slice is merged and deployed successfully, Routing is complete and the modernization roadmap advances to Search / Discover.
+Routing is complete. The modernization roadmap is now in Search / Discover; see `FRONTEND_MODERNIZATION_SEARCH_DISCOVER.md`.
