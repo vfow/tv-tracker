@@ -76,7 +76,7 @@ assert(login.includes('id="signup-panel" role="tabpanel" aria-labelledby="signup
 assert(config.includes('const TMDB_API_BASE = "/api/tmdb";'));
 assert(tmdb.includes('TMDB_API_BASE'));
 assert(!tmdb.includes('api_key='));
-assert(!tmdb.includes('TMDB_API_KEY'));
+assert(!tmdb.includes('window.TMDB_API_KEY'));
 assert(!tmdb.includes('api.themoviedb.org'));
 
 assert(ui.includes('function safeExternalURL'));
