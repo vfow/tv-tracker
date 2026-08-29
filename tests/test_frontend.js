@@ -170,7 +170,8 @@ assert(settingsVueLoader.includes('/static/vue/manifest.json'));
 assert(pendingSaveStore.includes('TVTrackerPendingSaveStore'));
 assert(auditUtils.includes('TVTrackerAuditUtils'));
 assert(clientRuntime.includes('TVTrackerClientRuntime'));
-assert(saveStorageFallback.includes('TVTrackerSaveStorageFallback'));
+assert(saveStorageFallback.includes('persistDurablePendingSaveQueue'));
+assert(saveStorageFallback.includes('PENDING_SAVE_STORAGE_ERROR'));
 assert(coreFoundation.includes('TVTrackerCore'));
 assert(streamRegion.includes('TVTrackerStreamingRegion'));
 
