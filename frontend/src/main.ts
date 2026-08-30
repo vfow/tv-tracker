@@ -2,6 +2,8 @@ import { createApp, type App as VueApp } from 'vue';
 
 import FoundationProbe from './FoundationProbe.vue';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
+import DiscoverHub from './search-discover/DiscoverHub.vue';
+import type { DiscoverRendererActions, DiscoverViewModel } from './search-discover/discoverViewModel';
 import SearchResults from './search-discover/SearchResults.vue';
 import type { SearchRendererActions, SearchViewModel } from './search-discover/searchViewModel';
 import SettingsAuth from './settings/SettingsAuth.vue';
@@ -43,6 +45,16 @@ type SearchBridge = Readonly<{
   actions: SearchRendererActions;
 }>;
 
+type DiscoverVueOwner = Readonly<{
+  render: (model: DiscoverViewModel) => void;
+  unmount: () => void;
+}>;
+
+type DiscoverBridge = Readonly<{
+  attachVueOwner: (owner: DiscoverVueOwner) => void;
+  actions: DiscoverRendererActions;
+}>;
+
 type VueFoundationBridge = Readonly<{
   version: string;
   mountProbe: typeof mountFoundationProbe;
@@ -53,6 +65,7 @@ declare global {
     TVTrackerVueFoundation?: VueFoundationBridge;
     TVTrackerSettingsBridge?: SettingsBridge;
     TVTrackerSearchVueBridge?: SearchBridge;
+    TVTrackerDiscoverVueBridge?: DiscoverBridge;
   }
 }
 
@@ -61,6 +74,8 @@ let settingsRoot: Element | null = null;
 let settingsSection = '';
 let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
+let discoverApp: VueApp<Element> | null = null;
+let discoverRoot: Element | null = null;
 
 function unmountSettings(): void {
   if (settingsApp) settingsApp.unmount();
@@ -73,6 +88,12 @@ function unmountSearch(): void {
   if (searchApp) searchApp.unmount();
   searchApp = null;
   searchRoot = null;
+}
+
+function unmountDiscover(): void {
+  if (discoverApp) discoverApp.unmount();
+  discoverApp = null;
+  discoverRoot = null;
 }
 
 function supportsPhase3Streaming(section: string): boolean {
@@ -127,6 +148,7 @@ const searchOwner: SearchVueOwner = Object.freeze({
     const root = document.getElementById('search-results');
     const bridge = window.TVTrackerSearchVueBridge;
     if (!root || !bridge) return;
+    unmountDiscover();
     unmountSearch();
     root.replaceChildren();
     searchRoot = root;
@@ -139,6 +161,24 @@ const searchOwner: SearchVueOwner = Object.freeze({
   unmount: unmountSearch
 });
 
+const discoverOwner: DiscoverVueOwner = Object.freeze({
+  render(model: DiscoverViewModel): void {
+    const root = document.getElementById('search-results');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    unmountSearch();
+    unmountDiscover();
+    root.replaceChildren();
+    discoverRoot = root;
+    discoverApp = createApp(DiscoverHub, {
+      model,
+      actions: bridge.actions
+    });
+    discoverApp.mount(root);
+  },
+  unmount: unmountDiscover
+});
+
 window.TVTrackerVueFoundation = Object.freeze({
   version: FRONTEND_FOUNDATION_VERSION,
   mountProbe: mountFoundationProbe
@@ -146,3 +186,4 @@ window.TVTrackerVueFoundation = Object.freeze({
 
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
+window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
