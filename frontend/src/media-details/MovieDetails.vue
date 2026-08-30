@@ -7,5 +7,5 @@ defineProps<{
 </script>
 
 <template>
-  <div data-tvtracker-movie-details-owner="vue" v-html="model.html"></div>
+  <div style="display: contents" data-tvtracker-movie-details-owner="vue" v-html="model.html"></div>
 </template>
