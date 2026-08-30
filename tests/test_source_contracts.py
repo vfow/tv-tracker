@@ -389,20 +389,22 @@ class TMDBOnlyContractTests(unittest.TestCase):
         router = self.read('static/js/app-router.js')
         app_py = self.read('app.py')
         css = self.read('static/css/tailwind-input.css')
+        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')
         self.assertIn('"collection"', app_js)
         self.assertIn('search/collection', app_js)
         self.assertIn('tmdbSearchCollectionsPage', app_js)
         self.assertIn('data-collection-search', ui)
         self.assertIn('renderMovieTitleWithAdultBadgeHTML', ui)
         self.assertIn('adult-movie-badge', css)
+        self.assertIn('adult-movie-badge', search_vue)
         self.assertIn('"person","collection"', app_js)
         routing = self.read('tvtracker/web/routing.py')
         self.assertIn('"person", "collection"', routing)
         self.assertIn('rawQuery', router)
-        self.assertIn('renderInactiveEyeFilterControlHTML', ui)
+        self.assertIn('eye-filter-menu-inactive search-eye-filter-menu', search_vue)
         self.assertIn('runCollectionsLiveFallbackSearch', app_js)
         self.assertIn('tmdbSearchCollectionsPage(cleanQuery,1)', app_js)
-        self.assertIn('collection-search-card', ui)
+        self.assertIn('collection-search-card', search_vue)
         self.assertIn('movie-title-with-adult-badge', css)
 
     def test_deploy_workflow_tests_and_checks_healthz(self):
@@ -452,6 +454,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         router = self.read('static/js/app-router.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
+        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')
 
         self.assertIn('const SEARCH_RESULT_BATCH_SIZE = 21', app_js)
         self.assertIn('function tmdbSearchMediaPage', app_js)
@@ -462,10 +465,11 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('getSearchRoute(query="",media="tv")', app_js)
         self.assertIn('&type=${encodeURIComponent(cleanMedia)}', app_js)
         self.assertIn('currentSearchMediaType', router)
-        self.assertIn('Start typing to search.', ui)
+        self.assertIn('Start typing to search.', search_vue)
         self.assertNotIn('Browse TV shows, movies, and genres.', ui)
         self.assertNotIn('Results for ${escapeHTML(query)}', ui)
         self.assertNotIn('known_for_department ? String(result.known_for_department)', ui)
+        self.assertIn('search-person-skeleton-card', search_vue)
         self.assertIn('search-person-skeleton-card', source_css)
         self.assertIn('search-person-skeleton-card', built_css)
 
@@ -552,7 +556,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('width:min(640px,48vw)', css)
         self.assertIn('class="route-error-copy"', error_template)
 
-    def test_phase602_movie_info_cleanup_exists(self):
+    def test602_movie_info_cleanup_exists(self):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
@@ -957,6 +961,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         router = self.read('static/js/app-router.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
+        search_vue = self.read('frontend/src/search-discover/SearchResults.vue')
 
         self.assertIn('href="/app/list/watching"', template)
         self.assertIn('href="/app/discover"', template)
@@ -966,8 +971,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('href="/app/history"', template)
         self.assertIn('class="watchlist-card-link" href=', ui)
         self.assertIn('class="app-route-card-link" href=', ui)
-        self.assertIn('class="genre-result-card search-result-poster-card"', ui)
-        self.assertIn('class="search-person-card"', ui)
+        self.assertIn('class="genre-result-card search-result-poster-card"', search_vue)
+        self.assertIn('class="search-person-card"', search_vue)
         self.assertIn('class="genre-result-card person-result-card"', ui)
         self.assertIn('class="profile-favorite-slot filled" href=', ui)
         self.assertIn('class="v2-actor-list-row v2-person-card-link" href=', ui)
