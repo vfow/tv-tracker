@@ -5417,15 +5417,11 @@ function renderMovieActiveTabContentHTML(movie){
     return renderMovieInfoTabHTML(movie);
 }
 
-function renderMovieDetailPage(state){
-    const content = document.getElementById("show-detail-content");
-    if(!content){
-        return;
-    }
+function renderMovieDetailPageHTML(state){
     const pageState = state || {};
     const movie = pageState.movie || null;
     if(!movie){
-        content.innerHTML = pageState.loading && typeof renderTrackerDetailSkeletonHTML === "function"
+        return pageState.loading && typeof renderTrackerDetailSkeletonHTML === "function"
         ? renderTrackerDetailSkeletonHTML("movie","movie-page-back-button")
         : `
             <div class="show-detail-page-inner">
@@ -5477,7 +5473,7 @@ function renderMovieDetailPage(state){
     }
     const metaHTML = metaItems.filter(Boolean).map((item,index)=>`${index > 0 ? `<span class="modal-meta-separator">•</span>` : ""}${item}`).join("");
 
-    content.innerHTML = `
+    return `
         <div class="show-detail-page-inner movie-detail-page-inner">
             <div class="show-page-hero-shell movie-page-hero-shell">
                 <button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back">
@@ -5510,6 +5506,15 @@ function renderMovieDetailPage(state){
         </div>
     `;
 }
+
+function renderMovieDetailPage(state){
+    const content = document.getElementById("show-detail-content");
+    if(!content){
+        return;
+    }
+    content.innerHTML = renderMovieDetailPageHTML(state);
+}
+
 
 
 
