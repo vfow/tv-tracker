@@ -1,6 +1,8 @@
 import { createApp, type App as VueApp } from 'vue';
 
 import FoundationProbe from './FoundationProbe.vue';
+import MovieDetails from './media-details/MovieDetails.vue';
+import type { MovieDetailsVueBridge, MovieDetailsVueOwner, MovieDetailsViewModel } from './media-details/movieViewModel';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
 import type { DiscoverRendererActions, DiscoverViewModel } from './search-discover/discoverViewModel';
@@ -66,6 +68,7 @@ declare global {
     TVTrackerSettingsBridge?: SettingsBridge;
     TVTrackerSearchVueBridge?: SearchBridge;
     TVTrackerDiscoverVueBridge?: DiscoverBridge;
+    TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;
   }
 }
 
@@ -76,6 +79,8 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let movieDetailsApp: VueApp<Element> | null = null;
+let movieDetailsRoot: Element | null = null;
 
 function unmountSettings(): void {
   if (settingsApp) settingsApp.unmount();
@@ -94,6 +99,12 @@ function unmountDiscover(): void {
   if (discoverApp) discoverApp.unmount();
   discoverApp = null;
   discoverRoot = null;
+}
+
+function unmountMovieDetails(): void {
+  if (movieDetailsApp) movieDetailsApp.unmount();
+  movieDetailsApp = null;
+  movieDetailsRoot = null;
 }
 
 function supportsPhase3Streaming(section: string): boolean {
@@ -179,6 +190,19 @@ const discoverOwner: DiscoverVueOwner = Object.freeze({
   unmount: unmountDiscover
 });
 
+const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
+  render(model: MovieDetailsViewModel): void {
+    const root = document.getElementById('show-detail-content');
+    if (!root) return;
+    unmountMovieDetails();
+    root.replaceChildren();
+    movieDetailsRoot = root;
+    movieDetailsApp = createApp(MovieDetails, { model });
+    movieDetailsApp.mount(root);
+  },
+  unmount: unmountMovieDetails
+});
+
 window.TVTrackerVueFoundation = Object.freeze({
   version: FRONTEND_FOUNDATION_VERSION,
   mountProbe: mountFoundationProbe
@@ -187,3 +211,4 @@ window.TVTrackerVueFoundation = Object.freeze({
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
+window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);
