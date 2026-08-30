@@ -15,6 +15,13 @@ import SettingsDanger from './settings/SettingsDanger.vue';
 import SettingsData from './settings/SettingsData.vue';
 import SettingsProfile from './settings/SettingsProfile.vue';
 import SettingsStreaming from './settings/SettingsStreaming.vue';
+import UpcomingNotificationsSurface from './upcoming-notifications/UpcomingNotificationsSurface.vue';
+import type {
+  UpcomingNotificationsSurface as UpcomingNotificationsSurfaceName,
+  UpcomingNotificationsViewModel,
+  UpcomingNotificationsVueBridge,
+  UpcomingNotificationsVueOwner
+} from './upcoming-notifications/viewModel';
 
 export const FRONTEND_FOUNDATION_LINEAGE = 'phase2-vue-foundation';
 export const FRONTEND_FOUNDATION_VERSION = 'phase5-shared-ui-feedback';
@@ -72,6 +79,7 @@ declare global {
     TVTrackerDiscoverVueBridge?: DiscoverBridge;
     TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;
     TVTrackerShowDetailsVueBridge?: ShowDetailsVueBridge;
+    TVTrackerUpcomingNotificationsVueBridge?: UpcomingNotificationsVueBridge;
   }
 }
 
@@ -86,6 +94,10 @@ let movieDetailsApp: VueApp<Element> | null = null;
 let movieDetailsRoot: Element | null = null;
 let showDetailsApp: VueApp<Element> | null = null;
 let showDetailsRoot: Element | null = null;
+let upcomingApp: VueApp<Element> | null = null;
+let upcomingRoot: Element | null = null;
+let notificationsApp: VueApp<Element> | null = null;
+let notificationsRoot: Element | null = null;
 
 function unmountSettings(): void {
   if (settingsApp) settingsApp.unmount();
@@ -116,6 +128,19 @@ function unmountShowDetails(): void {
   if (showDetailsApp) showDetailsApp.unmount();
   showDetailsApp = null;
   showDetailsRoot = null;
+}
+
+function unmountUpcomingNotifications(surface?: UpcomingNotificationsSurfaceName): void {
+  if (!surface || surface === 'upcoming') {
+    if (upcomingApp) upcomingApp.unmount();
+    upcomingApp = null;
+    upcomingRoot = null;
+  }
+  if (!surface || surface === 'notifications') {
+    if (notificationsApp) notificationsApp.unmount();
+    notificationsApp = null;
+    notificationsRoot = null;
+  }
 }
 
 function supportsPhase3Streaming(section: string): boolean {
@@ -174,10 +199,7 @@ const searchOwner: SearchVueOwner = Object.freeze({
     unmountSearch();
     root.replaceChildren();
     searchRoot = root;
-    searchApp = createApp(SearchResults, {
-      model,
-      actions: bridge.actions
-    });
+    searchApp = createApp(SearchResults, { model, actions: bridge.actions });
     searchApp.mount(root);
   },
   unmount: unmountSearch
@@ -192,10 +214,7 @@ const discoverOwner: DiscoverVueOwner = Object.freeze({
     unmountDiscover();
     root.replaceChildren();
     discoverRoot = root;
-    discoverApp = createApp(DiscoverHub, {
-      model,
-      actions: bridge.actions
-    });
+    discoverApp = createApp(DiscoverHub, { model, actions: bridge.actions });
     discoverApp.mount(root);
   },
   unmount: unmountDiscover
@@ -229,6 +248,26 @@ const showDetailsOwner: ShowDetailsVueOwner = Object.freeze({
   unmount: unmountShowDetails
 });
 
+const upcomingNotificationsOwner: UpcomingNotificationsVueOwner = Object.freeze({
+  render(model: UpcomingNotificationsViewModel): void {
+    const rootId = model.surface === 'upcoming' ? 'show-list' : 'notifications-content';
+    const root = document.getElementById(rootId);
+    if (!root) return;
+    unmountUpcomingNotifications(model.surface);
+    root.replaceChildren();
+    const app = createApp(UpcomingNotificationsSurface, { model });
+    app.mount(root);
+    if (model.surface === 'upcoming') {
+      upcomingRoot = root;
+      upcomingApp = app;
+    } else {
+      notificationsRoot = root;
+      notificationsApp = app;
+    }
+  },
+  unmount: unmountUpcomingNotifications
+});
+
 window.TVTrackerVueFoundation = Object.freeze({
   version: FRONTEND_FOUNDATION_VERSION,
   mountProbe: mountFoundationProbe
@@ -239,3 +278,4 @@ window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);
 window.TVTrackerShowDetailsVueBridge?.attachVueOwner(showDetailsOwner);
+window.TVTrackerUpcomingNotificationsVueBridge?.attachVueOwner(upcomingNotificationsOwner);
