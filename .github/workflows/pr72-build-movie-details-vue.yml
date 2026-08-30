@@ -1,0 +1,107 @@
+name: PR72 Build Movie Details Vue
+
+on:
+  push:
+    branches:
+      - frontend-modernization-movie-details-vue-renderer
+    paths:
+      - .github/workflows/pr72-build-movie-details-vue.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Movie Details branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-movie-details-vue-renderer
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Patch Movie Details DOM ownership
+        shell: python
+        run: |
+          from pathlib import Path
+
+          ui_path = Path('static/js/ui.js')
+          ui = ui_path.read_text(encoding='utf-8')
+          start = ui.index('function renderMovieDetailPage(state){')
+          end = ui.index('\n\n\n\nfunction getShowMetaHTML', start)
+          original = ui[start:end]
+          if 'function renderMovieDetailPageHTML(state){' not in ui:
+              pure = original.replace('function renderMovieDetailPage(state){', 'function renderMovieDetailPageHTML(state){', 1)
+              pure = pure.replace('    const content = document.getElementById("show-detail-content");\n    if(!content){\n        return;\n    }\n', '', 1)
+              pure = pure.replace('        content.innerHTML = pageState.loading', '        return pageState.loading', 1)
+              pure = pure.replace('    content.innerHTML = `', '    return `', 1)
+              wrapper = '''\n\nfunction renderMovieDetailPage(state){\n    const content = document.getElementById("show-detail-content");\n    if(!content){\n        return;\n    }\n    content.innerHTML = renderMovieDetailPageHTML(state);\n}\n'''
+              ui = ui[:start] + pure + wrapper + ui[end:]
+              ui_path.write_text(ui, encoding='utf-8')
+
+          main_path = Path('frontend/src/main.ts')
+          main = main_path.read_text(encoding='utf-8')
+          import_anchor = "import FoundationProbe from './FoundationProbe.vue';\n"
+          import_addition = import_anchor + "import MovieDetails from './media-details/MovieDetails.vue';\nimport type { MovieDetailsVueBridge, MovieDetailsVueOwner, MovieDetailsViewModel } from './media-details/movieViewModel';\n"
+          if "./media-details/MovieDetails.vue" not in main:
+              main = main.replace(import_anchor, import_addition, 1)
+
+          window_anchor = '    TVTrackerDiscoverVueBridge?: DiscoverBridge;\n'
+          if 'TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;' not in main:
+              main = main.replace(window_anchor, window_anchor + '    TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;\n', 1)
+
+          vars_anchor = 'let discoverRoot: Element | null = null;\n'
+          if 'let movieDetailsApp:' not in main:
+              main = main.replace(vars_anchor, vars_anchor + 'let movieDetailsApp: VueApp<Element> | null = null;\nlet movieDetailsRoot: Element | null = null;\n', 1)
+
+          unmount_anchor = '''function unmountDiscover(): void {\n  if (discoverApp) discoverApp.unmount();\n  discoverApp = null;\n  discoverRoot = null;\n}\n'''
+          if 'function unmountMovieDetails()' not in main:
+              main = main.replace(unmount_anchor, unmount_anchor + '''\nfunction unmountMovieDetails(): void {\n  if (movieDetailsApp) movieDetailsApp.unmount();\n  movieDetailsApp = null;\n  movieDetailsRoot = null;\n}\n''', 1)
+
+          owner_anchor = '''const discoverOwner: DiscoverVueOwner = Object.freeze({\n  render(model: DiscoverViewModel): void {\n    const root = document.getElementById('search-results');\n    const bridge = window.TVTrackerDiscoverVueBridge;\n    if (!root || !bridge) return;\n    unmountSearch();\n    unmountDiscover();\n    root.replaceChildren();\n    discoverRoot = root;\n    discoverApp = createApp(DiscoverHub, {\n      model,\n      actions: bridge.actions\n    });\n    discoverApp.mount(root);\n  },\n  unmount: unmountDiscover\n});\n'''
+          movie_owner = '''\nconst movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({\n  render(model: MovieDetailsViewModel): void {\n    const root = document.getElementById('show-detail-content');\n    if (!root) return;\n    unmountMovieDetails();\n    root.replaceChildren();\n    movieDetailsRoot = root;\n    movieDetailsApp = createApp(MovieDetails, { model });\n    movieDetailsApp.mount(root);\n  },\n  unmount: unmountMovieDetails\n});\n'''
+          if 'const movieDetailsOwner:' not in main:
+              if owner_anchor not in main:
+                  raise SystemExit('Discover owner anchor not found in main.ts')
+              main = main.replace(owner_anchor, owner_anchor + movie_owner, 1)
+
+          attach_anchor = 'window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);\n'
+          if 'attachVueOwner(movieDetailsOwner)' not in main:
+              main = main.replace(attach_anchor, attach_anchor + 'window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);\n', 1)
+          main_path.write_text(main, encoding='utf-8')
+
+          template_path = Path('templates/index.html')
+          template = template_path.read_text(encoding='utf-8')
+          state_line = "<script src=\"{{ url_for('static', filename='js/media-details-state-bridge.js') }}\"></script>\n"
+          vue_line = "<script src=\"{{ url_for('static', filename='js/movie-details-vue-bridge.js') }}\"></script>\n"
+          if vue_line not in template:
+              if state_line not in template:
+                  raise SystemExit('Media Details state bridge script anchor not found')
+              template = template.replace(state_line, state_line + vue_line, 1)
+              template_path.write_text(template, encoding='utf-8')
+
+      - name: Install frontend dependencies
+        run: npm ci --audit=false
+
+      - name: Build deterministic Vue bundle
+        run: npm run build
+
+      - name: Commit Movie Details Vue handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add static/js/ui.js frontend/src/main.ts templates/index.html static/vue
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Move Movie Details DOM ownership to Vue'
+          git push origin HEAD:frontend-modernization-movie-details-vue-renderer
