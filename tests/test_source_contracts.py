@@ -556,7 +556,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('width:min(640px,48vw)', css)
         self.assertIn('class="route-error-copy"', error_template)
 
-    def test602_movie_info_cleanup_exists(self):
+    def test_phase602_movie_info_cleanup_exists(self):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
