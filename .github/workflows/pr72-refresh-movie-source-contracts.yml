@@ -1,0 +1,48 @@
+name: PR72 Refresh Movie Source Contracts
+
+on:
+  push:
+    branches:
+      - frontend-modernization-movie-details-vue-renderer
+    paths:
+      - .github/workflows/pr72-refresh-movie-source-contracts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Movie Details branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-movie-details-vue-renderer
+          fetch-depth: 0
+
+      - name: Point legacy movie markup contracts at pure HTML boundary
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('tests/test_source_contracts.py')
+          source = path.read_text(encoding='utf-8')
+          old_detail = "detail_start = ui.index('function renderMovieDetailPage(state)')\n        detail_block = ui[detail_start:ui.index('function getShowMetaHTML', detail_start)]"
+          new_detail = "detail_start = ui.index('function renderMovieDetailPageHTML(state)')\n        detail_block = ui[detail_start:ui.index('function renderMovieDetailPage(state)', detail_start)]"
+          old_details = "details_start = ui.index('function renderMovieDetailPage(state)')\n        details_block = ui[details_start:ui.index('function getShowMetaHTML', details_start)]"
+          new_details = "details_start = ui.index('function renderMovieDetailPageHTML(state)')\n        details_block = ui[details_start:ui.index('function renderMovieDetailPage(state)', details_start)]"
+          if old_detail not in source or old_details not in source:
+              raise SystemExit('Expected legacy Movie Details contract slices not found')
+          source = source.replace(old_detail, new_detail, 1).replace(old_details, new_details, 1)
+          path.write_text(source, encoding='utf-8')
+
+      - name: Commit source-contract refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add tests/test_source_contracts.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Point movie markup contracts at pure renderer'
+          git push origin HEAD:frontend-modernization-movie-details-vue-renderer
