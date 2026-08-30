@@ -1,0 +1,44 @@
+name: Refresh Upcoming Notifications Frontend Bundle
+
+on:
+  push:
+    branches:
+      - frontend-modernization-upcoming-notifications-vue
+    paths:
+      - .github/workflows/upcoming-notifications-refresh-frontend-bundle.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: frontend-modernization-upcoming-notifications-vue
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci --audit=false
+      - name: Build committed frontend assets
+        run: npm run build:frontend
+      - name: Commit generated frontend assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add static/vue
+          if git diff --cached --quiet; then
+            echo 'Frontend assets already match the build.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Commit generated Upcoming Notifications Vue bundle'
+          git push origin HEAD:frontend-modernization-upcoming-notifications-vue
