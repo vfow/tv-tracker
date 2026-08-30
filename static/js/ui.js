@@ -7033,11 +7033,9 @@ function renderShowDetailTabContentHTML(show){
     return renderShowInfoTabHTML(show);
 }
 
-function renderShowDetailsPage(show,options={}){
-    const content = document.getElementById("show-detail-content");
-
-    if(!content || !show){
-        return;
+function renderShowDetailsPageHTML(show,options={}){
+    if(!show){
+        return "";
     }
 
     const isTracked = !!(DATA.shows && DATA.shows[String(show.tmdb_id)]);
@@ -7054,7 +7052,7 @@ function renderShowDetailsPage(show,options={}){
     selectedShowId = String(show.tmdb_id);
     activeShowDetailsTabs[String(show.tmdb_id)] = getShowDetailActiveTab(show);
 
-    content.innerHTML = `
+    return `
         <div class="show-detail-page-inner">
             <div class="show-page-hero-shell">
                 <button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back">
@@ -7086,7 +7084,18 @@ function renderShowDetailsPage(show,options={}){
             </div>
         </div>
     `;
+}
 
+
+function renderShowDetailsPage(show,options={}){
+    const content = document.getElementById("show-detail-content");
+
+    if(!content || !show){
+        return;
+    }
+
+    const isTracked = !!(DATA.shows && DATA.shows[String(show.tmdb_id)]);
+    content.innerHTML = renderShowDetailsPageHTML(show,options);
     attachShowDetailsPageEvents(show,isTracked);
     attachV2ShowModalEvents(show);
 }

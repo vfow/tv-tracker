@@ -3,6 +3,8 @@ import { createApp, type App as VueApp } from 'vue';
 import FoundationProbe from './FoundationProbe.vue';
 import MovieDetails from './media-details/MovieDetails.vue';
 import type { MovieDetailsVueBridge, MovieDetailsVueOwner, MovieDetailsViewModel } from './media-details/movieViewModel';
+import ShowDetails from './media-details/ShowDetails.vue';
+import type { ShowDetailsVueBridge, ShowDetailsVueOwner, ShowDetailsViewModel } from './media-details/showViewModel';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
 import type { DiscoverRendererActions, DiscoverViewModel } from './search-discover/discoverViewModel';
@@ -69,6 +71,7 @@ declare global {
     TVTrackerSearchVueBridge?: SearchBridge;
     TVTrackerDiscoverVueBridge?: DiscoverBridge;
     TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;
+    TVTrackerShowDetailsVueBridge?: ShowDetailsVueBridge;
   }
 }
 
@@ -81,6 +84,8 @@ let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
 let movieDetailsApp: VueApp<Element> | null = null;
 let movieDetailsRoot: Element | null = null;
+let showDetailsApp: VueApp<Element> | null = null;
+let showDetailsRoot: Element | null = null;
 
 function unmountSettings(): void {
   if (settingsApp) settingsApp.unmount();
@@ -105,6 +110,12 @@ function unmountMovieDetails(): void {
   if (movieDetailsApp) movieDetailsApp.unmount();
   movieDetailsApp = null;
   movieDetailsRoot = null;
+}
+
+function unmountShowDetails(): void {
+  if (showDetailsApp) showDetailsApp.unmount();
+  showDetailsApp = null;
+  showDetailsRoot = null;
 }
 
 function supportsPhase3Streaming(section: string): boolean {
@@ -194,6 +205,7 @@ const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
   render(model: MovieDetailsViewModel): void {
     const root = document.getElementById('show-detail-content');
     if (!root) return;
+    unmountShowDetails();
     unmountMovieDetails();
     root.replaceChildren();
     movieDetailsRoot = root;
@@ -201,6 +213,20 @@ const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
     movieDetailsApp.mount(root);
   },
   unmount: unmountMovieDetails
+});
+
+const showDetailsOwner: ShowDetailsVueOwner = Object.freeze({
+  render(model: ShowDetailsViewModel): void {
+    const root = document.getElementById('show-detail-content');
+    if (!root) return;
+    unmountMovieDetails();
+    unmountShowDetails();
+    root.replaceChildren();
+    showDetailsRoot = root;
+    showDetailsApp = createApp(ShowDetails, { model });
+    showDetailsApp.mount(root);
+  },
+  unmount: unmountShowDetails
 });
 
 window.TVTrackerVueFoundation = Object.freeze({
@@ -212,3 +238,4 @@ window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);
+window.TVTrackerShowDetailsVueBridge?.attachVueOwner(showDetailsOwner);
