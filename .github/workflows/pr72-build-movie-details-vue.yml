@@ -91,7 +91,7 @@ jobs:
         run: npm ci --audit=false
 
       - name: Build deterministic Vue bundle
-        run: npm run build
+        run: npm run build:frontend
 
       - name: Commit Movie Details Vue handoff
         shell: bash
