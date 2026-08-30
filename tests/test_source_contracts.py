@@ -570,8 +570,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        detail_start = ui.index('function renderMovieDetailPage(state)')
-        detail_block = ui[detail_start:ui.index('function getShowMetaHTML', detail_start)]
+        detail_start = ui.index('function renderMovieDetailPageHTML(state)')
+        detail_block = ui[detail_start:ui.index('function renderMovieDetailPage(state)', detail_start)]
         crew_start = ui.index('function renderMovieCrewTabHTML(movie)')
         crew_block = ui[crew_start:ui.index('function renderMovieDetailsTabHTML(movie)', crew_start)]
         release_start = ui.index('function renderMovieReleasesHTML(movie)')
@@ -601,8 +601,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        details_start = ui.index('function renderMovieDetailPage(state)')
-        details_block = ui[details_start:ui.index('function getShowMetaHTML', details_start)]
+        details_start = ui.index('function renderMovieDetailPageHTML(state)')
+        details_block = ui[details_start:ui.index('function renderMovieDetailPage(state)', details_start)]
         genres_start = ui.index('function renderShowGenresTabHTML(show)')
         genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
         releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
