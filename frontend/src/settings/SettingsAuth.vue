@@ -150,7 +150,7 @@ onMounted(() => {
 
       <section class="settings-v2-section">
         <h2>Session</h2>
-        <p class="settings-v2-copy">Sign out of this TV Tracker session.</p>
+        <p class="settings-v2-copy">Sign out of this session.</p>
         <form method="post" action="/logout" @submit="cleanupLogout">
           <input type="hidden" name="csrf_token" :value="csrfToken()">
           <button class="settings-v2-button" type="submit">Log Out</button>

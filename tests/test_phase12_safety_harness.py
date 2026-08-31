@@ -432,7 +432,8 @@ class BrowserEndToEndSafetyTests(unittest.TestCase):
             base_url = f"http://127.0.0.1:{server.server_port}"
             try:
                 logged_out_dom = self.dump_dom(browser, f"{base_url}/app/settings")
-                self.assertIn("TV Tracker — Access", logged_out_dom)
+                self.assertIn("<title>Sign in</title>", logged_out_dom)
+                self.assertIn(">WELCOME</h1>", logged_out_dom)
                 self.assertIn('id="login-panel"', logged_out_dom)
 
                 # The test-only route establishes the same authenticated session fields
