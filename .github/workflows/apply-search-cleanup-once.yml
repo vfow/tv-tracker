@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
 
 jobs:
   apply-search-cleanup:
@@ -18,22 +17,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract current-applicable Search cleanup hunk
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Build exact historical Search cleanup patch
         run: |
-          gh pr diff 68 --repo vfow/tv-tracker > /tmp/pr68.diff
-          python - <<'PY'
-          from pathlib import Path
-          diff = Path('/tmp/pr68.diff').read_text(encoding='utf-8')
-          marker = 'diff --git a/static/js/ui.js b/static/js/ui.js'
-          start = diff.find(marker)
-          if start < 0:
-              raise SystemExit('ui.js patch not found in PR #68')
-          end = diff.find('\ndiff --git ', start + len(marker))
-          patch = diff[start:] if end < 0 else diff[start:end]
-          Path('/tmp/ui.patch').write_text(patch, encoding='utf-8')
-          PY
+          git diff --binary \
+            c70325d247ddc9d583a1bf78a73ce2b8fdc3f5da \
+            5880db7c0ba7949d3f13516c56b71edb920fe342 \
+            -- static/js/ui.js > /tmp/ui.patch
+          test -s /tmp/ui.patch
+          git apply --check /tmp/ui.patch || true
 
       - name: Three-way apply Search dead-renderer deletion
         run: |
