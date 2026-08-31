@@ -30,6 +30,7 @@ const template = fs.readFileSync('templates/index.html','utf8');
 const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
+const searchResultsVue = fs.readFileSync('frontend/src/search-discover/SearchResults.vue','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
@@ -65,7 +66,7 @@ assert(!login.includes('name="next"'));
 assert(tmdb.includes('The key is held by Flask'));
 assert(!ui.includes('TVTrackerStaticAdapter'));
 assert(ui.includes('function safeExternalURL'));
-assert(ui.includes('data-person-role="person"'));
+assert(searchResultsVue.includes('data-person-role="person"'));
 assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
 assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
 assert(ui.includes('for="library-year-filter">Year</label>'));
