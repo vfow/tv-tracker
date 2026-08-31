@@ -85,6 +85,14 @@ function getMovieHistoryDisplayData(entry){
 }
 
 
+function loadMoreHistory(){
+
+    historyVisibleLimit += HISTORY_BATCH_SIZE;
+    return renderHistory();
+
+}
+
+
 function renderHistory(){
 
     const list = document.getElementById("show-list");
@@ -205,10 +213,7 @@ function renderHistory(){
         moreButton.type = "button";
         moreButton.textContent = "Load More";
 
-        moreButton.addEventListener("click",function(){
-            historyVisibleLimit += HISTORY_BATCH_SIZE;
-            renderHistory();
-        });
+        moreButton.addEventListener("click",loadMoreHistory);
 
         list.appendChild(moreButton);
 
