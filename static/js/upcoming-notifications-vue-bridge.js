@@ -194,6 +194,27 @@
         return true;
     }
 
+    async function renderShowListHTML(html){
+        const model = Object.freeze({surface:"upcoming",html:String(html || "")});
+        if(!vueOwner){
+            const loaded = await loadVueOwner("watchlist");
+            if(!loaded || !vueOwner) return false;
+        }
+        vueOwner.render(model);
+        const root = rootFor("upcoming");
+        if(root && root.dataset){
+            root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
+        }
+        if(root && typeof root.querySelector === "function"){
+            const marker = root.querySelector('[data-tvtracker-upcoming-notifications-owner="vue-upcoming"]');
+            if(marker){
+                marker.removeAttribute("data-tvtracker-upcoming-notifications-owner");
+                marker.setAttribute("data-tvtracker-tracker-lists-owner","vue-watchlist");
+            }
+        }
+        return true;
+    }
+
     async function renderUpcoming(startBackgroundRefresh=true){
         if(typeof legacyRenderUpcoming !== "function") return;
         await legacyRenderUpcoming(startBackgroundRefresh);
@@ -235,6 +256,7 @@
         attachVueOwner,
         renderUpcoming,
         renderNotificationsPage,
+        renderShowListHTML,
         ownership:"vue-dom"
     });
     global.TVTrackerUpcomingNotificationsVueBridge = bridge;
