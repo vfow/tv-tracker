@@ -79,6 +79,14 @@ assert(!stateBridgeSource.includes('document.'));
 // for each active list without changing status/query/filter/sort state.
 let vueModel = null;
 let renderCount = 0;
+let runtimeFilter = 'watching';
+const runtimeState = {
+    query:'needle',
+    genre:'Drama',
+    network:'HBO',
+    year:'2025',
+    sort:'recently-watched'
+};
 const root = {
     innerHTML:'',
     dataset:{},
@@ -100,11 +108,11 @@ const runtimeContext = {
     Map,
     window:{
         activeFilter:'watching',
-        librarySearchQuery:'needle',
-        libraryGenreFilter:'Drama',
-        libraryNetworkFilter:'HBO',
-        libraryYearFilter:'2025',
-        librarySortMode:'recently-watched',
+        librarySearchQuery:runtimeState.query,
+        libraryGenreFilter:runtimeState.genre,
+        libraryNetworkFilter:runtimeState.network,
+        libraryYearFilter:runtimeState.year,
+        librarySortMode:runtimeState.sort,
         document:{
             getElementById(id){ return id === 'show-list' ? root : null; },
             querySelectorAll(){ return []; },
@@ -115,12 +123,12 @@ const runtimeContext = {
             renderCount += 1;
             root.innerHTML = [
                 '<section class="watchlist-parity"',
-                ` data-filter="${this.activeFilter}"`,
-                ` data-query="${this.librarySearchQuery}"`,
-                ` data-genre="${this.libraryGenreFilter}"`,
-                ` data-network="${this.libraryNetworkFilter}"`,
-                ` data-year="${this.libraryYearFilter}"`,
-                ` data-sort="${this.librarySortMode}"></section>`
+                ` data-filter="${runtimeFilter}"`,
+                ` data-query="${runtimeState.query}"`,
+                ` data-genre="${runtimeState.genre}"`,
+                ` data-network="${runtimeState.network}"`,
+                ` data-year="${runtimeState.year}"`,
+                ` data-sort="${runtimeState.sort}"></section>`
             ].join('');
         },
         renderUpcoming(){},
@@ -143,6 +151,7 @@ sharedBridge.attachVueOwner({
 
 (async()=>{
     for(const item of statusCases){
+        runtimeFilter = item.filter;
         runtimeContext.window.activeFilter = item.filter;
         runtimeContext.window.location.pathname = `/app/list/${item.slug}`;
         const before = renderCount;
