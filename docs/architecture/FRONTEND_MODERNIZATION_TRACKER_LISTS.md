@@ -2,17 +2,22 @@
 
 ## Scope
 
-This phase covers the protected tracker-list surfaces rooted at `/app/list/<status>` and the tracked show/movie state that later Vue renderers must preserve.
+This phase covers the protected tracker-list surfaces rooted at `/app/list/<status>` and the tracked show/movie state that Vue renderers must preserve.
 
-The first slice is characterization only: establish a strict typed/read-only state boundary before any Vue renderer owns Watchlist DOM or any tracker persistence path changes.
+The read-only characterization slice is complete in production. The current bounded slice moves only the final Watchlist DOM handoff to Vue while keeping tracker state, filtering, sorting, actions, and durable persistence in the proven legacy owners.
 
-## Current legacy ownership
+## Current ownership
 
 ### Watchlist / show lists
 
 - `static/js/app.js` owns tracker truth in `DATA.shows`, `activeFilter`, the canonical list-route mapping, tracker mutations, durable save orchestration, and the library filter state (`librarySearchQuery`, genre, network, year, and sort).
-- `static/js/ui.js` owns `renderShowsPage()`, `renderWatchlist()`, library search/filter controls, sorting/filtering presentation, and the current Watchlist DOM.
+- `static/js/ui.js` continues to compose the established Watchlist markup, next-episode/progress presentation, empty states, library controls, filtering, and sorting.
+- `static/js/upcoming-notifications-vue-bridge.js` now captures that composed Watchlist markup and hands it to the already-built generic Vue `#show-list` HTML owner. Vue is therefore the final runtime DOM owner for Watchlist after the handoff.
+- The same runtime bridge rebinds the existing Watchlist action semantics after Vue mounts: `mark` delegates to `markNextEpisode`, and `watching` delegates to `updateShowStatus`.
+- `refreshWatchlistShows` deliberately becomes a full Watchlist rerender in this bounded ownership slice so legacy partial-DOM reuse cannot compete with Vue ownership.
 - `static/js/app-router.js` remains the sole browser History owner for `/app/list/watching`, `/app/list/paused`, `/app/list/completed`, `/app/list/plan-to-watch`, and `/app/list/dropped`.
+
+The shared Vue shell reuse is intentionally narrow. It reuses only the existing generic `v-html` mount into `#show-list`; it does not give Upcoming business logic ownership over Watchlist. Runtime ownership is marked as `vue-watchlist` after mount.
 
 The current show status contract is:
 
@@ -38,33 +43,31 @@ The current library sort contract is:
 - `DATA.movies` remains the authoritative tracked-movie store.
 - Movie tracking preserves the existing `watched`, `plan`, and `favorite` flags.
 - `DATA.profile.favorite_shows` and `DATA.profile.favorite_movies` remain the authoritative favorite selections and their existing limits/order semantics are unchanged.
+- This Watchlist renderer slice does not invent a new movie-list surface or alter movie persistence.
 
 ## Ownership lock for the migration
 
-Until a later explicit DOM handoff:
-
 1. Legacy `app.js` remains authoritative for tracker data, status changes, watched/plan/favorite mutations, pending-save behavior, and persistence orchestration.
-2. Legacy `ui.js` remains authoritative for Watchlist DOM, library controls, filtering, sorting, progress presentation, and watch actions.
-3. `app-router.js` remains the sole History API owner.
-4. The Tracker Lists state bridge is read-only. It must not mutate tracker state, call save APIs, render DOM, fetch provider data, or navigate.
-5. Vue code may consume normalized snapshots only after a bounded renderer/action contract is selected.
-6. History and watched/episode tracking remain separate later roadmap phases; this slice does not move those mutation owners.
+2. Legacy `ui.js` remains authoritative for Watchlist markup composition, library controls, filtering, sorting, and progress calculations in this bounded slice.
+3. Vue is the final runtime owner of the resulting Watchlist DOM in `#show-list`.
+4. `app-router.js` remains the sole History API owner.
+5. The Tracker Lists state bridge is read-only and remains read-only through this DOM handoff. It must not mutate tracker state, call save APIs, render DOM, fetch provider data, or navigate.
+6. No API, database, schema, tracker-data-format, retry-policy, or durable-save semantics change in this handoff.
+7. History and watched/episode tracking remain separate later roadmap phases; this slice does not move those mutation owners.
 
-## First typed boundary
+## Typed boundary
 
 `frontend/src/tracker-lists/contracts.ts` defines the current list status/route/sort vocabulary and normalized tracked-show/tracked-movie summary state.
 
 `static/js/tracker-lists-state-bridge.js` exposes an immutable detached snapshot through `TVTrackerTrackerListsStateBridge` with ownership `legacy-read-only`. The snapshot contains the active list/filter state, tracked show/movie summaries, and detached favorite ID lists without exposing mutable `DATA` objects.
 
-`frontend/src/tracker-lists/legacyTrackerListsState.ts` is the strict TypeScript adapter for that bridge. It is intentionally not imported by `frontend/src/main.ts` in this characterization slice.
+`frontend/src/tracker-lists/legacyTrackerListsState.ts` is the strict TypeScript adapter for that bridge. It remains intentionally separate from mutation and DOM ownership in this slice.
 
-## Planned handoff sequence
+## Handoff sequence
 
-1. Prove read-only parity for status routes, library search/filter/sort state, tracked show/movie identity, and favorites.
-2. Select the bounded Watchlist renderer handoff while keeping `app.js` persistence and mutation semantics authoritative.
-3. Preserve existing next-episode/progress presentation, search, genre/network/year filters, sort modes, status changes, favorites, modified-click/detail navigation, and mobile behavior.
-4. Move Watchlist DOM ownership to Vue once without moving durable-save or tracker mutation ownership at the same time.
-5. Prove parity for Watching, Paused, Completed, Plan To Watch, and Dropped.
-6. Extend the bounded contract for movie list presentation where the current product exposes it, without changing tracker-data formats.
-7. Remove only the legacy list renderer code that has been proven replaced.
-8. Run full regression and production acceptance before moving to History.
+1. Read-only parity for status routes, library search/filter/sort state, tracked show/movie identity, and favorites. **Complete.**
+2. Bounded Watchlist Vue DOM handoff while keeping legacy tracker state/actions/persistence authoritative. **Current slice.**
+3. Prove parity for Watching, Paused, Completed, Plan To Watch, and Dropped, including search, genre/network/year filters, sort modes, next-episode/progress presentation, actions, direct routes, and mobile behavior.
+4. Extend the bounded contract for any existing movie-list presentation without changing tracker-data formats.
+5. Remove only legacy list-renderer code that has been proven replaced.
+6. Run full regression and production acceptance before moving to History.

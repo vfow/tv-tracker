@@ -3,6 +3,7 @@
 
     const manifestUrl = "/static/vue/manifest.json";
     const legacyRenderUpcoming = typeof global.renderUpcoming === "function" ? global.renderUpcoming : null;
+    const legacyRenderWatchlist = typeof global.renderWatchlist === "function" ? global.renderWatchlist : null;
     const legacyNotifications = global.TVTrackerNotifications || null;
     let vueOwner = null;
     let loadPromise = null;
@@ -10,7 +11,7 @@
 
     function rootFor(surface){
         if(!global.document || typeof global.document.getElementById !== "function") return null;
-        return global.document.getElementById(surface === "upcoming" ? "show-list" : "notifications-content");
+        return global.document.getElementById(surface === "upcoming" || surface === "watchlist" ? "show-list" : "notifications-content");
     }
 
     function reportLoadFailure(surface){
@@ -186,12 +187,83 @@
         });
     }
 
+    function attachWatchlistInteractions(){
+        const root = rootFor("watchlist");
+        if(!root || typeof root.querySelectorAll !== "function") return;
+
+        root.querySelectorAll(".watchlist-action").forEach(button=>{
+            if(button.dataset && button.dataset.vueBound === "1") return;
+            if(button.dataset) button.dataset.vueBound = "1";
+
+            button.addEventListener("click",async function(event){
+                event.stopPropagation();
+                if(this.disabled) return;
+
+                const card = typeof this.closest === "function" ? this.closest(".watchlist-card") : null;
+                const showId = String(card && card.dataset ? card.dataset.showId || "" : "");
+                const action = String(this.dataset ? this.dataset.watchlistAction || "" : "");
+                if(!showId || !action) return;
+
+                this.disabled = true;
+                try{
+                    if(action === "mark"){
+                        if(typeof global.playCheckSuccessAnimation === "function"){
+                            await global.playCheckSuccessAnimation(this);
+                        }
+                        if(typeof global.markNextEpisode === "function"){
+                            await global.markNextEpisode(showId);
+                        }
+                    }else if(action === "watching" && typeof global.updateShowStatus === "function"){
+                        await global.updateShowStatus(showId,"watching");
+                    }
+                }finally{
+                    if(this.isConnected) this.disabled = false;
+                }
+            });
+        });
+    }
+
     function renderWithVue(surface,model){
         if(!vueOwner || !model) return false;
         vueOwner.render(model);
         if(surface === "upcoming") attachUpcomingInteractions();
         else attachNotificationInteractions();
         return true;
+    }
+
+    async function renderShowListHTML(html){
+        const model = Object.freeze({surface:"upcoming",html:String(html || "")});
+        if(!vueOwner){
+            const loaded = await loadVueOwner("watchlist");
+            if(!loaded || !vueOwner) return false;
+        }
+        vueOwner.render(model);
+        const root = rootFor("watchlist");
+        if(root && root.dataset){
+            root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
+        }
+        if(root && typeof root.querySelector === "function"){
+            const marker = root.querySelector('[data-tvtracker-upcoming-notifications-owner="vue-upcoming"]');
+            if(marker){
+                marker.removeAttribute("data-tvtracker-upcoming-notifications-owner");
+                marker.setAttribute("data-tvtracker-tracker-lists-owner","vue-watchlist");
+            }
+        }
+        return true;
+    }
+
+    async function renderWatchlist(){
+        if(typeof legacyRenderWatchlist !== "function") return false;
+        legacyRenderWatchlist();
+        const root = rootFor("watchlist");
+        if(!root) return false;
+        const rendered = await renderShowListHTML(root.innerHTML || "");
+        if(rendered) attachWatchlistInteractions();
+        return rendered;
+    }
+
+    async function refreshWatchlistShows(){
+        return renderWatchlist();
     }
 
     async function renderUpcoming(startBackgroundRefresh=true){
@@ -235,10 +307,20 @@
         attachVueOwner,
         renderUpcoming,
         renderNotificationsPage,
+        renderShowListHTML,
         ownership:"vue-dom"
     });
     global.TVTrackerUpcomingNotificationsVueBridge = bridge;
     global.renderUpcoming = renderUpcoming;
+
+    const trackerListsBridge = Object.freeze({
+        renderWatchlist,
+        refreshWatchlistShows,
+        ownership:"vue-dom"
+    });
+    global.TVTrackerTrackerListsVueBridge = trackerListsBridge;
+    global.renderWatchlist = renderWatchlist;
+    global.refreshWatchlistShows = refreshWatchlistShows;
 
     if(legacyNotifications){
         global.TVTrackerNotifications = Object.assign({},legacyNotifications,{
