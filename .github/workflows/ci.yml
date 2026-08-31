@@ -50,19 +50,19 @@ jobs:
           npm run build:frontend
           git diff --exit-code -- static/vue
       - name: Source Search route ownership
-        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_real_protected_page_routes_exist -v
+        run: cd tests && python -m unittest test_source_contracts.TMDBOnlyContractTests.test_real_protected_page_routes_exist -v
       - name: Source Search routing polish
         if: always()
-        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase51_search_routing_polish_exists -v
+        run: cd tests && python -m unittest test_source_contracts.TMDBOnlyContractTests.test_phase51_search_routing_polish_exists -v
       - name: Source Search collection ownership
         if: always()
-        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase_66j_adult_badge_and_collection_search_exist -v
+        run: cd tests && python -m unittest test_source_contracts.TMDBOnlyContractTests.test_phase_66j_adult_badge_and_collection_search_exist -v
       - name: Source Search view more ownership
         if: always()
-        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_discover_description_and_view_more_polish_exists -v
+        run: cd tests && python -m unittest test_source_contracts.TMDBOnlyContractTests.test_discover_description_and_view_more_polish_exists -v
       - name: Source movie Search ownership
         if: always()
-        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase601_movie_layout_search_state_and_person_roles_exist -v
+        run: cd tests && python -m unittest test_source_contracts.TMDBOnlyContractTests.test_phase601_movie_layout_search_state_and_person_roles_exist -v
       - name: Check repository diff hygiene
         if: always()
         run: git diff --check
