@@ -51,7 +51,7 @@ The current library sort contract is:
 2. Legacy `ui.js` remains authoritative for Watchlist markup composition, library controls, filtering, sorting, and progress calculations in this bounded slice.
 3. Vue is the final runtime owner of the resulting Watchlist DOM in `#show-list`.
 4. `app-router.js` remains the sole History API owner.
-5. The Tracker Lists state bridge remains read-only. It must not mutate tracker state, call save APIs, render DOM, fetch provider data, or navigate.
+5. The Tracker Lists state bridge is read-only and remains read-only through this DOM handoff. It must not mutate tracker state, call save APIs, render DOM, fetch provider data, or navigate.
 6. No API, database, schema, tracker-data-format, retry-policy, or durable-save semantics change in this handoff.
 7. History and watched/episode tracking remain separate later roadmap phases; this slice does not move those mutation owners.
 
