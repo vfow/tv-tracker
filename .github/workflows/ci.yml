@@ -9,28 +9,56 @@ permissions:
   contents: write
 
 jobs:
-  test:
+  cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: modernization/search-dead-renderer-cleanup-main
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci --audit=false
-      - name: Regenerate committed Tailwind artifact
-        run: npm run build:css
-      - name: Commit regenerated Tailwind artifact when changed
+          fetch-depth: 0
+      - name: Collapse diagnostic contract split and restore normal gate
         run: |
-          if git diff --quiet -- static/css/tailwind.css; then
-            echo "Tailwind artifact already current."
-            exit 0
-          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          base = Path('tests/source_contracts_base.py')
+          text = base.read_text(encoding='utf-8')
+          old = '''    def test_discover_description_and_view_more_polish_exists(self):
+                  ui = self.read('static/js/ui.js')
+                  css = self.read('static/css/tailwind-input.css')
+                  app_js = self.read('static/js/app.js')
+                  tmdb_js = self.read('static/js/tmdb.js')
+                  self.assertIn('VIEW MORE', ui)
+                  self.assertIn('loadMoreSearchResults', app_js)
+                  self.assertIn('loadMoreDiscoverSection', app_js)
+                  self.assertIn('-webkit-line-clamp:2', css)
+                  self.assertIn('view-more-button', css)
+                  self.assertIn('tmdbSearchShowsPage', tmdb_js)
+          '''
+          new = '''    def test_discover_description_and_view_more_polish_exists(self):
+                  search_vue = self.read('frontend/src/search-discover/SearchResults.vue')
+                  css = self.read('static/css/tailwind-input.css')
+                  app_js = self.read('static/js/app.js')
+                  tmdb_js = self.read('static/js/tmdb.js')
+                  self.assertIn('VIEW MORE', search_vue)
+                  self.assertIn('loadMoreSearchResults', app_js)
+                  self.assertIn('loadMoreDiscoverSection', app_js)
+                  self.assertIn('-webkit-line-clamp:2', css)
+                  self.assertIn('view-more-button', css)
+                  self.assertIn('tmdbSearchShowsPage', tmdb_js)
+          '''
+          if old not in text:
+              raise SystemExit('Expected view-more contract block not found')
+          Path('tests/test_source_contracts.py').write_text(text.replace(old, new, 1), encoding='utf-8')
+          base.unlink()
+          PY
+          git checkout origin/main -- tests/run_all.py .github/workflows/ci.yml
+          git diff --check
+      - name: Commit branch cleanup
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add static/css/tailwind.css
-          git commit -m "Regenerate Tailwind after Search ownership cleanup"
+          git add -A tests/source_contracts_base.py tests/test_source_contracts.py tests/run_all.py .github/workflows/ci.yml
+          git commit -m "Clean Search ownership regression scaffolding"
           git push origin HEAD:modernization/search-dead-renderer-cleanup-main
