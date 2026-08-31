@@ -609,7 +609,7 @@ def _notification_push_payload(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "kind": "notification",
         "notificationId": int(item["id"]),
-        "title": str(item.get("title") or "TV Tracker"),
+        "title": str(item.get("title") or "Notification"),
         "body": str(item.get("message") or "New notification"),
         "route": str(item.get("route") or "/app/notifications"),
         "imageUrl": image_url,
@@ -673,7 +673,7 @@ def enqueue_push_deliveries(
                     delivery_key = hashlib.sha256(key_material.encode("utf-8")).hexdigest()
                     payload = {
                         "kind": "summary",
-                        "title": "TV Tracker",
+                        "title": "Notifications",
                         "body": f"{len(extras)} more notification{'s' if len(extras) != 1 else ''}",
                         "route": "/app/notifications",
                         "tag": "tv-tracker-summary-" + hashlib.sha256(identifiers.encode("utf-8")).hexdigest()[:20],
@@ -982,8 +982,8 @@ def run_final_notification_worker(
 
 def _manifest_payload() -> dict[str, Any]:
     return {
-        "name": "TV Tracker",
-        "short_name": "TV Tracker",
+        "name": "Library",
+        "short_name": "Library",
         "id": "/app/",
         "start_url": "/app/list/watching",
         "scope": "/",
@@ -1073,7 +1073,7 @@ self.addEventListener("push", event => {
     let payload = {};
     try { payload = event.data ? event.data.json() : {}; } catch (_) { payload = {}; }
     const options = {
-      body: String(payload.body || "New TV Tracker notification"),
+      body: String(payload.body || "New notification"),
       icon: "/static/assets/icons/app-icon-192.png",
       badge: "/static/assets/icons/app-icon-192.png",
       tag: String(payload.tag || "tv-tracker-notification"),
@@ -1084,7 +1084,7 @@ self.addEventListener("push", event => {
       }
     };
     if (payload.imageUrl) options.image = String(payload.imageUrl);
-    await self.registration.showNotification(String(payload.title || "TV Tracker"), options);
+    await self.registration.showNotification(String(payload.title || "Notification"), options);
   })());
 });
 
