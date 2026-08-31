@@ -7,17 +7,23 @@ const timing = require("../static/js/release-timing.js");
 assert.strictEqual(timing._key(123,2,4),"123:2:4");
 assert.strictEqual(timing._key(0,2,4),"");
 
+function dateOffset(days){
+    return new Date(Date.now() + (days * 86400000)).toISOString().slice(0,10);
+}
+
+const firstPrefetchDate = dateOffset(1);
+const secondPrefetchDate = dateOffset(2);
 const shows = {
     "123":{
         tmdb_id:123,
         _episode_list:{
             "1":[
-                {season_number:1,episode_number:1,air_date:"2026-08-16"},
-                {season_number:1,episode_number:1,air_date:"2026-08-16"},
-                {season_number:1,episode_number:2,air_date:"2026-08-23"}
+                {season_number:1,episode_number:1,air_date:firstPrefetchDate},
+                {season_number:1,episode_number:1,air_date:firstPrefetchDate},
+                {season_number:1,episode_number:2,air_date:secondPrefetchDate}
             ]
         },
-        next_episode_to_air:{season_number:1,episode_number:2,air_date:"2026-08-23"}
+        next_episode_to_air:{season_number:1,episode_number:2,air_date:secondPrefetchDate}
     }
 };
 const episodes = timing._collectEpisodes(shows);
