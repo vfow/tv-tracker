@@ -1,13 +1,13 @@
 # TV Tracker
 
-Single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailwind-only frontend.
+Single-admin TV tracking website built with Flask, PostgreSQL, TMDB, Vue 3, TypeScript, Vite, and Tailwind CSS. The frontend is being migrated incrementally: Vue owns the completed product surfaces while proven legacy JavaScript state/composition services remain only where active bridges still depend on them.
 
 ## Features
 
 - Tracks Watching, Paused, Completed, Plan To Watch, and Dropped shows.
 - Stores watched episodes, progress, history, favourites, notes, profile details, posters, backdrops, and imported metadata in PostgreSQL.
 - Uses TMDB for search, show and episode metadata, artwork, cast and crew, trailers, alternative titles, similar shows, and Where to Watch.
-- Keeps TMDB credentials server-side. The browser only talks to authenticated TV Tracker endpoints; the server adds the TMDB v3 API key to upstream TMDB request URLs where required by TMDB.
+- Keeps TMDB credentials server-side. The browser only talks to authenticated application endpoints; the server adds the TMDB v3 API key to upstream TMDB request URLs where required by TMDB.
 - Supports native App Backup JSON export/import and compatible external JSON/CSV imports.
 - Uses revision-based optimistic synchronization for multiple tabs and devices.
 - Supports refresh-safe app, show, and episode URLs.
@@ -16,9 +16,9 @@ Single-admin TV tracking website built with Flask, PostgreSQL, TMDB, and a Tailw
 ## Tech Stack
 
 - Backend: Flask, psycopg, PostgreSQL, Argon2 password hashing.
-- Frontend: plain JavaScript and Tailwind CSS.
-- Styling: `static/css/tailwind-input.css` compiled to `static/css/tailwind.css`.
-- Tests: Python unittest plus Node-based frontend contract checks, with PostgreSQL integration coverage in CI.
+- Frontend: Vue 3 + TypeScript + Vite for migrated surfaces, with retained legacy JavaScript services during the incremental migration.
+- Styling: Tailwind CSS; `static/css/tailwind-input.css` compiles to `static/css/tailwind.css`.
+- Tests: Python unittest plus Node/Vue frontend contract, type/build, and behavior checks, with PostgreSQL integration coverage in CI.
 - Deployment: GitHub Actions deploy to Alwaysdata over SSH using exact commit SHAs, explicit migrations, health verification, and source rollback.
 
 ## Project Structure
@@ -29,10 +29,12 @@ wsgi.py                 Production entrypoint; schema verification only
 tvtracker/               Domain packages for auth, backup, database, media,
                          migrations, notifications, sync, tracker state and web routes
 requirements.txt        Python runtime dependencies
-package.json            Tailwind build scripts
+package.json            Tailwind and Vue/TypeScript/Vite build scripts
+frontend/               Vue 3 + TypeScript application source and Vite configuration
 templates/              Login, error, and protected app templates
 static/css/             Tailwind source and generated CSS
-static/js/              UI, router, TMDB client, persistence, and sync logic
+static/js/              Legacy/shared state, bridges, router, persistence and provider services
+static/vue/             Committed production Vue build manifest/assets
 tests/                  Backend, PostgreSQL, route, source-contract, and frontend checks
 tools/                  Admin, repair, release and secret helper scripts
 docs/                   Deployment, policy, architecture, and audit records
@@ -85,6 +87,12 @@ Install frontend dependencies:
 npm ci
 ```
 
+Build/type-check the Vue frontend when changing `frontend/`:
+
+```text
+npm run build:frontend
+```
+
 Set the required environment variables in your shell or host config, apply migrations explicitly, then run the same WSGI entrypoint used by production:
 
 ```text
@@ -124,7 +132,7 @@ The command reports how many rows changed and surfaces failures to the operator.
 
 ## Tailwind CSS
 
-Templates load only `static/css/tailwind.css` for application styling.
+Templates and migrated Vue surfaces use the committed Tailwind build at `static/css/tailwind.css`.
 
 Build CSS after editing `static/css/tailwind-input.css` or changing Tailwind class usage:
 
@@ -138,7 +146,7 @@ Watch Tailwind during UI work:
 npm run css:watch
 ```
 
-CI and deployment rebuild the CSS and fail if the committed generated file differs.
+CI and deployment rebuild the CSS and fail if the committed generated file differs. CI also type-checks/builds the Vue frontend and verifies the committed Vue assets.
 
 ## Static Asset Caching
 
@@ -215,7 +223,7 @@ Run the full local regression suite:
 python tests/run_all.py
 ```
 
-The suite checks backend contracts, route protection, source contracts, JavaScript syntax, frontend behavior, synchronization reliability, TMDB proxy usage, asset references, migration behavior, and the Tailwind-only frontend contract.
+The suite checks backend contracts, route protection, source contracts, JavaScript syntax, Vue/TypeScript frontend ownership and behavior, synchronization reliability, TMDB proxy usage, asset references, migration behavior, and committed Tailwind/Vue build contracts.
 
 CI provisions PostgreSQL 16 and passes `TEST_DATABASE_URL` so migration and database-sensitive integration paths are exercised against a real PostgreSQL service rather than only mocks.
 
@@ -225,7 +233,7 @@ Pushing an accepted commit to `main` triggers `.github/workflows/deploy.yml`. Ma
 
 1. tests the exact commit with PostgreSQL;
 2. audits Python/npm dependencies;
-3. rebuilds and verifies committed Tailwind CSS;
+3. rebuilds and verifies committed frontend assets through the repository regression/build gates;
 4. confirms the requested SHA is still the tip of `main`;
 5. stages that exact SHA in a temporary worktree on Alwaysdata;
 6. installs dependencies and runs additive migrations from the staged release;
