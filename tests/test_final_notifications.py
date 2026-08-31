@@ -139,10 +139,15 @@ class FinalNotificationPureTests(unittest.TestCase):
         self.assertIn('tvtracker-consume-push-clicks', source)
         self.assertNotIn('pushNotification=', source)
         self.assertNotIn('addEventListener("fetch"', source)
+        self.assertIn('payload.body || "New notification"', source)
+        self.assertIn('payload.title || "Notification"', source)
+        self.assertNotIn('New TV Tracker notification', source)
+        self.assertNotIn('payload.title || "TV Tracker"', source)
 
     def test_manifest_has_png_fallback_icons(self):
         manifest = final._manifest_payload()
-        self.assertEqual(manifest["name"], "TV Tracker")
+        self.assertEqual(manifest["name"], "Library")
+        self.assertEqual(manifest["short_name"], "Library")
         self.assertEqual(manifest["start_url"], "/app/list/watching")
         self.assertEqual(manifest["display"], "standalone")
         sizes = {icon.get("sizes") for icon in manifest["icons"]}
