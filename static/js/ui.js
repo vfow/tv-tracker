@@ -161,7 +161,7 @@ function getTrackerDocumentTitleLabel(){
 
     return activePage === "shows"
     ? (showTabTitles[activeShowsTab] || "Shows")
-    : (pageTitles[activePage] || "TV Tracker");
+    : (pageTitles[activePage] || "Library");
 
 }
 
@@ -170,13 +170,13 @@ function updateShellTitle(){
     const label = getTrackerDocumentTitleLabel();
 
     if(typeof document !== "undefined"){
-        document.title = label && label !== "TV Tracker" ? `${label} — TV Tracker` : "TV Tracker";
+        document.title = label || "Library";
     }
 
     const title = document.getElementById("mobile-page-title");
 
     if(title){
-        title.textContent = label || "TV Tracker";
+        title.textContent = label || "Library";
     }
 
 }
