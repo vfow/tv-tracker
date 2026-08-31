@@ -1,0 +1,36 @@
+name: Temporary Tailwind Regeneration
+
+on:
+  push:
+    branches:
+      - modernization/search-dead-renderer-cleanup-current
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: ${{ !contains(github.event.head_commit.message, '[skip tailwind regen]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --audit=false
+      - name: Regenerate committed Tailwind CSS
+        run: npm run build:css
+      - name: Commit deterministic CSS artifact
+        shell: bash
+        run: |
+          if git diff --quiet -- static/css/tailwind.css; then
+            echo "Tailwind CSS is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/css/tailwind.css
+          git commit -m "Regenerate Tailwind CSS after Search cleanup [skip tailwind regen]"
+          git push origin HEAD:modernization/search-dead-renderer-cleanup-current
