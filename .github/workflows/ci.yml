@@ -49,30 +49,66 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
-      - name: Diagnose Python tests A-F
-        env:
+      - name: Python G
+        env: &testenv
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_[a-fA-F]*.py' -v
-      - name: Diagnose Python tests G-L
+        run: python -m unittest discover -s tests -p 'test_g*.py' -v
+      - name: Python H
         if: always()
-        env:
-          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_[g-lG-L]*.py' -v
-      - name: Diagnose Python tests M-R
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_h*.py' -v
+      - name: Python I
         if: always()
-        env:
-          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_[m-rM-R]*.py' -v
-      - name: Diagnose Python tests S-Z
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_i*.py' -v
+      - name: Python J
         if: always()
-        env:
-          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_[s-zS-Z]*.py' -v
-      - name: Diagnose all frontend tests
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_j*.py' -v
+      - name: Python K
         if: always()
-        run: |
-          set -e
-          for f in tests/test_*.js; do echo "Running $f"; node "$f"; done
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_k*.py' -v
+      - name: Python L
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_l*.py' -v
+      - name: Python M
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_m*.py' -v
+      - name: Python N
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_n*.py' -v
+      - name: Python O
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_o*.py' -v
+      - name: Python P
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_p*.py' -v
+      - name: Python Q
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_q*.py' -v
+      - name: Python R
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_r*.py' -v
+      - name: Python S
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_s*.py' -v
+      - name: Python T
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_t*.py' -v
+      - name: Python U-Z
+        if: always()
+        env: *testenv
+        run: python -m unittest discover -s tests -p 'test_[u-zU-Z]*.py' -v
       - name: Check repository diff hygiene
         if: always()
         run: git diff --check
