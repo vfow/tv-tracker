@@ -11,19 +11,6 @@
         }
     }
 
-    function installNeutralRequestErrorCopy(){
-        if(typeof global.friendlyRequestError !== "function"){
-            return;
-        }
-        const originalFriendlyRequestError = global.friendlyRequestError;
-        global.friendlyRequestError = function(error,fallback){
-            if(error instanceof TypeError){
-                return "Could not reach the server. Check your connection.";
-            }
-            return originalFriendlyRequestError(error,fallback);
-        };
-    }
-
     function installStartupRecovery(){
         if(!global.document || !global.TVTrackerStartup || global.TVTrackerStartup.status !== "failed"){
             return;
@@ -57,7 +44,6 @@
     }
 
     removeLegacyPendingSaveNotice();
-    installNeutralRequestErrorCopy();
 
     global.TVTrackerStartupPromise = Promise.resolve()
     .then(()=>global.startTVTrackerApp())
