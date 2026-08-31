@@ -1,0 +1,53 @@
+name: Temporary placeholder-brand cleanup
+
+on:
+  push:
+    branches:
+      - fix/remove-placeholder-branding
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: ${{ !contains(github.event.head_commit.message, 'Remove placeholder branding from runtime titles') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/remove-placeholder-branding
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Remove runtime placeholder branding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('static/js/ui.js')
+          source = path.read_text(encoding='utf-8')
+          replacements = {
+              ': (pageTitles[activePage] || "TV Tracker");': ': (pageTitles[activePage] || "Library");',
+              'document.title = label && label !== "TV Tracker" ? `${label} — TV Tracker` : "TV Tracker";': 'document.title = label || "Library";',
+              'title.textContent = label || "TV Tracker";': 'title.textContent = label || "Library";',
+          }
+          for old, new in replacements.items():
+              if old not in source:
+                  raise SystemExit(f'Expected runtime-title source not found: {old}')
+              source = source.replace(old, new, 1)
+          path.write_text(source, encoding='utf-8')
+          PY
+      - name: Refresh committed Vue assets
+        run: |
+          npm ci --audit=false
+          npm run build:frontend
+      - name: Commit cleanup
+        run: |
+          rm .github/workflows/temporary-remove-placeholder-branding.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/js/ui.js static/vue .github/workflows/temporary-remove-placeholder-branding.yml
+          git commit -m "Remove placeholder branding from runtime titles"
+          git push origin HEAD:fix/remove-placeholder-branding
