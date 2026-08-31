@@ -231,6 +231,40 @@
         return true;
     }
 
+    function composeWatchlistHTML(){
+        if(typeof legacyRenderWatchlist !== "function") return null;
+        const root = rootFor("watchlist");
+        if(!root) return null;
+
+        const parent = root.parentNode;
+        if(!parent || typeof root.cloneNode !== "function" || typeof parent.insertBefore !== "function"){
+            legacyRenderWatchlist();
+            return String(root.innerHTML || "");
+        }
+
+        const originalId = String(root.id || "show-list");
+        const stagingRoot = root.cloneNode(false);
+        stagingRoot.id = originalId;
+        if(stagingRoot.dataset){
+            delete stagingRoot.dataset.tvtrackerTrackerListsOwner;
+        }
+
+        root.id = originalId + "-vue-owned";
+        parent.insertBefore(stagingRoot,root);
+
+        try{
+            legacyRenderWatchlist();
+            return String(stagingRoot.innerHTML || "");
+        }finally{
+            if(typeof stagingRoot.remove === "function"){
+                stagingRoot.remove();
+            }else if(stagingRoot.parentNode && typeof stagingRoot.parentNode.removeChild === "function"){
+                stagingRoot.parentNode.removeChild(stagingRoot);
+            }
+            root.id = originalId;
+        }
+    }
+
     async function renderShowListHTML(html){
         const model = Object.freeze({surface:"upcoming",html:String(html || "")});
         if(!vueOwner){
@@ -253,11 +287,9 @@
     }
 
     async function renderWatchlist(){
-        if(typeof legacyRenderWatchlist !== "function") return false;
-        legacyRenderWatchlist();
-        const root = rootFor("watchlist");
-        if(!root) return false;
-        const rendered = await renderShowListHTML(root.innerHTML || "");
+        const html = composeWatchlistHTML();
+        if(html === null) return false;
+        const rendered = await renderShowListHTML(html);
         if(rendered) attachWatchlistInteractions();
         return rendered;
     }
