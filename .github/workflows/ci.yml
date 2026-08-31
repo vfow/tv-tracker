@@ -49,23 +49,174 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
-      - name: Diagnose full Python regression suite
+      - name: Diagnose test_discover_stability.js
         continue-on-error: true
-        env:
-          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Diagnose Search discover contract
+        run: node tests/test_discover_stability.js
+      - name: Diagnose test_duplicate_show_merge.js
         continue-on-error: true
-        run: node tests/test_frontend_modernization_search_discover_contract.js
-      - name: Diagnose Search state bridge
+        run: node tests/test_duplicate_show_merge.js
+      - name: Diagnose test_final_notifications.js
         continue-on-error: true
-        run: node tests/test_frontend_modernization_search_state_bridge.js
-      - name: Diagnose frontend ownership
+        run: node tests/test_final_notifications.js
+      - name: Diagnose test_frontend_modernization_discover_state_bridge.js
         continue-on-error: true
-        run: node tests/test_phase17_frontend_ownership.js
-      - name: Diagnose shared UI ownership
+        run: node tests/test_frontend_modernization_discover_state_bridge.js
+      - name: Diagnose test_frontend_modernization_discover_vue_renderer.js
         continue-on-error: true
-        run: node tests/test_frontend_modernization_phase5_shared_ui.js
+        run: node tests/test_frontend_modernization_discover_vue_renderer.js
+      - name: Diagnose test_frontend_modernization_episode_tracking_completion.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_episode_tracking_completion.js
+      - name: Diagnose test_frontend_modernization_episode_tracking_state_bridge.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_episode_tracking_state_bridge.js
+      - name: Diagnose test_frontend_modernization_history_state_bridge.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_history_state_bridge.js
+      - name: Diagnose test_frontend_modernization_history_vue_renderer.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_history_vue_renderer.js
+      - name: Diagnose test_frontend_modernization_media_details_state_bridge.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_media_details_state_bridge.js
+      - name: Diagnose test_frontend_modernization_movie_details_vue_renderer.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_movie_details_vue_renderer.js
+      - name: Diagnose test_frontend_modernization_phase1.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase1.js
+      - name: Diagnose test_frontend_modernization_phase3.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase3.js
+      - name: Diagnose test_frontend_modernization_phase4a.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4a.js
+      - name: Diagnose test_frontend_modernization_phase4b.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4b.js
+      - name: Diagnose test_frontend_modernization_phase4c.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4c.js
+      - name: Diagnose test_frontend_modernization_phase4d.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4d.js
+      - name: Diagnose test_frontend_modernization_phase4e.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4e.js
+      - name: Diagnose test_frontend_modernization_phase4f.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_phase4f.js
+      - name: Diagnose test_frontend_modernization_routing_boundary.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_routing_boundary.js
+      - name: Diagnose test_frontend_modernization_routing_completion.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_routing_completion.js
+      - name: Diagnose test_frontend_modernization_routing_matrix_contract.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_routing_matrix_contract.js
+      - name: Diagnose test_frontend_modernization_session.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_session.js
+      - name: Diagnose test_frontend_modernization_settings.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_settings.js
+      - name: Diagnose test_frontend_modernization_show_details_vue_renderer.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_show_details_vue_renderer.js
+      - name: Diagnose test_frontend_modernization_tracker_lists_completion.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_tracker_lists_completion.js
+      - name: Diagnose test_frontend_modernization_tracker_lists_state_bridge.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_tracker_lists_state_bridge.js
+      - name: Diagnose test_frontend_modernization_tracker_lists_status_parity.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_tracker_lists_status_parity.js
+      - name: Diagnose test_frontend_modernization_tracker_lists_vue_renderer.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_tracker_lists_vue_renderer.js
+      - name: Diagnose test_frontend_modernization_upcoming_notifications_vue_renderer.js
+        continue-on-error: true
+        run: node tests/test_frontend_modernization_upcoming_notifications_vue_renderer.js
+      - name: Diagnose test_nav_font_delivery.js
+        continue-on-error: true
+        run: node tests/test_nav_font_delivery.js
+      - name: Diagnose test_notifications_polish_runtime.js
+        continue-on-error: true
+        run: node tests/test_notifications_polish_runtime.js
+      - name: Diagnose test_phase14_settings_migration.js
+        continue-on-error: true
+        run: node tests/test_phase14_settings_migration.js
+      - name: Diagnose test_phase15_feedback_revalidation.js
+        continue-on-error: true
+        run: node tests/test_phase15_feedback_revalidation.js
+      - name: Diagnose test_phase16_notification_consolidation.js
+        continue-on-error: true
+        run: node tests/test_phase16_notification_consolidation.js
+      - name: Diagnose test_phase3_data_integrity.js
+        continue-on-error: true
+        run: node tests/test_phase3_data_integrity.js
+      - name: Diagnose test_phase4_adult_policy.js
+        continue-on-error: true
+        run: node tests/test_phase4_adult_policy.js
+      - name: Diagnose test_phase5_logout_cleanup.js
+        continue-on-error: true
+        run: node tests/test_phase5_logout_cleanup.js
+      - name: Diagnose test_phase6_settings_repairs.js
+        continue-on-error: true
+        run: node tests/test_phase6_settings_repairs.js
+      - name: Diagnose test_phase7_unified_feedback.js
+        continue-on-error: true
+        run: node tests/test_phase7_unified_feedback.js
+      - name: Diagnose test_phase_63c.js
+        continue-on-error: true
+        run: node tests/test_phase_63c.js
+      - name: Diagnose test_product_quality.js
+        continue-on-error: true
+        run: node tests/test_product_quality.js
+      - name: Diagnose test_provider_freshness.js
+        continue-on-error: true
+        run: node tests/test_provider_freshness.js
+      - name: Diagnose test_provider_save_batching.js
+        continue-on-error: true
+        run: node tests/test_provider_save_batching.js
+      - name: Diagnose test_release_timing_frontend.js
+        continue-on-error: true
+        run: node tests/test_release_timing_frontend.js
+      - name: Diagnose test_router.js
+        continue-on-error: true
+        run: node tests/test_router.js
+      - name: Diagnose test_search_navigation_fix.js
+        continue-on-error: true
+        run: node tests/test_search_navigation_fix.js
+      - name: Diagnose test_settings_notifications_followup.js
+        continue-on-error: true
+        run: node tests/test_settings_notifications_followup.js
+      - name: Diagnose test_show_removal_integrity.js
+        continue-on-error: true
+        run: node tests/test_show_removal_integrity.js
+      - name: Diagnose test_startup_font_visibility.js
+        continue-on-error: true
+        run: node tests/test_startup_font_visibility.js
+      - name: Diagnose test_startup_readiness.js
+        continue-on-error: true
+        run: node tests/test_startup_readiness.js
+      - name: Diagnose test_streaming_region.js
+        continue-on-error: true
+        run: node tests/test_streaming_region.js
+      - name: Diagnose test_sync_reliability.js
+        continue-on-error: true
+        run: node tests/test_sync_reliability.js
+      - name: Diagnose test_tmdb_cache.js
+        continue-on-error: true
+        run: node tests/test_tmdb_cache.js
+      - name: Diagnose test_trending.js
+        continue-on-error: true
+        run: node tests/test_trending.js
+      - name: Diagnose test_watchlist_canonical_loggability.js
+        continue-on-error: true
+        run: node tests/test_watchlist_canonical_loggability.js
       - name: Run full regression suite
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
