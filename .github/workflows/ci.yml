@@ -49,30 +49,20 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
-      - name: Diagnose phase contracts with annotations
-        env: &testenv
-          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: |
-          set +e
-          python -m unittest discover -s tests -p 'test_phase*.py' -v > /tmp/phase.log 2>&1
-          status=$?
-          cat /tmp/phase.log
-          if [ "$status" -ne 0 ]; then
-            tail -n 80 /tmp/phase.log | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g' | while IFS= read -r line; do echo "::error title=Phase regression::$line"; done
-          fi
-          exit "$status"
-      - name: Diagnose source contracts with annotations
+      - name: Source Search route ownership
+        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_real_protected_page_routes_exist -v
+      - name: Source Search routing polish
         if: always()
-        env: *testenv
-        run: |
-          set +e
-          python -m unittest discover -s tests -p 'test_source*.py' -v > /tmp/source.log 2>&1
-          status=$?
-          cat /tmp/source.log
-          if [ "$status" -ne 0 ]; then
-            tail -n 80 /tmp/source.log | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g' | while IFS= read -r line; do echo "::error title=Source regression::$line"; done
-          fi
-          exit "$status"
+        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase51_search_routing_polish_exists -v
+      - name: Source Search collection ownership
+        if: always()
+        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase_66j_adult_badge_and_collection_search_exist -v
+      - name: Source Search view more ownership
+        if: always()
+        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_discover_description_and_view_more_polish_exists -v
+      - name: Source movie Search ownership
+        if: always()
+        run: python -m unittest tests.test_source_contracts.TMDBOnlyContractTests.test_phase601_movie_layout_search_state_and_person_roles_exist -v
       - name: Check repository diff hygiene
         if: always()
         run: git diff --check
