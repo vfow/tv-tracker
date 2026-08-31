@@ -1,5 +1,6 @@
 import { createApp, type App as VueApp } from 'vue';
 
+import EpisodeTrackingController from './episode-tracking/EpisodeTrackingController.vue';
 import FoundationProbe from './FoundationProbe.vue';
 import MovieDetails from './media-details/MovieDetails.vue';
 import type { MovieDetailsVueBridge, MovieDetailsVueOwner, MovieDetailsViewModel } from './media-details/movieViewModel';
@@ -98,6 +99,17 @@ let upcomingApp: VueApp<Element> | null = null;
 let upcomingRoot: Element | null = null;
 let notificationsApp: VueApp<Element> | null = null;
 let notificationsRoot: Element | null = null;
+let episodeTrackingControllerApp: VueApp<Element> | null = null;
+
+function mountEpisodeTrackingController(): void {
+  if (episodeTrackingControllerApp || !document.body) return;
+  const root = document.createElement('div');
+  root.id = 'vue-episode-tracking-controller-root';
+  root.hidden = true;
+  document.body.appendChild(root);
+  episodeTrackingControllerApp = createApp(EpisodeTrackingController);
+  episodeTrackingControllerApp.mount(root);
+}
 
 function unmountSettings(): void {
   if (settingsApp) settingsApp.unmount();
@@ -273,6 +285,7 @@ window.TVTrackerVueFoundation = Object.freeze({
   mountProbe: mountFoundationProbe
 });
 
+mountEpisodeTrackingController();
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
