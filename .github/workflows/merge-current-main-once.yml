@@ -1,0 +1,27 @@
+name: Merge current main once
+
+on:
+  push:
+    branches:
+      - modernization/search-dead-renderer-cleanup-current
+
+permissions:
+  contents: write
+
+jobs:
+  merge-current-main:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Merge current main into cleanup branch
+        run: |
+          git fetch origin main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-edit origin/main
+          git diff origin/main...HEAD --check
+          git push origin HEAD:modernization/search-dead-renderer-cleanup-current
