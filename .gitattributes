@@ -1,2 +1,3 @@
+# Keep Tailwind source and generated CSS deterministic across local and CI platforms.
 static/css/tailwind-input.css text eol=lf
 static/css/tailwind.css text eol=lf
