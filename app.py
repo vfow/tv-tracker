@@ -10,11 +10,11 @@ from urllib.request import urlopen
 
 import psycopg
 from flask import Flask, session
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # urlopen is re-exported so patch.object(app, "urlopen", ...) keeps intercepting
 # upstream TMDB requests through the deps seam in tvtracker/web/routes.py.
 
+from tvtracker.application import build_flask_application
 from tvtracker.auth import security as auth_security
 from tvtracker.auth.security import (
     MIN_ADMIN_PASSWORD_CHARS,
@@ -289,29 +289,25 @@ def run_notification_check(now: datetime | None = None) -> dict[str, Any]:
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
-    if env_flag("TRUST_PROXY_HEADERS"):
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-    app.config.update(
-        SECRET_KEY=required_env("SECRET_KEY"),
-        MAX_CONTENT_LENGTH=MAX_BODY_BYTES,
-        SESSION_COOKIE_NAME="tv_tracker_session",
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SECURE=True,
-        SESSION_COOKIE_SAMESITE="Lax",
-        PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    return build_flask_application(
+        __name__,
+        secret_key=required_env("SECRET_KEY"),
+        max_content_length=MAX_BODY_BYTES,
+        permanent_session_lifetime=timedelta(days=7),
+        trust_proxy_headers=env_flag("TRUST_PROXY_HEADERS"),
+        prepare_schema=ensure_schema,
+        register_routes=lambda application: register_routes(
+            application,
+            deps=sys.modules[__name__],
+        ),
+        install_client_error_reporting=lambda application: install_client_error_reporting(
+            application,
+            login_required=login_required,
+            check_csrf=check_csrf,
+            release_sha=RELEASE_SHA,
+        ),
+        install_static_asset_versioning=install_static_asset_versioning,
     )
-
-    ensure_schema()
-    register_routes(app, deps=sys.modules[__name__])
-    install_client_error_reporting(
-        app,
-        login_required=login_required,
-        check_csrf=check_csrf,
-        release_sha=RELEASE_SHA,
-    )
-    install_static_asset_versioning(app)
-    return app
 
 
 app = create_app()
