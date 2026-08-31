@@ -17,6 +17,8 @@ def test_pending_save_recovery_stays_silent_and_intact():
     for notice in forbidden_notices:
         assert notice not in runtime
 
+    assert "TV Tracker" not in runtime
+
     assert '"Saving changes…"' not in startup
     assert "PENDING_SAVE_FEEDBACK_KEY" not in startup
     assert "PENDING_SAVE_STORAGE_FEEDBACK_KEY" not in startup
@@ -28,7 +30,8 @@ def test_pending_save_recovery_stays_silent_and_intact():
     # durable queue/retry behavior that remains owned by db.js.
     assert 'getElementById("tv-unsaved-status")' in startup
     assert "indicator.remove();" in startup
-    assert 'return "Could not reach the server. Check your connection.";' in startup
+    assert "installNeutralRequestErrorCopy" not in startup
+    assert 'return "Could not reach the server. Check your connection.";' in db
 
     # The durable retry/storage machinery remains owned by db.js; this change only
     # removes the persistent user-facing diagnostic layer around it.

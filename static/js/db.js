@@ -226,7 +226,7 @@ function friendlyRequestError(error,fallback="Request failed"){
         return error.message || "Updated from another tab or device.";
     }
     if(error instanceof TypeError){
-        return "Could not reach the TV Tracker server. Check your connection.";
+        return "Could not reach the server. Check your connection.";
     }
 
     return error && error.message ? error.message : fallback;
