@@ -2,7 +2,8 @@
 module.exports = {
   content: [
     './templates/**/*.html',
-    './static/js/**/*.js'
+    './static/js/**/*.js',
+    '!./static/js/episode-tracking-state-bridge.js'
   ],
   safelist: [
     'profile-header-default',
