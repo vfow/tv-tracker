@@ -44,7 +44,10 @@
     }
 
     document.addEventListener("tvtracker:settings-vue-needed",loadVueSettings);
-    if(/^\/app\/settings(?:\/(?:profile|auth|notifications|streaming|data|danger-zone))?\/?$/.test(String(global.location && global.location.pathname || ""))){
+    const currentPath = String(global.location && global.location.pathname || "");
+    const settingsRoute = /^\/app\/settings(?:\/(?:profile|auth|notifications|streaming|data|danger-zone))?\/?$/.test(currentPath);
+    const episodeRoute = /^\/app\/show\/[1-9][0-9]{0,11}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?\/season\/\d{1,5}\/episode\/[1-9][0-9]{0,5}\/?$/.test(currentPath);
+    if(settingsRoute || episodeRoute){
         loadVueSettings();
     }
 })(window);
