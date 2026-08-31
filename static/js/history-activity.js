@@ -88,7 +88,7 @@ function getMovieHistoryDisplayData(entry){
 function loadMoreHistory(){
 
     historyVisibleLimit += HISTORY_BATCH_SIZE;
-    return renderHistory();
+    return globalThis.renderHistory();
 
 }
 
