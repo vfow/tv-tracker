@@ -49,66 +49,30 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
-      - name: Python G
+      - name: Python pending-save contracts
         env: &testenv
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_g*.py' -v
-      - name: Python H
+        run: python -m unittest discover -s tests -p 'test_pending*.py' -v
+      - name: Python phase contracts
         if: always()
         env: *testenv
-        run: python -m unittest discover -s tests -p 'test_h*.py' -v
-      - name: Python I
+        run: python -m unittest discover -s tests -p 'test_phase*.py' -v
+      - name: Python product contracts
         if: always()
         env: *testenv
-        run: python -m unittest discover -s tests -p 'test_i*.py' -v
-      - name: Python J
+        run: python -m unittest discover -s tests -p 'test_product*.py' -v
+      - name: Python provider contracts
         if: always()
         env: *testenv
-        run: python -m unittest discover -s tests -p 'test_j*.py' -v
-      - name: Python K
+        run: python -m unittest discover -s tests -p 'test_provider*.py' -v
+      - name: Python source contracts
         if: always()
         env: *testenv
-        run: python -m unittest discover -s tests -p 'test_k*.py' -v
-      - name: Python L
+        run: python -m unittest discover -s tests -p 'test_source*.py' -v
+      - name: Python static contracts
         if: always()
         env: *testenv
-        run: python -m unittest discover -s tests -p 'test_l*.py' -v
-      - name: Python M
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_m*.py' -v
-      - name: Python N
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_n*.py' -v
-      - name: Python O
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_o*.py' -v
-      - name: Python P
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_p*.py' -v
-      - name: Python Q
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_q*.py' -v
-      - name: Python R
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_r*.py' -v
-      - name: Python S
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_s*.py' -v
-      - name: Python T
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_t*.py' -v
-      - name: Python U-Z
-        if: always()
-        env: *testenv
-        run: python -m unittest discover -s tests -p 'test_[u-zU-Z]*.py' -v
+        run: python -m unittest discover -s tests -p 'test_static*.py' -v
       - name: Check repository diff hygiene
         if: always()
         run: git diff --check
