@@ -39,6 +39,7 @@ jobs:
           node tests/test_frontend.js
           node tests/test_frontend_modernization_search_discover_contract.js
           node tests/test_frontend_modernization_search_vue_renderer.js
+          python -m pip install --disable-pip-version-check pytest
           python -m pytest tests/test_source_contracts.py -q
 
       - name: Commit ownership regression updates
