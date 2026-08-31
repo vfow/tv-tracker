@@ -22,5 +22,6 @@ def test_unnamed_product_does_not_expose_placeholder_branding():
     assert "<title>Library</title>" in index
     assert "<title>Sign in</title>" in login
     assert ">WELCOME</h1>" in login
+    assert "<title>{{ status_code }} - App</title>" in error
     assert 'document.title = label || "Library";' in ui
     assert "Sign out of this session." in auth_settings
