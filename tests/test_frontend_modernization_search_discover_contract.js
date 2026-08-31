@@ -5,6 +5,7 @@ const contract = fs.readFileSync('frontend/src/search-discover/contracts.ts', 'u
 const main = fs.readFileSync('frontend/src/main.ts', 'utf8');
 const app = fs.readFileSync('static/js/app.js', 'utf8');
 const ui = fs.readFileSync('static/js/ui.js', 'utf8');
+const searchBridge = fs.readFileSync('static/js/search-state-bridge.js', 'utf8');
 const router = fs.readFileSync('static/js/app-router.js', 'utf8');
 const trending = fs.readFileSync('static/js/trending.js', 'utf8');
 
@@ -29,7 +30,8 @@ assert(app.includes('var discoverHubState = {'));
 assert(app.includes('async function loadDiscoverHub(force=false)'));
 assert(app.includes('function shouldShowDiscoverHub()'));
 
-assert(ui.includes('function renderSearchResults(resultsList)'));
+assert(!ui.includes('function renderSearchResults(resultsList)'), 'legacy Search renderer must stay deleted after Vue ownership transfer');
+assert(searchBridge.includes('global.renderSearchResults = render'), 'Search runtime renderer hook must be owned by the Vue bridge');
 assert(ui.includes('function renderDiscoverHubContent()'));
 assert(ui.includes('window.renderDiscoverHub = renderDiscoverHub'));
 assert(trending.includes('global.TVTrackerTrending = Object.freeze({'));
