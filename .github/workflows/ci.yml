@@ -49,30 +49,30 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
-      - name: Diagnose Python regression suite
+      - name: Diagnose Python tests A-F
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Diagnose frontend tests A-F
+        run: python -m unittest discover -s tests -p 'test_[a-fA-F]*.py' -v
+      - name: Diagnose Python tests G-L
+        if: always()
+        env:
+          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
+        run: python -m unittest discover -s tests -p 'test_[g-lG-L]*.py' -v
+      - name: Diagnose Python tests M-R
+        if: always()
+        env:
+          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
+        run: python -m unittest discover -s tests -p 'test_[m-rM-R]*.py' -v
+      - name: Diagnose Python tests S-Z
+        if: always()
+        env:
+          TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
+        run: python -m unittest discover -s tests -p 'test_[s-zS-Z]*.py' -v
+      - name: Diagnose all frontend tests
         if: always()
         run: |
           set -e
-          for f in tests/test_[a-fA-F]*.js; do [ -e "$f" ] || continue; echo "Running $f"; node "$f"; done
-      - name: Diagnose frontend tests G-L
-        if: always()
-        run: |
-          set -e
-          for f in tests/test_[g-lG-L]*.js; do [ -e "$f" ] || continue; echo "Running $f"; node "$f"; done
-      - name: Diagnose frontend tests M-R
-        if: always()
-        run: |
-          set -e
-          for f in tests/test_[m-rM-R]*.js; do [ -e "$f" ] || continue; echo "Running $f"; node "$f"; done
-      - name: Diagnose frontend tests S-Z
-        if: always()
-        run: |
-          set -e
-          for f in tests/test_[s-zS-Z]*.js; do [ -e "$f" ] || continue; echo "Running $f"; node "$f"; done
+          for f in tests/test_*.js; do echo "Running $f"; node "$f"; done
       - name: Check repository diff hygiene
         if: always()
         run: git diff --check
