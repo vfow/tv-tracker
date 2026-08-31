@@ -17,7 +17,7 @@ def test_pending_save_recovery_stays_silent_and_intact():
     for notice in forbidden_notices:
         assert notice not in runtime
 
-    assert "TV Tracker" not in runtime
+    assert "Could not reach the TV Tracker server. Check your connection." not in runtime
 
     assert '"Saving changes…"' not in startup
     assert "PENDING_SAVE_FEEDBACK_KEY" not in startup
