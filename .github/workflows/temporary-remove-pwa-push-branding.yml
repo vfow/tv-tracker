@@ -1,0 +1,47 @@
+name: Temporary PWA push branding cleanup
+
+on:
+  push:
+    branches:
+      - fix/remove-placeholder-pwa-push-branding
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: ${{ !contains(github.event.head_commit.message, 'Remove placeholder PWA and push branding') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/remove-placeholder-pwa-push-branding
+          fetch-depth: 0
+      - name: Remove user-visible PWA and push placeholder branding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tvtracker/notifications/push_and_movies.py')
+          source = path.read_text(encoding='utf-8')
+          replacements = [
+              ('"title": str(item.get("title") or "TV Tracker"),', '"title": str(item.get("title") or "Notification"),'),
+              ('"title": "TV Tracker",\n                        "body": f"{len(extras)} more notification', '"title": "Notifications",\n                        "body": f"{len(extras)} more notification'),
+              ('"name": "TV Tracker",\n        "short_name": "TV Tracker",', '"name": "Library",\n        "short_name": "Library",'),
+              ('body: String(payload.body || "New TV Tracker notification"),', 'body: String(payload.body || "New notification"),'),
+              ('showNotification(String(payload.title || "TV Tracker"), options);', 'showNotification(String(payload.title || "Notification"), options);'),
+          ]
+          for old, new in replacements:
+              if old not in source:
+                  raise SystemExit(f'Expected user-visible branding source not found: {old}')
+              source = source.replace(old, new, 1)
+          path.write_text(source, encoding='utf-8')
+          PY
+      - name: Commit cleanup
+        run: |
+          rm .github/workflows/temporary-remove-pwa-push-branding.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tvtracker/notifications/push_and_movies.py .github/workflows/temporary-remove-pwa-push-branding.yml
+          git commit -m "Remove placeholder PWA and push branding"
+          git push origin HEAD:fix/remove-placeholder-pwa-push-branding
