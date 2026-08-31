@@ -75,7 +75,7 @@
         });
     }
 
-    async function renderHistory(){
+    async function renderHistoryWithVue(){
         const sharedVueBridge = global.TVTrackerUpcomingNotificationsVueBridge;
         if(!sharedVueBridge || typeof sharedVueBridge.renderShowListHTML !== "function"){
             if(typeof legacyRenderHistory === "function") legacyRenderHistory();
@@ -96,6 +96,7 @@
         return true;
     }
 
+    const renderHistory = renderHistoryWithVue;
     const bridge = Object.freeze({
         renderHistory,
         ownership:"vue-dom"
