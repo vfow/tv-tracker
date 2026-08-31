@@ -2,16 +2,20 @@
 
 ## Phase position
 
-This is the Phase 14 watched / episode-tracking modernization boundary. History rendering is already migrated separately; this phase owns the interaction and state that marks individual regular episodes or whole seasons watched/unwatched.
+The watched / episode-tracking modernization phase is complete. History rendering remains a separate completed surface; this phase owns the Vue interaction boundary for individual regular episodes and whole-season watched/unwatched actions while preserving the established mutation semantics.
 
-## Current ownership lock
+## Final ownership lock
 
 1. `DATA.shows[showId].episodes_watched` remains the authoritative watched-episode state.
 2. `DATA.history` remains the activity/history log updated by the established episode mutation flow; it is not promoted to the primary watched-state store.
-3. `app.js` remains the owner of `updateEpisodeWatched`, `markSeasonWatched`, `markNextEpisode`, auto-completion/reopen behavior, History mutations, save calls, and episode-loading requirements.
-4. The Episode Tracking state bridge is read-only. It must not mutate tracker state, render DOM, fetch provider data, persist data, or navigate.
-5. `app-router.js` remains the sole browser History API owner.
-6. Episode detail/show detail rendering ownership is unchanged in this characterization slice.
+3. `app.js` remains the mutation owner of `updateEpisodeWatched`, `markSeasonWatched`, `markNextEpisode`, auto-completion/reopen behavior, History mutations, save calls, and episode-loading requirements.
+4. The Episode Tracking state bridge is read-only. It does not mutate tracker state, render DOM, fetch provider data, persist data, or navigate.
+5. `frontend/src/episode-tracking/EpisodeTrackingController.vue` is the Vue interaction owner for tracked Show Details episode/season controls and the Episode Details watched toggle. It claims those clicks during capture before dormant legacy target listeners can fire.
+6. `frontend/src/episode-tracking/legacyEpisodeTrackingActions.ts` is a typed delegation boundary only. It calls the established legacy mutation functions and preserves the existing success animation; it does not write `DATA`, History, persistence, provider data, or browser navigation.
+7. Discovery preview episode/season controls remain explicitly outside this owner because their semantics are "add show and log" rather than mutation of an already tracked show.
+8. Watchlist remains a Vue-owned live DOM surface and its next-episode action continues to delegate to the established `markNextEpisode` mutation.
+9. `app-router.js` remains the sole browser History API owner.
+10. The legacy episode/season target listeners remain physically present only as rollback/readability code until the following legacy-cleanup phase; Vue capture prevents double mutation on migrated surfaces.
 
 ## Read-only state boundary
 
@@ -28,7 +32,21 @@ A snapshot is detached from live tracker data and contains:
 
 The bridge deliberately includes watched episode numbers that are not currently present in `_episode_list`, so incomplete provider metadata cannot hide authoritative local watched state.
 
-`frontend/src/episode-tracking/legacyEpisodeTrackingState.ts` provides the strict TypeScript adapter. It is intentionally not imported by `frontend/src/main.ts` yet; no Vue renderer takes episode-tracking ownership in this slice.
+`frontend/src/episode-tracking/legacyEpisodeTrackingState.ts` is the strict TypeScript read adapter used by the Vue interaction controller. The controller uses that immutable snapshot to identify the tracked show, selected episode, and current watched state before delegating a mutation.
+
+## Vue interaction ownership
+
+The shared Vue entry mounts one hidden `EpisodeTrackingController` for interaction ownership. The controller does not render replacement episode markup; Show Details already has Vue live-DOM ownership, while Episode Details keeps its existing markup composition during this phase.
+
+The controller owns only these mutation interactions:
+
+- tracked Show Details `.episode-check-button` clicks;
+- tracked Show Details `.season-all-button` clicks;
+- Episode Details `#episode-toggle-watched-button` clicks.
+
+It uses a capture listener plus `stopImmediatePropagation()` after it has positively identified an owned action. This makes the Vue controller the sole interaction dispatcher for those migrated controls while leaving the old target listeners dormant for rollback until cleanup.
+
+Direct canonical episode URLs also load the shared Vue entry, so ownership does not depend on navigating through a Show Details page first.
 
 ## Mutation invariants preserved
 
@@ -40,12 +58,26 @@ The existing mutation semantics stay unchanged:
 - marking a full season watched/unwatched keeps the existing confirmation and imported-special handling;
 - watched logging may transition `plan` to `watching` and may auto-complete a show only through the existing verification logic;
 - unwatching a regular episode or season may reopen a completed show through the existing rule;
-- `saveShowMutation` / `saveData` behavior is unchanged.
+- `saveShowMutation` / `saveData` behavior is unchanged;
+- next-episode logging continues through `markNextEpisode` from the Vue-owned Watchlist surface.
 
-## Handoff sequence
+## Acceptance contract
 
-1. Characterize watched/episode state through this immutable boundary.
-2. Move the visible episode-tracking controls behind a Vue-owned surface without changing mutation semantics.
-3. Delegate Vue interactions back to the established mutation functions until parity is proven.
-4. Add focused parity tests for individual episode watch/unwatch, season watch/unwatch, next-episode logging, completion/reopen, and unavailable/future episodes.
-5. Remove migrated legacy rendering/listener code only in the later legacy-cleanup phase after replacement ownership is proven.
+`tests/test_frontend_modernization_episode_tracking_state_bridge.js` proves immutable/detached state, special/future handling, selected episode state, and unchanged mutation ownership.
+
+`tests/test_frontend_modernization_episode_tracking_completion.js` proves:
+
+- Vue capture ownership for tracked Show Details episode/season controls;
+- Vue capture ownership for the Episode Details watched toggle;
+- no interception of discovery preview add-and-log controls;
+- no direct `DATA`, History, persistence, provider, or browser-History ownership in the Vue controller/action adapter;
+- delegation to `updateEpisodeWatched`, `markSeasonWatched`, and `markNextEpisode`;
+- preservation of unwatch confirmation, future/loggability protection, completion/reopen, History, and save ownership;
+- dormant legacy listeners remain present only for the next cleanup phase;
+- direct episode routes load the shared Vue entry.
+
+## Next phase
+
+Episode Tracking modernization is complete once its exact PR head passes the full CI gate and the merged release passes production regression, deploy, restart, and public-health verification.
+
+The next roadmap phase is legacy frontend cleanup: remove the now-dormant migrated episode-tracking listeners and other proven replacement-era legacy code without changing behavior or ownership.
