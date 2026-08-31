@@ -1,6 +1,29 @@
 (function(global){
     "use strict";
 
+    function removeLegacyPendingSaveNotice(){
+        if(!global.document || typeof global.document.getElementById !== "function"){
+            return;
+        }
+        const indicator = global.document.getElementById("tv-unsaved-status");
+        if(indicator && typeof indicator.remove === "function"){
+            indicator.remove();
+        }
+    }
+
+    function installNeutralRequestErrorCopy(){
+        if(typeof global.friendlyRequestError !== "function"){
+            return;
+        }
+        const originalFriendlyRequestError = global.friendlyRequestError;
+        global.friendlyRequestError = function(error,fallback){
+            if(error instanceof TypeError){
+                return "Could not reach the server. Check your connection.";
+            }
+            return originalFriendlyRequestError(error,fallback);
+        };
+    }
+
     function installStartupRecovery(){
         if(!global.document || !global.TVTrackerStartup || global.TVTrackerStartup.status !== "failed"){
             return;
@@ -33,10 +56,14 @@
         status.appendChild(button);
     }
 
+    removeLegacyPendingSaveNotice();
+    installNeutralRequestErrorCopy();
+
     global.TVTrackerStartupPromise = Promise.resolve()
     .then(()=>global.startTVTrackerApp())
     .catch(error=>global.handleTVTrackerStartupFailure(error))
     .then(result=>{
+        removeLegacyPendingSaveNotice();
         installStartupRecovery();
         return result;
     });
