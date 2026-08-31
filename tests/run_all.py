@@ -59,6 +59,12 @@ if not node:
     raise SystemExit("Node.js is required for the frontend regression tests.")
 
 for test_file in sorted((ROOT / "tests").glob("test_*.js")):
-    subprocess.run([node, str(test_file)], cwd=ROOT, check=True)
+    completed = subprocess.run([node, str(test_file)], cwd=ROOT, check=False)
+    if completed.returncode:
+        print(
+            f"::error file={test_file.relative_to(ROOT)}::"
+            f"Frontend regression failed after the Python suite: {test_file.name}"
+        )
+        raise subprocess.CalledProcessError(completed.returncode, [node, str(test_file)])
 
 print("All TV Tracker integration tests passed.")
