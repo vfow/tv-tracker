@@ -94,12 +94,13 @@ function buildContext({throwDuringLegacy=false}={}){
             location:{pathname:'/app/list/watching',origin:'https://example.test'},
             renderWatchlist(){
                 legacyRenderCount += 1;
+                const liveBefore = root.innerHTML;
                 const target = document.getElementById('show-list');
                 assert(target,'legacy composer should receive a staging #show-list');
                 assert.notStrictEqual(target,root,'legacy composer must not receive the live Vue root');
-                assert.strictEqual(root.innerHTML,'<p data-existing-vue-content>existing Vue content</p>','legacy composition must not mutate live Vue content');
                 if(throwDuringLegacy) throw new Error('legacy composition failed');
                 target.innerHTML = '<article class="watchlist-card" data-show-id="42"><button class="watchlist-action" data-watchlist-action="mark"></button></article>';
+                assert.strictEqual(root.innerHTML,liveBefore,'legacy composition must not mutate live Vue content');
             },
             renderUpcoming(){},
             TVTrackerNotifications:null,
