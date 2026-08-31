@@ -1,0 +1,65 @@
+name: Apply Search cleanup once
+
+on:
+  push:
+    branches:
+      - modernization/search-dead-renderer-cleanup-current
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  apply-search-cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Extract current-applicable Search cleanup hunk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff 68 --repo vfow/tv-tracker > /tmp/pr68.diff
+          python - <<'PY'
+          from pathlib import Path
+          diff = Path('/tmp/pr68.diff').read_text(encoding='utf-8')
+          marker = 'diff --git a/static/js/ui.js b/static/js/ui.js'
+          start = diff.find(marker)
+          if start < 0:
+              raise SystemExit('ui.js patch not found in PR #68')
+          end = diff.find('\ndiff --git ', start + len(marker))
+          patch = diff[start:] if end < 0 else diff[start:end]
+          Path('/tmp/ui.patch').write_text(patch, encoding='utf-8')
+          PY
+
+      - name: Three-way apply Search dead-renderer deletion
+        run: |
+          git apply --3way --index /tmp/ui.patch
+          git diff --cached --check
+
+      - name: Verify cleanup boundary
+        run: |
+          ! grep -q 'function renderTrackerPersonSkeletonCards' static/js/ui.js
+          ! grep -q 'function renderSearchTabButtonHTML' static/js/ui.js
+          ! grep -q 'function renderInactiveEyeFilterControlHTML' static/js/ui.js
+          ! grep -q 'function renderSearchResultPosterCard' static/js/ui.js
+          ! grep -q 'function renderSearchPersonCard' static/js/ui.js
+          ! grep -q 'function renderSearchResults' static/js/ui.js
+          grep -q 'function lockSearchRouteBeforeResultOpen' static/js/ui.js
+          grep -q 'function getEyeFilteredRenderItems' static/js/ui.js
+          grep -q 'function renderCollectionCard' static/js/ui.js
+          grep -q 'function renderEyeFilterControlHTML' static/js/ui.js
+
+      - name: Commit surgical cleanup
+        run: |
+          if git diff --cached --quiet; then
+            echo 'No cleanup diff produced'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Remove dead legacy Search renderer ownership'
+          git push origin HEAD:modernization/search-dead-renderer-cleanup-current
