@@ -7,6 +7,7 @@ const component = fs.readFileSync('frontend/src/search-discover/SearchResults.vu
 const viewModel = fs.readFileSync('frontend/src/search-discover/searchViewModel.ts', 'utf8');
 const main = fs.readFileSync('frontend/src/main.ts', 'utf8');
 const ui = fs.readFileSync('static/js/ui.js', 'utf8');
+const tailwindConfig = fs.readFileSync('tailwind.config.js', 'utf8');
 
 (async()=>{
     const calls = [];
@@ -154,6 +155,8 @@ const ui = fs.readFileSync('static/js/ui.js', 'utf8');
     assert(component.includes('data-eye-toggle'));
     assert(component.includes('search-result-poster-card'));
     assert(component.includes('search-person-card'));
+    assert(component.includes('search-person-skeleton-card'));
+    assert(tailwindConfig.includes("'search-person-skeleton-card'"), 'Vue-owned person skeleton styling must remain safelisted for Tailwind');
     assert(component.includes('collection-search-card'));
     assert(component.includes('search-load-more-button'));
     assert(component.includes('Start typing to search.'));
