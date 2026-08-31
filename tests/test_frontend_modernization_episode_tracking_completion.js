@@ -43,12 +43,14 @@ assert(stateAdapter.includes('readLegacyEpisodeTrackingSnapshot'), 'immutable st
 assert(app.includes('async function updateEpisodeWatched(showId,season,episode,isWatched)'), 'legacy individual episode mutation semantics remain authoritative');
 assert(app.includes('async function markSeasonWatched(showId,seasonNumber)'), 'legacy season mutation semantics remain authoritative');
 assert(app.includes('async function markNextEpisode(showId)'), 'legacy next-episode mutation semantics remain authoritative');
-assert(app.includes('await confirmEpisodeUnwatch(show,season,episode,episodeData);'), 'individual unwatch confirmation must remain intact');
-assert(app.includes('await confirmAction('), 'season confirmation flow must remain intact');
-assert(app.includes('autoCompleteShowAfterLogging(show);'), 'completion behavior must remain in established mutation flow');
-assert(app.includes('show.status = "watching";'), 'reopen/status transition behavior must remain in legacy mutation flow');
-assert(app.includes('saveShowMutation(showId,{'), 'episode mutation persistence ownership must remain legacy');
-assert(app.includes('isEpisodeLoggable('), 'future/unavailable episode blocking must remain in the mutation layer');
+assert(app.includes('await confirmEpisodeUnwatch(show,season,episode);'), 'individual unwatch confirmation must remain intact');
+assert(app.includes('await confirmSeasonWatch(seasonNumber);'), 'season watched confirmation must remain intact');
+assert(app.includes('title:"Mark Season Unwatched"'), 'season unwatched confirmation must remain intact');
+assert(app.includes('await autoCompleteShowAfterLogging(show);'), 'completion behavior must remain in established mutation flow');
+assert(app.includes('reopenCompletedShowAfterUnwatch(show,season);'), 'individual episode reopen behavior must remain in legacy mutation flow');
+assert(app.includes('reopenCompletedShowAfterUnwatch(show,seasonNumber)'), 'season reopen behavior must remain in legacy mutation flow');
+assert(app.includes('await saveShowMutation(id,addedEntries,deletedHistoryIds);'), 'episode mutation persistence ownership must remain legacy');
+assert(app.includes('isEpisodeLoggable(episodeData,show,season)'), 'future/unavailable episode blocking must remain in the mutation layer');
 
 assert(ui.includes('document.querySelectorAll(".episode-check-button")'), 'legacy episode listener remains physically present for rollback until cleanup phase');
 assert(ui.includes('document.querySelectorAll(".season-all-button")'), 'legacy season listener remains physically present for rollback until cleanup phase');
