@@ -6,6 +6,7 @@ module.exports = {
     '!./static/js/episode-tracking-state-bridge.js'
   ],
   safelist: [
+    'search-person-skeleton-card',
     'profile-header-default',
     'profile-header-blue',
     'profile-header-purple',
