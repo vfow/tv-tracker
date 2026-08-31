@@ -32,7 +32,7 @@ The existing shared Vue show-list HTML owner is reused, so this slice does not c
 - The legacy History composer must not mutate the live Vue-owned `#show-list` during normal staging composition.
 - Vue is the sole final live History DOM writer after a successful handoff.
 - If the shared Vue owner cannot load, the bridge falls back to the legacy renderer rather than leaving History blank.
-- The read-only state bridge must not mutate `DATA.history`.
+- The read-only bridge must not mutate `DATA.history`.
 - Episode/movie ordering, future-episode suppression, routes, artwork fallbacks, empty state, grouping, relative timestamps, and Load More behavior must remain unchanged.
 - `app-router.js` remains the sole browser History API owner.
 - Watched/episode tracking remains a separate later roadmap phase; this History renderer handoff does not change tracker truth or write semantics.
