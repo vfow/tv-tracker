@@ -50,7 +50,8 @@ jobs:
           '''
           if old not in text:
               raise SystemExit('Expected view-more contract block not found')
-          Path('tests/test_source_contracts.py').write_text(text.replace(old, new, 1), encoding='utf-8')
+          merged = text.replace(old, new, 1).rstrip() + '\n'
+          Path('tests/test_source_contracts.py').write_text(merged, encoding='utf-8')
           base.unlink()
           PY
           git checkout origin/main -- tests/run_all.py .github/workflows/ci.yml
