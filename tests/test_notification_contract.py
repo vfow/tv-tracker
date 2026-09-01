@@ -108,8 +108,8 @@ assert "filename='js/notifications.js'" not in template
 assert 'id="notifications-page"' in template
 assert 'id="notification-settings-page"' not in template
 assert '/app/settings/notifications' in router
-assert "mountUpcomingBell" in ui
-assert "mountUpcomingBellFallback" in ui
+assert "mountUpcomingBell" in frontend
+assert "mountUpcomingBellFallback" in frontend
 assert 'path === "/app/notifications"' in router
 assert 'path === "/app/notifications/settings"' in router
 assert "/* Notifications V1 */" in css
