@@ -93,13 +93,15 @@ assert.strictEqual(snapshot.entries[2].episodeTitle,'Second');
 assert(Object.isFrozen(snapshot),'History snapshot must be immutable');
 assert(Object.isFrozen(snapshot.entries),'History entries collection must be immutable');
 assert(Object.isFrozen(snapshot.entries[0]),'History entry must be immutable');
-assert.strictEqual(JSON.stringify(history),originalHistory,'History snapshot must not mutate authoritative legacy history');
+assert.strictEqual(JSON.stringify(history),originalHistory,'History snapshot must not mutate authoritative history');
 
 history[0].title = 'Changed after snapshot';
-assert.strictEqual(snapshot.entries[2].title,'Older Show','History snapshot must be detached from legacy state');
+assert.strictEqual(snapshot.entries[2].title,'Older Show','History snapshot must be detached from authoritative state');
 
 assert(contracts.includes('export type HistoryEntry = HistoryEpisodeEntry | HistoryMovieEntry'));
 assert(contracts.includes('export interface HistoryState'));
+assert(contracts.includes('export interface HistoryViewModel'));
+assert(contracts.includes('export interface HistoryVueBridge'));
 assert(contracts.includes('readonly tab: "history"'));
 assert(typedAdapter.includes('TVTrackerHistoryStateBridge?: LegacyHistoryStateBridge'));
 assert(typedAdapter.includes('export function hasLegacyHistoryStateBridge(): boolean'));
@@ -108,18 +110,20 @@ assert(!typedAdapter.includes('document.'),'typed History adapter must remain DO
 assert(!typedAdapter.includes('fetch('),'typed History adapter must remain network-free');
 assert(!typedAdapter.includes('history.'),'typed History adapter must not own navigation');
 assert(!typedAdapter.includes('createApp('),'typed History adapter must not mount Vue');
-assert(!main.includes('./history/legacyHistoryState'),'History adapter remains inactive before Vue DOM ownership');
+assert(!main.includes('./history/legacyHistoryState'),'read-only History adapter stays separate from the live renderer');
 
 const activityIndex = template.indexOf("filename='js/history-activity.js'");
 const bridgeIndex = template.indexOf("filename='js/history-state-bridge.js'");
+const vueIndex = template.indexOf("filename='js/history-vue-bridge.js'");
 const routerIndex = template.indexOf("filename='js/app-router.js'");
-assert(activityIndex >= 0,'legacy History renderer must remain loaded');
-assert(bridgeIndex > activityIndex,'History bridge must load after legacy History helpers');
-assert(routerIndex > bridgeIndex,'History bridge must load before routing/startup consumers');
+assert(activityIndex >= 0,'History data-shaping helpers must remain loaded');
+assert(bridgeIndex > activityIndex,'History state bridge must load after History helpers');
+assert(vueIndex > bridgeIndex,'History Vue bridge must load after the read-only state bridge');
+assert(routerIndex > vueIndex,'History bridges must load before routing/startup consumers');
 
-assert(architecture.includes('`DATA.history` remains authoritative legacy tracker state'));
+assert(architecture.includes('`DATA.history` remains authoritative tracker state'));
 assert(architecture.includes('`app-router.js` remains the sole browser History API owner'));
-assert(architecture.includes('The read-only bridge must not mutate `DATA.history`'));
-assert(architecture.includes('Watched/episode tracking remains a separate later roadmap phase'));
+assert(architecture.includes('The read-only state bridge must not mutate `DATA.history`'));
+assert(architecture.includes('Watched/episode tracking remains separate domain ownership'));
 
 console.log('Frontend modernization History read-only state bridge checks passed.');
