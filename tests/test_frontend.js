@@ -32,6 +32,7 @@ const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const searchResultsVue = fs.readFileSync('frontend/src/search-discover/SearchResults.vue','utf8');
 const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
+const upcomingVueBridge = fs.readFileSync('static/js/upcoming-notifications-vue-bridge.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
@@ -39,8 +40,10 @@ assert(ui.includes('function renderTrackerMediaRowSkeletonHTML(index=0,kind="upc
 assert(ui.includes('function renderUpcomingSkeletonHTML()'));
 assert(ui.includes('function renderHistorySkeletonHTML()'));
 assert(ui.includes('const count = mobile ? 6 : 8'));
-assert(ui.includes('if(startBackgroundRefresh || isRefreshingUpcoming)'));
-assert(router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
+assert(upcomingVueBridge.includes('const loading = items.length === 0 && (startBackgroundRefresh || global.isRefreshingUpcoming === true)'));
+assert(upcomingVueBridge.includes('if(startBackgroundRefresh && global.isRefreshingUpcoming !== true && typeof global.refreshUpcomingDataInBackground === \"function\")'));
+assert(!ui.includes('function renderUpcoming(startBackgroundRefresh=true)'));
+assert(!router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
 assert(router.includes('list.innerHTML = renderHistorySkeletonHTML()'));
 assert(!historyActivity.includes('appDataReady === false'));
 const upcomingSkeletonSource = ui.slice(
