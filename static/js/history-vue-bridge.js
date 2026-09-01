@@ -1,105 +1,72 @@
 (function(global){
     "use strict";
 
-    const legacyRenderHistory = typeof global.renderHistory === "function" ? global.renderHistory : null;
+    const manifestUrl = "/static/vue/manifest.json";
+    let vueOwner = null;
+    let loadPromise = null;
 
-    function root(){
-        if(!global.document || typeof global.document.getElementById !== "function") return null;
-        return global.document.getElementById("show-list");
-    }
-
-    function composeHistoryHTML(){
-        if(typeof legacyRenderHistory !== "function") return null;
-        const liveRoot = root();
-        if(!liveRoot) return null;
-
-        const parent = liveRoot.parentNode;
-        if(!parent || typeof liveRoot.cloneNode !== "function" || typeof parent.insertBefore !== "function"){
-            legacyRenderHistory();
-            return String(liveRoot.innerHTML || "");
-        }
-
-        const originalId = String(liveRoot.id || "show-list");
-        const stagingRoot = liveRoot.cloneNode(false);
-        stagingRoot.id = originalId;
-        if(stagingRoot.dataset){
-            delete stagingRoot.dataset.tvtrackerHistoryOwner;
-            delete stagingRoot.dataset.tvtrackerTrackerListsOwner;
-        }
-
-        liveRoot.id = originalId + "-vue-owned";
-        parent.insertBefore(stagingRoot,liveRoot);
-
-        try{
-            legacyRenderHistory();
-            return String(stagingRoot.innerHTML || "");
-        }finally{
-            if(typeof stagingRoot.remove === "function"){
-                stagingRoot.remove();
-            }else if(stagingRoot.parentNode && typeof stagingRoot.parentNode.removeChild === "function"){
-                stagingRoot.parentNode.removeChild(stagingRoot);
-            }
-            liveRoot.id = originalId;
+    function reportLoadFailure(){
+        const runtime = global.TVTrackerClientRuntime;
+        if(runtime && typeof runtime.report === "function"){
+            runtime.report({category:"runtime",surface:"history",code:"vue_history_load_failed"});
         }
     }
 
-    function markVueOwnership(){
-        const liveRoot = root();
-        if(!liveRoot) return;
-        if(liveRoot.dataset){
-            delete liveRoot.dataset.tvtrackerTrackerListsOwner;
-            liveRoot.dataset.tvtrackerHistoryOwner = "vue-history";
-        }
-        if(typeof liveRoot.querySelector === "function"){
-            const marker = liveRoot.querySelector('[data-tvtracker-tracker-lists-owner="vue-watchlist"], [data-tvtracker-upcoming-notifications-owner="vue-upcoming"]');
-            if(marker){
-                marker.removeAttribute("data-tvtracker-tracker-lists-owner");
-                marker.removeAttribute("data-tvtracker-upcoming-notifications-owner");
-                marker.setAttribute("data-tvtracker-history-owner","vue-history");
-            }
-        }
-    }
-
-    function attachHistoryInteractions(){
-        const liveRoot = root();
-        if(!liveRoot || typeof liveRoot.querySelectorAll !== "function") return;
-        liveRoot.querySelectorAll(".history-load-more").forEach(button=>{
-            if(button.dataset && button.dataset.vueBound === "1") return;
-            if(button.dataset) button.dataset.vueBound = "1";
-            button.addEventListener("click",event=>{
-                event.stopPropagation();
-                if(typeof global.loadMoreHistory === "function"){
-                    void global.loadMoreHistory();
-                }
-            });
+    function loadVueOwner(){
+        if(vueOwner) return Promise.resolve(true);
+        if(loadPromise) return loadPromise;
+        if(typeof global.fetch !== "function") return Promise.resolve(false);
+        loadPromise = global.fetch(manifestUrl,{credentials:"same-origin",cache:"no-store",headers:{Accept:"application/json"}})
+        .then(response=>{
+            if(!response.ok) throw new Error("manifest request failed");
+            return response.json();
+        })
+        .then(manifest=>{
+            const entry = manifest && manifest["frontend/src/main.ts"];
+            const file = entry && typeof entry.file === "string" ? entry.file : "";
+            if(!/^assets\/[A-Za-z0-9_-]+\.js$/.test(file)) throw new Error("invalid Vue manifest entry");
+            const base = global.location && global.location.origin ? global.location.origin : "http://localhost";
+            return import(new URL("/static/vue/" + file,base).href).then(()=>true);
+        })
+        .catch(()=>{
+            reportLoadFailure();
+            loadPromise = null;
+            return false;
         });
+        return loadPromise;
     }
 
-    async function renderHistoryWithVue(){
-        const sharedVueBridge = global.TVTrackerUpcomingNotificationsVueBridge;
-        if(!sharedVueBridge || typeof sharedVueBridge.renderShowListHTML !== "function"){
-            if(typeof legacyRenderHistory === "function") legacyRenderHistory();
-            return false;
+    function buildModel(){
+        if(typeof global.getHistoryViewModel !== "function") return null;
+        return global.getHistoryViewModel();
+    }
+
+    async function renderHistory(){
+        if(!vueOwner){
+            const loaded = await loadVueOwner();
+            if(!loaded || !vueOwner) return false;
         }
-
-        const html = composeHistoryHTML();
-        if(html === null) return false;
-
-        const rendered = await sharedVueBridge.renderShowListHTML(html);
-        if(!rendered){
-            if(typeof legacyRenderHistory === "function") legacyRenderHistory();
-            return false;
-        }
-
-        markVueOwnership();
-        attachHistoryInteractions();
+        const model = buildModel();
+        if(!model) return false;
+        vueOwner.render(model);
         return true;
     }
 
-    const renderHistory = renderHistoryWithVue;
+    const actions = Object.freeze({
+        async loadMore(){
+            if(typeof global.loadMoreHistory === "function"){
+                await global.loadMoreHistory();
+            }
+        }
+    });
+
     const bridge = Object.freeze({
-        renderHistory,
-        ownership:"vue-dom"
+        ownership:"vue-dom",
+        actions,
+        attachVueOwner(owner){
+            vueOwner = owner && typeof owner.render === "function" ? owner : null;
+        },
+        renderHistory
     });
 
     global.TVTrackerHistoryVueBridge = bridge;
