@@ -20,3 +20,5 @@ Upcoming and Notifications now use structured view models rendered natively by V
 ## Preserved behavior
 
 The migration preserves group ordering, batch expansion, NEW badges, episode routes, release/loggability checks, quick-log actions, background schedule refresh, notification unread-dot refresh, notification read-all/list/delete APIs, swipe-delete behavior, and notification settings navigation.
+
+Regression ownership contracts now assert the structured Upcoming bridge for loading/background-refresh behavior and explicitly reject restoration of the retired `ui.js` renderer or router skeleton write.
