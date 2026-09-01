@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 
 import type { HistoryRendererActions, HistoryViewModel } from './contracts';
 
@@ -9,6 +9,11 @@ const props = defineProps<{
 }>();
 
 const loadingMore = ref(false);
+const ownerMarker = ref<HTMLElement | null>(null);
+
+onBeforeUnmount(() => {
+  ownerMarker.value?.parentElement?.removeAttribute('data-tvtracker-history-owner');
+});
 
 async function loadMore(): Promise<void> {
   if (loadingMore.value) return;
@@ -22,7 +27,7 @@ async function loadMore(): Promise<void> {
 </script>
 
 <template>
-  <div data-tvtracker-history-owner="vue-history" style="display: contents">
+  <div ref="ownerMarker" data-tvtracker-history-owner="vue-history" style="display: contents">
     <div v-if="model.emptyState" class="empty-state">
       <h2>{{ model.emptyState.title }}</h2>
       <p>{{ model.emptyState.text }}</p>
