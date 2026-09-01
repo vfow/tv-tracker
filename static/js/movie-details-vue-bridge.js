@@ -104,8 +104,10 @@
 
         const directedBy = fragment("renderMovieDirectedByHTML",movie);
         if(directedBy.length) add(directedBy);
-        const genres = fragment("renderMovieGenresHTML",movie);
-        if(genres.length) add(genres);
+        const genresHTML = callString("renderMovieGenresHTML",movie);
+        if(genresHTML && genresHTML.trim() !== "Unknown"){
+            add(factory.fragment(genresHTML));
+        }
         const adult = fragment("renderAdultMovieBadgeHTML",movie,"movie");
         if(adult.length) add(adult);
         add(ratingNodes(rating));
