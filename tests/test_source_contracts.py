@@ -969,7 +969,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('href="/app/settings"', template)
         self.assertIn('href="/app/upcoming"', template)
         self.assertIn('href="/app/history"', template)
-        self.assertIn('class="watchlist-card-link" href=', ui)
+        self.assertIn('class="watchlist-card-link"', self.read('frontend/src/tracker-lists/TrackerListsSurface.vue'))
         self.assertIn('class="app-route-card-link" href=', ui)
         self.assertIn('class="genre-result-card search-result-poster-card"', search_vue)
         self.assertIn('class="search-person-card"', search_vue)

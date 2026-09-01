@@ -3,9 +3,9 @@
 
     const manifestUrl = "/static/vue/manifest.json";
     const legacyRenderUpcoming = typeof global.renderUpcoming === "function" ? global.renderUpcoming : null;
-    const legacyRenderWatchlist = typeof global.renderWatchlist === "function" ? global.renderWatchlist : null;
     const legacyNotifications = global.TVTrackerNotifications || null;
     let vueOwner = null;
+    let trackerListsVueOwner = null;
     let loadPromise = null;
     const lastModels = new Map();
 
@@ -187,82 +187,12 @@
         });
     }
 
-    function attachWatchlistInteractions(){
-        const root = rootFor("watchlist");
-        if(!root || typeof root.querySelectorAll !== "function") return;
-
-        root.querySelectorAll(".watchlist-action").forEach(button=>{
-            if(button.dataset && button.dataset.vueBound === "1") return;
-            if(button.dataset) button.dataset.vueBound = "1";
-
-            button.addEventListener("click",async function(event){
-                event.stopPropagation();
-                if(this.disabled) return;
-
-                const card = typeof this.closest === "function" ? this.closest(".watchlist-card") : null;
-                const showId = String(card && card.dataset ? card.dataset.showId || "" : "");
-                const action = String(this.dataset ? this.dataset.watchlistAction || "" : "");
-                if(!showId || !action) return;
-
-                this.disabled = true;
-                try{
-                    if(action === "mark"){
-                        if(typeof global.playCheckSuccessAnimation === "function"){
-                            await global.playCheckSuccessAnimation(this);
-                        }
-                        if(typeof global.markNextEpisode === "function"){
-                            await global.markNextEpisode(showId);
-                        }
-                    }else if(action === "watching" && typeof global.updateShowStatus === "function"){
-                        await global.updateShowStatus(showId,"watching");
-                    }
-                }finally{
-                    if(this.isConnected) this.disabled = false;
-                }
-            });
-        });
-    }
-
     function renderWithVue(surface,model){
         if(!vueOwner || !model) return false;
         vueOwner.render(model);
         if(surface === "upcoming") attachUpcomingInteractions();
         else attachNotificationInteractions();
         return true;
-    }
-
-    function composeWatchlistHTML(){
-        if(typeof legacyRenderWatchlist !== "function") return null;
-        const root = rootFor("watchlist");
-        if(!root) return null;
-
-        const parent = root.parentNode;
-        if(!parent || typeof root.cloneNode !== "function" || typeof parent.insertBefore !== "function"){
-            legacyRenderWatchlist();
-            return String(root.innerHTML || "");
-        }
-
-        const originalId = String(root.id || "show-list");
-        const stagingRoot = root.cloneNode(false);
-        stagingRoot.id = originalId;
-        if(stagingRoot.dataset){
-            delete stagingRoot.dataset.tvtrackerTrackerListsOwner;
-        }
-
-        root.id = originalId + "-vue-owned";
-        parent.insertBefore(stagingRoot,root);
-
-        try{
-            legacyRenderWatchlist();
-            return String(stagingRoot.innerHTML || "");
-        }finally{
-            if(typeof stagingRoot.remove === "function"){
-                stagingRoot.remove();
-            }else if(stagingRoot.parentNode && typeof stagingRoot.parentNode.removeChild === "function"){
-                stagingRoot.parentNode.removeChild(stagingRoot);
-            }
-            root.id = originalId;
-        }
     }
 
     async function renderShowListHTML(html){
@@ -286,12 +216,66 @@
         return true;
     }
 
+    function buildWatchlistModel(){
+        const stateBridge = global.TVTrackerTrackerListsStateBridge;
+        if(!stateBridge || stateBridge.ownership !== "legacy-read-only" || typeof stateBridge.viewModel !== "function") return null;
+        try{
+            return stateBridge.viewModel();
+        }catch(error){
+            return null;
+        }
+    }
+
+    function renderWatchlistLoadFailure(){
+        const root = rootFor("watchlist");
+        if(!root) return;
+        root.innerHTML = '<div class="empty-state" data-tvtracker-watchlist-vue-load-failed="true" role="alert"><h2>List unavailable</h2><p>Reload the page to try again.</p></div>';
+    }
+
+    async function performTrackerListAction(kind,showId,target){
+        const id = String(showId || "").trim();
+        if(!id) return;
+        if(kind === "mark"){
+            if(target && typeof global.playCheckSuccessAnimation === "function"){
+                await global.playCheckSuccessAnimation(target);
+            }
+            if(typeof global.markNextEpisode === "function") await global.markNextEpisode(id);
+            return;
+        }
+        if(kind === "watching" && typeof global.updateShowStatus === "function"){
+            await global.updateShowStatus(id,"watching");
+        }
+    }
+
+    const trackerListsActions = Object.freeze({perform:performTrackerListAction});
+
+    function attachTrackerListsVueOwner(owner){
+        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
+            throw new TypeError("Invalid Tracker Lists Vue owner");
+        }
+        trackerListsVueOwner = owner;
+    }
+
     async function renderWatchlist(){
-        const html = composeWatchlistHTML();
-        if(html === null) return false;
-        const rendered = await renderShowListHTML(html);
-        if(rendered) attachWatchlistInteractions();
-        return rendered;
+        if(typeof global.renderLibrarySearchControl === "function") global.renderLibrarySearchControl();
+        const model = buildWatchlistModel();
+        if(!model){
+            renderWatchlistLoadFailure();
+            return false;
+        }
+        if(!trackerListsVueOwner){
+            const loaded = await loadVueOwner("watchlist");
+            if(!loaded || !trackerListsVueOwner){
+                renderWatchlistLoadFailure();
+                return false;
+            }
+        }
+        trackerListsVueOwner.render(model);
+        const root = rootFor("watchlist");
+        if(root && root.dataset){
+            root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
+        }
+        return true;
     }
 
     async function refreshWatchlistShows(){
@@ -346,8 +330,10 @@
     global.renderUpcoming = renderUpcoming;
 
     const trackerListsBridge = Object.freeze({
+        attachVueOwner:attachTrackerListsVueOwner,
         renderWatchlist,
         refreshWatchlistShows,
+        actions:trackerListsActions,
         ownership:"vue-dom"
     });
     global.TVTrackerTrackerListsVueBridge = trackerListsBridge;

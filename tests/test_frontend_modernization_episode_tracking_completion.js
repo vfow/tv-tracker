@@ -55,7 +55,7 @@ assert(app.includes('isEpisodeLoggable(episodeData,show,season)'), 'future/unava
 assert(ui.includes('document.querySelectorAll(".episode-check-button")'), 'legacy episode listener remains physically present for rollback until cleanup phase');
 assert(ui.includes('document.querySelectorAll(".season-all-button")'), 'legacy season listener remains physically present for rollback until cleanup phase');
 assert(ui.includes('const toggleButton = document.getElementById("episode-toggle-watched-button")'), 'legacy episode-detail listener remains physically present for rollback until cleanup phase');
-assert(ui.includes('await markNextEpisode(show.tmdb_id);'), 'watchlist next-episode path must continue to call the established mutation');
+assert(watchlistRuntime.includes('await global.markNextEpisode(id);'), 'Vue-native Watchlist next-episode action must continue to call the established mutation');
 assert(watchlistRuntime.includes('ownership:"vue-dom"'), 'Watchlist remains a Vue-owned live DOM surface while preserving legacy mutation delegation');
 
 console.log('Frontend modernization Episode Tracking completion parity checks passed.');

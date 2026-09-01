@@ -3,6 +3,7 @@ module.exports = {
   content: [
     './templates/**/*.html',
     './static/js/**/*.js',
+    './frontend/**/*.{vue,ts}',
     '!./static/js/episode-tracking-state-bridge.js'
   ],
   safelist: [

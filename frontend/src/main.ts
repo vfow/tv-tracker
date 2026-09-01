@@ -11,6 +11,8 @@ import DiscoverHub from './search-discover/DiscoverHub.vue';
 import type { DiscoverRendererActions, DiscoverViewModel } from './search-discover/discoverViewModel';
 import SearchResults from './search-discover/SearchResults.vue';
 import type { SearchRendererActions, SearchViewModel } from './search-discover/searchViewModel';
+import TrackerListsSurface from './tracker-lists/TrackerListsSurface.vue';
+import type { TrackerListsVueBridge, TrackerListsVueOwner, TrackerListsViewModel } from './tracker-lists/contracts';
 import SettingsAuth from './settings/SettingsAuth.vue';
 import SettingsDanger from './settings/SettingsDanger.vue';
 import SettingsData from './settings/SettingsData.vue';
@@ -78,6 +80,7 @@ declare global {
     TVTrackerSettingsBridge?: SettingsBridge;
     TVTrackerSearchVueBridge?: SearchBridge;
     TVTrackerDiscoverVueBridge?: DiscoverBridge;
+    TVTrackerTrackerListsVueBridge?: TrackerListsVueBridge;
     TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;
     TVTrackerShowDetailsVueBridge?: ShowDetailsVueBridge;
     TVTrackerUpcomingNotificationsVueBridge?: UpcomingNotificationsVueBridge;
@@ -99,6 +102,8 @@ let upcomingApp: VueApp<Element> | null = null;
 let upcomingRoot: Element | null = null;
 let notificationsApp: VueApp<Element> | null = null;
 let notificationsRoot: Element | null = null;
+let trackerListsApp: VueApp<Element> | null = null;
+let trackerListsRoot: Element | null = null;
 let episodeTrackingControllerApp: VueApp<Element> | null = null;
 
 function mountEpisodeTrackingController(): void {
@@ -140,6 +145,12 @@ function unmountShowDetails(): void {
   if (showDetailsApp) showDetailsApp.unmount();
   showDetailsApp = null;
   showDetailsRoot = null;
+}
+
+function unmountTrackerLists(): void {
+  if (trackerListsApp) trackerListsApp.unmount();
+  trackerListsApp = null;
+  trackerListsRoot = null;
 }
 
 function unmountUpcomingNotifications(surface?: UpcomingNotificationsSurfaceName): void {
@@ -260,11 +271,28 @@ const showDetailsOwner: ShowDetailsVueOwner = Object.freeze({
   unmount: unmountShowDetails
 });
 
+const trackerListsOwner: TrackerListsVueOwner = Object.freeze({
+  render(model: TrackerListsViewModel): void {
+    const root = document.getElementById('show-list');
+    const bridge = window.TVTrackerTrackerListsVueBridge;
+    if (!root || !bridge) return;
+    unmountUpcomingNotifications('upcoming');
+    unmountTrackerLists();
+    root.replaceChildren();
+    trackerListsRoot = root;
+    trackerListsApp = createApp(TrackerListsSurface, { model, actions: bridge.actions });
+    trackerListsApp.mount(root);
+    root.setAttribute('data-tvtracker-tracker-lists-owner', 'vue-watchlist');
+  },
+  unmount: unmountTrackerLists
+});
+
 const upcomingNotificationsOwner: UpcomingNotificationsVueOwner = Object.freeze({
   render(model: UpcomingNotificationsViewModel): void {
     const rootId = model.surface === 'upcoming' ? 'show-list' : 'notifications-content';
     const root = document.getElementById(rootId);
     if (!root) return;
+    if (model.surface === 'upcoming') unmountTrackerLists();
     unmountUpcomingNotifications(model.surface);
     root.replaceChildren();
     const app = createApp(UpcomingNotificationsSurface, { model });
@@ -289,6 +317,7 @@ mountEpisodeTrackingController();
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
+window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);
 window.TVTrackerShowDetailsVueBridge?.attachVueOwner(showDetailsOwner);
 window.TVTrackerUpcomingNotificationsVueBridge?.attachVueOwner(upcomingNotificationsOwner);

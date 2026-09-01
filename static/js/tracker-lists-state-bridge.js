@@ -137,8 +137,163 @@
         });
     }
 
+    function imageURL(path,size="w500"){
+        const value = cleanText(path);
+        if(!value) return "";
+        if(/^https?:\/\//i.test(value)) return value;
+        if(typeof global.trackerImageURL === "function"){
+            return cleanText(global.trackerImageURL(value,size));
+        }
+        return "https://image.tmdb.org/t/p/" + String(size || "w500") + value;
+    }
+
+    function posterFallback(show){
+        const words = cleanText(show && (show.title || show.name) || "TV")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0,2);
+        const initials = words.map(word=>word.charAt(0)).join("").toUpperCase();
+        return initials || "TV";
+    }
+
+    function actionViewModel(show,displayFilter,nextEp){
+        const title = cleanText(show && show.title) || "show";
+        if(displayFilter === "finished") return null;
+        if(displayFilter === "paused" || displayFilter === "plan" || displayFilter === "dropped"){
+            return Object.freeze({kind:"watching",label:`Change ${title} to Watching`,disabled:false});
+        }
+        if(!nextEp) return null;
+        const isAvailable = Boolean(
+            nextEp.air_date &&
+            typeof global.isEpisodeLoggable === "function" &&
+            global.isEpisodeLoggable(nextEp,show,nextEp.season)
+        );
+        const releaseDate = nextEp.air_date && typeof global.formatAirDate === "function"
+            ? cleanText(global.formatAirDate(nextEp.air_date,nextEp,show))
+            : "";
+        const label = isAvailable
+            ? `Mark ${title} Season ${nextEp.season}, Episode ${nextEp.episode} watched`
+            : releaseDate
+                ? `${title} Season ${nextEp.season}, Episode ${nextEp.episode} is available ${releaseDate}`
+                : `${title} episode release date is unavailable`;
+        return Object.freeze({kind:"mark",label,disabled:!isAvailable});
+    }
+
+    function cardViewModel(show,displayFilter){
+        if(!show || typeof show !== "object") return null;
+        const id = cleanId(show.tmdb_id || show.id);
+        if(!id) return null;
+        const title = cleanText(show.title || show.name);
+        const isCompletedFilter = displayFilter === "finished";
+        const isDroppedFilter = displayFilter === "dropped";
+        const nextEp = (!isCompletedFilter && !isDroppedFilter && typeof global.getNextEpisode === "function")
+            ? global.getNextEpisode(show)
+            : null;
+        const droppedStopEpisode = isDroppedFilter && typeof global.getLatestWatchedEpisode === "function"
+            ? global.getLatestWatchedEpisode(show)
+            : null;
+        const droppedStopEpisodeData = droppedStopEpisode && typeof global.getEpisodeData === "function"
+            ? global.getEpisodeData(show,droppedStopEpisode.season,droppedStopEpisode.episode)
+            : null;
+        const newBadge = Boolean(
+            displayFilter === "watching" &&
+            nextEp &&
+            typeof global.isNewUpcomingEpisode === "function" &&
+            global.isNewUpcomingEpisode(show,{
+                season_number:nextEp.season,
+                episode_number:nextEp.episode,
+                air_date:nextEp.air_date,
+                air_time:nextEp.air_time || "",
+                air_timestamp:nextEp.air_timestamp || ""
+            })
+        );
+        const episodeText = isCompletedFilter
+            ? "✓ Completed"
+            : isDroppedFilter && droppedStopEpisode
+                ? `Stopped after Season ${droppedStopEpisode.season}, Episode ${droppedStopEpisode.episode}`
+                : isDroppedFilter
+                    ? "Dropped"
+                    : displayFilter === "plan" && nextEp
+                        ? `Start with Season ${nextEp.season}, Episode ${nextEp.episode}`
+                        : displayFilter === "paused" && nextEp
+                            ? `Next: Season ${nextEp.season}, Episode ${nextEp.episode}`
+                            : nextEp
+                                ? `Season ${nextEp.season}, Episode ${nextEp.episode}`
+                                : typeof global.getNoNextEpisodeText === "function"
+                                    ? cleanText(global.getNoNextEpisodeText(show))
+                                    : "";
+        const episodeTitle = isDroppedFilter && droppedStopEpisodeData && droppedStopEpisodeData.name
+            ? cleanText(droppedStopEpisodeData.name)
+            : nextEp && nextEp.name
+                ? cleanText(nextEp.name)
+                : "";
+        const route = typeof global.getShowDetailRoute === "function"
+            ? cleanText(global.getShowDetailRoute(show.tmdb_id || show.id,title))
+            : `/app/list/${routeSlug(displayFilter)}`;
+        return Object.freeze({
+            id,
+            filter:displayFilter,
+            title,
+            route,
+            posterUrl:imageURL(show.poster_path,"w500"),
+            posterFallback:posterFallback(show),
+            episodeText,
+            completed:isCompletedFilter,
+            episodeTitle,
+            newBadge,
+            action:actionViewModel(show,displayFilter,nextEp)
+        });
+    }
+
+    function filterLabel(filter){
+        const labels = {watching:"Watching",paused:"Paused",finished:"Completed",plan:"Plan To Watch",dropped:"Dropped"};
+        return labels[filter] || "Watching";
+    }
+
+    function emptyStateFor(state,query){
+        if(query){
+            const filterText = [state.genre,state.network,state.year]
+            .filter(value=>value && value !== "all")
+            .join(" • ");
+            return Object.freeze({
+                title:`No matches in ${filterLabel(state.activeFilter)}.`,
+                text:filterText ? `No show matches ${filterText} in this list.` : "No show matches the selected filters."
+            });
+        }
+        const messages = {
+            watching:["Nothing in watching","Add a show when you start watching."],
+            paused:["No paused shows","Paused shows will appear here."],
+            finished:["No completed shows","Finished shows will appear here."],
+            plan:["No planned shows","Shows saved for later will appear here."],
+            dropped:["No dropped shows","Shows you stop watching will appear here."]
+        };
+        const message = messages[state.activeFilter] || messages.watching;
+        return Object.freeze({title:message[0],text:message[1]});
+    }
+
+    function viewModel(){
+        const state = snapshot();
+        const legacyView = typeof global.getWatchlistShowsForCurrentView === "function"
+            ? global.getWatchlistShowsForCurrentView()
+            : null;
+        const rawShows = legacyView && Array.isArray(legacyView.shows)
+            ? legacyView.shows
+            : Object.values(global.DATA && global.DATA.shows || {}).filter(show=>normalizeFilter(show && show.status) === state.activeFilter);
+        const query = legacyView ? cleanText(legacyView.query) : state.query;
+        const items = rawShows.map(show=>cardViewModel(show,state.activeFilter)).filter(Boolean);
+        return Object.freeze({
+            surface:"watchlist",
+            activeFilter:state.activeFilter,
+            routeSlug:state.routeSlug,
+            query,
+            items:Object.freeze(items),
+            emptyState:items.length ? null : emptyStateFor(state,query)
+        });
+    }
+
     global.TVTrackerTrackerListsStateBridge = Object.freeze({
         snapshot,
+        viewModel,
         ownership:"legacy-read-only"
     });
 })(window);

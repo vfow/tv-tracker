@@ -72,7 +72,8 @@ vm.runInContext(bridgeSource, context);
 const bridge = context.window.TVTrackerTrackerListsStateBridge;
 assert(bridge, 'read-only Tracker Lists bridge should be exposed on window');
 assert.strictEqual(bridge.ownership, 'legacy-read-only');
-assert.deepStrictEqual(Object.keys(bridge).sort(), ['ownership','snapshot']);
+assert.deepStrictEqual(Object.keys(bridge).sort(), ['ownership','snapshot','viewModel']);
+assert.strictEqual(typeof bridge.viewModel, 'function', 'native Watchlist composition must be exposed as a read-only structured view-model function');
 
 const snapshot = bridge.snapshot();
 assert.strictEqual(snapshot.page, 'shows');
@@ -136,7 +137,7 @@ assert(!typedAdapter.includes('document.'), 'typed Tracker Lists adapter must re
 assert(!typedAdapter.includes('fetch('), 'typed Tracker Lists adapter must remain network-free');
 assert(!typedAdapter.includes('history.'), 'typed Tracker Lists adapter must not own navigation');
 assert(!typedAdapter.includes('createApp('), 'typed Tracker Lists adapter must not mount Vue');
-assert(!main.includes('./tracker-lists/legacyTrackerListsState'), 'Tracker Lists adapter remains inactive before Vue DOM ownership');
+assert(!main.includes('./tracker-lists/legacyTrackerListsState'), 'Tracker Lists adapter remains inactive because the live owner consumes the structured runtime bridge directly');
 
 const appIndex = template.indexOf("filename='js/app.js'");
 const bridgeIndex = template.indexOf("filename='js/tracker-lists-state-bridge.js'");
@@ -145,9 +146,9 @@ assert(appIndex >= 0, 'app.js must remain loaded');
 assert(bridgeIndex > appIndex, 'Tracker Lists bridge must load after authoritative legacy tracker state exists');
 assert(routerIndex > bridgeIndex, 'Tracker Lists bridge must load before routing/startup consumes state');
 
-assert(architecture.includes('Legacy `app.js` remains authoritative for tracker data'));
-assert(architecture.includes('`app-router.js` remains the sole History API owner'));
-assert(architecture.includes('The Tracker Lists state bridge is read-only'));
-assert(architecture.includes('History and watched/episode tracking remain separate later roadmap phases'));
+assert(architecture.includes('`static/js/app.js` remains authoritative for `DATA.shows`, tracker mutations, durable save orchestration, list/filter state, and persistence semantics.'));
+assert(architecture.includes('`app-router.js` remains the sole History API owner.'));
+assert(architecture.includes('`static/js/tracker-lists-state-bridge.js` is a read-only boundary.'));
+assert(architecture.includes('legacy Watchlist HTML composition is no longer part of the runtime path.'));
 
 console.log('Frontend modernization Tracker Lists read-only state bridge checks passed.');
