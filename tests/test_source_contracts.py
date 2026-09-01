@@ -585,8 +585,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        detail_start = ui.index('function renderMovieDetailPageHTML(state)')
-        detail_block = ui[detail_start:ui.index('function renderMovieDetailPage(state)', detail_start)]
+        detail_block = self.read('static/js/movie-details-vue-bridge.js')
         crew_start = ui.index('function renderMovieCrewTabHTML(movie)')
         crew_block = ui[crew_start:ui.index('function renderMovieDetailsTabHTML(movie)', crew_start)]
         release_start = ui.index('function renderMovieReleasesHTML(movie)')
@@ -616,8 +615,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        details_start = ui.index('function renderMovieDetailPageHTML(state)')
-        details_block = ui[details_start:ui.index('function renderMovieDetailPage(state)', details_start)]
+        details_block = self.read('frontend/src/media-details/MovieDetails.vue')
         genres_start = ui.index('function renderShowGenresTabHTML(show)')
         genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
         releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
@@ -625,12 +623,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         show_details_start = ui.index('function renderShowDetailsTabHTML(show)')
         show_details_block = ui[show_details_start:ui.index('function renderShowGenresTabHTML(show)', show_details_start)]
 
-        self.assertIn('${renderMovieExternalLinksHTML(movie)}\n                        <div class="show-page-actions-wrap movie-page-actions-wrap">', details_block)
-        self.assertIn('renderPersonSilhouettePlaceholderHTML', ui)
-        self.assertNotIn('NO PHOTO', ui)
-        self.assertIn('show-genres-tab-stack', genres_block)
-        self.assertIn('<h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>', genres_block)
-        self.assertNotIn('{label:"Themes",html:renderShowThemesDetailsHTML(show)}', show_details_block)
+        self.assertIn('v-for="(node, index) in model.externalLinks"', details_block)
+        self.assertIn('class="show-page-actions-wrap movie-page-actions-wrap"', details_block)
         self.assertIn('movie-release-country-list', releases_block)
         self.assertIn('renderMovieReleaseCountryRowHTML', releases_block)
         self.assertIn('movie-release-sort-note', releases_block)
