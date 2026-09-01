@@ -1,0 +1,52 @@
+name: Upcoming contract repair
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/upcoming-contract-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.ref == 'modernization/upcoming-vue-native-composition'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: modernization/upcoming-vue-native-composition
+          fetch-depth: 0
+      - name: Move Upcoming frontend contract to Vue bridge
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test_frontend.js')
+          text = path.read_text(encoding='utf-8')
+
+          old_import = "const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');\nconst db = fs.readFileSync('static/js/db.js','utf8');"
+          new_import = "const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');\nconst upcomingVueBridge = fs.readFileSync('static/js/upcoming-notifications-vue-bridge.js','utf8');\nconst db = fs.readFileSync('static/js/db.js','utf8');"
+          if old_import not in text:
+              raise SystemExit('Upcoming bridge import anchor not found')
+          text = text.replace(old_import, new_import, 1)
+
+          old_contract = "assert(ui.includes('if(startBackgroundRefresh || isRefreshingUpcoming)'));\nassert(router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));"
+          new_contract = "assert(upcomingVueBridge.includes('const loading = items.length === 0 && (startBackgroundRefresh || global.isRefreshingUpcoming === true)'));\nassert(upcomingVueBridge.includes('if(startBackgroundRefresh && global.isRefreshingUpcoming !== true && typeof global.refreshUpcomingDataInBackground === \\\"function\\\")'));\nassert(!ui.includes('function renderUpcoming(startBackgroundRefresh=true)'));\nassert(!router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));"
+          if old_contract not in text:
+              raise SystemExit('Legacy Upcoming refresh contract anchor not found')
+          text = text.replace(old_contract, new_contract, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+          node tests/test_frontend.js
+      - name: Commit repaired contract and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/upcoming-contract-repair.yml
+          git add tests/test_frontend.js
+          git commit -m "Update Upcoming frontend ownership contract"
+          git push origin HEAD:modernization/upcoming-vue-native-composition
