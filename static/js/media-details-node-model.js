@@ -2,7 +2,7 @@
     "use strict";
 
     const SAFE_TAGS = new Set([
-        "a","button","div","h2","h3","img","p","section","span","svg","path"
+        "a","article","button","circle","div","em","footer","g","h1","h2","h3","h4","header","img","li","line","main","nav","p","path","polyline","rect","section","small","span","strong","svg","time","ul","use"
     ]);
     const URL_ATTRS = new Set(["href","src"]);
 
