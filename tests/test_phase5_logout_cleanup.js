@@ -38,14 +38,15 @@ assert.strictEqual(
 
 const uiSource = readScript("ui.js");
 const historyActivitySource = readScript("history-activity.js");
-assert(!/function\s+renderHistory\s*\(/.test(uiSource),"ui.js must no longer define renderHistory");
-assert(/function\s+renderHistory\s*\(/.test(historyActivitySource),"history-activity.js owns renderHistory");
+const historyVueBridgeSource = readScript("history-vue-bridge.js");
+assert(!/function\s+renderHistory\s*\(/.test(uiSource),"ui.js must not define renderHistory");
+assert(!/function\s+renderHistory\s*\(/.test(historyActivitySource),"legacy history-activity.js must not define renderHistory");
+assert(/function\s+renderHistory\s*\(/.test(historyVueBridgeSource),"History Vue bridge must be the sole renderHistory owner");
 
-// The remaining renderHistory callers (ui.js:307, ui.js:3752) run after
-// history-activity.js has loaded: index.html loads ui.js before
-// history-activity.js, and startup.js runs last.
 const templateSource = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
-assert(templateSource.indexOf("js/ui.js") < templateSource.indexOf("js/history-activity.js"),"ui.js must load before history-activity.js");
+assert(templateSource.indexOf("js/ui.js") < templateSource.indexOf("js/history-activity.js"),"ui.js must load before the compatibility History placeholder");
+assert(templateSource.indexOf("js/history-activity.js") < templateSource.indexOf("js/history-state-bridge.js"),"History state bridge must load after the compatibility placeholder");
+assert(templateSource.indexOf("js/history-state-bridge.js") < templateSource.indexOf("js/history-vue-bridge.js"),"History Vue owner must load after structured History state");
 
 // --- C2: Vue Auth Settings owns logout cleanup while preserving the native POST.
 const settingsSource = readScript("settings.js");

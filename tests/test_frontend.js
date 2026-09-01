@@ -162,47 +162,59 @@ assert(!app.includes('history.replaceState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
 assert(template.includes('history-activity.js'));
 assert(template.indexOf('js/app.js') < template.indexOf('js/history-activity.js'));
-assert(historyActivity.includes('function getActivityHistoryEntries'));
-assert(historyActivity.includes('function renderHistory'));
-assert(historyActivity.includes('getMovieDetailRoute(movie.id,movie.title)'));
-assert(historyActivity.includes('entry && entry.backdrop_path || trackedMovie.backdrop_path || ""'));
-assert(!historyActivity.includes('poster_path'),'movie History must use backdrop/still imagery, not posters');
+const historyStateBridge = fs.readFileSync('static/js/history-state-bridge.js','utf8');
+const historyVueBridge = fs.readFileSync('static/js/history-vue-bridge.js','utf8');
+const historySurfaceVue = fs.readFileSync('frontend/src/history/HistorySurface.vue','utf8');
 
-const historyActivityRuleSource = historyActivity.slice(
-  historyActivity.indexOf('function getActivityHistoryEntries'),
-  historyActivity.indexOf('function getMovieHistoryDisplayData')
-);
-const historyActivityContext = {
+assert(!historyActivity.includes('function getActivityHistoryEntries'));
+assert(!historyActivity.includes('function renderHistory'));
+assert(!historyActivity.includes('innerHTML'));
+assert(historyStateBridge.includes('function viewModel('));
+assert(historyStateBridge.includes('getMovieDetailRoute'));
+assert(historyStateBridge.includes('entry && entry.backdrop_path || tracked.backdrop_path'));
+assert(!historyStateBridge.includes('poster_path'),'movie History must use backdrop/still imagery, not posters');
+assert(historyVueBridge.includes('stateBridge.viewModel(visibleLimit)'));
+assert(historySurfaceVue.includes('data-tvtracker-history-owner="vue-history"'));
+assert(!historySurfaceVue.includes('v-html'));
+
+const historyStateBridgeContext = {
   console,
   Object,
   Array,
   Number,
   String,
   Date,
-  DATA:{
-    shows:{
-      1:{tmdb_id:'1',title:'Show One'},
-      2:{tmdb_id:'2',title:'Future Show'}
-    },
-    history:[
-      {id:'tv-1',tmdb_id:'1',season:1,episode:1,title:'Show One',watched_at:'2026-08-13T08:00:00Z',air_date:'2026-08-01'},
-      {id:'movie-1',media_type:'movie',movie_id:'10',tmdb_id:'10',title:'Movie One',watched_at:'2026-08-13T09:00:00Z'},
-      {id:'tv-future',tmdb_id:'2',season:1,episode:1,title:'Future Show',watched_at:'2026-08-13T10:00:00Z',air_date:'2099-01-01'}
-    ]
-  },
-  isMovieHistoryEntry(entry){
-    return !!entry && (String(entry.media_type || '').toLowerCase() === 'movie' || !!entry.movie_id);
-  },
-  isEpisodeAired(airDate){
-    return String(airDate || '') <= '2026-08-13';
-  }
+  window:{}
 };
-vm.createContext(historyActivityContext);
-vm.runInContext(historyActivityRuleSource,historyActivityContext);
+historyStateBridgeContext.window.DATA = {
+  shows:{
+    1:{tmdb_id:'1',title:'Show One'},
+    2:{tmdb_id:'2',title:'Future Show'}
+  },
+  history:[
+    {id:'tv-1',tmdb_id:'1',season:1,episode:1,title:'Show One',watched_at:'2026-08-13T08:00:00Z',air_date:'2026-08-01'},
+    {id:'movie-1',media_type:'movie',movie_id:'10',tmdb_id:'10',title:'Movie One',watched_at:'2026-08-13T09:00:00Z'},
+    {id:'tv-future',tmdb_id:'2',season:1,episode:1,title:'Future Show',watched_at:'2026-08-13T10:00:00Z',air_date:'2099-01-01'}
+  ]
+};
+historyStateBridgeContext.window.isMovieHistoryEntry = function(entry){
+  return !!entry && (String(entry.media_type || '').toLowerCase() === 'movie' || !!entry.movie_id);
+};
+historyStateBridgeContext.window.isEpisodeAired = function(airDate){
+  return String(airDate || '') <= '2026-08-13';
+};
+vm.createContext(historyStateBridgeContext);
+vm.runInContext(historyStateBridge,historyStateBridgeContext);
+const historySnapshot = historyStateBridgeContext.window.TVTrackerHistoryStateBridge.snapshot();
 assert.deepStrictEqual(
-  Array.from(historyActivityContext.getActivityHistoryEntries()).map(entry=>entry.id),
-  ['movie-1','tv-1'],
+  Array.from(historySnapshot.entries).map(entry=>entry.kind),
+  ['movie','episode'],
   'History should combine watched movies and aired TV episodes chronologically'
+);
+assert.deepStrictEqual(
+  Array.from(historySnapshot.entries).map(entry=>entry.title),
+  ['Movie One','Show One'],
+  'History should suppress future TV episodes while preserving watched movie and episode ordering'
 );
 
 

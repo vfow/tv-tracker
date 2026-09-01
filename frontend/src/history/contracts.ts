@@ -28,6 +28,46 @@ export interface HistoryState {
   readonly entries: readonly HistoryEntry[];
 }
 
+export interface HistoryCardViewModel {
+  readonly key: string;
+  readonly kind: "episode" | "movie";
+  readonly route: string;
+  readonly title: string;
+  readonly detailLine: string;
+  readonly imageUrl: string;
+  readonly placeholder: string;
+  readonly relativeTime: string;
+}
+
+export interface HistoryGroupViewModel {
+  readonly key: string;
+  readonly label: string;
+  readonly entries: readonly HistoryCardViewModel[];
+}
+
+export interface HistoryViewModel {
+  readonly surface: "history";
+  readonly groups: readonly HistoryGroupViewModel[];
+  readonly emptyState: Readonly<{ title: string; text: string }> | null;
+  readonly hasMore: boolean;
+}
+
+export interface HistoryRendererActions {
+  loadMore(): Promise<void>;
+}
+
+export interface HistoryVueOwner {
+  render(model: HistoryViewModel): void;
+  unmount(): void;
+}
+
+export interface HistoryVueBridge {
+  readonly ownership: "vue-dom";
+  readonly actions: HistoryRendererActions;
+  attachVueOwner(owner: HistoryVueOwner): void;
+  renderHistory(): Promise<boolean>;
+}
+
 export function normalizeHistoryText(value: unknown): string {
   return String(value ?? "").trim();
 }
