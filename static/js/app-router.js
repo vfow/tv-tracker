@@ -713,11 +713,9 @@
         if(activeShowsTab !== "watchlist" && typeof document !== "undefined" && document && typeof document.getElementById === "function"){
             const list = document.getElementById("show-list");
             if(list){
-                if(activeShowsTab === "upcoming" && typeof renderUpcomingSkeletonHTML === "function"){
-                    list.innerHTML = renderUpcomingSkeletonHTML();
-                }else if(activeShowsTab === "history" && typeof renderHistorySkeletonHTML === "function"){
+                if(activeShowsTab === "history" && typeof renderHistorySkeletonHTML === "function"){
                     list.innerHTML = renderHistorySkeletonHTML();
-                }else{
+                }else if(activeShowsTab !== "upcoming"){
                     list.innerHTML = "";
                 }
             }

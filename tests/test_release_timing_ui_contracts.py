@@ -11,6 +11,7 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         cls.app = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
         cls.ui = (ROOT / "static/js/ui.js").read_text(encoding="utf-8")
         cls.tracker_lists = (ROOT / "static/js/tracker-lists-state-bridge.js").read_text(encoding="utf-8")
+        cls.upcoming = (ROOT / "static/js/upcoming-notifications-vue-bridge.js").read_text(encoding="utf-8")
         cls.release = (ROOT / "static/js/release-timing.js").read_text(encoding="utf-8")
         cls.routes = (ROOT / "tvtracker/release_timing/routes.py").read_text(encoding="utf-8")
         cls.resolver = (ROOT / "tvtracker/release_timing/service.py").read_text(encoding="utf-8")
@@ -32,7 +33,7 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         self.assertNotIn("watchlist-release-meta", combined_watchlist)
         self.assertIn("if(!isEpisodeLoggable(ep,show,season))", self.app)
         self.assertNotIn("const canonicalDayDifference = getDayDiffFromToday(ep.air_date,ep,show);", self.app)
-        self.assertIn("const canLog = isEpisodeLoggable(ep,show,ep.season_number);", self.ui)
+        self.assertIn("global.isEpisodeLoggable(episode,show,episode.season_number)", self.upcoming)
         self.assertIn("global.isEpisodeLoggable(nextEp,show,nextEp.season)", self.tracker_lists)
 
     def test_show_and_episode_surfaces_pass_show_identity_to_timing(self):

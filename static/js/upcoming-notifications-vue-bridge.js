@@ -2,8 +2,7 @@
     "use strict";
 
     const manifestUrl = "/static/vue/manifest.json";
-    const legacyRenderUpcoming = typeof global.renderUpcoming === "function" ? global.renderUpcoming : null;
-    const legacyNotifications = global.TVTrackerNotifications || null;
+    const notificationServices = global.TVTrackerNotifications || null;
     let vueOwner = null;
     let trackerListsVueOwner = null;
     let loadPromise = null;
@@ -45,12 +44,164 @@
         return loadPromise;
     }
 
-    function rememberModel(surface){
-        const root = rootFor(surface);
-        if(!root) return null;
-        const model = Object.freeze({surface,html:String(root.innerHTML || "")});
-        lastModels.set(surface,model);
-        return model;
+    function staticAsset(metaName,fallback){
+        const meta = global.document && typeof global.document.querySelector === "function"
+            ? global.document.querySelector('meta[name="' + metaName + '"]')
+            : null;
+        return meta && meta.content ? String(meta.content) : fallback;
+    }
+
+    function imageURL(path,size="w780"){
+        const value = String(path || "").trim();
+        if(!value) return "";
+        if(typeof global.trackerImageURL === "function") return String(global.trackerImageURL(value,size) || "");
+        if(/^https?:\/\//i.test(value)) return value;
+        return "https://image.tmdb.org/t/p/" + String(size || "w780") + (value.startsWith("/") ? value : "/" + value);
+    }
+
+    function episodeRoute(show,episode){
+        if(typeof global.getEpisodeDetailRoute === "function"){
+            return String(global.getEpisodeDetailRoute(show.tmdb_id,episode.season_number,episode.episode_number) || "/app/list/watching");
+        }
+        return "/app/list/watching";
+    }
+
+    function episodeLabel(episode){
+        return "S" + Number(episode.season_number || 0) + "E" + String(Number(episode.episode_number || 0)).padStart(2,"0") + " — " + String(episode.name || "Untitled Episode");
+    }
+
+    function batchEpisodeModel(show,episode){
+        const canLog = typeof global.isEpisodeAired === "function"
+            ? !!global.isEpisodeAired(episode.air_date,episode,show)
+            : false;
+        const imagePath = episode.still_path || show.poster_path || "";
+        return Object.freeze({
+            key:String(show.tmdb_id) + ":" + String(episode.season_number) + ":" + String(episode.episode_number),
+            showId:String(show.tmdb_id || ""),
+            season:Number(episode.season_number || 0),
+            episode:Number(episode.episode_number || 0),
+            label:episodeLabel(episode),
+            timeLabel:typeof global.getUpcomingTimeLabel === "function" ? String(global.getUpcomingTimeLabel(episode.air_date,episode,show) || "") : "",
+            route:episodeRoute(show,episode),
+            imageUrl:imageURL(imagePath,"w780"),
+            canLog
+        });
+    }
+
+    function upcomingEpisodeModel(display){
+        const item = display.item || {};
+        const show = item.show || {};
+        const episode = item.episode || {};
+        const extraEpisodes = Array.isArray(display.extraEpisodes) ? display.extraEpisodes : [];
+        const canLog = typeof global.isEpisodeLoggable === "function"
+            ? !!global.isEpisodeLoggable(episode,show,episode.season_number)
+            : false;
+        const recentlyAvailable = typeof global.isRecentlyAvailableEpisode === "function"
+            ? !!global.isRecentlyAvailableEpisode(episode,show)
+            : false;
+        const isNew = canLog && (
+            item.isNew === true ||
+            (typeof global.isNewUpcomingEpisode === "function" && global.isNewUpcomingEpisode(show,episode)) ||
+            recentlyAvailable
+        );
+        const batchKey = display.isBatch ? String(display.batchKey || "") : "";
+        const expanded = global.expandedUpcomingBatches && typeof global.expandedUpcomingBatches === "object"
+            ? global.expandedUpcomingBatches
+            : {};
+        const batchOpen = !!(batchKey && expanded[batchKey]);
+        const behindCount = Number(item.behindCount || 0);
+        const behindText = !display.isBatch && behindCount > 0
+            ? behindCount + " more episode" + (behindCount === 1 ? "" : "s") + " behind"
+            : "";
+        const imagePath = episode.still_path || show.poster_path || "";
+        return Object.freeze({
+            key:String(show.tmdb_id || "") + ":" + String(episode.season_number || 0) + ":" + String(episode.episode_number || 0),
+            showId:String(show.tmdb_id || ""),
+            season:Number(episode.season_number || 0),
+            episode:Number(episode.episode_number || 0),
+            showTitle:String(show.title || ""),
+            episodeLabel:episodeLabel(episode),
+            timeLabel:String(item.timeLabel || ""),
+            route:episodeRoute(show,episode),
+            imageUrl:imageURL(imagePath,"w780"),
+            canLog,
+            isNew:!!isNew,
+            behindText,
+            batchKey,
+            batchOpen,
+            extraEpisodes:Object.freeze(extraEpisodes.map(extra=>batchEpisodeModel(show,extra)))
+        });
+    }
+
+    function buildUpcomingModel(startBackgroundRefresh=true){
+        const upcoming = typeof global.getUpcomingShows === "function" ? global.getUpcomingShows() : [];
+        const items = Array.isArray(upcoming) ? upcoming : [];
+        const loading = items.length === 0 && (startBackgroundRefresh || global.isRefreshingUpcoming === true);
+        const bellIcon = staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg");
+        if(items.length === 0){
+            return Object.freeze({surface:"upcoming",state:loading ? "loading" : "empty",groups:Object.freeze([]),unread:false,bellIcon});
+        }
+        const groupOrder = ["Catch Up","Yesterday","Today","Tomorrow","This Week","This Month","Later"];
+        let bellAssigned = false;
+        const groups = [];
+        groupOrder.forEach(name=>{
+            const groupItems = items.filter(item=>item && item.group === name);
+            if(!groupItems.length) return;
+            const displays = typeof global.prepareUpcomingDisplayItems === "function"
+                ? global.prepareUpcomingDisplayItems(groupItems)
+                : groupItems.map(item=>({item,extraEpisodes:[],isBatch:false,batchKey:""}));
+            const showNotificationBell = !bellAssigned;
+            bellAssigned = true;
+            groups.push(Object.freeze({
+                name,
+                showNotificationBell,
+                items:Object.freeze((Array.isArray(displays) ? displays : []).map(upcomingEpisodeModel))
+            }));
+        });
+        return Object.freeze({surface:"upcoming",state:"ready",groups:Object.freeze(groups),unread:false,bellIcon});
+    }
+
+    function notificationImageURL(path){
+        const clean = String(path || "").trim();
+        if(!clean) return "";
+        if(/^https?:\/\//i.test(clean)) return clean;
+        return "https://image.tmdb.org/t/p/w300" + (clean.startsWith("/") ? clean : "/" + clean);
+    }
+
+    function relativeTime(value){
+        if(notificationServices && typeof notificationServices._relativeTime === "function"){
+            return String(notificationServices._relativeTime(value) || "");
+        }
+        const time = Date.parse(value || "");
+        if(!Number.isFinite(time)) return "";
+        const seconds = Math.max(0,Math.floor((Date.now() - time) / 1000));
+        if(seconds < 60) return "now";
+        const minutes = Math.floor(seconds / 60);
+        if(minutes < 60) return minutes + "m ago";
+        const hours = Math.floor(minutes / 60);
+        if(hours < 24) return hours + "h ago";
+        const days = Math.floor(hours / 24);
+        if(days < 7) return days + "d ago";
+        const weeks = Math.floor(days / 7);
+        if(weeks < 8) return weeks + "w ago";
+        return Math.floor(days / 30) + "mo ago";
+    }
+
+    function buildNotificationsModel(state,items=[]){
+        const source = Array.isArray(items) ? items : [];
+        return Object.freeze({
+            surface:"notifications",
+            state,
+            items:Object.freeze(source.map(item=>Object.freeze({
+                id:String(item && item.id || ""),
+                message:String(item && item.message || "Notification"),
+                timeLabel:relativeTime(item && item.createdAt),
+                route:String(item && item.route || (item && item.showId ? "/app/show/" + encodeURIComponent(String(item.showId)) : "/app/upcoming")),
+                imageUrl:notificationImageURL(item && item.imagePath)
+            }))),
+            bellIcon:staticAsset("notification-bell-icon","/static/assets/icons/notification-bell.svg"),
+            settingsIcon:staticAsset("notification-settings-icon","/static/assets/icons/notification-settings.svg")
+        });
     }
 
     async function csrfRequest(path,options={}){
@@ -85,9 +236,7 @@
                 event.stopPropagation();
                 const key = button.dataset.batch || "";
                 if(!key) return;
-                if(!global.expandedUpcomingBatches || typeof global.expandedUpcomingBatches !== "object"){
-                    global.expandedUpcomingBatches = {};
-                }
+                if(!global.expandedUpcomingBatches || typeof global.expandedUpcomingBatches !== "object") global.expandedUpcomingBatches = {};
                 global.expandedUpcomingBatches[key] = !global.expandedUpcomingBatches[key];
                 void renderUpcoming(false);
             });
@@ -121,25 +270,15 @@
             row.classList.add("notification-row--removing");
             global.setTimeout(()=>row.remove(),180);
             return true;
-        }catch(error){
-            return false;
-        }
+        }catch(error){ return false; }
     }
 
     function bindNotificationSwipe(row,link){
         if(!row || !link || !global.PointerEvent) return;
-        let startX = 0;
-        let startY = 0;
-        let deltaX = 0;
-        let active = false;
-        let horizontal = false;
+        let startX = 0, startY = 0, deltaX = 0, active = false, horizontal = false;
         row.addEventListener("pointerdown",event=>{
             if(event.pointerType === "mouse" || event.button !== 0) return;
-            startX = event.clientX;
-            startY = event.clientY;
-            deltaX = 0;
-            active = true;
-            horizontal = false;
+            startX = event.clientX; startY = event.clientY; deltaX = 0; active = true; horizontal = false;
         });
         row.addEventListener("pointermove",event=>{
             if(!active) return;
@@ -178,9 +317,7 @@
             const deleteButton = row.querySelector(".notification-row-delete");
             if(deleteButton){
                 deleteButton.addEventListener("click",event=>{
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void deleteNotificationRow(row);
+                    event.preventDefault(); event.stopPropagation(); void deleteNotificationRow(row);
                 });
             }
             if(link) bindNotificationSwipe(row,link);
@@ -189,41 +326,16 @@
 
     function renderWithVue(surface,model){
         if(!vueOwner || !model) return false;
+        lastModels.set(surface,model);
         vueOwner.render(model);
-        if(surface === "upcoming") attachUpcomingInteractions();
-        else attachNotificationInteractions();
-        return true;
-    }
-
-    async function renderShowListHTML(html){
-        const model = Object.freeze({surface:"upcoming",html:String(html || "")});
-        if(!vueOwner){
-            const loaded = await loadVueOwner("watchlist");
-            if(!loaded || !vueOwner) return false;
-        }
-        vueOwner.render(model);
-        const root = rootFor("watchlist");
-        if(root && root.dataset){
-            root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
-        }
-        if(root && typeof root.querySelector === "function"){
-            const marker = root.querySelector('[data-tvtracker-upcoming-notifications-owner="vue-upcoming"]');
-            if(marker){
-                marker.removeAttribute("data-tvtracker-upcoming-notifications-owner");
-                marker.setAttribute("data-tvtracker-tracker-lists-owner","vue-watchlist");
-            }
-        }
+        if(surface === "upcoming") attachUpcomingInteractions(); else attachNotificationInteractions();
         return true;
     }
 
     function buildWatchlistModel(){
         const stateBridge = global.TVTrackerTrackerListsStateBridge;
         if(!stateBridge || stateBridge.ownership !== "legacy-read-only" || typeof stateBridge.viewModel !== "function") return null;
-        try{
-            return stateBridge.viewModel();
-        }catch(error){
-            return null;
-        }
+        try{ return stateBridge.viewModel(); }catch(error){ return null; }
     }
 
     function renderWatchlistLoadFailure(){
@@ -236,66 +348,70 @@
         const id = String(showId || "").trim();
         if(!id) return;
         if(kind === "mark"){
-            if(target && typeof global.playCheckSuccessAnimation === "function"){
-                await global.playCheckSuccessAnimation(target);
-            }
+            if(target && typeof global.playCheckSuccessAnimation === "function") await global.playCheckSuccessAnimation(target);
             if(typeof global.markNextEpisode === "function") await global.markNextEpisode(id);
             return;
         }
-        if(kind === "watching" && typeof global.updateShowStatus === "function"){
-            await global.updateShowStatus(id,"watching");
-        }
+        if(kind === "watching" && typeof global.updateShowStatus === "function") await global.updateShowStatus(id,"watching");
     }
 
     const trackerListsActions = Object.freeze({perform:performTrackerListAction});
 
     function attachTrackerListsVueOwner(owner){
-        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
-            throw new TypeError("Invalid Tracker Lists Vue owner");
-        }
+        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function") throw new TypeError("Invalid Tracker Lists Vue owner");
         trackerListsVueOwner = owner;
     }
 
     async function renderWatchlist(){
         if(typeof global.renderLibrarySearchControl === "function") global.renderLibrarySearchControl();
         const model = buildWatchlistModel();
-        if(!model){
-            renderWatchlistLoadFailure();
-            return false;
-        }
+        if(!model){ renderWatchlistLoadFailure(); return false; }
         if(!trackerListsVueOwner){
             const loaded = await loadVueOwner("watchlist");
-            if(!loaded || !trackerListsVueOwner){
-                renderWatchlistLoadFailure();
-                return false;
-            }
+            if(!loaded || !trackerListsVueOwner){ renderWatchlistLoadFailure(); return false; }
         }
         trackerListsVueOwner.render(model);
         const root = rootFor("watchlist");
-        if(root && root.dataset){
-            root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
-        }
+        if(root && root.dataset) root.dataset.tvtrackerTrackerListsOwner = "vue-watchlist";
         return true;
     }
 
-    async function refreshWatchlistShows(){
-        return renderWatchlist();
-    }
+    async function refreshWatchlistShows(){ return renderWatchlist(); }
 
     async function renderUpcoming(startBackgroundRefresh=true){
-        if(typeof legacyRenderUpcoming !== "function") return;
-        await legacyRenderUpcoming(startBackgroundRefresh);
-        const model = rememberModel("upcoming");
-        if(renderWithVue("upcoming",model)) return;
-        void loadVueOwner("upcoming");
+        const model = buildUpcomingModel(startBackgroundRefresh);
+        if(!vueOwner){
+            const loaded = await loadVueOwner("upcoming");
+            if(!loaded || !vueOwner){ reportLoadFailure("upcoming"); return; }
+        }
+        renderWithVue("upcoming",model);
+        if(model.state === "loading"){
+            if(startBackgroundRefresh && global.isRefreshingUpcoming !== true && typeof global.refreshUpcomingDataInBackground === "function"){
+                void global.refreshUpcomingDataInBackground();
+            }
+            return;
+        }
+        if(startBackgroundRefresh && typeof global.refreshUpcomingDataInBackground === "function"){
+            void global.refreshUpcomingDataInBackground();
+        }
     }
 
     async function renderNotificationsPage(){
-        if(!legacyNotifications || typeof legacyNotifications.renderNotificationsPage !== "function") return;
-        await legacyNotifications.renderNotificationsPage();
-        const model = rememberModel("notifications");
-        if(renderWithVue("notifications",model)) return;
-        void loadVueOwner("notifications");
+        if(!vueOwner){
+            const loaded = await loadVueOwner("notifications");
+            if(!loaded || !vueOwner){ reportLoadFailure("notifications"); return; }
+        }
+        renderWithVue("notifications",buildNotificationsModel("loading"));
+        try{
+            await csrfRequest("/api/notifications/read-all",{method:"POST"});
+            const root = global.document;
+            if(root && typeof root.querySelectorAll === "function") root.querySelectorAll(".notification-unread-dot").forEach(dot=>{ dot.hidden = true; });
+            const payload = await csrfRequest("/api/notifications");
+            const items = Array.isArray(payload.notifications) ? payload.notifications : [];
+            renderWithVue("notifications",buildNotificationsModel(items.length ? "ready" : "empty",items));
+        }catch(error){
+            renderWithVue("notifications",buildNotificationsModel("error"));
+        }
     }
 
     function openNotificationsPage(){
@@ -312,39 +428,26 @@
     }
 
     function attachVueOwner(owner){
-        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
-            throw new TypeError("Invalid Upcoming/Notifications Vue owner");
-        }
+        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function") throw new TypeError("Invalid Upcoming/Notifications Vue owner");
         vueOwner = owner;
         lastModels.forEach((model,surface)=>renderWithVue(surface,model));
     }
 
-    const bridge = Object.freeze({
-        attachVueOwner,
-        renderUpcoming,
-        renderNotificationsPage,
-        renderShowListHTML,
-        ownership:"vue-dom"
-    });
-    global.TVTrackerUpcomingNotificationsVueBridge = bridge;
+    global.TVTrackerUpcomingNotificationsVueBridge = Object.freeze({attachVueOwner,renderUpcoming,renderNotificationsPage,buildUpcomingModel,ownership:"vue-dom"});
     global.renderUpcoming = renderUpcoming;
 
-    const trackerListsBridge = Object.freeze({
+    global.TVTrackerTrackerListsVueBridge = Object.freeze({
         attachVueOwner:attachTrackerListsVueOwner,
         renderWatchlist,
         refreshWatchlistShows,
         actions:trackerListsActions,
         ownership:"vue-dom"
     });
-    global.TVTrackerTrackerListsVueBridge = trackerListsBridge;
     global.renderWatchlist = renderWatchlist;
     global.refreshWatchlistShows = refreshWatchlistShows;
 
-    if(legacyNotifications){
-        global.TVTrackerNotifications = Object.assign({},legacyNotifications,{
-            openNotificationsPage,
-            renderNotificationsPage
-        });
+    if(notificationServices){
+        global.TVTrackerNotifications = Object.assign({},notificationServices,{openNotificationsPage,renderNotificationsPage});
     }
 
     const currentPath = String(global.location && global.location.pathname || "");
