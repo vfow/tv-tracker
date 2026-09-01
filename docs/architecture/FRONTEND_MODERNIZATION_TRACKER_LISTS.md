@@ -6,11 +6,15 @@ The protected `/app/list/<status>` surfaces now use a Vue-native structured view
 
 ## Current ownership
 
+Legacy `app.js` remains authoritative for tracker data, mutations, durable save orchestration, list/filter state, and persistence semantics.
+
 - `static/js/app.js` remains authoritative for `DATA.shows`, tracker mutations, durable save orchestration, list/filter state, and persistence semantics.
 - `static/js/tracker-lists-state-bridge.js` is a read-only boundary. Its `viewModel()` reuses the established read-only filter/sort/progress helpers and produces structured card/action/empty-state data without touching the DOM, network, storage, or navigation.
 - `frontend/src/tracker-lists/TrackerListsSurface.vue` is the Vue-native Watchlist renderer. It renders the existing Watchlist classes and action affordances without `v-html`.
 - `static/js/upcoming-notifications-vue-bridge.js` publishes the Watchlist render entrypoint and mutation actions, but no longer captures or stages the legacy `renderWatchlist` HTML composer.
 - `app-router.js` remains the sole History API owner.
+
+The Tracker Lists state bridge is read-only. It does not own tracker truth, mutations, persistence, DOM navigation, or provider requests.
 
 ## Preserved behavior
 
