@@ -1,4 +1,4 @@
-name: Temporary Watchlist Source Extraction
+name: Temporary Watchlist Native Composition
 
 on:
   push:
@@ -9,121 +9,41 @@ permissions:
   contents: write
 
 jobs:
-  extract:
+  implement:
+    if: ${{ !contains(github.event.head_commit.message, '[watchlist-native-done]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: modernization/watchlist-vue-native-composition
           fetch-depth: 0
-      - name: Extract current Watchlist functions
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci --audit=false
+      - name: Apply Watchlist native composition patch
+        run: python .tmp/implement_watchlist_native.py
+      - name: Build committed frontend assets
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          source = Path('static/js/ui.js').read_text()
-
-          def skip_string_comment(i, quote, escaped, line_comment, block_comment):
-              return i, quote, escaped, line_comment, block_comment
-
-          def find_body_start(match):
-              i = source.find('(', match.end() - 1)
-              if i < 0:
-                  raise SystemExit('missing parameter list')
-              depth = 0
-              quote = None
-              escaped = False
-              line_comment = False
-              block_comment = False
-              while i < len(source):
-                  ch = source[i]
-                  nxt = source[i + 1] if i + 1 < len(source) else ''
-                  if line_comment:
-                      if ch == '\n': line_comment = False
-                      i += 1; continue
-                  if block_comment:
-                      if ch == '*' and nxt == '/': block_comment = False; i += 2
-                      else: i += 1
-                      continue
-                  if quote:
-                      if escaped: escaped = False
-                      elif ch == '\\': escaped = True
-                      elif ch == quote: quote = None
-                      i += 1; continue
-                  if ch == '/' and nxt == '/': line_comment = True; i += 2; continue
-                  if ch == '/' and nxt == '*': block_comment = True; i += 2; continue
-                  if ch in ('\"', "'", '`'): quote = ch; i += 1; continue
-                  if ch == '(':
-                      depth += 1
-                  elif ch == ')':
-                      depth -= 1
-                      if depth == 0:
-                          body = source.find('{', i + 1)
-                          if body < 0: raise SystemExit('missing function body')
-                          return body
-                  i += 1
-              raise SystemExit('unclosed parameter list')
-
-          def extract_function(name):
-              match = re.search(r'function\s+' + re.escape(name) + r'\s*\(', source)
-              if not match:
-                  raise SystemExit(f'missing function: {name}')
-              brace = find_body_start(match)
-              depth = 0
-              i = brace
-              quote = None
-              escaped = False
-              line_comment = False
-              block_comment = False
-              while i < len(source):
-                  ch = source[i]
-                  nxt = source[i + 1] if i + 1 < len(source) else ''
-                  if line_comment:
-                      if ch == '\n': line_comment = False
-                      i += 1; continue
-                  if block_comment:
-                      if ch == '*' and nxt == '/': block_comment = False; i += 2
-                      else: i += 1
-                      continue
-                  if quote:
-                      if escaped: escaped = False
-                      elif ch == '\\': escaped = True
-                      elif ch == quote: quote = None
-                      i += 1; continue
-                  if ch == '/' and nxt == '/': line_comment = True; i += 2; continue
-                  if ch == '/' and nxt == '*': block_comment = True; i += 2; continue
-                  if ch in ('\"', "'", '`'): quote = ch; i += 1; continue
-                  if ch == '{': depth += 1
-                  elif ch == '}':
-                      depth -= 1
-                      if depth == 0:
-                          return source[match.start():i + 1]
-                  i += 1
-              raise SystemExit(f'unclosed function: {name}')
-
-          names = [
-              'getWatchlistPosterFallback',
-              'getWatchlistActionConfig',
-              'createWatchlistCard',
-              'getWatchlistShowsForCurrentView',
-              'renderWatchlist',
-              'refreshWatchlistShows',
-          ]
-          out = []
-          for name in names:
-              out.append(f'===== {name} =====\n{extract_function(name)}\n')
-          path = Path('.tmp/watchlist-functions.txt')
-          path.parent.mkdir(exist_ok=True)
-          path.write_text('\n'.join(out))
-          PY
-      - name: Commit extraction snapshot
+          npm run build:frontend
+          npm run css:build
+      - name: Run targeted Watchlist contracts
+        run: |
+          node tests/test_frontend_modernization_tracker_lists_completion.js
+          node tests/test_frontend_modernization_tracker_lists_vue_renderer.js
+          node tests/test_frontend_modernization_tracker_lists_status_parity.js
+          python tests/test_source_contracts.py
+          git diff --check
+      - name: Commit Watchlist implementation
         run: |
           git config user.name "tv-tracker-modernization"
           git config user.email "165537678+vfow@users.noreply.github.com"
-          git add -f .tmp/watchlist-functions.txt
+          git add frontend static docs tests tailwind.config.js
           if git diff --cached --quiet; then
+            echo "No implementation changes to commit"
             exit 0
           fi
-          git commit -m "Temporary extract Watchlist composer sources"
+          git commit -m "Replace Watchlist legacy HTML composition [watchlist-native-done]"
           git push origin HEAD:modernization/watchlist-vue-native-composition
