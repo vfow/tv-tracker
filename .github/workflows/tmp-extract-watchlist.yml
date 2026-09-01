@@ -101,7 +101,7 @@ jobs:
         run: |
           git config user.name "tv-tracker-modernization"
           git config user.email "165537678+vfow@users.noreply.github.com"
-          git add .tmp/watchlist-functions.txt
+          git add -f .tmp/watchlist-functions.txt
           if git diff --cached --quiet; then
             exit 0
           fi
