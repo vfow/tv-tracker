@@ -14,12 +14,27 @@
             : null;
     }
 
-    function buildViewModel(show,options){
-        const renderHTML = global.renderShowDetailsPageHTML;
-        if(typeof renderHTML !== "function"){
-            throw new Error("Show Details HTML renderer unavailable");
+    function nodeModel(){
+        const model = global.TVTrackerMediaDetailsNodeModel;
+        if(!model || model.ownership !== "typed-node-model" || typeof model.fragment !== "function"){
+            throw new Error("Media Details typed node model unavailable");
         }
-        return Object.freeze({html:String(renderHTML(show,options || {}) || "")});
+        return model;
+    }
+
+    function callString(name,...args){
+        const fn = global[name];
+        return typeof fn === "function" ? String(fn(...args) || "") : "";
+    }
+
+    function fragment(name,...args){
+        const factory = nodeModel();
+        const fn = global[name];
+        return typeof fn === "function" ? factory.fragment(fn(...args)) : Object.freeze([]);
+    }
+
+    function imageURL(path,size){
+        return callString("trackerImageURL",path,size);
     }
 
     function isTracked(show){
@@ -27,6 +42,64 @@
             ? global.DATA.shows
             : {};
         return !!(show && shows[String(show.tmdb_id)]);
+    }
+
+    function buildPoster(show){
+        const factory = nodeModel();
+        if(show && show.poster_path){
+            const src = imageURL(show.poster_path,"w500");
+            if(src){
+                return Object.freeze([
+                    factory.element("img",{src,alt:String(show.title || "Show") + " poster"},[])
+                ]);
+            }
+        }
+        return fragment("renderPosterTitlePlaceholderHTML",show,"tv");
+    }
+
+    function buildBackdrop(show){
+        if(show && show.backdrop_path){
+            const background = callString("trackerBackgroundImage",show.backdrop_path,"original");
+            if(background){
+                return "linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), " + background;
+            }
+        }
+        return "linear-gradient(to top, #080808 0%, #141414 100%)";
+    }
+
+    function buildViewModel(show,options){
+        if(!show || typeof show !== "object"){
+            throw new TypeError("Show Details requires a show");
+        }
+        const factory = nodeModel();
+        const showId = String(show.tmdb_id || show.id || "");
+        const tracked = isTracked(show);
+        const year = show.first_air_date ? String(show.first_air_date).slice(0,4) : "Unknown";
+        const genres = Array.isArray(show.genres) && show.genres.length ? show.genres.join(" • ") : "";
+        const rating = Number(show.tmdb_rating || 0);
+        const ratingHTML = rating > 0
+            ? '<span class="modal-meta-separator">•</span><span class="tmdb-rating-group"><span class="tmdb-rating-inline">' + rating.toFixed(1) + '</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>'
+            : "";
+
+        global.selectedShowId = showId;
+        if(global.activeShowDetailsTabs && typeof global.activeShowDetailsTabs === "object" && typeof global.getShowDetailActiveTab === "function"){
+            global.activeShowDetailsTabs[showId] = global.getShowDetailActiveTab(show);
+        }
+
+        return factory.freeze({
+            surface:"show",
+            showId,
+            title:String(show.title || show.name || "Untitled"),
+            backdropStyle:buildBackdrop(show),
+            poster:buildPoster(show),
+            meta:fragment("getShowMetaHTML",show,year,genres,ratingHTML),
+            externalLinks:fragment("renderV2ShowInfoLinksLineHTML",show),
+            actions:fragment("renderShowDetailActionControlsHTML",show,tracked),
+            tabs:fragment("renderShowDetailTabsHTML",show),
+            tabContent:fragment("renderShowDetailTabContentHTML",show),
+            similar:fragment("renderV2SimilarShowsHTML",show),
+            preview:!!(options && options.preview)
+        });
     }
 
     function attachInteractions(){
@@ -39,21 +112,43 @@
         }
     }
 
-    function renderLoading(){
+    function replaceWithStatus(title,message,failed){
         const root = showRoot();
-        if(!root){ return; }
-        if(typeof global.renderTrackerDetailSkeletonHTML === "function"){
-            root.innerHTML = global.renderTrackerDetailSkeletonHTML("show","show-page-back-button");
-            return;
+        if(!root || !global.document || typeof global.document.createElement !== "function") return;
+        root.replaceChildren();
+        const shell = global.document.createElement("div");
+        shell.className = "show-detail-page-inner";
+        if(failed){
+            shell.dataset.tvtrackerShowDetailsVueLoadFailed = "true";
+            shell.setAttribute("role","alert");
         }
-        root.innerHTML = '<div class="show-detail-page-inner"><div class="empty-state show-detail-loading-state"><h2>Loading show</h2><p>Getting details.</p></div></div>';
+        const back = global.document.createElement("button");
+        back.type = "button";
+        back.className = "show-page-back-button";
+        back.id = "show-page-back-button";
+        back.setAttribute("aria-label","Back");
+        const icon = global.document.createElement("img");
+        icon.src = "/static/assets/icons/arrow-narrow-left.svg";
+        icon.alt = "";
+        back.appendChild(icon);
+        const state = global.document.createElement("div");
+        state.className = "empty-state show-detail-loading-state";
+        const heading = global.document.createElement("h2");
+        heading.textContent = title;
+        const detail = global.document.createElement("p");
+        detail.textContent = message;
+        state.append(heading,detail);
+        shell.append(back,state);
+        root.appendChild(shell);
+    }
+
+    function renderLoading(){
+        replaceWithStatus("Loading show","Getting details.",false);
     }
 
     function renderLoadFailure(){
         if(vueOwner){ return; }
-        const root = showRoot();
-        if(!root){ return; }
-        root.innerHTML = '<div class="show-detail-page-inner" data-tvtracker-show-details-vue-load-failed="true" role="alert"><button type="button" class="show-page-back-button" id="show-page-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button><div class="empty-state show-detail-loading-state"><h2>Show details unavailable</h2><p>Reload the page to try again.</p></div></div>';
+        replaceWithStatus("Show details unavailable","Reload the page to try again.",true);
         attachInteractions();
     }
 
