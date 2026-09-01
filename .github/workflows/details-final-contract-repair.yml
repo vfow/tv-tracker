@@ -1,0 +1,50 @@
+name: Final Details contract repair
+
+on:
+  push:
+    branches:
+      - modernization/media-details-vue-native-composition
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: modernization/media-details-vue-native-composition
+      - name: Update remaining stale Details source contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_source_contracts.py')
+          text = path.read_text(encoding='utf-8')
+          replacements = {
+              "        error_template = self.read('templates/error.html')\n        self.assertIn('movie-page-hero-shell', ui)\n        self.assertIn('movie-page-identity-row', ui)\n        self.assertIn('modal-hero show-detail-hero show-page-hero movie-page-hero', ui)\n":
+              "        error_template = self.read('templates/error.html')\n        movie_details_component = self.read('frontend/src/media-details/MovieDetails.vue')\n        self.assertIn('movie-page-hero-shell', movie_details_component)\n        self.assertIn('movie-page-identity-row', movie_details_component)\n        self.assertIn('modal-hero show-detail-hero show-page-hero movie-page-hero', movie_details_component)\n",
+              "        self.assertIn('renderMovieDirectedByHTML(movie)', detail_block)\n":
+              "        self.assertIn('fragment(\"renderMovieDirectedByHTML\",movie)', detail_block)\n",
+              "        self.assertIn('renderMovieGenresHTML(movie)', detail_block)\n":
+              "        self.assertIn('callString(\"renderMovieGenresHTML\",movie)', detail_block)\n",
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match for {old!r}, found {count}')
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit repair
+        run: |
+          if git diff --quiet; then
+            echo "No repair needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_source_contracts.py
+          git commit -m "Align Details source contracts with Vue ownership"
+          git push origin HEAD:modernization/media-details-vue-native-composition
