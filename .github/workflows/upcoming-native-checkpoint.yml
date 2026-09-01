@@ -91,6 +91,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add static/js/ui.js static/js/app-router.js static/vue .github/workflows/upcoming-source-inspect.yml .github/workflows/upcoming-native-checkpoint.yml
+          git add -A
           git commit -m "Complete Upcoming Vue-native composition"
           git push origin HEAD:modernization/upcoming-vue-native-composition
