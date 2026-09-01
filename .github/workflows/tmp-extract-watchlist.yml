@@ -24,7 +24,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --audit=false
       - name: Apply Watchlist native composition patch
-        run: python .tmp/implement_watchlist_native.py
+        run: |
+          python .tmp/implement_watchlist_native.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tailwind.config.js')
+          text = path.read_text()
+          frontend = "    './frontend/**/*.{vue,ts}',\n"
+          if frontend not in text:
+              anchor = "    './static/js/**/*.js',\n"
+              if anchor not in text:
+                  raise SystemExit('Tailwind content anchor missing')
+              text = text.replace(anchor, anchor + frontend, 1)
+              path.write_text(text)
+          PY
       - name: Build committed frontend assets
         run: |
           npm run build:frontend
