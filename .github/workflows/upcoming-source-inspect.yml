@@ -19,6 +19,8 @@ jobs:
         with:
           name: upcoming-source-snapshot
           path: |
+            static/js/app.js
+            static/js/app-router.js
             static/js/ui.js
             static/js/notifications-runtime.js
             static/js/upcoming-notifications-vue-bridge.js
