@@ -11,17 +11,19 @@ const template = fs.readFileSync('templates/index.html','utf8');
 const architecture = fs.readFileSync('docs/architecture/FRONTEND_MODERNIZATION_HISTORY.md','utf8');
 
 assert(bridgeSource.includes('const manifestUrl = "/static/vue/manifest.json"'));
-assert(bridgeSource.includes('attachVueOwner(owner)'));
-assert(bridgeSource.includes('global.getHistoryViewModel'));
+assert(bridgeSource.includes('stateBridge.viewModel(visibleLimit)'));
+assert(bridgeSource.includes('visibleLimit += HISTORY_BATCH_SIZE'));
 assert(bridgeSource.includes('global.renderHistory = renderHistory'));
+assert(bridgeSource.includes('global.loadMoreHistory = loadMoreHistory'));
 assert(!bridgeSource.includes('legacyRenderHistory'));
 assert(!bridgeSource.includes('cloneNode(false)'));
 assert(!bridgeSource.includes('renderShowListHTML'));
-assert(activitySource.includes('function getHistoryViewModel()'));
-assert(activitySource.includes('function loadMoreHistory()'));
-assert(activitySource.includes('historyVisibleLimit += HISTORY_BATCH_SIZE'));
-assert(activitySource.includes('return globalThis.renderHistory()'));
-assert(!activitySource.includes('document.'),'History data shaping must not write DOM');
+assert(!/function\s+renderHistory\s*\(/.test(activitySource),'legacy History activity file must not own renderHistory');
+assert(!/function\s+loadMoreHistory\s*\(/.test(activitySource),'legacy History activity file must not own pagination');
+assert(!activitySource.includes('innerHTML'),'legacy History activity file must not compose DOM');
+assert(stateBridgeSource.includes('function viewModel('));
+assert(stateBridgeSource.includes('groupHistoryByDate'));
+assert(stateBridgeSource.includes('formatHistoryRelative'));
 assert(!stateBridgeSource.includes('document.'),'read-only History state bridge must remain DOM-free');
 assert(componentSource.includes('data-tvtracker-history-owner="vue-history"'));
 assert(componentSource.includes('class="history-load-more"'));
@@ -31,41 +33,30 @@ assert(mainSource.includes("import HistorySurface from './history/HistorySurface
 assert(mainSource.includes('TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner)'));
 
 (async()=>{
-    const model = Object.freeze({
-        surface:'history',
-        groups:Object.freeze([
-            Object.freeze({
-                key:'today',
-                label:'Today',
-                entries:Object.freeze([
-                    Object.freeze({
-                        key:'episode-42-1-2',
-                        kind:'episode',
-                        route:'/app/show/example/42/season/1/episode/2',
-                        title:'Example Show',
-                        detailLine:'S1E02 — Second',
-                        imageUrl:'https://image.tmdb.org/example.jpg',
-                        placeholder:'📺',
-                        relativeTime:'2h ago'
-                    })
-                ])
-            })
-        ]),
-        emptyState:null,
-        hasMore:true
-    });
-    let renderedModel = null;
-    let loadMoreCount = 0;
-    let reportCount = 0;
-
+    const root = {dataset:{tvtrackerTrackerListsOwner:'vue-watchlist'},innerHTML:''};
+    const limits = [];
+    const renderedModels = [];
     const window = {
-        getHistoryViewModel(){ return model; },
-        async loadMoreHistory(){
-            loadMoreCount += 1;
-            return true;
-        },
-        TVTrackerClientRuntime:{
-            report(){ reportCount += 1; }
+        document:{getElementById(id){ return id === 'show-list' ? root : null; }},
+        location:{pathname:'/not-history',origin:'http://localhost'},
+        TVTrackerHistoryStateBridge:{
+            ownership:'legacy-read-only',
+            viewModel(limit){
+                limits.push(limit);
+                return Object.freeze({
+                    surface:'history',
+                    groups:Object.freeze([Object.freeze({
+                        key:'today',
+                        label:'Today',
+                        entries:Object.freeze([Object.freeze({
+                            key:'episode-1',kind:'episode',route:'/app/tv/1/season/1/episode/1',title:'Show',
+                            detailLine:'S1E01 — Pilot',imageUrl:'',placeholder:'📺',relativeTime:'Now'
+                        })])
+                    })]),
+                    emptyState:null,
+                    hasMore:limit < 80
+                });
+            }
         }
     };
     const context = {window,console,Promise,Object,String,Number,Error,URL};
@@ -78,30 +69,35 @@ assert(mainSource.includes('TVTrackerHistoryVueBridge?.attachVueOwner(historyOwn
     assert.deepStrictEqual(Object.keys(bridge).sort(),['actions','attachVueOwner','ownership','renderHistory']);
 
     bridge.attachVueOwner({
-        render(value){ renderedModel = value; },
+        render(model){ renderedModels.push(model); },
         unmount(){}
     });
-    const rendered = await window.renderHistory();
-    assert.strictEqual(rendered,true);
-    assert.strictEqual(renderedModel,model,'Vue owner must receive structured History model unchanged');
-    assert.strictEqual(reportCount,0);
 
-    await bridge.actions.loadMore();
-    assert.strictEqual(loadMoreCount,1,'Vue Load More action must delegate to authoritative pagination action once');
+    assert.strictEqual(await window.renderHistory(),true);
+    assert.deepStrictEqual(limits,[40]);
+    assert.strictEqual(renderedModels.length,1);
+    assert.strictEqual(renderedModels[0].groups[0].entries[0].title,'Show');
+    assert.strictEqual(root.dataset.tvtrackerHistoryOwner,'vue-history');
+    assert.strictEqual(root.dataset.tvtrackerTrackerListsOwner,undefined);
+
+    assert.strictEqual(await bridge.actions.loadMore(),true);
+    assert.deepStrictEqual(limits,[40,80]);
+    assert.strictEqual(renderedModels.length,2);
+    assert.strictEqual(renderedModels[1].hasMore,false);
 
     const activityIndex = template.indexOf("filename='js/history-activity.js'");
     const stateIndex = template.indexOf("filename='js/history-state-bridge.js'");
     const vueIndex = template.indexOf("filename='js/history-vue-bridge.js'");
     const routerIndex = template.indexOf("filename='js/app-router.js'");
-    assert(activityIndex >= 0);
+    assert(activityIndex >= 0,'compatibility placeholder stays until the final file-removal sweep');
     assert(stateIndex > activityIndex);
-    assert(vueIndex > stateIndex,'Vue renderer bridge must load after History state/data shaping');
+    assert(vueIndex > stateIndex,'Vue renderer bridge must load after structured History state');
     assert(routerIndex > vueIndex,'History renderer must be installed before router/startup');
 
     assert(architecture.includes('`frontend/src/history/HistorySurface.vue` is the sole live History composition/DOM renderer'));
     assert(architecture.includes('No History runtime path stages or serializes legacy HTML'));
     assert(architecture.includes('`app-router.js` remains the sole browser History API owner'));
-    assert(architecture.includes('Watched/episode tracking remains separate domain ownership'));
+    assert(architecture.includes('`DATA.history` remains authoritative'));
 
     console.log('Frontend modernization History Vue-native renderer ownership checks passed.');
 })().catch(error=>{
