@@ -146,8 +146,9 @@ assert(appIndex >= 0, 'app.js must remain loaded');
 assert(bridgeIndex > appIndex, 'Tracker Lists bridge must load after authoritative legacy tracker state exists');
 assert(routerIndex > bridgeIndex, 'Tracker Lists bridge must load before routing/startup consumes state');
 
-assert(architecture.includes('Legacy `app.js` remains authoritative for tracker data'));
-assert(architecture.includes('`app-router.js` remains the sole History API owner'));
-assert(architecture.includes('The Tracker Lists state bridge is read-only'));
+assert(architecture.includes('`static/js/app.js` remains authoritative for `DATA.shows`, tracker mutations, durable save orchestration, list/filter state, and persistence semantics.'));
+assert(architecture.includes('`app-router.js` remains the sole History API owner.'));
+assert(architecture.includes('`static/js/tracker-lists-state-bridge.js` is a read-only boundary.'));
+assert(architecture.includes('legacy Watchlist HTML composition is no longer part of the runtime path.'));
 
 console.log('Frontend modernization Tracker Lists read-only state bridge checks passed.');
