@@ -48,6 +48,13 @@ jobs:
       - name: Build and verify committed Vue frontend
         run: |
           npm run build:frontend
+          echo 'BEGIN_GENERATED_VUE_MANIFEST'
+          cat static/vue/manifest.json
+          echo 'END_GENERATED_VUE_MANIFEST'
+          echo 'BEGIN_GENERATED_VUE_BUNDLE_BASE64'
+          base64 -w 0 static/vue/assets/main-*.js
+          echo
+          echo 'END_GENERATED_VUE_BUNDLE_BASE64'
           git diff --exit-code -- static/vue
       - name: Run full regression suite
         env:
