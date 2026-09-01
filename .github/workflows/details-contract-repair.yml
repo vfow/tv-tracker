@@ -1,0 +1,45 @@
+name: Details contract repair
+
+on:
+  push:
+    branches:
+      - modernization/media-details-vue-native-composition
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: modernization/media-details-vue-native-composition
+      - name: Update stale Movie Details ownership contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_source_contracts.py')
+          text = path.read_text(encoding='utf-8')
+          old = "        self.assertIn('renderMovieDetailPage', ui)\n"
+          new = (
+              "        movie_details_bridge = self.read('static/js/movie-details-vue-bridge.js')\n"
+              "        self.assertIn('global.renderMovieDetailPage = render;', movie_details_bridge)\n"
+              "        self.assertNotIn('function renderMovieDetailPage(', ui)\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one stale Movie Details assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+      - name: Commit repair
+        run: |
+          if git diff --quiet; then
+            echo "No repair needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_source_contracts.py
+          git commit -m "Update Movie Details ownership source contract"
+          git push origin HEAD:modernization/media-details-vue-native-composition
