@@ -28,33 +28,35 @@ async function loadMore(): Promise<void> {
       <p>{{ model.emptyState.text }}</p>
     </div>
 
-    <div v-for="group in model.groups" v-else :key="group.key" class="history-group">
-      <div class="history-group-title">{{ group.label }}</div>
+    <template v-else>
+      <div v-for="group in model.groups" :key="group.key" class="history-group">
+        <div class="history-group-title">{{ group.label }}</div>
 
-      <a
-        v-for="entry in group.entries"
-        :key="entry.key"
-        class="show history-entry-card"
-        :href="entry.route"
-      >
-        <img
-          v-if="entry.imageUrl"
-          class="history-still"
-          loading="lazy"
-          decoding="async"
-          :src="entry.imageUrl"
-          :alt="`${entry.title} artwork`"
+        <a
+          v-for="entry in group.entries"
+          :key="entry.key"
+          class="show history-entry-card"
+          :href="entry.route"
         >
-        <div v-else class="history-still-placeholder" aria-hidden="true">{{ entry.placeholder }}</div>
+          <img
+            v-if="entry.imageUrl"
+            class="history-still"
+            loading="lazy"
+            decoding="async"
+            :src="entry.imageUrl"
+            :alt="`${entry.title} artwork`"
+          >
+          <div v-else class="history-still-placeholder" aria-hidden="true">{{ entry.placeholder }}</div>
 
-        <div class="info">
-          <div class="title">{{ entry.title }}</div>
-          <div v-if="entry.detailLine" class="history-episode-line">{{ entry.detailLine }}</div>
-        </div>
+          <div class="info">
+            <div class="title">{{ entry.title }}</div>
+            <div v-if="entry.detailLine" class="history-episode-line">{{ entry.detailLine }}</div>
+          </div>
 
-        <div class="history-time">{{ entry.relativeTime }}</div>
-      </a>
-    </div>
+          <div class="history-time">{{ entry.relativeTime }}</div>
+        </a>
+      </div>
+    </template>
 
     <button
       v-if="model.hasMore"
