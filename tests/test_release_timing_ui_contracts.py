@@ -10,6 +10,7 @@ class ReleaseTimingUIContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.app = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
         cls.ui = (ROOT / "static/js/ui.js").read_text(encoding="utf-8")
+        cls.tracker_lists = (ROOT / "static/js/tracker-lists-state-bridge.js").read_text(encoding="utf-8")
         cls.release = (ROOT / "static/js/release-timing.js").read_text(encoding="utf-8")
         cls.routes = (ROOT / "tvtracker/release_timing/routes.py").read_text(encoding="utf-8")
         cls.resolver = (ROOT / "tvtracker/release_timing/service.py").read_text(encoding="utf-8")
@@ -26,12 +27,13 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         self.assertIn("isEpisodeAired(airDate,timingEpisode,showInfo)", self.app)
 
     def test_watching_has_no_future_release_metadata(self):
-        self.assertNotIn("const releaseMeta = nextEpisodeFuture", self.ui)
-        self.assertNotIn("watchlist-release-meta", self.ui)
+        combined_watchlist = "\n".join((self.ui, self.tracker_lists))
+        self.assertNotIn("const releaseMeta = nextEpisodeFuture", combined_watchlist)
+        self.assertNotIn("watchlist-release-meta", combined_watchlist)
         self.assertIn("if(!isEpisodeLoggable(ep,show,season))", self.app)
         self.assertNotIn("const canonicalDayDifference = getDayDiffFromToday(ep.air_date,ep,show);", self.app)
         self.assertIn("const canLog = isEpisodeLoggable(ep,show,ep.season_number);", self.ui)
-        self.assertIn("isEpisodeLoggable(nextEp,show,nextEp.season)", self.ui)
+        self.assertIn("global.isEpisodeLoggable(nextEp,show,nextEp.season)", self.tracker_lists)
 
     def test_show_and_episode_surfaces_pass_show_identity_to_timing(self):
         self.assertIn("formatAirDate(ep.air_date,ep,show)", self.ui)
