@@ -47,6 +47,59 @@ export interface TrackerListsState {
   readonly favoriteMovieIds: readonly string[];
 }
 
+export type TrackerListActionKind = "mark" | "watching";
+
+export interface TrackerListActionViewModel {
+  readonly kind: TrackerListActionKind;
+  readonly label: string;
+  readonly disabled: boolean;
+}
+
+export interface TrackerListCardViewModel {
+  readonly id: string;
+  readonly filter: TrackerListFilter;
+  readonly title: string;
+  readonly route: string;
+  readonly posterUrl: string;
+  readonly posterFallback: string;
+  readonly episodeText: string;
+  readonly completed: boolean;
+  readonly episodeTitle: string;
+  readonly newBadge: boolean;
+  readonly action: TrackerListActionViewModel | null;
+}
+
+export interface TrackerListEmptyViewModel {
+  readonly title: string;
+  readonly text: string;
+}
+
+export interface TrackerListsViewModel {
+  readonly surface: "watchlist";
+  readonly activeFilter: TrackerListFilter;
+  readonly routeSlug: TrackerListRouteSlug;
+  readonly query: string;
+  readonly items: readonly TrackerListCardViewModel[];
+  readonly emptyState: TrackerListEmptyViewModel | null;
+}
+
+export interface TrackerListsRendererActions {
+  perform(kind: TrackerListActionKind, showId: string, target: HTMLElement | null): Promise<void>;
+}
+
+export interface TrackerListsVueOwner {
+  render(model: TrackerListsViewModel): void;
+  unmount(): void;
+}
+
+export interface TrackerListsVueBridge {
+  readonly ownership: "vue-dom";
+  readonly actions: TrackerListsRendererActions;
+  attachVueOwner(owner: TrackerListsVueOwner): void;
+  renderWatchlist(): Promise<boolean>;
+  refreshWatchlistShows(showIds?: readonly string[]): Promise<boolean>;
+}
+
 export const TRACKER_LIST_FILTERS = Object.freeze<readonly TrackerListFilter[]>([
   "watching",
   "paused",
