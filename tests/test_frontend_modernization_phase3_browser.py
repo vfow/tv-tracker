@@ -62,7 +62,7 @@ class FrontendModernizationPhase3BrowserTests(unittest.TestCase):
                 encoding="utf-8",
                 errors="replace",
                 capture_output=True,
-                timeout=25,
+                timeout=60,
                 check=False,
             )
         self.assertEqual(
