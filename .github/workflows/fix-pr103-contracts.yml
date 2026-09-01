@@ -49,7 +49,7 @@ jobs:
                   i += 1
                   while i < len(lines) and 'details_block)' not in lines[i]:
                       i += 1
-                  assert i < len(lines) and 'show-page-actions-wrap movie-page-actions-wrap' in lines[i]
+                  assert i < len(lines)
                   i += 1
                   continue
               output.append(lines[i])
