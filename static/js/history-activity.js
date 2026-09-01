@@ -85,138 +85,84 @@ function getMovieHistoryDisplayData(entry){
 }
 
 
-function loadMoreHistory(){
-
-    historyVisibleLimit += HISTORY_BATCH_SIZE;
-    return globalThis.renderHistory();
-
-}
-
-
-function renderHistory(){
-
-    const list = document.getElementById("show-list");
-
-    list.innerHTML = "";
+function getHistoryViewModel(){
 
     const allHistoryEntries = getActivityHistoryEntries();
 
     if(allHistoryEntries.length === 0){
-
-        list.innerHTML = `
-            <div class="empty-state">
-                <h2>No watch history</h2>
-                <p>Watched episodes and movies will appear here.</p>
-            </div>
-        `;
-
-        return;
-
+        return {
+            surface:"history",
+            groups:[],
+            emptyState:{
+                title:"No watch history",
+                text:"Watched episodes and movies will appear here."
+            },
+            hasMore:false
+        };
     }
 
     const historyEntries = allHistoryEntries.slice(0,historyVisibleLimit);
-    const groups = groupHistoryByDate(historyEntries);
-    const fragment = document.createDocumentFragment();
-
-    groups.forEach(group=>{
-
-        const groupBox = document.createElement("div");
-        groupBox.className = "history-group";
-
-        groupBox.innerHTML = `
-            <div class="history-group-title">
-                ${escapeHTML(group.label)}
-            </div>
-        `;
-
-        group.entries.forEach(entry=>{
-
+    const groups = groupHistoryByDate(historyEntries).map((group,groupIndex)=>({
+        key:`history-group-${groupIndex}-${String(group.label || "")}`,
+        label:String(group.label || ""),
+        entries:group.entries.map((entry,entryIndex)=>{
             const movieEntry = isMovieHistoryEntry(entry);
-            const card = document.createElement("a");
-            card.className = "show history-entry-card";
-
-            let stillPath = "";
+            let route = "/app/history";
             let title = "";
             let detailLine = "";
+            let imagePath = "";
             let placeholder = "📺";
+            let identity = "";
 
             if(movieEntry){
-
                 const movie = getMovieHistoryDisplayData(entry);
-                stillPath = movie.backdropPath;
                 title = movie.title;
-                detailLine = movie.year ? escapeHTML(movie.year) : "";
+                detailLine = movie.year || "";
+                imagePath = movie.backdropPath;
                 placeholder = "🎬";
-                card.href = typeof getMovieDetailRoute === "function"
+                identity = `movie-${movie.id}`;
+                route = typeof getMovieDetailRoute === "function"
                 ? getMovieDetailRoute(movie.id,movie.title)
-                : "/app/history";
-
+                : route;
             }else{
-
                 const show = DATA.shows[String(entry.tmdb_id)] || {};
                 const episodeData = getEpisodeData(show,entry.season,entry.episode);
-                const episodeTitle =
-                entry.episode_title ||
-                episodeData.name ||
-                "Untitled Episode";
-
-                stillPath =
-                entry.episode_still_path ||
-                episodeData.still_path ||
-                "";
+                const episodeTitle = entry.episode_title || episodeData.name || "Untitled Episode";
+                imagePath = entry.episode_still_path || episodeData.still_path || "";
                 title = entry.title || show.title || "Unknown Show";
-                detailLine = `S${entry.season}E${String(entry.episode).padStart(2,"0")} — ${escapeHTML(episodeTitle)}`;
-                card.href = typeof getEpisodeDetailRoute === "function"
+                detailLine = `S${entry.season}E${String(entry.episode).padStart(2,"0")} — ${episodeTitle}`;
+                identity = `episode-${entry.tmdb_id}-${entry.season}-${entry.episode}`;
+                route = typeof getEpisodeDetailRoute === "function"
                 ? getEpisodeDetailRoute(entry.tmdb_id,entry.season,entry.episode)
-                : "/app/history";
-
+                : route;
             }
 
-            const imageHTML = stillPath
-            ? `<img class="history-still" loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(stillPath,"w780"))}">`
-            : `<div class="history-still-placeholder">${placeholder}</div>`;
+            return {
+                key:`${identity}-${String(entry.watched_at || "")}-${entryIndex}`,
+                kind:movieEntry ? "movie" : "episode",
+                route,
+                title:String(title || ""),
+                detailLine:String(detailLine || ""),
+                imageUrl:imagePath ? trackerImageURL(imagePath,"w780") : "",
+                placeholder,
+                relativeTime:formatHistoryRelative(entry.watched_at)
+            };
+        })
+    }));
 
-            card.innerHTML = `
+    return {
+        surface:"history",
+        groups,
+        emptyState:null,
+        hasMore:allHistoryEntries.length > historyEntries.length
+    };
 
-                ${imageHTML}
+}
 
-                <div class="info">
 
-                    <div class="title">
-                        ${escapeHTML(title)}
-                    </div>
+function loadMoreHistory(){
 
-                    ${detailLine ? `<div class="history-episode-line">${detailLine}</div>` : ""}
-
-                </div>
-
-                <div class="history-time">
-                    ${formatHistoryRelative(entry.watched_at)}
-                </div>
-
-            `;
-
-            groupBox.appendChild(card);
-
-        });
-
-        fragment.appendChild(groupBox);
-
-    });
-
-    list.appendChild(fragment);
-
-    if(allHistoryEntries.length > historyEntries.length){
-
-        const moreButton = document.createElement("button");
-        moreButton.className = "history-load-more";
-        moreButton.type = "button";
-        moreButton.textContent = "Load More";
-
-        moreButton.addEventListener("click",loadMoreHistory);
-
-        list.appendChild(moreButton);
-
-    }
+    historyVisibleLimit += HISTORY_BATCH_SIZE;
+    return globalThis.renderHistory();
 
 }
