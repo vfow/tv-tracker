@@ -1,0 +1,153 @@
+===== getWatchlistPosterFallback =====
+function getWatchlistPosterFallback(show){
+
+    const words = String(show.title || show.name || "TV")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0,2);
+
+    const initials = words
+    .map(word=>word.charAt(0))
+    .join("")
+    .toUpperCase();
+
+    return initials || "TV";
+
+}
+
+===== getWatchlistActionConfig =====
+function getWatchlistActionConfig(show,displayFilter,nextEp){
+
+    const title = show.title || "show";
+
+    if(displayFilter === "finished"){
+        return null;
+    }
+
+    if(
+        displayFilter === "paused" ||
+        displayFilter === "plan" ||
+        displayFilter === "dropped"
+    ){
+        return {
+            action:"watching",
+            label:`Change ${title} to Watching`,
+            disabled:false
+        };
+    }
+
+    if(!nextEp){
+        return null;
+    }
+
+    const isAvailable = Boolean(
+        nextEp.air_date &&
+        isEpisodeLoggable(nextEp,show,nextEp.season)
+    );
+
+    const releaseDate = nextEp.air_date
+    ? formatAirDate(nextEp.air_date,nextEp,show)
+    : "";
+
+    return {
+        action:"mark",
+        label:isAvailable
+        ? `Mark ${title} Season ${nextEp.season}, Episode ${nextEp.episode} watched`
+        : releaseDate
+        ? `${title} Season ${nextEp.season}, Episode ${nextEp.episode} is available ${releaseDate}`
+        : `${title} episode release date is unavailable`,
+        disabled:!isAvailable
+    };
+
+}
+
+===== createWatchlistCard =====
+function createWatchlistCard(show,options={}
+
+===== getWatchlistShowsForCurrentView =====
+function getWatchlistShowsForCurrentView(){
+    const query = getLibrarySearchQuery();
+    let shows = Object.values(DATA.shows || {})
+    .filter(show=>filterShow(show))
+    .filter(show=>libraryShowMatchesAdvancedFilters(show));
+
+    if(query){
+        shows = shows.filter(show=>libraryShowMatchesSearch(show,query));
+    }
+
+    shows = sortLibraryShows(shows,query);
+
+    return {shows,query};
+}
+
+===== renderWatchlist =====
+function renderWatchlist(){
+    renderLibrarySearchControl();
+
+    const list = document.getElementById("show-list");
+    list.innerHTML = "";
+
+    const view = getWatchlistShowsForCurrentView();
+    const shows = view.shows;
+    const query = view.query;
+
+    if(shows.length === 0){
+        const empty = document.createElement("div");
+        empty.innerHTML = query ? getLibrarySearchEmptyHTML(query) : getWatchlistEmptyHTML();
+        list.appendChild(empty.firstElementChild);
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    shows.forEach(show=>fragment.appendChild(createWatchlistCard(show)));
+    list.appendChild(fragment);
+}
+
+===== refreshWatchlistShows =====
+function refreshWatchlistShows(showIds){
+    if(
+        activePage !== "shows" ||
+        activeShowsTab !== "watchlist"
+    ){
+        return;
+    }
+
+    const list = document.getElementById("show-list");
+
+    if(!list){
+        return;
+    }
+
+    renderLibrarySearchControl();
+
+    const view = getWatchlistShowsForCurrentView();
+    const shows = view.shows;
+    const dirtyIds = new Set((showIds || []).map(String));
+
+    if(shows.length === 0){
+        renderWatchlist();
+        return;
+    }
+
+    const existingCards = new Map();
+    list.querySelectorAll(".watchlist-card[data-show-id]").forEach(card=>{
+        existingCards.set(String(card.dataset.showId),card);
+    });
+
+    const fragment = document.createDocumentFragment();
+
+    shows.forEach(show=>{
+        const id = String(show.tmdb_id || show.id || "");
+        let card = existingCards.get(id) || null;
+
+        if(!card || dirtyIds.has(id)){
+            card = createWatchlistCard(show);
+        }
+
+        fragment.appendChild(card);
+        existingCards.delete(id);
+    });
+
+    list.replaceChildren(fragment);
+}
