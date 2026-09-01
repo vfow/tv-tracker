@@ -18,33 +18,186 @@
             : {movieId:"",routeSlug:"",loading:false,error:"",movie:null};
     }
 
+    function nodeModel(){
+        const model = global.TVTrackerMediaDetailsNodeModel;
+        if(!model || model.ownership !== "typed-node-model" || typeof model.fragment !== "function"){
+            throw new Error("Media Details typed node model unavailable");
+        }
+        return model;
+    }
+
+    function callString(name,...args){
+        const fn = global[name];
+        return typeof fn === "function" ? String(fn(...args) || "") : "";
+    }
+
+    function fragment(name,...args){
+        const factory = nodeModel();
+        const fn = global[name];
+        return typeof fn === "function" ? factory.fragment(fn(...args)) : Object.freeze([]);
+    }
+
+    function imageURL(path,size){
+        return callString("trackerImageURL",path,size);
+    }
+
+    function buildPoster(movie){
+        const factory = nodeModel();
+        if(movie && movie.poster_path){
+            const src = imageURL(movie.poster_path,"w500");
+            if(src){
+                return Object.freeze([
+                    factory.element("img",{src,alt:String(movie.title || "Movie") + " poster"},[])
+                ]);
+            }
+        }
+        return fragment("renderPosterTitlePlaceholderHTML",movie,"movie");
+    }
+
+    function buildBackdrop(movie){
+        if(movie && movie.backdrop_path){
+            const background = callString("trackerBackgroundImage",movie.backdrop_path,"original");
+            if(background){
+                return "linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), " + background;
+            }
+        }
+        return "linear-gradient(to top, #080808 0%, #141414 100%)";
+    }
+
+    function separatorNode(){
+        const factory = nodeModel();
+        return factory.element("span",{class:"modal-meta-separator"},[factory.text("•")]);
+    }
+
+    function ratingNodes(rating){
+        const factory = nodeModel();
+        if(!(rating > 0)){
+            return Object.freeze([factory.element("span",{},[factory.text("Unknown")])]);
+        }
+        return Object.freeze([
+            factory.element("span",{class:"tmdb-rating-group"},[
+                factory.element("span",{class:"tmdb-rating-inline"},[factory.text(rating.toFixed(1))]),
+                factory.element("span",{class:"tmdb-rating-slash"},[factory.text("/")]),
+                factory.element("span",{class:"tmdb-rating-ten"},[factory.text("10")])
+            ])
+        ]);
+    }
+
+    function buildMeta(movie){
+        const factory = nodeModel();
+        const items = [];
+        const add = function(nodes){
+            const clean = Array.isArray(nodes) ? nodes.filter(Boolean) : [];
+            if(!clean.length) return;
+            if(items.length) items.push(separatorNode());
+            clean.forEach(node=>items.push(node));
+        };
+        const unknown = ()=>Object.freeze([factory.element("span",{},[factory.text("Unknown")])]);
+        const certification = typeof global.getMovieCertification === "function"
+            ? String(global.getMovieCertification(movie) || "")
+            : "";
+        const rating = Number(movie && movie.vote_average || 0);
+
+        add(movie && movie.year ? fragment("renderYearLinkHTML",movie.year,"movie") : unknown());
+        add(certification ? fragment("renderCertificationLinkHTML","movie",certification) : unknown());
+        add(movie && movie.runtime ? fragment("renderRuntimeDetailLinkHTML",movie.runtime,"movie") : unknown());
+
+        const directedBy = fragment("renderMovieDirectedByHTML",movie);
+        if(directedBy.length) add(directedBy);
+        const genresHTML = callString("renderMovieGenresHTML",movie);
+        if(genresHTML && genresHTML.trim() !== "Unknown"){
+            add(factory.fragment(genresHTML));
+        }
+        const adult = fragment("renderAdultMovieBadgeHTML",movie,"movie");
+        if(adult.length) add(adult);
+        add(ratingNodes(rating));
+
+        return Object.freeze(items);
+    }
+
     function buildViewModel(state){
         const pageState = state && typeof state === "object" ? state : currentState();
-        const renderHTML = global.renderMovieDetailPageHTML;
-        if(typeof renderHTML !== "function"){
-            throw new Error("Movie Details HTML renderer unavailable");
+        const movie = pageState.movie && typeof pageState.movie === "object" ? pageState.movie : null;
+        const factory = nodeModel();
+
+        if(!movie){
+            return factory.freeze({
+                surface:"movie",
+                state:pageState.loading ? "loading" : "error",
+                title:"",
+                message:String(pageState.error || "Getting details."),
+                backdropStyle:"",
+                poster:Object.freeze([]),
+                meta:Object.freeze([]),
+                externalLinks:Object.freeze([]),
+                actions:Object.freeze([]),
+                tabs:Object.freeze([]),
+                tabContent:Object.freeze([])
+            });
         }
-        return Object.freeze({html:String(renderHTML(pageState) || "")});
+
+        return factory.freeze({
+            surface:"movie",
+            state:"ready",
+            title:String(movie.title || "Untitled"),
+            message:"",
+            backdropStyle:buildBackdrop(movie),
+            poster:buildPoster(movie),
+            meta:buildMeta(movie),
+            externalLinks:fragment("renderMovieExternalLinksHTML",movie),
+            actions:fragment("renderMovieActionButtonsHTML",movie),
+            tabs:fragment("renderMovieTabsHTML"),
+            tabContent:fragment("renderMovieActiveTabContentHTML",movie)
+        });
+    }
+
+    function attachInteractions(){
+        if(typeof global.attachMovieDetailPageEvents === "function"){
+            global.attachMovieDetailPageEvents();
+        }
+        if(typeof global.updateShellTitle === "function"){
+            global.updateShellTitle();
+        }
+    }
+
+    function replaceWithStatus(title,message,failed){
+        const root = movieRoot();
+        if(!root || !global.document || typeof global.document.createElement !== "function") return;
+        root.replaceChildren();
+        const shell = global.document.createElement("div");
+        shell.className = "show-detail-page-inner";
+        if(failed){
+            shell.dataset.tvtrackerMovieDetailsVueLoadFailed = "true";
+            shell.setAttribute("role","alert");
+        }
+        const back = global.document.createElement("button");
+        back.type = "button";
+        back.className = "show-page-back-button";
+        back.id = "movie-page-back-button";
+        back.setAttribute("aria-label","Back");
+        const icon = global.document.createElement("img");
+        icon.src = "/static/assets/icons/arrow-narrow-left.svg";
+        icon.alt = "";
+        back.appendChild(icon);
+        const status = global.document.createElement("div");
+        status.className = "empty-state show-detail-loading-state";
+        const heading = global.document.createElement("h2");
+        heading.textContent = title;
+        const detail = global.document.createElement("p");
+        detail.textContent = message;
+        status.append(heading,detail);
+        shell.append(back,status);
+        root.appendChild(shell);
     }
 
     function renderLoading(){
-        const root = movieRoot();
-        if(!root){ return; }
-        if(typeof global.renderTrackerDetailSkeletonHTML === "function"){
-            root.innerHTML = global.renderTrackerDetailSkeletonHTML("movie","movie-page-back-button");
-            return;
-        }
-        root.innerHTML = '<div class="show-detail-page-inner"><div class="empty-state show-detail-loading-state"><h2>Loading movie</h2><p>Getting details.</p></div></div>';
+        replaceWithStatus("Loading movie","Getting details.",false);
     }
 
     function renderLoadFailure(){
         if(vueOwner){ return; }
-        const root = movieRoot();
-        if(!root){ return; }
-        root.innerHTML = '<div class="show-detail-page-inner" data-tvtracker-movie-details-vue-load-failed="true" role="alert"><button type="button" class="show-page-back-button" id="movie-page-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button><div class="empty-state show-detail-loading-state"><h2>Movie details unavailable</h2><p>Reload the page to try again.</p></div></div>';
-        if(typeof global.attachMovieDetailPageEvents === "function"){
-            global.attachMovieDetailPageEvents();
-        }
+        replaceWithStatus("Movie details unavailable","Reload the page to try again.",true);
+        attachInteractions();
     }
 
     function reportLoadFailure(){
@@ -94,6 +247,7 @@
         }
         if(vueOwner){
             vueOwner.render(lastModel);
+            attachInteractions();
             return;
         }
         renderLoading();
@@ -107,12 +261,7 @@
         vueOwner = owner;
         if(lastModel){
             vueOwner.render(lastModel);
-            if(typeof global.attachMovieDetailPageEvents === "function"){
-                global.attachMovieDetailPageEvents();
-            }
-            if(typeof global.updateShellTitle === "function"){
-                global.updateShellTitle();
-            }
+            attachInteractions();
         }
     }
 

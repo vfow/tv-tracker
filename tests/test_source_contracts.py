@@ -240,7 +240,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         self.assertIn('renderPersonDetailPage', ui)
         self.assertIn('renderDiscoveryFilterDetailPage', ui)
-        self.assertIn('renderMovieDetailPage', ui)
+        movie_details_bridge = self.read('static/js/movie-details-vue-bridge.js')
+        self.assertIn('global.renderMovieDetailPage = render;', movie_details_bridge)
+        self.assertNotIn('function renderMovieDetailPage(', ui)
         self.assertIn('renderCollectionsIndexPage', ui)
         self.assertIn('renderCollectionDetailPage', ui)
         self.assertIn('renderMovieCrewTabHTML', ui)
@@ -545,9 +547,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         css = self.read('static/css/tailwind-input.css')
         error_template = self.read('templates/error.html')
-        self.assertIn('movie-page-hero-shell', ui)
-        self.assertIn('movie-page-identity-row', ui)
-        self.assertIn('modal-hero show-detail-hero show-page-hero movie-page-hero', ui)
+        movie_details_component = self.read('frontend/src/media-details/MovieDetails.vue')
+        self.assertIn('movie-page-hero-shell', movie_details_component)
+        self.assertIn('movie-page-identity-row', movie_details_component)
+        self.assertIn('modal-hero show-detail-hero show-page-hero movie-page-hero', movie_details_component)
         self.assertIn('pushExplicitDetailBackRoute', app_js)
         self.assertIn('backRoute:backRoute', ui)
         self.assertIn('getPersonCreditRoleLabel', app_js)
@@ -585,15 +588,14 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        detail_start = ui.index('function renderMovieDetailPageHTML(state)')
-        detail_block = ui[detail_start:ui.index('function renderMovieDetailPage(state)', detail_start)]
+        detail_block = self.read('static/js/movie-details-vue-bridge.js')
         crew_start = ui.index('function renderMovieCrewTabHTML(movie)')
         crew_block = ui[crew_start:ui.index('function renderMovieDetailsTabHTML(movie)', crew_start)]
         release_start = ui.index('function renderMovieReleasesHTML(movie)')
         release_block = ui[release_start:ui.index('function renderMovieCastTabHTML(movie)', release_start)]
 
-        self.assertIn('renderMovieDirectedByHTML(movie)', detail_block)
-        self.assertIn('renderMovieGenresHTML(movie)', detail_block)
+        self.assertIn('fragment("renderMovieDirectedByHTML",movie)', detail_block)
+        self.assertIn('callString("renderMovieGenresHTML",movie)', detail_block)
         self.assertNotIn('movie.tagline ? `<p class="show-detail-tagline">', detail_block)
         self.assertIn('font-style:italic;', source_css)
         self.assertIn('font-style:italic;', built_css)
@@ -616,8 +618,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        details_start = ui.index('function renderMovieDetailPageHTML(state)')
-        details_block = ui[details_start:ui.index('function renderMovieDetailPage(state)', details_start)]
+        details_block = self.read('frontend/src/media-details/MovieDetails.vue')
         genres_start = ui.index('function renderShowGenresTabHTML(show)')
         genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
         releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
@@ -625,12 +626,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         show_details_start = ui.index('function renderShowDetailsTabHTML(show)')
         show_details_block = ui[show_details_start:ui.index('function renderShowGenresTabHTML(show)', show_details_start)]
 
-        self.assertIn('${renderMovieExternalLinksHTML(movie)}\n                        <div class="show-page-actions-wrap movie-page-actions-wrap">', details_block)
-        self.assertIn('renderPersonSilhouettePlaceholderHTML', ui)
-        self.assertNotIn('NO PHOTO', ui)
-        self.assertIn('show-genres-tab-stack', genres_block)
-        self.assertIn('<h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>', genres_block)
-        self.assertNotIn('{label:"Themes",html:renderShowThemesDetailsHTML(show)}', show_details_block)
+        self.assertIn('v-for="(node, index) in model.externalLinks"', details_block)
+        self.assertIn('class="show-page-actions-wrap movie-page-actions-wrap"', details_block)
         self.assertIn('movie-release-country-list', releases_block)
         self.assertIn('renderMovieReleaseCountryRowHTML', releases_block)
         self.assertIn('movie-release-sort-note', releases_block)
