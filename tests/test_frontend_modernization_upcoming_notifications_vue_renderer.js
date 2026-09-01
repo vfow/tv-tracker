@@ -49,7 +49,7 @@ assert(!bridge.includes('addEventListener("popstate"'));
 
 assert(!ui.includes('async function renderUpcoming(startBackgroundRefresh=true)'));
 assert(!ui.includes('function renderUpcomingBatchEpisodesHTML(show,episodes)'));
-assert(!ui.includes('function renderUpcomingSkeletonHTML()'));
+assert(ui.includes('function renderUpcomingSkeletonHTML()'));
 assert(notifications.includes('async function renderNotificationsPage()'));
 assert(notifications.includes('mountUpcomingBell'));
 assert(router.includes('if(path === "/app/upcoming")'));
