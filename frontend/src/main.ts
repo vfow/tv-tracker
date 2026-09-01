@@ -2,6 +2,8 @@ import { createApp, type App as VueApp } from 'vue';
 
 import EpisodeTrackingController from './episode-tracking/EpisodeTrackingController.vue';
 import FoundationProbe from './FoundationProbe.vue';
+import HistorySurface from './history/HistorySurface.vue';
+import type { HistoryVueBridge, HistoryVueOwner, HistoryViewModel } from './history/contracts';
 import MovieDetails from './media-details/MovieDetails.vue';
 import type { MovieDetailsVueBridge, MovieDetailsVueOwner, MovieDetailsViewModel } from './media-details/movieViewModel';
 import ShowDetails from './media-details/ShowDetails.vue';
@@ -80,6 +82,7 @@ declare global {
     TVTrackerSettingsBridge?: SettingsBridge;
     TVTrackerSearchVueBridge?: SearchBridge;
     TVTrackerDiscoverVueBridge?: DiscoverBridge;
+    TVTrackerHistoryVueBridge?: HistoryVueBridge;
     TVTrackerTrackerListsVueBridge?: TrackerListsVueBridge;
     TVTrackerMovieDetailsVueBridge?: MovieDetailsVueBridge;
     TVTrackerShowDetailsVueBridge?: ShowDetailsVueBridge;
@@ -104,6 +107,8 @@ let notificationsApp: VueApp<Element> | null = null;
 let notificationsRoot: Element | null = null;
 let trackerListsApp: VueApp<Element> | null = null;
 let trackerListsRoot: Element | null = null;
+let historyApp: VueApp<Element> | null = null;
+let historyRoot: Element | null = null;
 let episodeTrackingControllerApp: VueApp<Element> | null = null;
 
 function mountEpisodeTrackingController(): void {
@@ -151,6 +156,12 @@ function unmountTrackerLists(): void {
   if (trackerListsApp) trackerListsApp.unmount();
   trackerListsApp = null;
   trackerListsRoot = null;
+}
+
+function unmountHistory(): void {
+  if (historyApp) historyApp.unmount();
+  historyApp = null;
+  historyRoot = null;
 }
 
 function unmountUpcomingNotifications(surface?: UpcomingNotificationsSurfaceName): void {
@@ -276,6 +287,7 @@ const trackerListsOwner: TrackerListsVueOwner = Object.freeze({
     const root = document.getElementById('show-list');
     const bridge = window.TVTrackerTrackerListsVueBridge;
     if (!root || !bridge) return;
+    unmountHistory();
     unmountUpcomingNotifications('upcoming');
     unmountTrackerLists();
     root.replaceChildren();
@@ -287,12 +299,33 @@ const trackerListsOwner: TrackerListsVueOwner = Object.freeze({
   unmount: unmountTrackerLists
 });
 
+const historyOwner: HistoryVueOwner = Object.freeze({
+  render(model: HistoryViewModel): void {
+    const root = document.getElementById('show-list');
+    const bridge = window.TVTrackerHistoryVueBridge;
+    if (!root || !bridge) return;
+    unmountTrackerLists();
+    unmountUpcomingNotifications('upcoming');
+    unmountHistory();
+    root.replaceChildren();
+    historyRoot = root;
+    historyApp = createApp(HistorySurface, { model, actions: bridge.actions });
+    historyApp.mount(root);
+    root.setAttribute('data-tvtracker-history-owner', 'vue-history');
+    root.removeAttribute('data-tvtracker-tracker-lists-owner');
+  },
+  unmount: unmountHistory
+});
+
 const upcomingNotificationsOwner: UpcomingNotificationsVueOwner = Object.freeze({
   render(model: UpcomingNotificationsViewModel): void {
     const rootId = model.surface === 'upcoming' ? 'show-list' : 'notifications-content';
     const root = document.getElementById(rootId);
     if (!root) return;
-    if (model.surface === 'upcoming') unmountTrackerLists();
+    if (model.surface === 'upcoming') {
+      unmountHistory();
+      unmountTrackerLists();
+    }
     unmountUpcomingNotifications(model.surface);
     root.replaceChildren();
     const app = createApp(UpcomingNotificationsSurface, { model });
@@ -317,6 +350,7 @@ mountEpisodeTrackingController();
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
+window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);
 window.TVTrackerShowDetailsVueBridge?.attachVueOwner(showDetailsOwner);
