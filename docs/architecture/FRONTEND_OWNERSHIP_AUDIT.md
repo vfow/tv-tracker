@@ -4,7 +4,7 @@
 
 This audit records the current post-migration frontend ownership model after Watchlist native composition and the History native-composition replacement. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of legacy services that Vue still consumes through bridges.
 
-Search duplicate renderer ownership is already removed. Watchlist no longer stages legacy HTML. This History slice removes the equivalent History staging/composer dependency while preserving tracker truth, pagination state, routing, and durable-write ownership.
+Search duplicate renderer ownership is already removed. Watchlist no longer stages legacy HTML. This History slice removes the equivalent History staging/composer dependency while preserving tracker truth, routing, and durable-write ownership.
 
 ## Ownership rules
 
@@ -25,7 +25,7 @@ Search duplicate renderer ownership is already removed. Watchlist no longer stag
 | Discover hub | legacy Discover renderer/stability gate | current Discover state/provider services | RETAIN — migration/removal not yet proven complete |
 | Watchlist / tracker lists | Vue-native `TrackerListsSurface.vue` | `app.js` tracker state/mutations/save orchestration plus read-only filter/progress helpers | PASS — structured view model replaces detached legacy HTML composition |
 | Upcoming / notifications | Vue final live owner | legacy Upcoming/notification composition plus canonical timing/notification services | RETAIN — `upcoming-notifications-vue-bridge.js` still invokes the legacy composers before Vue takes final DOM ownership |
-| History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | History truth plus pure grouping/pagination/data-shaping helpers | PASS — no detached HTML staging or legacy DOM composer remains |
+| History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | `DATA.history` truth plus DOM-free state/view-model helpers | PASS — no detached HTML staging, legacy DOM composer, or legacy pagination action remains |
 | Show details | Vue final live owner through `show-details-vue-bridge.js` | `renderShowDetailsPageHTML`, detail events, tracker/provider services | RETAIN COMPOSER — bridge still consumes the legacy HTML composer |
 | Movie details | Vue final live owner through `movie-details-vue-bridge.js` | `renderMovieDetailPageHTML`, detail events, provider services | RETAIN COMPOSER — bridge still consumes the legacy HTML composer |
 | Episode tracking | Vue interaction owner | authoritative watched/history mutation and durable save semantics | RETAIN SERVICES — not dead-code cleanup |
@@ -33,9 +33,11 @@ Search duplicate renderer ownership is already removed. Watchlist no longer stag
 
 ## History ownership conclusion
 
-`static/js/history-activity.js` now performs pure History data shaping and pagination calculations only. It no longer creates, mutates, or queries DOM. `static/js/history-vue-bridge.js` no longer captures the old renderer, clones a staging root, or serializes HTML. Instead it lazy-loads the existing Vue entry and hands a structured model to `HistorySurface.vue`.
+`static/js/history-state-bridge.js` now owns the DOM-free structured History projection used by Vue. It preserves the established visibility, ordering, grouping, route, artwork, tracked metadata fallback, relative-time, and empty-state semantics without mutating `DATA.history`.
 
-`loadMoreHistory()` remains the authoritative pagination-state action: it increments the existing visible-limit state and routes the follow-up render through the public History bridge. `DATA.history` remains authoritative tracker truth, and watched/history mutation and save semantics are unchanged.
+`static/js/history-vue-bridge.js` owns renderer activation and the existing 40-entry pagination UI state. It no longer captures an old renderer, clones a staging root, serializes HTML, or delegates pagination back to a legacy action. `HistorySurface.vue` is the sole live composition/DOM renderer.
+
+`static/js/history-activity.js` is now only a temporary parser-blocking compatibility placeholder and contains no History renderer, composer, or pagination logic. The final file-removal sweep may remove that empty compatibility file and script tag together after the remaining frontend ownership work is stable.
 
 ## Detail and Upcoming cleanup audit
 
