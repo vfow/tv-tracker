@@ -14,6 +14,7 @@ const app = fs.readFileSync('static/js/app.js', 'utf8');
 const template = fs.readFileSync('templates/index.html', 'utf8');
 
 const calls = [];
+let movieGenresHTML = '<span>Drama</span>';
 const pageState = {
     movieId:'101',
     routeSlug:'example-movie',
@@ -41,7 +42,7 @@ const context = {
         renderCertificationLinkHTML(){ return '<a>PG-13</a>'; },
         renderRuntimeDetailLinkHTML(){ return '<a>120 min</a>'; },
         renderMovieDirectedByHTML(){ return '<span>Directed by Director</span>'; },
-        renderMovieGenresHTML(){ return '<span>Drama</span>'; },
+        renderMovieGenresHTML(){ return movieGenresHTML; },
         renderAdultMovieBadgeHTML(){ return ''; },
         renderMovieExternalLinksHTML(){ calls.push(['links']); return '<div>TMDB</div>'; },
         renderMovieActionButtonsHTML(){ calls.push(['actions']); return '<button>Favorite</button>'; },
@@ -72,6 +73,11 @@ assert(!Object.prototype.hasOwnProperty.call(model,'html'), 'Movie Details model
 assert(Object.isFrozen(model), 'Movie Details Vue view model must be immutable');
 assert(calls.some(call=>call[0] === 'actions'));
 assert(calls.some(call=>call[0] === 'content'));
+
+movieGenresHTML = 'Unknown';
+const unknownGenreModel = bridge.buildViewModel(pageState);
+assert(!unknownGenreModel.meta.some(node=>node && node.kind === 'text' && node.text === 'Unknown'), 'legacy Unknown genre placeholder must remain suppressed');
+movieGenresHTML = '<span>Drama</span>';
 
 const loading = bridge.buildViewModel({loading:true,error:'',movie:null});
 assert.strictEqual(loading.state, 'loading');
