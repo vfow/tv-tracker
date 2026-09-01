@@ -1,0 +1,66 @@
+name: Fix PR 103 stale Details contracts
+
+on:
+  push:
+    branches:
+      - modernization/media-details-vue-native-composition
+
+permissions:
+  contents: write
+
+jobs:
+  patch-contracts:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: modernization/media-details-vue-native-composition
+      - name: Update stale Details source contracts
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('tests/test_source_contracts.py')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          output = []
+          patched_detail = 0
+          patched_details = 0
+          patched_structure = 0
+          i = 0
+          while i < len(lines):
+              stripped = lines[i].strip()
+              if stripped == "detail_start = ui.index('function renderMovieDetailPageHTML(state)')":
+                  assert i + 1 < len(lines) and "detail_block = ui[detail_start:ui.index('function renderMovieDetailPage(state)', detail_start)]" in lines[i + 1]
+                  output.append("        detail_block = self.read('static/js/movie-details-vue-bridge.js')")
+                  patched_detail += 1
+                  i += 2
+                  continue
+              if stripped == "details_start = ui.index('function renderMovieDetailPageHTML(state)')":
+                  assert i + 1 < len(lines) and "details_block = ui[details_start:ui.index('function renderMovieDetailPage(state)', details_start)]" in lines[i + 1]
+                  output.append("        details_block = self.read('frontend/src/media-details/MovieDetails.vue')")
+                  patched_details += 1
+                  i += 2
+                  continue
+              if "self.assertIn('${renderMovieExternalLinksHTML(movie)}\\" in lines[i]:
+                  assert i + 1 < len(lines) and 'show-page-actions-wrap movie-page-actions-wrap' in lines[i + 1]
+                  output.append("        self.assertIn('v-for=\"(node, index) in model.externalLinks\"', details_block)")
+                  output.append("        self.assertIn('class=\"show-page-actions-wrap movie-page-actions-wrap\"', details_block)")
+                  patched_structure += 1
+                  i += 2
+                  continue
+              output.append(lines[i])
+              i += 1
+
+          assert patched_detail == 1, patched_detail
+          assert patched_details == 1, patched_details
+          assert patched_structure == 1, patched_structure
+          path.write_text('\n'.join(output) + '\n', encoding='utf-8')
+      - name: Commit contract repair
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/test_source_contracts.py
+          git diff --cached --check
+          git commit -m "Update Details modernization source contracts"
+          git push origin HEAD:modernization/media-details-vue-native-composition
