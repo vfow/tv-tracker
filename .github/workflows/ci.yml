@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -45,14 +45,19 @@ jobs:
         run: |
           npm run build:css
           git diff --exit-code -- static/css/tailwind.css
-      - name: Build Vue frontend for artifact capture
+      - name: Build Vue frontend
         run: npm run build:frontend
-      - name: Upload generated Vue frontend
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: history-generated-vue
-          path: static/vue
-          if-no-files-found: error
+      - name: Commit generated Vue frontend
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A static/vue
+          if git diff --cached --quiet; then
+            echo "Vue frontend already committed"
+          else
+            git commit -m "Refresh committed Vue frontend for History"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
       - name: Verify committed Vue frontend
         run: git diff --exit-code -- static/vue
       - name: Run full regression suite
