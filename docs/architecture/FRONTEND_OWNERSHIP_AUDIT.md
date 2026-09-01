@@ -26,8 +26,8 @@ Search duplicate renderer ownership is already removed. Watchlist no longer stag
 | Watchlist / tracker lists | Vue-native `TrackerListsSurface.vue` | `app.js` tracker state/mutations/save orchestration plus read-only filter/progress helpers | PASS — structured view model replaces detached legacy HTML composition |
 | Upcoming / notifications | Vue final live owner | legacy Upcoming/notification composition plus canonical timing/notification services | RETAIN — `upcoming-notifications-vue-bridge.js` still invokes the legacy composers before Vue takes final DOM ownership |
 | History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | `DATA.history` truth plus DOM-free state/view-model helpers | PASS — no detached HTML staging, legacy DOM composer, or legacy pagination action remains |
-| Show details | Vue final live owner through `show-details-vue-bridge.js` | `renderShowDetailsPageHTML`, detail events, tracker/provider services | RETAIN COMPOSER — bridge still consumes the legacy HTML composer |
-| Movie details | Vue final live owner through `movie-details-vue-bridge.js` | `renderMovieDetailPageHTML`, detail events, provider services | RETAIN COMPOSER — bridge still consumes the legacy HTML composer |
+| Show details | Vue native page shell through `show-details-vue-bridge.js` + typed detail-node model | detail events, tracker/provider services, shared fragment helpers | PAGE COMPOSER REMOVED — shared helpers remain service/fragment dependencies until final `ui.js` cleanup |
+| Movie details | Vue native page shell through `movie-details-vue-bridge.js` + typed detail-node model | detail events, provider services, shared fragment helpers | PAGE COMPOSER REMOVED — shared helpers remain service/fragment dependencies until final `ui.js` cleanup |
 | Episode tracking | Vue interaction owner | authoritative watched/history mutation and durable save semantics | RETAIN SERVICES — not dead-code cleanup |
 | Pending-save recovery | no persistent warning UI | `db.js` queue/retry/storage recovery | PASS — silent retry/storage protection preserved and pending-save runtime copy is product-neutral |
 
