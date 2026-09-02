@@ -246,7 +246,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('function renderMovieDetailPage(', ui)
         self.assertIn('renderCollectionsIndexPage', ui)
         self.assertIn('renderCollectionDetailPage', ui)
-        self.assertIn('renderMovieCrewTabHTML', ui)
+        self.assertIn('function buildCrew(movie)', self.read('static/js/movie-details-native-panels.js'))
         self.assertIn('function buildDirectorNodes(movie)', movie_details_bridge)
         self.assertNotIn('function renderSearchResults(', ui)
         self.assertIn('renderDiscoverGenreSection', ui)
@@ -514,7 +514,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('discover-genre-tab', ui)
         self.assertIn('genre-media-switch-button', ui)
         self.assertIn('getGenreDetailRoute(genre.id,name,media)', ui)
-        self.assertIn('renderShowGenreLinksHTML(genres,"movie")', ui)
+        self.assertIn('function genreChip(genre)', self.read('static/js/movie-details-native-panels.js'))
+        self.assertIn('getShowGenreRoute(genre,"movie")', self.read('static/js/movie-details-native-panels.js'))
         self.assert_css_rule_has(source_css, '.discover-genre-tab', '@apply tw-inline-flex')
         self.assert_css_rule_has(built_css, '.discover-genre-tab', 'display:inline-flex')
 
@@ -538,9 +539,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function buildTabs()', movie_details_bridge)
         self.assertIn('["Info","Cast","Crew","Details","Genres","Releases"]', movie_details_bridge)
         self.assertIn('movie-page-status-button', movie_details_bridge)
-        self.assertIn('renderMovieCrewTabHTML', ui)
+        self.assertIn('function buildCrew(movie)', self.read('static/js/movie-details-native-panels.js'))
         self.assertIn('function buildDirectorNodes(movie)', movie_details_bridge)
-        self.assertIn('renderMovieReleasesHTML', ui)
+        self.assertIn('function buildReleases(movie)', self.read('static/js/movie-details-native-panels.js'))
         self.assertIn('lockSearchRouteBeforeResultOpen', ui)
         self.assertIn('favorites-popup-title', template)
         self.assertIn('movie-page-actions-wrap', css)
@@ -564,16 +565,16 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_phase602_movie_info_cleanup_exists(self):
         ui = self.read('static/js/ui.js')
+        panels = self.read('static/js/movie-details-native-panels.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        info_start = ui.index('function renderMovieInfoTabHTML(movie)')
-        info_end = ui.index('function renderMovieActiveTabContentHTML(movie)')
-        info_block = ui[info_start:info_end]
-        details_start = ui.index('function renderMovieDetailsTabHTML(movie)')
-        details_end = ui.index('function renderMovieInfoTabHTML(movie)')
-        details_block = ui[details_start:details_end]
+        info_start = panels.index('function buildInfo(movie)')
+        info_block = panels[info_start:panels.index('function build(movie)', info_start)]
+        details_start = panels.index('function buildDetails(movie)')
+        details_block = panels[details_start:panels.index('function genreChip(genre)', details_start)]
 
-        self.assertIn('function renderMovieCompanyLogosHTML', ui)
+        self.assertNotIn('function renderMovieCompanyLogosHTML', ui)
+        self.assertIn('function renderCompanyLogoTilesHTML(companies,media="tv")', ui)
         self.assertIn('movie-info-tagline', info_block)
         self.assertIn('movie.overview || "Unknown"', info_block)
         self.assertNotIn('renderMovieGenresHTML(movie)', info_block)
@@ -582,8 +583,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('Written by', info_block)
         self.assertNotIn('Budget', details_block)
         self.assertNotIn('Revenue', details_block)
-        self.assertIn('if(productionCompaniesHTML)', details_block)
-        self.assertIn('renderMovieCompanyLogosHTML(movie && movie.production_companies)', details_block)
+        self.assertIn('companyNodes(movie)', details_block)
         self.assertIn('movie-company-logo', source_css)
         self.assertIn('movie-company-logo', built_css)
 
@@ -592,18 +592,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
         detail_block = self.read('static/js/movie-details-vue-bridge.js')
+        panels = self.read('static/js/movie-details-native-panels.js')
         show_detail_block = self.read('static/js/show-details-vue-bridge.js')
-        crew_start = ui.index('function renderMovieCrewTabHTML(movie)')
-        crew_block = ui[crew_start:ui.index('function renderMovieDetailsTabHTML(movie)', crew_start)]
-        release_start = ui.index('function renderMovieReleasesHTML(movie)')
-        release_block = ui[release_start:ui.index('function renderMovieCastTabHTML(movie)', release_start)]
+        crew_start = panels.index('function buildCrew(movie)')
+        crew_block = panels[crew_start:panels.index('function discoveryEntity', crew_start)]
+        release_start = panels.index('function buildReleases(movie)')
+        release_block = panels[release_start:panels.index('function railButton', release_start)]
 
         self.assertIn('appendGroup(items,buildDirectorNodes(movie));', detail_block)
         self.assertIn('appendGroup(items,buildGenreNodes(movie));', detail_block)
         self.assertNotIn('movie.tagline ? `<p class="show-detail-tagline">', detail_block)
         self.assertIn('font-style:italic;', source_css)
         self.assertIn('font-style:italic;', built_css)
-        self.assertIn('renderCrewJobGroupsHTML(Array.isArray(movie && movie.crew) ? movie.crew : [],"movie","Unknown")', crew_block)
+        self.assertIn('global.collectCrewJobGroups(source)', crew_block)
         self.assertIn('function renderCrewJobGroupsHTML(source,media="tv",emptyText="Unknown")', ui)
         self.assertIn('movie-crew-department-list', source_css)
         self.assertIn('movie-crew-department-list', built_css)
@@ -613,8 +614,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('background:#f3f3f3;', source_css)
         self.assertIn('background:#f3f3f3;', built_css)
         self.assertIn('movie-release-country-list', release_block)
-        self.assertIn('renderMovieReleaseCountryRowHTML', release_block)
-        self.assertIn('movie-release-certification-badge', ui)
+        self.assertIn('function releaseCountryRow(country)', panels)
+        self.assertIn('movie-release-certification-badge', panels)
         self.assertIn('localeCompare(String(b.countryName', ui)
         self.assertIn('movie-release-country-row', source_css)
         self.assertIn('movie-release-country-row', built_css)
@@ -627,15 +628,19 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function buildDetails(show)', show_details_bridge)
         self.assertIn('function buildGenres(show)', show_details_bridge)
         ui = self.read('static/js/ui.js')
-        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
-        releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
+        panels = self.read('static/js/movie-details-native-panels.js')
+        releases_start = panels.index('function releaseSortControl(mode)')
+        releases_block = panels[releases_start:panels.index('function railButton', releases_start)]
 
         self.assertIn('v-for="(node, index) in model.externalLinks"', details_block)
         self.assertIn('class="show-page-actions-wrap movie-page-actions-wrap"', details_block)
         self.assertIn('movie-release-country-list', releases_block)
-        self.assertIn('renderMovieReleaseCountryRowHTML', releases_block)
+        self.assertIn('function releaseCountryRow(country)', releases_block)
         self.assertIn('movie-release-sort-note', releases_block)
         self.assertNotIn('groupedByType', releases_block)
+        self.assertIn('function personPlaceholder()', panels)
+        self.assertNotIn('function renderMovieReleaseSortControlHTML', ui)
+        self.assertNotIn('function renderMovieReleaseCountryRowHTML', ui)
         self.assertIn('person-silhouette-placeholder', source_css)
         self.assertIn('person-silhouette-placeholder', built_css)
         self.assertIn('show-genres-tab-stack', source_css)
@@ -653,21 +658,23 @@ class TMDBOnlyContractTests(unittest.TestCase):
         genres_start = show_details_bridge.index('function buildGenres(show)')
         themes_block = show_details_bridge[genres_start:show_details_bridge.index('function providerWatchLink', genres_start)]
         ui = self.read('static/js/ui.js')
-        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
-        releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
+        panels = self.read('static/js/movie-details-native-panels.js')
+        releases_start = panels.index('function releaseSortControl(mode)')
+        releases_block = panels[releases_start:panels.index('function railButton', releases_start)]
 
         self.assertIn('show-detail-theme-list-expanded', themes_block)
         self.assertNotIn('data-show-themes-more', themes_block)
         self.assertNotIn('...more', themes_block)
         self.assertIn('var activeMovieReleaseSort = "date";', app)
         self.assertIn('activeMovieReleaseSort = "date";', app)
-        self.assertIn('data-movie-release-sort-toggle', ui)
+        self.assertIn('data-movie-release-sort-toggle', releases_block)
         self.assertIn('data-movie-release-sort-toggle', app)
-        self.assertIn('renderMovieReleaseSortControlHTML(sortMode)', releases_block)
+        self.assertIn('releaseSortControl(sortMode)', releases_block)
         self.assertIn('groupMovieReleasesByDate(releases)', releases_block)
         self.assertIn('groupMovieReleasesByCountry(releases)', ui)
         self.assertIn('movie-release-date-row', releases_block)
         self.assertIn('movie-release-date-entry-list', releases_block)
+        self.assertNotIn('function renderMovieReleaseSortControlHTML', ui)
         self.assertIn('movie-release-date-row', source_css)
         self.assertIn('movie-release-date-row', built_css)
         self.assertIn('movie-release-sort-button', source_css)
@@ -676,15 +683,17 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_phase606_release_dropdown_and_visual_polish_exists(self):
         ui = self.read('static/js/ui.js')
+        panels = self.read('static/js/movie-details-native-panels.js')
         app = self.read('static/js/app.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
-        releases_block = ui[releases_start:ui.index('function renderMovieReleaseEntryHTML(release)', releases_start)]
+        releases_start = panels.index('function releaseSortControl(mode)')
+        releases_block = panels[releases_start:panels.index('function releaseEntry', releases_start)]
 
         self.assertIn('data-movie-release-sort-menu', releases_block)
         self.assertIn('data-movie-release-sort-option', releases_block)
         self.assertIn('movie-release-sort-current', releases_block)
+        self.assertNotIn('function renderMovieReleaseSortControlHTML', ui)
         self.assertIn('movie-release-sort-menu-wrap', source_css)
         self.assertIn('movie-release-sort-menu-wrap', built_css)
         self.assertIn('movie-release-sort-menu-option', source_css)
@@ -707,14 +716,18 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_movie_genres_people_media_and_discover_gradients_exist(self):
         ui = self.read('static/js/ui.js')
         movie_details_bridge = self.read('static/js/movie-details-vue-bridge.js')
+        movie_details_panels = self.read('static/js/movie-details-native-panels.js')
         app = self.read('static/js/app.js')
         router = self.read('static/js/app-router.js')
         backend = self.read('app.py')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        self.assertIn('function renderMovieGenresTabHTML(movie)', ui)
-        self.assertIn('renderMovieThemesDetailsHTML(movie)', ui)
-        self.assertIn('data-discovery-media="${escapeHTML(cleanMedia)}"', ui)
+        self.assertIn('function buildGenres(movie)', movie_details_panels)
+        self.assertIn('function themeChip(theme)', movie_details_panels)
+        self.assertIn('global.normalizeMovieThemeItems(movie)', movie_details_panels)
+        self.assertIn('"data-discovery-media":"movie"', movie_details_panels)
+        self.assertNotIn('function renderMovieGenresTabHTML', ui)
+        self.assertNotIn('function renderMovieThemesDetailsHTML', ui)
         self.assertIn('["Info","Cast","Crew","Details","Genres","Releases"]', movie_details_bridge)
         self.assertNotIn('id="person-media-filter"', ui)
         self.assertIn('data-person-media="tv"', ui)
@@ -921,12 +934,14 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
     def test_phase65b_more_link_and_release_sort_visual_polish_exists(self):
         ui = self.read('static/js/ui.js')
+        panels = self.read('static/js/movie-details-native-panels.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
-        releases_block = ui[releases_start:ui.index('function sortMovieReleaseRows', releases_start)]
-        self.assertIn('renderBrowseChevronIcon("movie-release-sort-chevron-icon")', releases_block)
+        releases_start = panels.index('function releaseSortControl(mode)')
+        releases_block = panels[releases_start:panels.index('function releaseEntry', releases_start)]
+        self.assertIn('element("svg",{class:"browse-chevron movie-release-sort-chevron-icon"', releases_block)
         self.assertNotIn('>⌄</span>', releases_block)
+        self.assertNotIn('function renderMovieReleaseSortControlHTML', ui)
         self.assert_css_rule_has(
             source_css,
             '.person-bio-more-button',
@@ -1033,6 +1048,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
     def test_phase61_movie_tracking_foundation_exists(self):
         app = self.read('static/js/app.js')
         ui = self.read('static/js/ui.js')
+        movie_details_bridge = self.read('static/js/movie-details-vue-bridge.js')
         backend = self.read('app.py')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
@@ -1044,10 +1060,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function isMovieHistoryEntry(entry,movieId="")', app)
         self.assertIn('function toggleFavoriteShow(showId)', app)
         self.assertIn('showAppConfirm({', app)
-        self.assertIn('data-movie-tracking-action="${escapeHTML(action)}"', ui)
-        self.assertIn('renderMovieTrackingButtonHTML(state,"watched","Watched")', ui)
-        self.assertIn('renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")', ui)
-        self.assertIn('renderFavoriteHeartButtonHTML(state.favorite,`data-movie-tracking-action="favorite"`)', ui)
+        self.assertIn('function trackingButton(state,action,label)', movie_details_bridge)
+        self.assertIn('"data-movie-tracking-action":action', movie_details_bridge)
+        self.assertIn('trackingButton(state,"watched","Watched")', movie_details_bridge)
+        self.assertIn('trackingButton(state,"plan","Plan to Watch")', movie_details_bridge)
+        self.assertIn('favoriteButton(state.favorite)', movie_details_bridge)
+        self.assertNotIn('function renderMovieTrackingButtonHTML', ui)
         show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
         self.assertIn('"data-show-favorite-button":"true"', show_details_bridge)
         primitives = self.read('tvtracker/backup/primitives.py')
@@ -1074,6 +1092,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
         show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
+        movie_details_panels = self.read('static/js/movie-details-native-panels.js')
 
         self.assertIn('const TMDB_SEARCH_CACHE_TTL = 1000 * 60 * 60;', tmdb)
         self.assertIn('const TMDB_PROVIDER_CATALOG_CACHE_TTL = 1000 * 60 * 60 * 24;', tmdb)
@@ -1123,10 +1142,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('data-person-role-filter', ui)
         self.assertIn('person-role-browse-bar', source_css)
         self.assertIn('function renderCrewJobGroupsHTML(source,media="tv",emptyText="Unknown")', ui)
-        self.assertIn('renderMovieMoreLikeThisHTML(movie)', ui)
-        self.assertIn('data-movie-similar-open', ui)
-        self.assertIn('function formatRuntimeDisplay(runtimeMinutes)', ui)
-        self.assertIn('renderRuntimeDetailLinkHTML(movie.runtime,"movie")', ui)
+        self.assertIn('function buildMoreLike(movie)', movie_details_panels)
+        self.assertIn('data-movie-similar-open', movie_details_panels)
+        self.assertIn('function runtimeNode(runtime)', movie_details_panels)
+        self.assertIn('global.getRuntimeBrowseRoute(runtime,"movie")', movie_details_panels)
+        self.assertNotIn('function renderMovieMoreLikeThisHTML', ui)
+        self.assertNotIn('renderRuntimeDetailLinkHTML(movie.runtime,"movie")', ui)
         self.assertIn('global.getRuntimeBrowseRoute(runtime,"tv")', show_details_bridge)
 
         self.assertIn('browse-service-logo-tile', source_css)
