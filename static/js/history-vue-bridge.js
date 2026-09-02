@@ -3,26 +3,63 @@
 
     const manifestUrl = "/static/vue/manifest.json";
     const HISTORY_BATCH_SIZE = 40;
+    const emptyGroups = Object.freeze([]);
+    const errorModel = Object.freeze({
+        surface:"history",
+        state:"error",
+        groups:emptyGroups,
+        emptyState:null,
+        hasMore:false,
+        failure:"model-projection"
+    });
     let visibleLimit = HISTORY_BATCH_SIZE;
     let vueOwner = null;
     let loadPromise = null;
 
-    function root(){
-        if(!global.document || typeof global.document.getElementById !== "function") return null;
-        return global.document.getElementById("show-list");
-    }
-
-    function reportLoadFailure(){
+    function reportFailure(code){
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.report === "function"){
-            runtime.report({category:"runtime",surface:"history",code:"vue_history_load_failed"});
+            runtime.report({category:"runtime",surface:"history",code});
         }
+    }
+
+    function loadingModel(){
+        const mobile = typeof global.matchMedia === "function" && global.matchMedia("(max-width: 767.98px)").matches;
+        return Object.freeze({
+            surface:"history",
+            state:"loading",
+            groups:emptyGroups,
+            emptyState:null,
+            hasMore:false,
+            failure:null,
+            loadingRowCount:mobile ? 6 : 8
+        });
+    }
+
+    function renderAssetLoadFailure(){
+        const currentPath = String(global.location && global.location.pathname || "");
+        const runtime = global.TVTrackerClientRuntime;
+        if(currentPath !== "/app/history" || !runtime || typeof runtime.renderSurfaceFailure !== "function") return;
+        runtime.renderSurfaceFailure({
+            rootId:"show-list",
+            marker:"data-tvtracker-history-vue-asset-load-failed",
+            title:"History unavailable",
+            message:"Reload the page to try again."
+        });
+    }
+
+    function handleAssetLoadFailure(){
+        reportFailure("vue_history_asset_load_failed");
+        renderAssetLoadFailure();
     }
 
     function loadVueOwner(){
         if(vueOwner) return Promise.resolve(true);
         if(loadPromise) return loadPromise;
-        if(typeof global.fetch !== "function") return Promise.resolve(false);
+        if(typeof global.fetch !== "function"){
+            handleAssetLoadFailure();
+            return Promise.resolve(false);
+        }
         loadPromise = global.fetch(manifestUrl,{credentials:"same-origin",cache:"no-store",headers:{Accept:"application/json"}})
         .then(response=>{
             if(!response.ok) throw new Error("manifest request failed");
@@ -33,10 +70,13 @@
             const file = entry && typeof entry.file === "string" ? entry.file : "";
             if(!/^assets\/[A-Za-z0-9_-]+\.js$/.test(file)) throw new Error("invalid Vue manifest entry");
             const base = global.location && global.location.origin ? global.location.origin : "http://localhost";
-            return import(new URL("/static/vue/" + file,base).href).then(()=>true);
+            return import(new URL("/static/vue/" + file,base).href).then(()=>{
+                if(!vueOwner) throw new Error("History Vue owner unavailable");
+                return true;
+            });
         })
         .catch(()=>{
-            reportLoadFailure();
+            handleAssetLoadFailure();
             loadPromise = null;
             return false;
         });
@@ -45,18 +85,12 @@
 
     function buildModel(){
         const stateBridge = global.TVTrackerHistoryStateBridge;
-        if(!stateBridge || stateBridge.ownership !== "legacy-read-only" || typeof stateBridge.viewModel !== "function") return null;
-        try{
-            return stateBridge.viewModel(visibleLimit);
-        }catch(error){
-            return null;
+        if(!stateBridge || stateBridge.ownership !== "legacy-read-only" || typeof stateBridge.viewModel !== "function"){
+            throw new Error("History model projection unavailable");
         }
-    }
-
-    function renderLoadFailure(){
-        const liveRoot = root();
-        if(!liveRoot) return;
-        liveRoot.innerHTML = '<div class="empty-state" data-tvtracker-history-vue-load-failed="true" role="alert"><h2>History unavailable</h2><p>Reload the page to try again.</p></div>';
+        const model = stateBridge.viewModel(visibleLimit);
+        if(!model) throw new Error("History model projection failed");
+        return model;
     }
 
     function attachVueOwner(owner){
@@ -64,28 +98,25 @@
             throw new TypeError("Invalid History Vue owner");
         }
         vueOwner = owner;
+        const currentPath = String(global.location && global.location.pathname || "");
+        if(currentPath === "/app/history" && global.appDataReady === false){
+            vueOwner.render(loadingModel());
+        }
     }
 
     async function renderHistory(){
-        const model = buildModel();
-        if(!model){
-            renderLoadFailure();
-            return false;
-        }
         if(!vueOwner){
             const loaded = await loadVueOwner();
-            if(!loaded || !vueOwner){
-                renderLoadFailure();
-                return false;
-            }
+            if(!loaded || !vueOwner) return false;
+        }
+        let model;
+        try{
+            model = buildModel();
+        }catch(error){
+            reportFailure("history_model_projection_failed");
+            model = errorModel;
         }
         vueOwner.render(model);
-        const liveRoot = root();
-        if(liveRoot && liveRoot.dataset){
-            delete liveRoot.dataset.tvtrackerTrackerListsOwner;
-            delete liveRoot.dataset.tvtrackerUpcomingNotificationsOwner;
-            liveRoot.dataset.tvtrackerHistoryOwner = "vue-history";
-        }
         return true;
     }
 

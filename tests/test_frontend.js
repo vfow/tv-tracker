@@ -31,24 +31,21 @@ const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const searchResultsVue = fs.readFileSync('frontend/src/search-discover/SearchResults.vue','utf8');
-const historyActivity = fs.readFileSync('static/js/history-activity.js','utf8');
 const upcomingVueBridge = fs.readFileSync('static/js/upcoming-notifications-vue-bridge.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
-assert(ui.includes('function renderTrackerMediaRowSkeletonHTML(index=0,kind="upcoming")'));
+assert(ui.includes('function renderUpcomingMediaRowSkeletonHTML(index=0)'));
 assert(ui.includes('function renderUpcomingSkeletonHTML()'));
-assert(ui.includes('function renderHistorySkeletonHTML()'));
-assert(ui.includes('const count = mobile ? 6 : 8'));
+assert(!ui.includes('function renderHistorySkeletonHTML()'));
 assert(upcomingVueBridge.includes('const loading = items.length === 0 && (startBackgroundRefresh || global.isRefreshingUpcoming === true)'));
 assert(upcomingVueBridge.includes('if(startBackgroundRefresh && global.isRefreshingUpcoming !== true && typeof global.refreshUpcomingDataInBackground === \"function\")'));
 assert(!ui.includes('function renderUpcoming(startBackgroundRefresh=true)'));
 assert(!router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
-assert(router.includes('list.innerHTML = renderHistorySkeletonHTML()'));
-assert(!historyActivity.includes('appDataReady === false'));
+assert(!router.includes('renderHistorySkeletonHTML'));
 const upcomingSkeletonSource = ui.slice(
   ui.indexOf('function renderUpcomingSkeletonHTML()'),
-  ui.indexOf('function renderHistorySkeletonHTML()')
+  ui.indexOf('function renderTrackerPosterSkeletonCards(')
 );
 assert(!upcomingSkeletonSource.toLowerCase().includes('bell'));
 assert(!upcomingSkeletonSource.includes('watchlist-skeleton-action'));
@@ -163,21 +160,30 @@ assert(router.includes('history.pushState'));
 assert(!app.includes('history.pushState'));
 assert(!app.includes('history.replaceState'));
 assert(app.includes('/static/assets/icons/arrow-narrow-left.svg'));
-assert(template.includes('history-activity.js'));
-assert(template.indexOf('js/app.js') < template.indexOf('js/history-activity.js'));
 const historyStateBridge = fs.readFileSync('static/js/history-state-bridge.js','utf8');
 const historyVueBridge = fs.readFileSync('static/js/history-vue-bridge.js','utf8');
 const historySurfaceVue = fs.readFileSync('frontend/src/history/HistorySurface.vue','utf8');
 
-assert(!historyActivity.includes('function getActivityHistoryEntries'));
-assert(!historyActivity.includes('function renderHistory'));
-assert(!historyActivity.includes('innerHTML'));
+assert(!template.includes('history-activity.js'));
+assert(template.includes('js/app.js'));
+assert(template.indexOf('js/app.js') < template.indexOf('js/history-state-bridge.js'));
+assert(template.indexOf('js/history-state-bridge.js') < template.indexOf('js/history-vue-bridge.js'));
+assert(template.indexOf('js/history-vue-bridge.js') < template.indexOf('js/app-router.js'));
+assert(!/function\s+renderHistory\s*\(/.test(ui),'ui.js must not own History rendering');
+assert(!/function\s+renderHistory\s*\(/.test(historyStateBridge),'read-only History state must not own rendering');
+assert(/function\s+renderHistory\s*\(/.test(historyVueBridge),'History Vue bridge must own rendering');
 assert(historyStateBridge.includes('function viewModel('));
 assert(historyStateBridge.includes('getMovieDetailRoute'));
 assert(historyStateBridge.includes('entry && entry.backdrop_path || tracked.backdrop_path'));
 assert(!historyStateBridge.includes('poster_path'),'movie History must use backdrop/still imagery, not posters');
 assert(historyVueBridge.includes('stateBridge.viewModel(visibleLimit)'));
+assert(!historyVueBridge.includes('document.'));
+assert(!historyVueBridge.includes('innerHTML'));
 assert(historySurfaceVue.includes('data-tvtracker-history-owner="vue-history"'));
+assert(!historySurfaceVue.includes('watchlist-skeleton-row'));
+assert(historyVueBridge.includes('loadingRowCount:mobile ? 6 : 8'));
+assert(historySurfaceVue.includes("model.state === 'loading'"));
+assert(historySurfaceVue.includes("model.state === 'error'"));
 assert(!historySurfaceVue.includes('v-html'));
 
 const historyStateBridgeContext = {

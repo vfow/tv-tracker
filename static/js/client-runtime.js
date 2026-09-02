@@ -148,6 +148,37 @@
         return root;
     }
 
+    function renderSurfaceFailure(details={}){
+        if(
+            !global.document ||
+            typeof global.document.getElementById !== "function" ||
+            typeof global.document.createElement !== "function"
+        ){
+            return null;
+        }
+        const rootId = String(details.rootId || "").trim();
+        const marker = String(details.marker || "").trim();
+        if(!/^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(rootId) || !/^data-tvtracker-[a-z0-9-]{1,64}$/.test(marker)){
+            return null;
+        }
+        const root = global.document.getElementById(rootId);
+        if(!root || typeof root.replaceChildren !== "function"){
+            return null;
+        }
+
+        const status = global.document.createElement("div");
+        status.className = "empty-state";
+        status.setAttribute(marker,"true");
+        status.setAttribute("role","alert");
+        const heading = global.document.createElement("h2");
+        heading.textContent = String(details.title || "Page unavailable");
+        const message = global.document.createElement("p");
+        message.textContent = String(details.message || "Reload the page to try again.");
+        status.append(heading,message);
+        root.replaceChildren(status);
+        return status;
+    }
+
     function storageIsWritable(storage){
         if(!storage || typeof storage.setItem !== "function" || typeof storage.removeItem !== "function"){
             return false;
@@ -326,6 +357,7 @@
     global.TVTrackerClientRuntime = Object.freeze({
         report,
         surfaceFromPath,
+        renderSurfaceFailure,
         setSaveStatus,
         handleSessionExpired
     });

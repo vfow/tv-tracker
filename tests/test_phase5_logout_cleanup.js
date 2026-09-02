@@ -37,16 +37,18 @@ assert.strictEqual(
 );
 
 const uiSource = readScript("ui.js");
-const historyActivitySource = readScript("history-activity.js");
 const historyVueBridgeSource = readScript("history-vue-bridge.js");
 assert(!/function\s+renderHistory\s*\(/.test(uiSource),"ui.js must not define renderHistory");
-assert(!/function\s+renderHistory\s*\(/.test(historyActivitySource),"legacy history-activity.js must not define renderHistory");
 assert(/function\s+renderHistory\s*\(/.test(historyVueBridgeSource),"History Vue bridge must be the sole renderHistory owner");
 
 const templateSource = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
-assert(templateSource.indexOf("js/ui.js") < templateSource.indexOf("js/history-activity.js"),"ui.js must load before the compatibility History placeholder");
-assert(templateSource.indexOf("js/history-activity.js") < templateSource.indexOf("js/history-state-bridge.js"),"History state bridge must load after the compatibility placeholder");
+assert(!fs.existsSync(path.join(STATIC,"history-activity.js")),"removed legacy History placeholder must stay deleted");
+assert(!templateSource.includes("js/history-activity.js"),"removed legacy History placeholder must not be loaded");
+assert(templateSource.includes("js/ui.js") && templateSource.includes("js/app.js"),"History state dependencies must be loaded");
+assert(templateSource.indexOf("js/ui.js") < templateSource.indexOf("js/history-state-bridge.js"),"History state bridge must load after its legacy helpers");
+assert(templateSource.indexOf("js/app.js") < templateSource.indexOf("js/history-state-bridge.js"),"History state bridge must load after authoritative tracker state");
 assert(templateSource.indexOf("js/history-state-bridge.js") < templateSource.indexOf("js/history-vue-bridge.js"),"History Vue owner must load after structured History state");
+assert(templateSource.indexOf("js/history-vue-bridge.js") < templateSource.indexOf("js/app-router.js"),"History Vue owner must be installed before router startup");
 
 // --- C2: Vue Auth Settings owns logout cleanup while preserving the native POST.
 const settingsSource = readScript("settings.js");

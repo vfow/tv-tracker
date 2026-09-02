@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -77,7 +78,10 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
         self.assertIn("All other Phase 11", decision)
 
     def test_frontend_build_is_reproducible(self):
-        subprocess.run(["npm", "run", "build:frontend"], cwd=ROOT, check=True)
+        npm = shutil.which("npm")
+        if npm is None:
+            self.fail("npm executable not found on PATH")
+        subprocess.run([npm, "run", "build:frontend"], cwd=ROOT, check=True)
         subprocess.run(
             ["git", "diff", "--exit-code", "--", "static/vue"],
             cwd=ROOT,

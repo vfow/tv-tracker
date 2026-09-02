@@ -45,11 +45,16 @@ export interface HistoryGroupViewModel {
   readonly entries: readonly HistoryCardViewModel[];
 }
 
+export type HistorySurfaceState = "loading" | "ready" | "empty" | "error";
+
 export interface HistoryViewModel {
   readonly surface: "history";
+  readonly state: HistorySurfaceState;
   readonly groups: readonly HistoryGroupViewModel[];
   readonly emptyState: Readonly<{ title: string; text: string }> | null;
   readonly hasMore: boolean;
+  readonly failure: "model-projection" | null;
+  readonly loadingRowCount?: 6 | 8;
 }
 
 export interface HistoryRendererActions {

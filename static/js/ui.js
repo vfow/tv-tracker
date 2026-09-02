@@ -578,19 +578,15 @@ function renderTrackerListSkeletonRows(count=5,label="Loading",options={}){
     `;
 }
 
-function renderTrackerMediaRowSkeletonHTML(index=0,kind="upcoming"){
+function renderUpcomingMediaRowSkeletonHTML(index=0){
     const variant = (Math.max(0,Number(index) || 0) % 5) + 1;
-    const isHistory = kind === "history";
-    const rowClass = isHistory ? "history-entry-card" : "upcoming-entry-card";
-    const stillClass = isHistory ? "history-still" : "upcoming-still";
     return `
-        <article class="show ${rowClass}" aria-hidden="true">
-            <div class="${stillClass} watchlist-skeleton-block"></div>
+        <article class="show upcoming-entry-card" aria-hidden="true">
+            <div class="upcoming-still watchlist-skeleton-block"></div>
             <div class="info watchlist-skeleton-content">
                 <div class="watchlist-skeleton-block watchlist-skeleton-title watchlist-skeleton-title--${variant}"></div>
                 <div class="watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--${variant}"></div>
             </div>
-            ${isHistory ? `<div class="history-time"><div class="watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${variant}"></div></div>` : ""}
         </article>
     `;
 }
@@ -599,7 +595,7 @@ function renderUpcomingSkeletonHTML(){
     const groups = Array.from({length:2}).map((_,groupIndex)=>{
         const headingVariant = (groupIndex % 5) + 1;
         const rows = Array.from({length:3})
-        .map((__,rowIndex)=>renderTrackerMediaRowSkeletonHTML((groupIndex * 3) + rowIndex,"upcoming"))
+        .map((__,rowIndex)=>renderUpcomingMediaRowSkeletonHTML((groupIndex * 3) + rowIndex))
         .join("");
         return `
             <div class="upcoming-group" aria-hidden="true">
@@ -614,22 +610,6 @@ function renderUpcomingSkeletonHTML(){
         <div class="watchlist-initial-skeleton upcoming-initial-skeleton" role="status" aria-live="polite" aria-label="Loading upcoming episodes">
             ${groups}
             <span class="watchlist-skeleton-sr">Loading upcoming episodes…</span>
-        </div>
-    `;
-}
-
-function renderHistorySkeletonHTML(){
-    const mobile = typeof window !== "undefined" &&
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(max-width: 767.98px)").matches;
-    const count = mobile ? 6 : 8;
-    const rows = Array.from({length:count})
-    .map((_,index)=>renderTrackerMediaRowSkeletonHTML(index,"history"))
-    .join("");
-    return `
-        <div class="watchlist-initial-skeleton history-initial-skeleton" role="status" aria-live="polite" aria-label="Loading watch history">
-            ${rows}
-            <span class="watchlist-skeleton-sr">Loading watch history…</span>
         </div>
     `;
 }
