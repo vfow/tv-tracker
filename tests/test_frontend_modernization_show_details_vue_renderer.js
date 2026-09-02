@@ -13,7 +13,20 @@ const app = fs.readFileSync('static/js/app.js', 'utf8');
 const template = fs.readFileSync('templates/index.html', 'utf8');
 
 const calls = [];
-const show = {tmdb_id:202,title:'Example Show',first_air_date:'2024-01-01',genres:['Drama'],tmdb_rating:8.4};
+const show = {
+    tmdb_id:202,
+    title:'Example Show',
+    first_air_date:'2024-01-01',
+    genre_items:[{id:18,name:'Drama'}],
+    genres:['Drama'],
+    networks:[{id:7,name:'Example Network',logo_path:'/network.png'},{id:8,name:'Text Network'}],
+    created_by_people:[{id:9,name:'Creator'}],
+    _tmdb_external_ids:{imdb_id:'tt202'},
+    _tmdb_videos:[{type:'Trailer',key:'trailer202'}],
+    _tmdb_similar:[{id:303,name:'Similar Show'}],
+    homepage:'https://show.example/',
+    tmdb_rating:8.4
+};
 const options = {preview:true};
 const nodeModel = {
     ownership:'typed-node-model',
@@ -30,14 +43,25 @@ const context = {
         activeShowDetailsTabs:{},
         TVTrackerMediaDetailsNodeModel:nodeModel,
         getShowDetailActiveTab(){ return 'Info'; },
+        getMediaPosterPlaceholderLabel(){ return 'Example Show (2024)'; },
         trackerBackgroundImage(){ return 'url("/backdrop.jpg")'; },
         trackerImageURL(){ return '/poster.jpg'; },
-        getShowMetaHTML(){ calls.push(['meta']); return '<span>2024</span>'; },
-        renderV2ShowInfoLinksLineHTML(){ calls.push(['links']); return '<div>TMDB</div>'; },
-        renderShowDetailActionControlsHTML(nextShow,tracked){ calls.push(['actions',nextShow,tracked]); return '<button data-status="watching">Watching</button>'; },
-        renderShowDetailTabsHTML(){ calls.push(['tabs']); return '<div class="show-detail-tabs"></div>'; },
+        getYearDetailRoute(){ return '/app/year/tv/2024'; },
+        getShowGenreRoute(){ return '/app/genre/tv/drama'; },
+        buildRouteKey(){ return '18-drama'; },
+        getShowNetworkItems(nextShow){ return nextShow.networks; },
+        getDiscoveryFilterDetailRoute(type,id){ return `/app/network/${id}-example-network`; },
+        getPersonDetailRoute(){ return '/app/person/9-creator'; },
+        getShowDetailRoute(){ return '/app/show/303-similar-show'; },
+        safeExternalURL(value){ return value; },
+        isShowFavorite(){ return true; },
+        isStatusAllowedForShow(){ return true; },
+        getShowMetaHTML(){ throw new Error('legacy meta composer called'); },
+        renderV2ShowInfoLinksLineHTML(){ throw new Error('legacy links composer called'); },
+        renderShowDetailActionControlsHTML(){ throw new Error('legacy actions composer called'); },
+        renderShowDetailTabsHTML(){ throw new Error('legacy tabs composer called'); },
         renderShowDetailTabContentHTML(){ calls.push(['content']); return '<section>Synopsis</section>'; },
-        renderV2SimilarShowsHTML(){ calls.push(['similar']); return '<section>You may also like</section>'; },
+        renderV2SimilarShowsHTML(){ throw new Error('legacy similar composer called'); },
         attachShowDetailsPageEvents(nextShow,tracked){ calls.push(['bind-page', nextShow, tracked]); },
         attachV2ShowModalEvents(nextShow){ calls.push(['bind-v2', nextShow]); }
     }
@@ -62,7 +86,30 @@ assert(Array.isArray(model.tabContent));
 assert(Array.isArray(model.similar));
 assert(!Object.prototype.hasOwnProperty.call(model,'html'), 'Show Details model must not serialize the page as HTML');
 assert(Object.isFrozen(model), 'Show Details Vue view model must be immutable');
-assert(calls.some(call=>call[0] === 'actions' && call[2] === true), 'tracked-state action composition must remain intact');
+assert(model.poster.some(node=>node.kind === 'element' && node.attrs.class.includes('media-title-placeholder')));
+assert(model.meta.some(node=>node.kind === 'element' && node.tag === 'a' && node.attrs.href === '/app/year/tv/2024'));
+assert(model.externalLinks.some(node=>node.kind === 'element' && node.attrs.class.includes('v2-show-info-links-line')));
+assert(model.actions.some(node=>node.kind === 'element' && node.attrs.class.includes('show-page-status-buttons')));
+assert(model.tabs.some(node=>node.kind === 'element' && node.attrs.class === 'show-detail-tabs'));
+assert(model.similar.some(node=>node.kind === 'element' && node.attrs.class.includes('v2-more-like-section')));
+const modelJSON = JSON.stringify(model);
+assert(modelJSON.includes('/app/network/7-example-network'));
+assert(modelJSON.includes('v2-provider-pill'));
+assert(modelJSON.includes('/app/person/9-creator'));
+assert(modelJSON.includes('/app/genre/tv/drama'));
+assert(modelJSON.includes('https://www.imdb.com/title/tt202/'));
+assert(modelJSON.includes('/app/show/303-similar-show'));
+assert(modelJSON.includes('data-show-favorite-button'));
+assert(calls.some(call=>call[0] === 'content'), 'the remaining tab-panel fragment dependency stays explicit for the next slice');
+
+context.window.DATA.shows = {};
+context.window.isStatusAllowedForShow = ()=>false;
+const previewModel = bridge.buildViewModel({...show,tmdb_id:404},{preview:true});
+const previewJSON = JSON.stringify(previewModel.actions);
+['watching','plan','finished','dropped'].forEach(status=>{
+    assert(previewJSON.includes(`data-add-status":"${status}`), `preview action parity must retain ${status}`);
+});
+context.window.DATA.shows = {'202':{tmdb_id:202}};
 
 let rendered = null;
 bridge.attachVueOwner({
@@ -86,6 +133,12 @@ assert(nodeComponent.includes('h(node.tag, node.attrs'), 'typed detail nodes mus
 assert(!component.includes('fetch('), 'Show Details Vue component must not own network requests');
 assert(!component.includes('history.'), 'Show Details Vue component must not own browser History');
 assert(!bridgeSource.includes('renderShowDetailsPageHTML'), 'Show Details bridge must not consume the retired page HTML composer');
+assert(!bridgeSource.includes('fragment("getShowMetaHTML"'), 'Show Details metadata must use native typed nodes');
+assert(!bridgeSource.includes('fragment("renderV2ShowInfoLinksLineHTML"'), 'Show Details links must use native typed nodes');
+assert(!bridgeSource.includes('fragment("renderShowDetailActionControlsHTML"'), 'Show Details actions must use native typed nodes');
+assert(!bridgeSource.includes('fragment("renderShowDetailTabsHTML"'), 'Show Details tabs must use native typed nodes');
+assert(!bridgeSource.includes('fragment("renderV2SimilarShowsHTML"'), 'Show Details similar rail must use native typed nodes');
+assert(bridgeSource.includes('fragment("renderShowDetailTabContentHTML"'), 'the remaining tab-panel dependency must stay named until the next slice');
 assert(!bridgeSource.includes('/api/'), 'Show Details Vue bridge must not make provider/API requests');
 assert(!bridgeSource.includes('history.pushState'), 'Show Details Vue bridge must not own browser History writes');
 assert(!bridgeSource.includes('history.replaceState'), 'Show Details Vue bridge must not own browser History writes');
@@ -95,7 +148,7 @@ assert(nodeModelSource.includes('lower.startsWith("on")'), 'legacy fragment adap
 assert(!ui.includes('function renderShowDetailsPageHTML(show,options={})'), 'obsolete Show Details page HTML composer must be deleted after parity');
 assert(!ui.includes('function renderShowDetailsPage(show,options={})'), 'obsolete legacy Show Details DOM wrapper must be deleted');
 assert(ui.includes('function attachShowDetailsPageEvents(show,isTracked)'), 'proven Show Details interaction services remain until the final service cleanup');
-assert(ui.includes('function renderShowDetailActionControlsHTML(show,isTracked)'), 'shared detail fragments may remain until the final ui.js sweep');
+assert(ui.includes('function renderShowDetailActionControlsHTML(show,isTracked)'), 'the old modal still retains its own composer until the final ui.js sweep');
 
 assert(app.includes('function renderActiveShowDetailPage()'), 'app.js must remain Show Details orchestration owner');
 assert(app.includes('renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show.tmdb_id)])});'));
