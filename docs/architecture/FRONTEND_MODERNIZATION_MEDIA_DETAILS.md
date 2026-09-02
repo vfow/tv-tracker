@@ -4,7 +4,7 @@
 
 This phase covers the protected TV-show and movie detail surfaces reached through `/app/show/<show_key>` and `/app/movie/<movie_key>`.
 
-At baseline `455e41c` through PR #107, Show and Movie Details final DOM is Vue-owned. Show Details has full typed composition; Movie Details remains the only detail surface fed by legacy HTML fragments.
+At baseline `8cfef1b` through PR #108, Show and Movie Details final DOM is Vue-owned. Show Details has full typed composition and its dead HTML composers are removed. Movie Details chrome is directly composed as typed nodes, with one named fragment remaining for the active tab panel.
 
 ## Current ownership
 
@@ -28,7 +28,8 @@ The renderer-visible tab contract is:
 
 - `static/js/app.js` owns `moviePageState`, `selectedMovieId`, route/open orchestration, async metadata hydration, tracking actions, `activeMovieDetailsTab`, and `activeMovieReleaseSort`.
 - `frontend/src/media-details/MovieDetails.vue` owns the final movie-detail DOM.
-- `static/js/movie-details-vue-bridge.js` still converts named legacy HTML fragments into typed nodes and is the next composition-removal target.
+- `static/js/movie-details-vue-bridge.js` directly composes poster fallback, metadata, external links, tracking actions, and all six primary tabs as immutable typed nodes.
+- `renderMovieActiveTabContentHTML(movie)` is the sole remaining named fragment dependency; Movie tab-panel behavior and its existing provider/services remain unchanged.
 - `static/js/app-router.js` remains the sole browser History owner.
 
 The renderer-visible contract is:
@@ -53,13 +54,13 @@ The renderer-visible contract is:
 
 `frontend/src/media-details/legacyMediaDetailsState.ts` is the strict TypeScript adapter for that bridge. The Vue renderers consume immutable view models through their dedicated runtime bridges.
 
-`static/js/media-details-node-model.js` provides sanitized typed node constructors during the incremental conversion. Show composition uses `text()` / `element()` directly. Its `fragment()` parser remains only because Movie Details still calls it and must not be removed before Movie composition migrates.
+`static/js/media-details-node-model.js` provides sanitized typed node constructors during the incremental conversion. Show composition and Movie chrome use `text()` / `element()` directly. Its `fragment()` parser remains only for `renderMovieActiveTabContentHTML(movie)` and must not be removed before Movie tab panels migrate.
 
 ## Cleanup sequence
 
-1. COMPLETED: physically remove the audited dead Show HTML composers after PR #107, while retaining Show state, interactions, routing, provider requests, lazy loading, and shared Movie/Discover/Episode helpers.
-2. NEXT: replace Movie chrome and tab-panel fragment composition with typed native data/nodes.
-3. AFTER MOVIE: remove `fragment()` and the HTML parser only once Movie Details no longer calls them.
-4. Delete only additional fragment composers and callers proven dead across the repository.
-5. Preserve routes, modified clicks, back-stack semantics, tabs, release sorting, adult filtering, provider-region behavior, tracker actions, and watched state.
-6. Run full regression, exact-head CI, deployment, and production verification before declaring Sprint 2A complete.
+1. COMPLETED: physically remove the audited dead Show HTML composers in PR #108, while retaining Show state, interactions, routing, provider requests, lazy loading, and shared Movie/Discover/Episode helpers.
+2. COMPLETED IN THIS SLICE: replace Movie chrome fragment composition with typed native nodes while retaining one active-tab panel fragment.
+3. NEXT: replace `renderMovieActiveTabContentHTML(movie)` and its Movie tab panels with typed native nodes without changing panel behavior.
+4. AFTER PANELS: remove only Movie HTML composers and callers proven dead across the repository.
+5. AFTER CLEANUP: remove `fragment()` and the HTML parser only when no active bridge consumes them.
+6. Preserve routes, modified clicks, back-stack semantics, tabs, release sorting, adult filtering, provider-region behavior, tracker actions, and watched state through full regression and production verification.

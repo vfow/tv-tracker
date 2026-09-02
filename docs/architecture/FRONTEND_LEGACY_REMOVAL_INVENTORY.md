@@ -4,7 +4,7 @@
 
 This document locks the safe removal boundary for the post-migration `app.js` / `ui.js` cleanup. The goal is to reduce legacy ownership without deleting still-required tracker state, mutation, persistence, provider, notification, or routing services.
 
-The inventory reflects baseline `455e41c` through PR #107, including complete typed Show Details composition and the final History placeholder/fallback cleanup. The audited follow-up physically removes the dead Show HTML composers and stale streaming-region render wrapper.
+The inventory reflects baseline `8cfef1b` through PR #108, including complete typed Show Details composition, physical removal of dead Show composers, and the final History placeholder/fallback cleanup. Movie Details chrome is typed in the current slice, with one active-tab panel fragment remaining.
 
 ## Current rule
 
@@ -50,7 +50,7 @@ PR #102 replaced History DOM composition with Vue-native structured composition.
 - The loading migration preserves six mobile/eight desktop skeleton rows and accessible status semantics; the shared runtime shell handles Vue asset failure, while Vue alone handles model projection failure.
 - `loadMoreHistory()` remains the Vue bridge-owned pagination action and routes its follow-up render through the sole active renderer.
 
-History Vue ownership and final fallback cleanup remain production-proven; the current inventory baseline is `455e41c` through PR #107.
+History Vue ownership and final fallback cleanup remain production-proven; the current inventory baseline is `8cfef1b` through PR #108.
 
 ### Episode tracking
 
@@ -66,10 +66,10 @@ The product has no chosen public name. Internal repository/package/storage ident
 
 ## Remaining active composition dependencies
 
-The current retained dependencies at baseline `455e41c` through PR #107 are:
+The current retained dependencies at baseline `8cfef1b` through PR #108 are:
 
 1. Show Details: the bridge directly composes all typed nodes. The 27 audited dead `ui.js` HTML composers and stale streaming-region render wrapper are physically removed; interaction/domain, provider request/catalog/refresh, routing, and lazy-load services remain active.
-2. Movie Details: the typed node-model bridge still consumes named fragment factories and interaction binders; the former full-page composer is removed.
+2. Movie Details: the bridge directly composes typed poster, metadata, external links, tracking actions, and six primary tabs. It retains interaction binders and exactly one named fragment, `renderMovieActiveTabContentHTML(movie)`, for the active panel; the former full-page composer is removed.
 3. Upcoming / notifications: Vue composes structured models while canonical timing, loggability, episode mutation, background refresh, notification API/persistence, and interaction services remain authoritative.
 4. Discover: the legacy Discover hub/stability owner remains until native ownership passes direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance.
 
@@ -78,11 +78,11 @@ The current retained dependencies at baseline `455e41c` through PR #107 are:
 Proceed incrementally:
 
 1. COMPLETED: audit and physically remove dead Show HTML composers and the stale Show provider render wrapper, while retaining interaction binders and shared domain/provider/routing/lazy-load services.
-2. NEXT: migrate Movie fragment factories to typed native composition.
-3. AFTER MOVIE: remove the media-details node-model fragment parser only when Movie no longer consumes it.
-4. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
-5. Finish Discover native ownership.
-6. Re-audit `app.js` / `ui.js` and remove only dead ownership; retain named shared services or remove the shells only if no required ownership remains.
+2. COMPLETED IN THIS SLICE: migrate Movie chrome fragment factories to typed native composition.
+3. NEXT: migrate the remaining Movie active-tab panels to typed nodes.
+4. AFTER PANELS: remove proven-dead Movie HTML composers and callers, then remove the media-details node-model fragment parser only when no bridge consumes it.
+5. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
+6. Finish Discover native ownership, then re-audit `app.js` / `ui.js` and remove only dead ownership.
 
 Each removal slice uses a dedicated branch/PR, exact-head CI, serialized merge, and production verification.
 
