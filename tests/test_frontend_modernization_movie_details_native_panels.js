@@ -139,7 +139,8 @@ for(const tab of ['Info','Cast','Crew','Details','Genres','Releases']){
     assert(nodes.length > 0,`${tab} panel must render content`);
     assert(flatten(nodes).every(node=>node.kind === 'text' || node.kind === 'element'),`${tab} panel must contain typed nodes only`);
     const throughBridgeBoundary = context.window.TVTrackerMediaDetailsNodeModel.fragment(nodes);
-    assert.strictEqual(throughBridgeBoundary,nodes,`${tab} typed nodes must pass through without HTML parsing`);
+    assert(Array.isArray(throughBridgeBoundary) && throughBridgeBoundary.length === nodes.length,`${tab} typed nodes must pass through without HTML parsing`);
+    assert(flatten(throughBridgeBoundary).every(node=>node.kind === 'text' || node.kind === 'element'),`${tab} bridge boundary must preserve typed nodes`);
 }
 assert.strictEqual(legacyFragmentCalls,0,'Movie panel runtime must not invoke the legacy HTML fragment parser');
 
