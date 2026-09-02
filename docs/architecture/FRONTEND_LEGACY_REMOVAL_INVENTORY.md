@@ -4,7 +4,7 @@
 
 This document locks the safe removal boundary for the post-migration `app.js` / `ui.js` cleanup. The goal is to reduce legacy ownership without deleting still-required tracker state, mutation, persistence, provider, notification, or routing services.
 
-The inventory reflects the `5ec823a` main baseline, including History Vue ownership from PR #102, Media Details native composition from PR #103, and Upcoming native composition from PR #104. This branch contains only the pending History placeholder/fallback removal described below.
+The inventory reflects the deployed `3f650c9` main baseline, including the final History placeholder/fallback cleanup from PR #105. The active branch incrementally removes Show Details HTML fragment dependencies.
 
 ## Current rule
 
@@ -41,7 +41,7 @@ The remaining tracker services are explicit retained services, not dead renderer
 
 ### History
 
-PR #102 replaced History DOM composition with Vue-native structured composition; that ownership is already present in deployed main `5ec823a`. This branch removes the inert `history-activity.js` placeholder/script tag, migrates the History skeleton/loading state into the structured Vue boundary, and replaces the History-specific failure fallback with the shared runtime surface shell, none of which changes final History data composition.
+PR #102 replaced History DOM composition with Vue-native structured composition. PR #105 then removed the inert `history-activity.js` placeholder/script tag, migrated the History skeleton/loading state into the structured Vue boundary, and replaced the History-specific failure fallback with the shared runtime surface shell.
 
 - `DATA.history` remains authoritative History truth.
 - `static/js/history-state-bridge.js` retains pure visibility, ordering, grouping input, route/artwork/relative-time model shaping, but no DOM writes.
@@ -50,7 +50,7 @@ PR #102 replaced History DOM composition with Vue-native structured composition;
 - The loading migration preserves six mobile/eight desktop skeleton rows and accessible status semantics; the shared runtime shell handles Vue asset failure, while Vue alone handles model projection failure.
 - `loadMoreHistory()` remains the Vue bridge-owned pagination action and routes its follow-up render through the sole active renderer.
 
-History Vue ownership is production-proven from PR #102. Only this branch's placeholder/script and bridge fallback removals remain unproven until the exact head passes CI, merge, deploy, restart, and public health.
+History Vue ownership and final fallback cleanup are production-proven at deployed main `3f650c9`.
 
 ### Episode tracking
 
@@ -76,11 +76,10 @@ The current retained dependencies after merged PRs #103 and #104 are:
 
 Proceed incrementally:
 
-1. Verify and production-prove this branch's History placeholder/fallback removal.
-2. Re-audit Show/Movie detail fragment factories and interaction binders, removing only dependencies with equivalent typed coverage.
-3. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
-4. Finish Discover native ownership.
-5. Re-audit `app.js` / `ui.js` and remove only dead ownership; retain named shared services or remove the shells only if no required ownership remains.
+1. Re-audit Show/Movie detail fragment factories and interaction binders, removing only dependencies with equivalent typed coverage.
+2. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
+3. Finish Discover native ownership.
+4. Re-audit `app.js` / `ui.js` and remove only dead ownership; retain named shared services or remove the shells only if no required ownership remains.
 
 Each removal slice uses a dedicated branch/PR, exact-head CI, serialized merge, and production verification.
 
