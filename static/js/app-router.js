@@ -710,14 +710,10 @@
         if(filters){
             filters.style.display = activeShowsTab === "watchlist" ? "flex" : "none";
         }
-        if(activeShowsTab !== "watchlist" && typeof document !== "undefined" && document && typeof document.getElementById === "function"){
+        if(activeShowsTab !== "watchlist" && activeShowsTab !== "history" && typeof document !== "undefined" && document && typeof document.getElementById === "function"){
             const list = document.getElementById("show-list");
-            if(list){
-                if(activeShowsTab === "history" && typeof renderHistorySkeletonHTML === "function"){
-                    list.innerHTML = renderHistorySkeletonHTML();
-                }else if(activeShowsTab !== "upcoming"){
-                    list.innerHTML = "";
-                }
+            if(list && activeShowsTab !== "upcoming"){
+                list.innerHTML = "";
             }
         }
         if(typeof updateShellTitle === "function"){

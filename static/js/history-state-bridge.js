@@ -197,11 +197,13 @@
 
         return Object.freeze({
             surface:"history",
+            state:allEntries.length === 0 ? "empty" : "ready",
             groups:Object.freeze(groups),
             emptyState:allEntries.length === 0
             ? Object.freeze({title:"No watch history",text:"Watched episodes and movies will appear here."})
             : null,
-            hasMore:allEntries.length > shownEntries.length
+            hasMore:allEntries.length > shownEntries.length,
+            failure:null
         });
     }
 

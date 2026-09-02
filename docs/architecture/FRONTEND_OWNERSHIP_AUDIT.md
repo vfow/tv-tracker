@@ -2,9 +2,9 @@
 
 ## Scope
 
-This audit records the current post-migration frontend ownership model after Watchlist native composition and the History native-composition replacement. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of legacy services that Vue still consumes through bridges.
+This audit records current ownership from the `5ec823a` main baseline: History Vue ownership from PR #102, Media Details native composition from PR #103, and Upcoming native composition from PR #104. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of services that Vue still consumes through bridges.
 
-Search duplicate renderer ownership is already removed. Watchlist no longer stages legacy HTML. This History slice removes the equivalent History staging/composer dependency while preserving tracker truth, routing, and durable-write ownership.
+Search duplicate renderer ownership is already removed. Watchlist and History no longer stage legacy HTML. This branch removes History's inert compatibility placeholder, migrates its skeleton/loading state fully into the structured Vue boundary, and replaces the History-specific failure fallback with the shared runtime shell boundary; that work remains pending exact-head verification.
 
 ## Ownership rules
 
@@ -24,8 +24,8 @@ Search duplicate renderer ownership is already removed. Watchlist no longer stag
 | Search results | Vue Search owner via `TVTrackerSearchVueBridge` | Search state/actions and shared route/image/filter/collection helpers | PASS — duplicate `ui.js` Search DOM renderer removed |
 | Discover hub | legacy Discover renderer/stability gate | current Discover state/provider services | RETAIN — migration/removal not yet proven complete |
 | Watchlist / tracker lists | Vue-native `TrackerListsSurface.vue` | `app.js` tracker state/mutations/save orchestration plus read-only filter/progress helpers | PASS — structured view model replaces detached legacy HTML composition |
-| Upcoming / notifications | Vue final live owner | legacy Upcoming/notification composition plus canonical timing/notification services | RETAIN — `upcoming-notifications-vue-bridge.js` still invokes the legacy composers before Vue takes final DOM ownership |
-| History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | `DATA.history` truth plus DOM-free state/view-model helpers | PASS — no detached HTML staging, legacy DOM composer, or legacy pagination action remains |
+| Upcoming / notifications | Vue-native `UpcomingNotificationsSurface.vue` | canonical schedule/timing, episode mutation, notification persistence/API, and interaction services | PASS — PR #104 removed legacy page composition; retained dependencies are services |
+| History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | `DATA.history` truth plus DOM-free state/view-model helpers | PASS at PR #102 — placeholder/fallback removal on this branch is pending verification |
 | Show details | Vue native page shell through `show-details-vue-bridge.js` + typed detail-node model | detail events, tracker/provider services, shared fragment helpers | PAGE COMPOSER REMOVED — shared helpers remain service/fragment dependencies until final `ui.js` cleanup |
 | Movie details | Vue native page shell through `movie-details-vue-bridge.js` + typed detail-node model | detail events, provider services, shared fragment helpers | PAGE COMPOSER REMOVED — shared helpers remain service/fragment dependencies until final `ui.js` cleanup |
 | Episode tracking | Vue interaction owner | authoritative watched/history mutation and durable save semantics | RETAIN SERVICES — not dead-code cleanup |
@@ -37,23 +37,24 @@ Search duplicate renderer ownership is already removed. Watchlist no longer stag
 
 `static/js/history-vue-bridge.js` owns renderer activation and the existing 40-entry pagination UI state. It no longer captures an old renderer, clones a staging root, serializes HTML, or delegates pagination back to a legacy action. `HistorySurface.vue` is the sole live composition/DOM renderer.
 
-`static/js/history-activity.js` is now only a temporary parser-blocking compatibility placeholder and contains no History renderer, composer, or pagination logic. The final file-removal sweep may remove that empty compatibility file and script tag together after the remaining frontend ownership work is stable.
+Skeleton/loading-state migration is included in this branch. The structured loading model preserves six mobile and eight desktop rows plus the existing accessible status behavior, while asset load failures exit the generic skeleton through `TVTrackerClientRuntime.renderSurfaceFailure()` and projection failures remain Vue-rendered with distinct markers and diagnostics.
 
-## Detail and Upcoming cleanup audit
+The obsolete `static/js/history-activity.js` compatibility placeholder and its parser-blocking script tag are removed. No legacy History activity script participates in runtime ordering or ownership.
 
-The next active composition dependencies are Show/Movie Details and Upcoming:
+## Current Detail and Upcoming audit
 
-- `show-details-vue-bridge.js` calls `renderShowDetailsPageHTML` to build the model delivered to the Vue owner.
-- `movie-details-vue-bridge.js` calls `renderMovieDetailPageHTML` to build the model delivered to the Vue owner.
-- `upcoming-notifications-vue-bridge.js` captures and invokes the legacy `renderUpcoming` implementation, then hands the resulting model to Vue.
-- Watchlist and History now use structured view models and Vue-native composition.
+PRs #103 and #104 changed these ownership boundaries after the earlier History audit:
 
-No detail or Upcoming composer is therefore eligible for physical deletion until its structured replacement is production-proven.
+- `show-details-vue-bridge.js` and `movie-details-vue-bridge.js` build typed node models for Vue. The removed `renderShowDetailsPageHTML` and `renderMovieDetailPageHTML` page composers are no longer dependencies; retained `ui.js` fragment helpers and interaction binders remain explicit services.
+- `upcoming-notifications-vue-bridge.js` builds structured Upcoming and Notifications models directly. It does not capture a legacy `renderUpcoming` composer; canonical schedule/timing, episode mutation, notification API/persistence, and DOM interaction services remain retained dependencies.
+- `HistorySurface.vue` and `TrackerListsSurface.vue` continue to use structured view models and Vue-native composition.
+
+The old Detail and Upcoming page composers are already removed. Their retained fragment, interaction, timing, mutation, and notification services are not dead ownership merely because Vue now composes the pages.
 
 ## Required legacy dependencies that still block broad `app.js` / `ui.js` deletion
 
-- Upcoming Vue ownership still consumes the legacy Upcoming composer before final Vue rendering.
-- Show and movie detail Vue ownership still consumes legacy HTML composers.
+- Show and movie details still consume named fragment factories and interaction binders through typed node-model bridges.
+- Upcoming still consumes canonical schedule/timing, loggability, background refresh, episode mutation, notification request/persistence, and interaction services.
 - Episode tracking still delegates authoritative mutations and durable write semantics to established services.
 - Discover retains its stability gate and legacy hub composition until a replacement is proven under direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance coverage.
 
@@ -61,8 +62,8 @@ These dependencies mean the correct strategy remains incremental ownership repla
 
 ## Next cleanup order
 
-1. Move Show/Movie detail composition to typed Vue-native view models before removing their legacy HTML composers.
-2. Migrate the Upcoming composer only after timing, grouping, watched actions, notification state, loading/failure, and mobile behavior have equivalent Vue-native coverage.
+1. Re-audit the retained Show/Movie detail fragment factories and interaction binders; replace or remove only dependencies with equivalent typed coverage.
+2. Re-audit retained Upcoming timing, mutation, notification, interaction, and unused skeleton helpers without weakening release or persistence semantics.
 3. Finish Discover native ownership under direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance coverage.
 4. Re-audit `app.js` / `ui.js`; retain only explicitly named shared state/service owners or remove the shells if no such ownership remains.
 
@@ -79,6 +80,6 @@ Every cleanup PR must prove:
 
 ## Current conclusion
 
-Watchlist and History native composition are now structurally complete in source. History is not considered production-complete until this exact branch head passes full CI, merges from current `main`, and the resulting release passes regression, provenance, deploy, restart, and public health.
+Watchlist and History native composition are already merged; History ownership proof came from PR #102 and is present in deployed main `5ec823a`. This branch's inert placeholder/script deletion and removal of the bridge failure DOM fallback are pending exact-head CI, merge, regression, provenance, deployment, restart, and public-health verification.
 
-After that gate, the next meaningful ownership reduction is Show/Movie Details, followed by Upcoming. Broad `app.js` / `ui.js` deletion remains intentionally blocked while those named composers/services are active.
+Media Details and Upcoming native composition are also merged through PRs #103 and #104. Broad `app.js` / `ui.js` deletion remains intentionally blocked while their named fragment/interaction/domain services and the Discover legacy owner are active.

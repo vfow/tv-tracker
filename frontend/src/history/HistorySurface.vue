@@ -28,7 +28,42 @@ async function loadMore(): Promise<void> {
 
 <template>
   <div ref="ownerMarker" data-tvtracker-history-owner="vue-history" style="display: contents">
-    <div v-if="model.emptyState" class="empty-state">
+    <div
+      v-if="model.state === 'loading'"
+      class="watchlist-initial-skeleton history-initial-skeleton"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading watch history"
+    >
+      <article
+        v-for="rowIndex in model.loadingRowCount"
+        :key="rowIndex"
+        class="show history-entry-card"
+        aria-hidden="true"
+      >
+        <div class="history-still watchlist-skeleton-block"></div>
+        <div class="info watchlist-skeleton-content">
+          <div :class="`watchlist-skeleton-block watchlist-skeleton-title watchlist-skeleton-title--${((rowIndex - 1) % 5) + 1}`"></div>
+          <div :class="`watchlist-skeleton-block watchlist-skeleton-episode watchlist-skeleton-episode--${((rowIndex - 1) % 5) + 1}`"></div>
+        </div>
+        <div class="history-time">
+          <div :class="`watchlist-skeleton-block watchlist-skeleton-meta watchlist-skeleton-meta--${((rowIndex - 1) % 5) + 1}`"></div>
+        </div>
+      </article>
+      <span class="watchlist-skeleton-sr">Loading watch history…</span>
+    </div>
+
+    <div
+      v-else-if="model.state === 'error'"
+      class="empty-state"
+      data-tvtracker-history-model-projection-failed="true"
+      role="alert"
+    >
+      <h2>History unavailable</h2>
+      <p>Reload the page to try again.</p>
+    </div>
+
+    <div v-else-if="model.emptyState" class="empty-state">
       <h2>{{ model.emptyState.title }}</h2>
       <p>{{ model.emptyState.text }}</p>
     </div>
@@ -64,7 +99,7 @@ async function loadMore(): Promise<void> {
     </template>
 
     <button
-      v-if="model.hasMore"
+      v-if="model.state === 'ready' && model.hasMore"
       type="button"
       class="history-load-more"
       :disabled="loadingMore"

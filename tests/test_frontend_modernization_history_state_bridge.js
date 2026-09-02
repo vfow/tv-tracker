@@ -66,11 +66,13 @@ assert.strictEqual(JSON.stringify(history),originalHistory,'snapshot must not mu
 
 const model = bridge.viewModel(2);
 assert.strictEqual(model.surface,'history');
+assert.strictEqual(model.state,'ready');
 assert.strictEqual(model.groups.length,1);
 assert.strictEqual(model.groups[0].entries.length,2);
 assert.strictEqual(model.hasMore,true);
 assert.strictEqual(model.groups[0].entries[0].kind,'episode');
 assert.strictEqual(model.groups[0].entries[1].kind,'movie');
+assert.strictEqual(model.failure,null);
 assert(Object.isFrozen(model));
 assert(Object.isFrozen(model.groups));
 assert(Object.isFrozen(model.groups[0]));
@@ -83,6 +85,7 @@ assert.strictEqual(snapshot.entries[2].title,'Older Show','History snapshot must
 assert(contracts.includes('export type HistoryEntry = HistoryEpisodeEntry | HistoryMovieEntry'));
 assert(contracts.includes('export interface HistoryState'));
 assert(contracts.includes('export interface HistoryViewModel'));
+assert(contracts.includes('export type HistorySurfaceState = "loading" | "ready" | "empty" | "error"'));
 assert(contracts.includes('export interface HistoryVueBridge'));
 assert(typedAdapter.includes('TVTrackerHistoryStateBridge?: LegacyHistoryStateBridge'));
 assert(typedAdapter.includes('export function readLegacyHistorySnapshot(): HistoryState | null'));
@@ -91,12 +94,13 @@ assert(!typedAdapter.includes('fetch('));
 assert(!typedAdapter.includes('createApp('));
 assert(!main.includes('./history/legacyHistoryState'),'read-only adapter stays separate from live renderer');
 
-const activityIndex = template.indexOf("filename='js/history-activity.js'");
+const appIndex = template.indexOf("filename='js/app.js'");
 const bridgeIndex = template.indexOf("filename='js/history-state-bridge.js'");
 const vueIndex = template.indexOf("filename='js/history-vue-bridge.js'");
 const routerIndex = template.indexOf("filename='js/app-router.js'");
-assert(activityIndex >= 0,'compatibility placeholder remains until final file-removal sweep');
-assert(bridgeIndex > activityIndex);
+assert(!template.includes("filename='js/history-activity.js'"),'removed legacy History placeholder must not be loaded');
+assert(appIndex >= 0,'authoritative tracker state script must be loaded');
+assert(bridgeIndex > appIndex,'structured History state must load after its legacy data/helper dependencies');
 assert(vueIndex > bridgeIndex);
 assert(routerIndex > vueIndex);
 
