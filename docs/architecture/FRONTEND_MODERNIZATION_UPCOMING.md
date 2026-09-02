@@ -14,7 +14,7 @@ Upcoming and Notifications now use structured view models rendered natively by V
 
 - `ui.js` no longer owns `renderUpcoming(startBackgroundRefresh=true)`.
 - `ui.js` no longer owns `renderUpcomingBatchEpisodesHTML(show,episodes)`.
-- The non-owning `renderUpcomingSkeletonHTML()` helper remains temporarily for final `ui.js` cleanup, but the router no longer uses it for the live Upcoming route.
+- The obsolete `renderUpcomingMediaRowSkeletonHTML()` and `renderUpcomingSkeletonHTML()` helpers have been removed from `ui.js`; Upcoming loading DOM is owned by `UpcomingNotificationsSurface.vue`.
 - The Notifications page no longer relies on `notifications-runtime.js` to compose page HTML before Vue renders it.
 
 ## Preserved behavior

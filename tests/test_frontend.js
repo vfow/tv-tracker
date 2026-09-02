@@ -31,24 +31,22 @@ const login = fs.readFileSync('templates/login.html','utf8');
 const tmdb = fs.readFileSync('static/js/tmdb.js','utf8');
 const ui = fs.readFileSync('static/js/ui.js','utf8');
 const searchResultsVue = fs.readFileSync('frontend/src/search-discover/SearchResults.vue','utf8');
+const upcomingNotificationsVue = fs.readFileSync('frontend/src/upcoming-notifications/UpcomingNotificationsSurface.vue','utf8');
 const upcomingVueBridge = fs.readFileSync('static/js/upcoming-notifications-vue-bridge.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
 assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
-assert(ui.includes('function renderUpcomingMediaRowSkeletonHTML(index=0)'));
-assert(ui.includes('function renderUpcomingSkeletonHTML()'));
+assert(!ui.includes('renderUpcomingMediaRowSkeletonHTML'));
+assert(!ui.includes('renderUpcomingSkeletonHTML'));
 assert(!ui.includes('function renderHistorySkeletonHTML()'));
 assert(upcomingVueBridge.includes('const loading = items.length === 0 && (startBackgroundRefresh || global.isRefreshingUpcoming === true)'));
 assert(upcomingVueBridge.includes('if(startBackgroundRefresh && global.isRefreshingUpcoming !== true && typeof global.refreshUpcomingDataInBackground === \"function\")'));
+assert(upcomingNotificationsVue.includes('data-tvtracker-upcoming-notifications-owner="vue-upcoming"'));
+assert(upcomingNotificationsVue.includes('v-if="model.state === \'loading\'"'));
+assert(upcomingNotificationsVue.includes('class="watchlist-initial-skeleton upcoming-initial-skeleton"'));
 assert(!ui.includes('function renderUpcoming(startBackgroundRefresh=true)'));
 assert(!router.includes('list.innerHTML = renderUpcomingSkeletonHTML()'));
 assert(!router.includes('renderHistorySkeletonHTML'));
-const upcomingSkeletonSource = ui.slice(
-  ui.indexOf('function renderUpcomingSkeletonHTML()'),
-  ui.indexOf('function renderTrackerPosterSkeletonCards(')
-);
-assert(!upcomingSkeletonSource.toLowerCase().includes('bell'));
-assert(!upcomingSkeletonSource.includes('watchlist-skeleton-action'));
 
 assert(router.includes('/app/list/'));
 assert(router.includes('app\\/show'));
