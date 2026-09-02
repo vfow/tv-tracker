@@ -143,7 +143,6 @@ const context = {
         safeExternalURL(value){ return /^https:\/\//.test(String(value || '')) ? value : ''; },
         isShowFavorite(){ return true; },
         isStatusAllowedForShow(){ return true; },
-        renderShowDetailTabContentHTML(){ throw new Error('legacy Show tab composer called'); },
         attachShowDetailsPageEvents(nextShow,tracked){ calls.push(['bind-page',nextShow,tracked]); },
         attachV2ShowModalEvents(nextShow){ calls.push(['bind-v2',nextShow]); }
     }
@@ -483,7 +482,65 @@ assert(!bridgeSource.includes('.fragment('));
 assert(!bridgeSource.includes('/api/'));
 assert(!bridgeSource.includes('history.pushState') && !bridgeSource.includes('history.replaceState'));
 assert(nodeModelSource.includes('fragment,'), 'Movie Details still requires global fragment support');
+assert(nodeModelSource.includes('function parseNode(node)'));
+assert(nodeModelSource.includes('function fragment(html)'));
 assert(nodeModelSource.includes('lower.startsWith("on")'));
+
+const deletedShowComposers = [
+    'getTVStatusSlugFromLabel',
+    'renderStatusLinkHTML',
+    'renderCompanyLinksHTML',
+    'getPrimaryShowRuntime',
+    'renderShowLanguageDetailsHTML',
+    'renderShowCountryDetailsHTML',
+    'renderShowThemesDetailsHTML',
+    'renderShowNetworkDetailsHTML',
+    'getV2ProviderWatchLink',
+    'renderV2ProvidersGroup',
+    'renderShowDetailActionControlsHTML',
+    'renderShowDetailTabsHTML',
+    'renderShowCrewTabHTML',
+    'renderAlternativeTitlesForDetailsHTML',
+    'renderShowDetailsTabHTML',
+    'renderShowGenresTabHTML',
+    'renderShowReleasesTabHTML',
+    'getShowInfoActiveTab',
+    'renderShowInfoSubTabsHTML',
+    'renderShowCastTabHTML',
+    'renderShowInfoSubTabContentHTML',
+    'renderShowInfoTabHTML',
+    'renderShowEpisodesTabHTML',
+    'renderShowDetailTabContentHTML',
+    'renderSeasonsHTML',
+    'renderSeasonEpisodesHTML',
+    'statusButtonHTML'
+];
+deletedShowComposers.forEach(name=>{
+    assert(!ui.includes(`function ${name}(`), `${name} must be physically removed from ui.js`);
+});
+
+const liveUiBoundaries = [
+    'renderShowDetailsPagePreservingScroll',
+    'renderShowModalPreservingScroll',
+    'renderShowModal',
+    'attachShowDetailsPageEvents',
+    'attachV2ShowModalEvents',
+    'attachV2RailScrollEvents',
+    'getShowDetailActiveTab',
+    'getShowNetworkItems',
+    'getShowLanguageItems',
+    'getShowGenreRoute',
+    'collectCrewJobGroups',
+    'getCrewRouteRole',
+    'normalizeThemeItems',
+    'renderSeasonEpisodeEmptyStateHTML'
+];
+liveUiBoundaries.forEach(name=>{
+    assert(ui.includes(`function ${name}(`), `${name} remains an active ui.js boundary`);
+});
+['openShowModal','closeShowModal'].forEach(name=>{
+    assert(app.includes(`function ${name}(`), `${name} remains an active app.js boundary`);
+});
 
 assert(!ui.includes('function renderShowDetailsPageHTML(show,options={})'));
 assert(!ui.includes('function renderShowDetailsPage(show,options={})'));
@@ -491,7 +548,7 @@ assert(ui.includes('function attachShowDetailsPageEvents(show,isTracked)'));
 assert(ui.includes('document.querySelectorAll(".season-toggle-area[data-season]")'));
 assert(ui.includes('toggleSeason(show.tmdb_id,Number(this.dataset.season));'));
 assert(ui.includes('if(!isPlainAppLinkClick(event)){ return; }'));
-assert(ui.includes('function renderShowDetailTabContentHTML(show)'), 'physical legacy Show composer deletion is deferred to an audited cleanup');
+assert(!ui.includes('function renderShowDetailTabContentHTML(show)'), 'audited legacy Show composer must be physically deleted');
 assert(app.includes('function renderActiveShowDetailPage()'));
 assert(app.includes('renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show.tmdb_id)])});'));
 assert(app.includes('async function openShowDetailsPage(showId,options={})'));

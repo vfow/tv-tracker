@@ -4,7 +4,7 @@
 
 This document locks the safe removal boundary for the post-migration `app.js` / `ui.js` cleanup. The goal is to reduce legacy ownership without deleting still-required tracker state, mutation, persistence, provider, notification, or routing services.
 
-The inventory reflects the deployed `007974a` main baseline through PR #106, including typed Show Details chrome and the final History placeholder/fallback cleanup. The active branch completes Show Details typed composition and removes its runtime HTML-fragment dependency.
+The inventory reflects baseline `455e41c` through PR #107, including complete typed Show Details composition and the final History placeholder/fallback cleanup. The audited follow-up physically removes the dead Show HTML composers and stale streaming-region render wrapper.
 
 ## Current rule
 
@@ -50,7 +50,7 @@ PR #102 replaced History DOM composition with Vue-native structured composition.
 - The loading migration preserves six mobile/eight desktop skeleton rows and accessible status semantics; the shared runtime shell handles Vue asset failure, while Vue alone handles model projection failure.
 - `loadMoreHistory()` remains the Vue bridge-owned pagination action and routes its follow-up render through the sole active renderer.
 
-History Vue ownership and final fallback cleanup remain production-proven at deployed main `007974a`.
+History Vue ownership and final fallback cleanup remain production-proven; the current inventory baseline is `455e41c` through PR #107.
 
 ### Episode tracking
 
@@ -66,9 +66,9 @@ The product has no chosen public name. Internal repository/package/storage ident
 
 ## Remaining active composition dependencies
 
-The current retained dependencies after merged PRs #103 and #104 are:
+The current retained dependencies at baseline `455e41c` through PR #107 are:
 
-1. Show Details: the bridge directly composes all typed nodes and retains only interaction/domain services. Its dead `ui.js` HTML composers await a subsequent audited physical cleanup.
+1. Show Details: the bridge directly composes all typed nodes. The 27 audited dead `ui.js` HTML composers and stale streaming-region render wrapper are physically removed; interaction/domain, provider request/catalog/refresh, routing, and lazy-load services remain active.
 2. Movie Details: the typed node-model bridge still consumes named fragment factories and interaction binders; the former full-page composer is removed.
 3. Upcoming / notifications: Vue composes structured models while canonical timing, loggability, episode mutation, background refresh, notification API/persistence, and interaction services remain authoritative.
 4. Discover: the legacy Discover hub/stability owner remains until native ownership passes direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance.
@@ -77,10 +77,12 @@ The current retained dependencies after merged PRs #103 and #104 are:
 
 Proceed incrementally:
 
-1. Audit and physically remove dead Show HTML composers, then migrate Movie fragment factories; retain interaction binders and shared domain services until equivalent ownership is proven.
-2. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
-3. Finish Discover native ownership.
-4. Re-audit `app.js` / `ui.js` and remove only dead ownership; retain named shared services or remove the shells only if no required ownership remains.
+1. COMPLETED: audit and physically remove dead Show HTML composers and the stale Show provider render wrapper, while retaining interaction binders and shared domain/provider/routing/lazy-load services.
+2. NEXT: migrate Movie fragment factories to typed native composition.
+3. AFTER MOVIE: remove the media-details node-model fragment parser only when Movie no longer consumes it.
+4. Re-audit Upcoming timing, mutation, notification, interaction, and unused skeleton helpers while preserving release and persistence semantics.
+5. Finish Discover native ownership.
+6. Re-audit `app.js` / `ui.js` and remove only dead ownership; retain named shared services or remove the shells only if no required ownership remains.
 
 Each removal slice uses a dedicated branch/PR, exact-head CI, serialized merge, and production verification.
 
