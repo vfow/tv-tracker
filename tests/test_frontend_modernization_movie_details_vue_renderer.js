@@ -3,6 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 const bridgeSource = fs.readFileSync('static/js/movie-details-vue-bridge.js', 'utf8');
+const panelSource = fs.readFileSync('static/js/movie-details-native-panels.js', 'utf8');
 const stateBridgeSource = fs.readFileSync('static/js/media-details-state-bridge.js', 'utf8');
 const nodeModelSource = fs.readFileSync('static/js/media-details-node-model.js', 'utf8');
 const component = fs.readFileSync('frontend/src/media-details/MovieDetails.vue', 'utf8');
@@ -25,7 +26,6 @@ function freeze(value){
     return value;
 }
 
-const fragmentCalls = [];
 const nodeModel = {
     ownership:'typed-node-model',
     text(value){
@@ -33,10 +33,6 @@ const nodeModel = {
     },
     element(tag,attrs,children){
         return Object.freeze({kind:'element',tag,attrs:Object.freeze(attrs || {}),children:Object.freeze(children || [])});
-    },
-    fragment(html){
-        fragmentCalls.push(String(html || ''));
-        return Object.freeze([{kind:'text',text:String(html || '')}]);
     },
     freeze
 };
@@ -131,10 +127,6 @@ const context = {
             calls.push(['tracking-state',id]);
             return trackingStates.get(String(id)) || {watched:false,plan:false,favorite:false};
         },
-        renderMovieActiveTabContentHTML(nextMovie){
-            calls.push(['content',nextMovie]);
-            return '<section>Synopsis panel</section>';
-        },
         attachMovieDetailPageEvents(){ calls.push(['bind']); },
         updateShellTitle(){ calls.push(['title']); }
     }
@@ -146,8 +138,14 @@ legacyChromeFunctions.forEach(name=>{
     };
 });
 vm.createContext(context);
+vm.runInContext(panelSource,context);
 vm.runInContext(bridgeSource,context);
 
+const panelOwner = context.window.TVTrackerMovieDetailsNativePanels;
+assert(panelOwner, 'typed Movie panel owner should exist');
+assert.strictEqual(panelOwner.ownership,'typed-node-panels');
+assert.strictEqual(typeof panelOwner.build,'function');
+assert(!Object.prototype.hasOwnProperty.call(context.window,'renderMovieActiveTabContentHTML'));
 const bridge = context.window.TVTrackerMovieDetailsVueBridge;
 assert(bridge, 'Movie Details Vue bridge should exist');
 assert.strictEqual(bridge.ownership,'vue-dom');
@@ -225,8 +223,9 @@ assert.strictEqual(model.title,'Example <Movie>','source text must not be pre-es
 assert(!Object.prototype.hasOwnProperty.call(model,'html'));
 assert(Object.isFrozen(model) && Object.isFrozen(model.meta) && Object.isFrozen(model.actions));
 assert.strictEqual(legacyCalls.length,0,'legacy Movie chrome composers must never run');
-assert.strictEqual(fragmentCalls.length,1,'each ready model must parse exactly the retained active panel fragment');
-assert.strictEqual(fragmentCalls[0],'<section>Synopsis panel</section>');
+assert(Object.isFrozen(model.tabContent),'ready model must contain the typed owner panel nodes');
+assert(nodesWithClass(model.tabContent,'movie-info-tab-stack').length === 1,'bridge must compose Info through the typed panel owner');
+assert.strictEqual(textOf(model.tabContent).includes('Synopsis'),true);
 assert(!Object.isFrozen(movie),'the recursively frozen model must not include the source movie');
 assert(!Object.isFrozen(movie.crew[0]),'nested crew records must remain mutable domain records');
 assert(!Object.isFrozen(movie.genres[0]),'nested genre records must remain mutable domain records');
@@ -409,9 +408,11 @@ Promise.all(favoriteRuntime.dispatch('click').results).then(()=>{
     assert(calls.some(call=>call[0] === 'title'));
 
     assert.strictEqual(legacyCalls.length,0);
-    assert.strictEqual((bridgeSource.match(/fragment\("renderMovieActiveTabContentHTML",movie\)/g) || []).length,1);
+    assert(bridgeSource.includes('const owner = global.TVTrackerMovieDetailsNativePanels;'));
+    assert(bridgeSource.includes('const nodes = owner.build(movie);'));
+    assert(!bridgeSource.includes('renderMovieActiveTabContentHTML'));
+    assert(!bridgeSource.includes('.fragment('));
     legacyChromeFunctions.forEach(name=>assert(!bridgeSource.includes(name),`${name} must not remain a bridge dependency`));
-    assert.strictEqual((bridgeSource.match(/fragment\("render/g) || []).length,1,'only the active panel may remain a named fragment');
     assert(!bridgeSource.includes('callString('));
 
     assert(viewModel.includes("readonly surface: 'movie'"));
@@ -432,7 +433,7 @@ Promise.all(favoriteRuntime.dispatch('click').results).then(()=>{
 
     assert(!ui.includes('function renderMovieDetailPageHTML(state)'));
     assert(!ui.includes('function renderMovieDetailPage(state)'));
-    assert(ui.includes('function renderMovieActiveTabContentHTML(movie)'),'the sole panel fragment remains until panel migration');
+    assert(!ui.includes('function renderMovieActiveTabContentHTML(movie)'),'retired HTML panel composer must stay removed');
     assert(app.includes('function renderActiveMoviePage()'));
     assert(app.includes('renderMovieDetailPage(moviePageState);'));
     assert(app.includes('attachMovieDetailPageEvents();'),'proven duplicate interaction binding remains unchanged in this slice');
@@ -446,11 +447,13 @@ Promise.all(favoriteRuntime.dispatch('click').results).then(()=>{
 
     const stateBridgeIndex = template.indexOf("filename='js/media-details-state-bridge.js'");
     const nodeModelIndex = template.indexOf("filename='js/media-details-node-model.js'");
+    const nativePanelsIndex = template.indexOf("filename='js/movie-details-native-panels.js'");
     const movieVueBridgeIndex = template.indexOf("filename='js/movie-details-vue-bridge.js'");
     const routerIndex = template.indexOf("filename='js/app-router.js'");
     assert(stateBridgeIndex >= 0);
     assert(nodeModelIndex > stateBridgeIndex);
-    assert(movieVueBridgeIndex > nodeModelIndex);
+    assert(nativePanelsIndex > nodeModelIndex);
+    assert(movieVueBridgeIndex > nativePanelsIndex);
     assert(routerIndex > movieVueBridgeIndex);
 
     console.log('Vue-native Movie Details chrome composition checks passed.');

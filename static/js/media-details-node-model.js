@@ -65,39 +65,9 @@
         });
     }
 
-    function parseNode(node){
-        if(!node) return null;
-        if(node.nodeType === 3){
-            return text(node.nodeValue || "");
-        }
-        if(node.nodeType !== 1) return null;
-        const tag = String(node.tagName || "").toLowerCase();
-        if(!SAFE_TAGS.has(tag)){
-            const flattened = Array.from(node.childNodes || []).map(parseNode).filter(Boolean);
-            return element("span",{},flattened);
-        }
-        const attrs = {};
-        Array.from(node.attributes || []).forEach(attribute=>{
-            attrs[attribute.name] = attribute.value;
-        });
-        const children = Array.from(node.childNodes || []).map(parseNode).filter(Boolean);
-        return element(tag,attrs,children);
-    }
-
-    function fragment(html){
-        if(!global.document || typeof global.document.createElement !== "function"){
-            throw new Error("Media Details node parser requires document.createElement");
-        }
-        const template = global.document.createElement("template");
-        template.innerHTML = String(html || "");
-        const root = template.content || template;
-        return Object.freeze(Array.from(root.childNodes || []).map(parseNode).filter(Boolean));
-    }
-
     global.TVTrackerMediaDetailsNodeModel = Object.freeze({
         text,
         element,
-        fragment,
         freeze,
         ownership:"typed-node-model"
     });

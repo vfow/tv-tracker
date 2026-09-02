@@ -25,7 +25,6 @@
             model.ownership !== "typed-node-model" ||
             typeof model.text !== "function" ||
             typeof model.element !== "function" ||
-            typeof model.fragment !== "function" ||
             typeof model.freeze !== "function"
         ){
             throw new Error("Media Details typed node model unavailable");
@@ -41,10 +40,13 @@
         return nodeModel().element(tag,attrs,children);
     }
 
-    function fragment(name,...args){
-        const factory = nodeModel();
-        const fn = global[name];
-        return typeof fn === "function" ? factory.fragment(fn(...args)) : Object.freeze([]);
+    function buildTabContent(movie){
+        const owner = global.TVTrackerMovieDetailsNativePanels;
+        if(!owner || owner.ownership !== "typed-node-panels" || typeof owner.build !== "function"){
+            throw new Error("Movie Details typed panel owner unavailable");
+        }
+        const nodes = owner.build(movie);
+        return Array.isArray(nodes) ? nodes : Object.freeze([]);
     }
 
     function imageURL(path,size){
@@ -364,7 +366,7 @@
             externalLinks:buildExternalLinks(movie),
             actions:buildActions(movie),
             tabs:buildTabs(),
-            tabContent:fragment("renderMovieActiveTabContentHTML",movie)
+            tabContent:buildTabContent(movie)
         });
     }
 

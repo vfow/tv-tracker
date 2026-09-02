@@ -481,9 +481,9 @@ assert(!bridgeSource.includes('renderShowDetailTabContentHTML'));
 assert(!bridgeSource.includes('.fragment('));
 assert(!bridgeSource.includes('/api/'));
 assert(!bridgeSource.includes('history.pushState') && !bridgeSource.includes('history.replaceState'));
-assert(nodeModelSource.includes('fragment,'), 'Movie Details still requires global fragment support');
-assert(nodeModelSource.includes('function parseNode(node)'));
-assert(nodeModelSource.includes('function fragment(html)'));
+assert(!nodeModelSource.includes('fragment,'), 'Movie Details must not require global fragment support');
+assert(!nodeModelSource.includes('function parseNode(node)'));
+assert(!nodeModelSource.includes('function fragment(html)'));
 assert(nodeModelSource.includes('lower.startsWith("on")'));
 
 const deletedShowComposers = [

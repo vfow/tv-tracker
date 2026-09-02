@@ -18,16 +18,11 @@ function freeze(value){
     return value;
 }
 
-let legacyFragmentCalls = 0;
 const baseNodeModel = Object.freeze({
     ownership:'typed-node-model',
     text(value){ return Object.freeze({kind:'text',text:String(value ?? '')}); },
     element(tag,attrs={},children=[]){
         return Object.freeze({kind:'element',tag:String(tag),attrs:Object.freeze({...attrs}),children:Object.freeze(children.slice())});
-    },
-    fragment(html){
-        legacyFragmentCalls += 1;
-        return Object.freeze([{kind:'legacy-fragment',html:String(html || '')}]);
     },
     freeze
 });
@@ -87,8 +82,10 @@ vm.runInContext(panelSource,context);
 const owner = context.window.TVTrackerMovieDetailsNativePanels;
 assert(owner,'native Movie panel owner must install');
 assert.strictEqual(owner.ownership,'typed-node-panels');
-assert.strictEqual(context.window.renderMovieActiveTabContentHTML,owner.build,'compatibility entry must point at typed builder');
+assert.strictEqual(typeof owner.build,'function','native Movie panel owner must expose the typed builder directly');
+assert(!Object.prototype.hasOwnProperty.call(context.window,'renderMovieActiveTabContentHTML'),'retired HTML panel compatibility export must stay absent');
 assert.strictEqual(context.window.TVTrackerMediaDetailsNodeModel.ownership,'typed-node-model');
+assert(!Object.prototype.hasOwnProperty.call(context.window.TVTrackerMediaDetailsNodeModel,'fragment'),'typed node model must not expose the retired HTML fragment parser');
 
 function flatten(value,result=[]){
     (Array.isArray(value) ? value : [value]).forEach(node=>{
@@ -138,11 +135,7 @@ for(const tab of ['Info','Cast','Crew','Details','Genres','Releases']){
     assert(Array.isArray(nodes) && Object.isFrozen(nodes),`${tab} panel must return frozen typed nodes`);
     assert(nodes.length > 0,`${tab} panel must render content`);
     assert(flatten(nodes).every(node=>node.kind === 'text' || node.kind === 'element'),`${tab} panel must contain typed nodes only`);
-    const throughBridgeBoundary = context.window.TVTrackerMediaDetailsNodeModel.fragment(nodes);
-    assert(Array.isArray(throughBridgeBoundary) && throughBridgeBoundary.length === nodes.length,`${tab} typed nodes must pass through without HTML parsing`);
-    assert(flatten(throughBridgeBoundary).every(node=>node.kind === 'text' || node.kind === 'element'),`${tab} bridge boundary must preserve typed nodes`);
 }
-assert.strictEqual(legacyFragmentCalls,0,'Movie panel runtime must not invoke the legacy HTML fragment parser');
 
 context.window.activeMovieDetailsTab = 'Info';
 const info = owner.build(movie);
@@ -194,7 +187,10 @@ assert(textOf(releases).includes('United States'));
 
 assert(!panelSource.includes('.innerHTML'),'native Movie panel owner must not compose HTML strings into the DOM');
 assert(!panelSource.includes('document.'),'native Movie panel owner must remain DOM-free');
-assert(bridgeSource.includes('fragment("renderMovieActiveTabContentHTML",movie)'),'existing bridge compatibility boundary remains until the physical cleanup slice');
+assert(bridgeSource.includes('const owner = global.TVTrackerMovieDetailsNativePanels;'),'Movie bridge must resolve the typed panel owner directly');
+assert(bridgeSource.includes('const nodes = owner.build(movie);'),'Movie bridge must build active panels through the typed owner');
+assert(!bridgeSource.includes('renderMovieActiveTabContentHTML'),'retired HTML panel composer must not remain a bridge dependency');
+assert(!bridgeSource.includes('.fragment('),'Movie bridge must not parse panel HTML fragments');
 
 const nodeModelIndex = template.indexOf("filename='js/media-details-node-model.js'");
 const nativePanelsIndex = template.indexOf("filename='js/movie-details-native-panels.js'");
