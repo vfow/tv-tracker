@@ -95,11 +95,11 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('cleanLegacyMetadata', app_js)
 
     def test_empty_season_has_final_empty_state(self):
-        ui = self.read('static/js/ui.js')
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
         app_js = self.read('static/js/app.js')
-        self.assertIn('Episode list not announced yet.', ui)
-        self.assertIn('Loading episode list...', ui)
-        self.assertIn('seasonEpisodeListIsLoadedEmpty', ui)
+        self.assertIn('Episode list not announced yet.', show_details_bridge)
+        self.assertIn('Loading episode list...', show_details_bridge)
+        self.assertIn('function seasonIsLoadedEmpty(show,seasonNumber)', show_details_bridge)
         self.assertIn('Number(show._season_episodes[seasonKey] || 0) === 0', app_js)
 
 
@@ -241,6 +241,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderPersonDetailPage', ui)
         self.assertIn('renderDiscoveryFilterDetailPage', ui)
         movie_details_bridge = self.read('static/js/movie-details-vue-bridge.js')
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
         self.assertIn('global.renderMovieDetailPage = render;', movie_details_bridge)
         self.assertNotIn('function renderMovieDetailPage(', ui)
         self.assertIn('renderCollectionsIndexPage', ui)
@@ -262,7 +263,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('global.getEyeFilteredRenderItems', search_bridge)
         self.assertIn('data-tvtracker-search-owner="vue"', search_vue)
         self.assertIn('data-person-role="person"', search_vue)
-        self.assertIn('renderShowThemesDetailsHTML', ui)
+        self.assertIn('function buildCrew(show)', show_details_bridge)
+        self.assertIn('global.normalizeThemeItems(show)', show_details_bridge)
 
     def test_friendly_error_page_copy_exists(self):
         routing = self.read('tvtracker/web/routing.py')
@@ -615,16 +617,15 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('movie-release-country-row', built_css)
 
     def test_phase604_detail_polish_releases_and_placeholders_exist(self):
-        ui = self.read('static/js/ui.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
         details_block = self.read('frontend/src/media-details/MovieDetails.vue')
-        genres_start = ui.index('function renderShowGenresTabHTML(show)')
-        genres_block = ui[genres_start:ui.index('function getRatingsByCountry(show)', genres_start)]
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
+        self.assertIn('function buildDetails(show)', show_details_bridge)
+        self.assertIn('function buildGenres(show)', show_details_bridge)
+        ui = self.read('static/js/ui.js')
         releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
         releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
-        show_details_start = ui.index('function renderShowDetailsTabHTML(show)')
-        show_details_block = ui[show_details_start:ui.index('function renderShowGenresTabHTML(show)', show_details_start)]
 
         self.assertIn('v-for="(node, index) in model.externalLinks"', details_block)
         self.assertIn('class="show-page-actions-wrap movie-page-actions-wrap"', details_block)
@@ -642,12 +643,13 @@ class TMDBOnlyContractTests(unittest.TestCase):
 
 
     def test_phase605_small_detail_cleanup_exists(self):
-        ui = self.read('static/js/ui.js')
         app = self.read('static/js/app.js')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
-        themes_start = ui.index('function renderShowThemesDetailsHTML(show)')
-        themes_block = ui[themes_start:ui.index('function renderShowNetworkDetailsHTML(show)', themes_start)]
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
+        genres_start = show_details_bridge.index('function buildGenres(show)')
+        themes_block = show_details_bridge[genres_start:show_details_bridge.index('function providerWatchLink', genres_start)]
+        ui = self.read('static/js/ui.js')
         releases_start = ui.index('function renderMovieReleaseSortControlHTML(sortMode)')
         releases_block = ui[releases_start:ui.index('function renderMovieCastTabHTML(movie)', releases_start)]
 
@@ -1040,7 +1042,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('renderMovieTrackingButtonHTML(state,"watched","Watched")', ui)
         self.assertIn('renderMovieTrackingButtonHTML(state,"plan","Plan to Watch")', ui)
         self.assertIn('renderFavoriteHeartButtonHTML(state.favorite,`data-movie-tracking-action="favorite"`)', ui)
-        self.assertIn('data-show-favorite-button="true"', ui)
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
+        self.assertIn('"data-show-favorite-button":"true"', show_details_bridge)
         primitives = self.read('tvtracker/backup/primitives.py')
         backup_validation = self.read('tvtracker/backup/validation.py')
         tracker_history = self.read('tvtracker/tracker/history.py')
@@ -1064,6 +1067,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         backend = self.read('app.py')
         source_css = self.read('static/css/tailwind-input.css')
         built_css = self.read('static/css/tailwind.css')
+        show_details_bridge = self.read('static/js/show-details-vue-bridge.js')
 
         self.assertIn('const TMDB_SEARCH_CACHE_TTL = 1000 * 60 * 60;', tmdb)
         self.assertIn('const TMDB_PROVIDER_CATALOG_CACHE_TTL = 1000 * 60 * 60 * 24;', tmdb)
@@ -1085,10 +1089,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertNotIn('Powered by JustWatch', ui)
         self.assertNotIn('VIEW WATCH OPTIONS', ui)
         self.assertNotIn('loadDetailWatchProviders', app)
-        self.assertIn('function renderShowReleasesTabHTML(show)', ui)
-        self.assertIn('renderV2ProvidersGroup("Streaming",providers.flatrate,providers)', ui)
-        self.assertIn('renderV2ProvidersGroup("Rent",providers.rent,providers)', ui)
-        self.assertIn('renderV2ProvidersGroup("Buy",providers.buy,providers)', ui)
+        self.assertIn('function buildReleases(show)', show_details_bridge)
+        self.assertIn('providerGroup("Streaming",providers.flatrate,providers)', show_details_bridge)
+        self.assertIn('providerGroup("Rent",providers.rent,providers)', show_details_bridge)
+        self.assertIn('providerGroup("Buy",providers.buy,providers)', show_details_bridge)
 
         self.assertIn('function renderFavoriteHeartButtonHTML(active,attributes="")', ui)
         self.assertIn('Add to favorites', ui)
@@ -1117,7 +1121,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('data-movie-similar-open', ui)
         self.assertIn('function formatRuntimeDisplay(runtimeMinutes)', ui)
         self.assertIn('renderRuntimeDetailLinkHTML(movie.runtime,"movie")', ui)
-        self.assertIn('renderRuntimeDetailLinkHTML(runtime,"tv")', ui)
+        self.assertIn('global.getRuntimeBrowseRoute(runtime,"tv")', show_details_bridge)
 
         self.assertIn('browse-service-logo-tile', source_css)
         self.assertIn('browse-service-logo-tile', built_css)

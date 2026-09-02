@@ -4,7 +4,7 @@
 
 This phase covers the protected TV-show and movie detail surfaces reached through `/app/show/<show_key>` and `/app/movie/<movie_key>`.
 
-Show and Movie Details final DOM is Vue-owned. This record describes the current incremental removal of the legacy HTML fragment composition still feeding those Vue surfaces.
+Show and Movie Details final DOM is Vue-owned. Show Details now has full typed composition; Movie Details remains the only detail surface fed by legacy HTML fragments.
 
 ## Current ownership
 
@@ -13,7 +13,9 @@ Show and Movie Details final DOM is Vue-owned. This record describes the current
 - `static/js/app.js` owns `selectedShowId`, `showDetailPreview`, tracked show data in `DATA.shows`, route/open orchestration, async metadata hydration, save/tracking actions, and active tab state.
 - `frontend/src/media-details/ShowDetails.vue` owns the final show-detail DOM.
 - `static/js/show-details-vue-bridge.js` builds the immutable renderer model and delegates established interactions after Vue mounts.
-- On this branch, poster fallback, metadata, external links, tracker actions, primary tabs, and the similar-title rail are native typed nodes. The Info/Episodes panel remains the only named legacy HTML-fragment dependency.
+- `static/js/show-details-vue-bridge.js` directly composes poster fallback, metadata, external links, tracker actions, primary tabs, all five Info subtabs, provider-region states, seasons, episodes, and the similar-title rail as immutable typed nodes. Show Details no longer calls an HTML-fragment composer.
+- `frontend/src/episode-tracking/EpisodeTrackingController.vue` capture-owns tracked episode and season watched actions; matching `ui.js` target handlers remain as dormant fallback.
+- Existing `ui.js` binders remain active for other Show interactions, including tabs and season expansion/lazy loading, while established mutation, provider, and routing services remain authoritative.
 - `static/js/app-router.js` remains the sole browser History owner.
 
 The renderer-visible tab contract is:
@@ -50,13 +52,13 @@ The renderer-visible contract is:
 
 `frontend/src/media-details/legacyMediaDetailsState.ts` is the strict TypeScript adapter for that bridge. The Vue renderers consume immutable view models through their dedicated runtime bridges.
 
-`static/js/media-details-node-model.js` provides sanitized typed node constructors during the incremental conversion. New bridge composition must use `text()` / `element()` directly; parsing legacy HTML through `fragment()` is temporary and must disappear after the remaining tab panels migrate.
+`static/js/media-details-node-model.js` provides sanitized typed node constructors during the incremental conversion. Show composition uses `text()` / `element()` directly. Its `fragment()` parser remains only because Movie Details still calls it and must not be removed before Movie composition migrates.
 
 ## Remaining sequence
 
-1. Replace the remaining Show Info/Episodes panel HTML fragment with typed native data/nodes.
-2. Replace Movie chrome and tab-panel fragment composition with typed native data/nodes.
-3. Remove `fragment()` and the HTML parser once no Details bridge calls it.
+1. Replace Movie chrome and tab-panel fragment composition with typed native data/nodes.
+2. Remove `fragment()` and the HTML parser once Movie Details no longer calls it.
+3. Audit and physically delete the now-dead Show HTML composers separately, after confirming no retained Discover/Movie/shared path uses them.
 4. Delete only fragment composers and callers proven dead across the repository.
 5. Preserve routes, modified clicks, back-stack semantics, tabs, release sorting, adult filtering, provider-region behavior, tracker actions, and watched state.
 6. Run full regression, exact-head CI, deployment, and production verification before declaring Sprint 2A complete.
