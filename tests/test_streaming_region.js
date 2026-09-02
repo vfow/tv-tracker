@@ -42,7 +42,6 @@ function load(){
                 : {};
             }
         }),
-        renderShowReleasesTabHTML:()=>"SHOW_ORIGINAL",
         renderMovieProvidersHTML:()=>"MOVIE_ORIGINAL",
         createProfileSettingsDraft:()=>({username:"Tester"}),
         saveProfileSettings:async settings=>{
@@ -112,7 +111,6 @@ function fakeElement(extra={}){
     assert.strictEqual(params.watch_region,undefined);
     assert.strictEqual(params.with_watch_monetization_types,undefined);
 
-    assert.ok(win.renderShowReleasesTabHTML({}).includes("Choose a streaming region"));
     assert.ok(win.renderMovieProvidersHTML({}).includes("Choose a streaming region"));
 
     await win.tmdbGetShowDetails(10);
@@ -135,9 +133,7 @@ function fakeElement(extra={}){
     assert.strictEqual(params.with_watch_providers,"8");
     assert.strictEqual(params.watch_region,"MY");
 
-    assert.ok(win.renderShowReleasesTabHTML({_tmdb_watch_providers:{results:{}}}).includes("No streaming provider data"));
     assert.ok(win.renderMovieProvidersHTML({watch_providers:{results:{}}}).includes("No streaming provider data"));
-    assert.strictEqual(win.renderShowReleasesTabHTML({_tmdb_watch_providers:{results:{MY:{flatrate:[1]}}}}),"SHOW_ORIGINAL");
     assert.strictEqual(win.renderMovieProvidersHTML({watch_providers:{results:{MY:{flatrate:[1]}}}}),"MOVIE_ORIGINAL");
 
     const draft = win.createProfileSettingsDraft();
@@ -218,6 +214,7 @@ function fakeElement(extra={}){
     assert.ok(source.includes("streaming-region-option-name"),"Country names should be the primary option label");
     assert.ok(source.includes("streaming-region-option-code"),"Country code should be secondary metadata only");
     assert.ok(!source.includes("MutationObserver"),"settings.js now renders its own streaming section; streaming-region.js must not install a re-render observer");
+    assert.ok(!source.includes("renderShowReleasesTabHTML"),"Streaming Region must not wrap the removed Show composer");
     assert.ok(source.includes("mountStreamingRegionSetting:mountSetting"),"Region mount should remain directly testable");
 
     console.log("Streaming region regression tests passed.");

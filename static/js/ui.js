@@ -3746,30 +3746,6 @@ function renderCertificationLinkHTML(media,rating){
     return renderPlainInlineRouteLinkHTML(cleanRating,route,"show-detail-certification-link");
 }
 
-function getTVStatusSlugFromLabel(label){
-    const clean = String(label || "").trim().toLowerCase();
-    if(clean === "returning series"){
-        return "returning-series";
-    }
-    if(clean === "ended"){
-        return "ended";
-    }
-    if(clean === "canceled" || clean === "cancelled"){
-        return "canceled";
-    }
-    if(clean === "in production"){
-        return "in-production";
-    }
-    return "";
-}
-
-function renderStatusLinkHTML(status){
-    const label = String(status || "").trim();
-    const slug = getTVStatusSlugFromLabel(label);
-    const route = slug && typeof getStatusDetailRoute === "function" ? getStatusDetailRoute(slug) : "";
-    return label ? renderPlainInlineRouteLinkHTML(label,route,"show-detail-status-link") : "Unknown";
-}
-
 function renderCreatedByHTML(show){
     const people = Array.isArray(show && show.created_by_people) ? show.created_by_people : [];
     if(people.length){
@@ -3812,10 +3788,6 @@ function renderCompanyLogoTilesHTML(companies,media="tv"){
     })
     .filter(Boolean);
     return items.length ? `<span class="movie-company-logo-list">${items.join("")}</span>` : "";
-}
-
-function renderCompanyLinksHTML(companies){
-    return renderCompanyLogoTilesHTML(companies,"tv") || "Unknown";
 }
 
 function renderMovieCompanyLogosHTML(companies){
@@ -4483,12 +4455,6 @@ function renderRuntimeDetailLinkHTML(runtimeMinutes,media="tv"){
     : escapeHTML(label);
 }
 
-function getPrimaryShowRuntime(show){
-    const runtimes = Array.isArray(show && show.episode_run_time) ? show.episode_run_time : [];
-    const runtime = runtimes.map(value=>Number(value || 0)).find(value=>Number.isFinite(value) && value > 0);
-    return runtime || 0;
-}
-
 function renderMovieDetailsTabHTML(movie){
     const certification = getMovieCertification(movie);
     const productionCompaniesHTML = renderMovieCompanyLogosHTML(movie && movie.production_companies);
@@ -4759,68 +4725,6 @@ function getShowLanguageItems(show){
     return items;
 }
 
-function renderShowLanguageDetailsHTML(show){
-    const languages = getShowLanguageItems(show);
-    const originalLanguage = String(show && show.original_language || "").trim().toLowerCase();
-    if(!languages.length){
-        return "Unknown";
-    }
-    return `<span class="show-detail-inline-link-list">${languages.map((language,index)=>{
-        const label = language.label || (typeof getLanguageName === "function" ? getLanguageName(language.code) : language.code);
-        const link = language.code && language.code === originalLanguage
-        ? renderShowEntityLinkHTML(label,"language",language.code,{name:`${label} TV Shows`,media:"tv"})
-        : `<span>${escapeHTML(label)}</span>`;
-        return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${link}`;
-    }).join("")}</span>`;
-}
-
-function renderShowCountryDetailsHTML(show){
-    const countries = (Array.isArray(show && show.origin_country) ? show.origin_country : [])
-    .map(code=>String(code || "").trim().toLowerCase())
-    .filter(Boolean);
-    const seen = new Set();
-    const unique = countries.filter(code=>{
-        if(seen.has(code)){
-            return false;
-        }
-        seen.add(code);
-        return true;
-    });
-
-    if(!unique.length){
-        return "Unknown";
-    }
-
-    return `<span class="show-detail-inline-link-list">${unique.map((code,index)=>{
-        const label = getCountryLabel(code);
-        const name = `TV Shows from ${getCountryName(code)}`;
-        return `${index > 0 ? `<span class="show-detail-inline-separator">/</span>` : ""}${renderShowEntityLinkHTML(label,"country",code,{name:name})}`;
-    }).join("")}</span>`;
-}
-
-function renderShowThemesDetailsHTML(show){
-    const themes = normalizeThemeItems(show);
-    if(!themes.length){
-        return "Unknown";
-    }
-
-    return `
-        <div class="show-detail-theme-list show-detail-theme-list-expanded">
-            ${themes.map(theme=>renderThemeItemHTML(theme)).join("")}
-        </div>
-    `;
-}
-
-function renderShowNetworkDetailsHTML(show){
-    const networks = getShowNetworkItems(show);
-
-    if(!networks.length){
-        return "Unknown";
-    }
-
-    return `<div class="v2-provider-list">${networks.map(renderNetworkEntityHTML).join("")}</div>`;
-}
-
 function renderV2ShowInfoMetaLineHTML(show){
     const year = show && show.first_air_date ? String(show.first_air_date).slice(0,4) : "";
     const contentRating = String(show && show.content_rating ? show.content_rating : "").trim();
@@ -4930,72 +4834,6 @@ function collectV2ProviderNames(providers){
     });
 
     return names.slice(0,12);
-}
-
-function getV2ProviderWatchLink(provider,providerRegion){
-    const directLink = safeExternalURL(
-        provider && (
-            provider.link ||
-            provider.url ||
-            provider.watch_url ||
-            provider.deep_link
-        )
-    );
-
-    if(directLink){
-        return directLink;
-    }
-
-    return safeExternalURL(providerRegion && providerRegion.link);
-}
-
-function renderV2ProvidersGroup(label,providers,providerRegion=null){
-    if(!Array.isArray(providers) || providers.length === 0){
-        return "";
-    }
-
-    const items = providers.slice(0,10).map(provider=>{
-        const logo = provider.logo_path
-        ? `<img class="v2-provider-logo" src="${escapeHTML(trackerImageURL(provider.logo_path,"w92"))}" alt="">`
-        : "";
-        const providerName = provider && provider.provider_name ? provider.provider_name : (provider && provider.name ? provider.name : "Provider");
-        const providerId = Number(provider && (provider.provider_id || provider.id) || 0);
-        const providerRoute = providerId && typeof getProviderDetailRoute === "function" ? getProviderDetailRoute(providerId,providerName) : "";
-        const watchLink = getV2ProviderWatchLink(provider,providerRegion);
-        const innerHTML = `
-            ${logo}
-            <span>${escapeHTML(providerName)}</span>
-        `;
-
-        if(providerRoute){
-            return `
-                <a class="v2-provider-pill v2-provider-pill-link" href="${escapeHTML(providerRoute)}" title="Browse ${escapeHTML(providerName)}">
-                    ${innerHTML}
-                </a>
-            `;
-        }
-
-        if(watchLink){
-            return `
-                <a class="v2-provider-pill v2-provider-pill-link" href="${escapeHTML(watchLink)}" target="_blank" rel="noopener noreferrer" title="Open ${escapeHTML(providerName)} availability">
-                    ${innerHTML}
-                </a>
-            `;
-        }
-
-        return `
-            <span class="v2-provider-pill v2-provider-pill-muted" title="No direct watch link available">
-                ${innerHTML}
-            </span>
-        `;
-    }).join("");
-
-    return `
-        <div class="v2-provider-group">
-            <div class="v2-provider-group-title">${escapeHTML(label)}</div>
-            <div class="v2-provider-list">${items}</div>
-        </div>
-    `;
 }
 
 function renderV2KeywordsHTML(show){
@@ -5779,46 +5617,6 @@ function getCountryLabel(code){
     return `${flag ? flag + " " : ""}${name}`;
 }
 
-function renderShowDetailActionControlsHTML(show,isTracked){
-    if(!show){
-        return "";
-    }
-
-    if(!isTracked){
-        return `
-            <div class="modal-status-buttons show-page-status-buttons">
-                <button class="modal-status-button show-page-add-status-button" data-add-status="watching">Add to Watching</button>
-                <button class="modal-status-button show-page-add-status-button" data-add-status="plan">Add to Plan</button>
-                <button class="modal-status-button show-page-add-status-button" data-add-status="finished">Add to Completed</button>
-                <button class="modal-status-button show-page-add-status-button" data-add-status="dropped">Add to Dropped</button>
-            </div>
-        `;
-    }
-
-    return `
-        <div class="modal-status-buttons show-page-status-buttons">
-            ${statusButtonHTML(show,"watching","Watching")}
-            ${statusButtonHTML(show,"plan","Plan to Watch")}
-            ${statusButtonHTML(show,"paused","Paused")}
-            ${statusButtonHTML(show,"finished","Completed")}
-            ${statusButtonHTML(show,"dropped","Dropped")}
-            ${renderFavoriteHeartButtonHTML(typeof isShowFavorite === "function" && isShowFavorite(show.tmdb_id),`data-show-favorite-button="true"`)}
-            <button class="remove-show-button" id="remove-show-button">Remove</button>
-        </div>
-    `;
-}
-
-function renderShowDetailTabsHTML(show){
-    const activeTab = getShowDetailActiveTab(show);
-    return `
-        <div class="show-detail-tabs" role="tablist" aria-label="Show details sections">
-            ${["Info","Episodes"].map(tab=>`
-                <button type="button" class="show-detail-tab ${activeTab === tab ? "active" : ""}" data-show-detail-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
-            `).join("")}
-        </div>
-    `;
-}
-
 function renderV2CrewMemberRows(people,fallbackRole="",media="tv"){
     return (Array.isArray(people) ? people : []).map(person=>{
         const routeRole = getCrewRouteRole(person,fallbackRole);
@@ -5847,123 +5645,6 @@ function renderV2CrewMemberRows(people,fallbackRole="",media="tv"){
     }).join("");
 }
 
-function renderShowCrewTabHTML(show){
-    return renderCrewJobGroupsHTML(show && show._tmdb_crew ? show._tmdb_crew : [],"tv","No crew details available yet.");
-}
-
-function renderAlternativeTitlesForDetailsHTML(show){
-    const titles = Array.isArray(show && show._tmdb_alternative_titles) ? show._tmdb_alternative_titles : [];
-    const filters = getShowDetailFilters();
-    const hiddenCountries = filters.hiddenAlternativeTitleCountries;
-    const hiddenTitleNames = filters.hiddenAlternativeTitleNames;
-    const grouped = new Map();
-
-    titles
-    .filter(item=>{
-        if(!item || !item.title){
-            return false;
-        }
-        const titleName = String(item.title || "").trim().toLowerCase();
-        if(hiddenTitleNames.includes(titleName)){
-            return false;
-        }
-        if(alternativeTitleCountryMatchesFilter(item,hiddenCountries)){
-            return false;
-        }
-        return true;
-    })
-    .slice(0,12)
-    .forEach(item=>{
-        const country = item.iso_3166_1 ? getCountryLabel(item.iso_3166_1) : "Other";
-        const key = country || "Other";
-        if(!grouped.has(key)){
-            grouped.set(key,[]);
-        }
-        const title = String(item.title || "").trim();
-        if(title && !grouped.get(key).includes(title)){
-            grouped.get(key).push(title);
-        }
-    });
-
-    if(!grouped.size){
-        return "Unknown";
-    }
-
-    return `
-        <div class="show-release-provider-stack">
-            ${Array.from(grouped.entries()).map(([country,countryTitles])=>`
-                <div class="v2-provider-group">
-                    <div class="v2-provider-group-title">${escapeHTML(country)}</div>
-                    <div class="show-detail-release-meta">
-                        ${countryTitles.map(title=>`<span>${escapeHTML(title)}</span>`).join("")}
-                    </div>
-                </div>
-            `).join("")}
-        </div>
-    `;
-}
-
-function renderShowDetailsTabHTML(show){
-    const productionCompanies = Array.isArray(show && show._tmdb_production_companies) ? show._tmdb_production_companies : [];
-    const contentRating = String(show && show.content_rating ? show.content_rating : "").trim();
-    const rows = [
-        {label:"Status",html:renderStatusLinkHTML(show && (show.tmdb_status || show.status) || "Unknown")}
-    ];
-    const runtime = getPrimaryShowRuntime(show);
-    if(runtime){
-        rows.push({label:"Runtime",html:renderRuntimeDetailLinkHTML(runtime,"tv")});
-    }
-    rows.push(
-        {label:"Networks",html:renderShowNetworkDetailsHTML(show)},
-        {label:"Language",html:renderShowLanguageDetailsHTML(show)},
-        {label:"Country",html:renderShowCountryDetailsHTML(show)},
-        {label:"Certification",html:contentRating ? renderCertificationLinkHTML("tv",contentRating) : "Unknown"},
-        {label:"Production Companies",html:renderCompanyLinksHTML(productionCompanies)},
-        {label:"Alternative Titles",html:renderAlternativeTitlesForDetailsHTML(show)}
-    );
-
-    return `
-        <div class="show-detail-fact-list">
-            ${rows.map(row=>`
-                <div class="show-detail-fact-row">
-                    <div class="episode-detail-label">${escapeHTML(row.label)}</div>
-                    <div class="episode-detail-value">${row.html}</div>
-                </div>
-            `).join("")}
-        </div>
-    `;
-}
-
-function renderShowGenresTabHTML(show){
-    const genres = Array.isArray(show && show.genre_items) && show.genre_items.length ? show.genre_items : (Array.isArray(show && show.genres) ? show.genres : []);
-    const themesHTML = renderShowThemesDetailsHTML(show);
-    const genreHTML = genres.length
-    ? `<div class="show-detail-genre-chips">${genres.map(genre=>{
-        const name = String(genre && typeof genre === "object" ? genre.name : genre || "").trim();
-        const route = getShowGenreRoute(genre,"tv");
-        const key = genre && typeof genre === "object" && genre.id && typeof buildRouteKey === "function" ? buildRouteKey(genre.id,name) : "";
-        return route && route !== "/app/list/watching"
-        ? `<a href="${escapeHTML(route)}" class="show-detail-genre-chip show-genre-link" data-genre-key="${escapeHTML(key)}" data-genre-name="${escapeHTML(name)}" data-genre-media="tv" data-genre-route="${escapeHTML(route)}">${escapeHTML(name)}</a>`
-        : `<span>${escapeHTML(name)}</span>`;
-    }).join("")}</div>`
-    : `<div class="v2-api-empty">No genres available.</div>`;
-
-    return `
-        <div class="show-genres-tab-stack">
-            <section class="show-genres-tab-section">
-                <h3 class="modal-section-heading show-genres-tab-heading">Genres</h3>
-                ${genreHTML}
-            </section>
-            ${themesHTML !== "Unknown" ? `
-                <section class="show-genres-tab-section">
-                    <h3 class="modal-section-heading show-genres-tab-heading">Themes</h3>
-                    ${themesHTML}
-                </section>
-            ` : ""}
-        </div>
-    `;
-}
-
 function getRatingsByCountry(show){
     const map = new Map();
     (Array.isArray(show && show._tmdb_content_ratings) ? show._tmdb_content_ratings : []).forEach(item=>{
@@ -5977,68 +5658,6 @@ function getRatingsByCountry(show){
 function renderProviderNamesForCountry(providerInfo){
     const names = collectV2ProviderNames(providerInfo);
     return names.length ? names.join(" / ") : "Not listed";
-}
-
-function renderShowReleasesTabHTML(show){
-    const region = v2GetWatchRegion();
-    const providers = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
-    ? show._tmdb_watch_providers.results[region]
-    : null;
-
-    if(!providers){
-        return `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
-    }
-
-    const groups = [
-        renderV2ProvidersGroup("Streaming",providers.flatrate,providers),
-        renderV2ProvidersGroup("Rent",providers.rent,providers),
-        renderV2ProvidersGroup("Buy",providers.buy,providers)
-    ].filter(Boolean).join("");
-
-    return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">No watch provider data available for the selected region yet.</div>`;
-}
-
-function getShowInfoActiveTab(show){
-    const id = String(show && show.tmdb_id ? show.tmdb_id : selectedShowId || "");
-    const tab = activeShowInfoTabs && activeShowInfoTabs[id] ? activeShowInfoTabs[id] : "Cast";
-    return ["Cast","Crew","Details","Genres","Releases"].includes(tab) ? tab : "Cast";
-}
-
-function renderShowInfoSubTabsHTML(show){
-    const activeTab = getShowInfoActiveTab(show);
-    return `
-        <div class="show-info-subtabs" role="tablist" aria-label="Show info sections">
-            ${["Cast","Crew","Details","Genres","Releases"].map(tab=>`
-                <button type="button" class="show-info-subtab ${activeTab === tab ? "active" : ""}" data-show-info-tab="${tab}" role="tab" aria-selected="${activeTab === tab ? "true" : "false"}">${tab}</button>
-            `).join("")}
-        </div>
-    `;
-}
-
-function renderShowCastTabHTML(show){
-    const cast = Array.isArray(show && show._tmdb_cast) ? show._tmdb_cast : [];
-    const rows = renderV2ActorListHTML(cast,null,"tv");
-
-    return rows ? `<div class="v2-actor-list show-info-actor-list">${rows}</div>` : `<div class="v2-api-empty">No cast details available yet.</div>`;
-}
-
-function renderShowInfoSubTabContentHTML(show){
-    const activeTab = getShowInfoActiveTab(show);
-
-    if(activeTab === "Crew"){
-        return renderShowCrewTabHTML(show);
-    }
-    if(activeTab === "Details"){
-        return renderShowDetailsTabHTML(show);
-    }
-    if(activeTab === "Genres"){
-        return renderShowGenresTabHTML(show);
-    }
-    if(activeTab === "Releases"){
-        return renderShowReleasesTabHTML(show);
-    }
-
-    return renderShowCastTabHTML(show);
 }
 
 function getShowProgressSummary(show){
@@ -6065,39 +5684,6 @@ function renderShowProgressHTML(show){
             <div class="progress-bar"><div class="progress-fill" style="width:${summary.progressPercent}%"></div></div>
         </div>
     `;
-}
-
-function renderShowInfoTabHTML(show){
-    return `
-        <div class="show-info-tab-stack">
-            <section class="show-info-synopsis-section">
-                <h3 class="modal-section-heading">Synopsis</h3>
-                <div class="modal-overview">${escapeHTML(show.overview || "No overview available.")}</div>
-            </section>
-            <section class="show-info-extra-section">
-                ${renderShowInfoSubTabsHTML(show)}
-                <div class="show-info-subtab-panel">${renderShowInfoSubTabContentHTML(show)}</div>
-            </section>
-        </div>
-    `;
-}
-
-function renderShowEpisodesTabHTML(show){
-    return `
-        <div class="show-episodes-tab-stack">
-            <div class="seasons-list">${renderSeasonsHTML(show)}</div>
-        </div>
-    `;
-}
-
-function renderShowDetailTabContentHTML(show){
-    const activeTab = getShowDetailActiveTab(show);
-
-    if(activeTab === "Episodes"){
-        return renderShowEpisodesTabHTML(show);
-    }
-
-    return renderShowInfoTabHTML(show);
 }
 
 function renderShowModal(show){
@@ -6655,176 +6241,6 @@ function formatEpisodeWatchedDate(dateString){
     });
 
 }
-
-
-
-function renderSeasonsHTML(show){
-
-    const seasonCount = Math.max(show.number_of_seasons || 1,1);
-    const showId = String(show.tmdb_id);
-
-    let html = "";
-
-    for(let season = 1; season <= seasonCount; season++){
-
-        const isOpen =
-        expandedSeasons[showId] &&
-        expandedSeasons[showId][String(season)];
-
-        const episodeList =
-        show._episode_list &&
-        Array.isArray(show._episode_list[String(season)])
-        ? show._episode_list[String(season)]
-        : null;
-
-        const total = episodeList
-        ? episodeList.length
-        : show._season_episodes[String(season)];
-
-        const watched = getSeasonWatchedCount(show,season);
-        const seasonMetaHTML = renderV2SeasonMetaHTML(show,season,total);
-        const isTrackedShow = !!(DATA.shows && DATA.shows[String(show.tmdb_id)]);
-
-        const airedEpisodeNumbers = getAiredEpisodeNumbersInSeason(show,season);
-
-        const seasonIsFullyWatched = isSeasonFullyWatched(
-            show,
-            season,
-            airedEpisodeNumbers
-        );
-
-        html += `
-
-            <div class="season-box collapse collapse-arrow bg-base-100 border-base-300 border ${isOpen ? "open collapse-open" : "collapse-close"}">
-
-                <div class="season-header collapse-title">
-
-                    <button
-                    type="button"
-                    class="season-toggle-area"
-                    data-season="${season}"
-                    aria-expanded="${isOpen ? "true" : "false"}">
-
-                        <span class="season-left">
-
-                            <span class="season-title-stack">
-                                <span class="season-title">
-                                    Season ${season}
-                                </span>
-                                ${seasonMetaHTML}
-                            </span>
-
-                        </span>
-
-                        <span class="season-count">
-                            ${total ? `${watched} / ${total}` : ""}
-                        </span>
-
-                    </button>
-
-                    <button
-                        type="button"
-                        class="season-all-button ${seasonIsFullyWatched ? "checked" : ""}"
-                        data-season="${season}"
-                        title="${isTrackedShow ? (seasonIsFullyWatched ? "Mark season as unwatched" : "Mark aired episodes as watched") : "Add this show before changing watched episodes"}"
-                        ${isTrackedShow ? "" : "disabled"}>
-                        </button>
-
-                </div>
-
-                ${
-                isOpen
-                ? `<div class="season-episodes collapse-content">${renderSeasonEpisodesHTML(show,season)}</div>`
-                : ""
-                }
-
-            </div>
-
-        `;
-
-    }
-
-    return html;
-
-}
-
-
-
-
-
-function renderSeasonEpisodesHTML(show,seasonNumber){
-
-    const episodeList =
-    show._episode_list &&
-    Array.isArray(show._episode_list[String(seasonNumber)])
-    ? show._episode_list[String(seasonNumber)]
-    : null;
-
-    if(!episodeList || episodeList.length === 0){
-        return renderSeasonEpisodeEmptyStateHTML(show,seasonNumber);
-    }
-
-    let html = "";
-
-    episodeList.forEach(ep=>{
-
-        const watchedEpisodes = show.episodes_watched[String(seasonNumber)] || [];
-        const isWatched = watchedEpisodes.includes(ep.episode_number);
-        const aired = isEpisodeLoggable(ep,show,seasonNumber);
-        const isTrackedShow = !!(DATA.shows && DATA.shows[String(show.tmdb_id)]);
-        const canToggle = isTrackedShow && (aired || isWatched);
-
-        html += `
-
-            <div class="${isWatched ? "episode-row watched" : aired ? "episode-row" : "episode-row future"}" data-season="${seasonNumber}" data-episode="${ep.episode_number}">
-
-                <a class="app-route-card-link" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,seasonNumber,ep.episode_number,show.title || show.name || "") : "/app/list/watching")}" aria-label="Open ${escapeHTML(show.title || show.name || "show")} episode"></a>
-
-                <div class="episode-name">
-                    E${ep.episode_number} — "${escapeHTML(ep.name || "Untitled Episode")}"
-                </div>
-
-                <button
-                type="button"
-                class="${isWatched ? "episode-check-button checked" : "episode-check-button"}"
-                data-season="${seasonNumber}"
-                data-episode="${ep.episode_number}"
-                data-watched="${isWatched ? "true" : "false"}"
-                ${canToggle ? "" : "disabled"}
-                title="${canToggle ? (isWatched ? "Mark as unwatched" : "Mark as watched") : (isTrackedShow ? "Not aired yet" : "Add this show before changing watched episodes")}">
-                </button>
-
-            </div>
-
-        `;
-
-    });
-
-    return html;
-
-}
-
-
-
-
-
-function statusButtonHTML(show,status,label){
-
-    if(!isStatusAllowedForShow(show,status)){
-        return "";
-    }
-
-    return `
-        <button
-        class="modal-status-button ${show.status === status ? "active" : ""}"
-        data-status="${status}">
-            ${label}
-        </button>
-    `;
-
-}
-
-
 
 
 

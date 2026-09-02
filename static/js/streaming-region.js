@@ -267,22 +267,6 @@
     }
 
     function installProviderRenderGuard(){
-        const showRender = global.renderShowReleasesTabHTML;
-        if(typeof showRender === "function" && !showRender.__streamingRegionGuard){
-            const wrappedShow = function(show){
-                const region = getRegion();
-                if(!region){
-                    return emptyMessage(REGION_REQUIRED);
-                }
-                const data = show && show._tmdb_watch_providers && show._tmdb_watch_providers.results
-                ? show._tmdb_watch_providers.results[region]
-                : null;
-                return data ? showRender.call(this,show) : emptyMessage(NO_PROVIDER_DATA);
-            };
-            wrappedShow.__streamingRegionGuard = true;
-            global.renderShowReleasesTabHTML = wrappedShow;
-        }
-
         const movieRender = global.renderMovieProvidersHTML;
         if(typeof movieRender === "function" && !movieRender.__streamingRegionGuard){
             const wrappedMovie = function(movie){
