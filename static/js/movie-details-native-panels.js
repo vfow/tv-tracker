@@ -7,7 +7,6 @@
         baseModel.ownership !== "typed-node-model" ||
         typeof baseModel.text !== "function" ||
         typeof baseModel.element !== "function" ||
-        typeof baseModel.fragment !== "function" ||
         typeof baseModel.freeze !== "function"
     ){
         return;
@@ -23,10 +22,6 @@
 
     function freezeNodes(nodes){
         return Object.freeze((Array.isArray(nodes) ? nodes : []).filter(Boolean));
-    }
-
-    function isTypedNode(node){
-        return !!node && typeof node === "object" && (node.kind === "text" || node.kind === "element");
     }
 
     function activeTab(){
@@ -545,23 +540,8 @@
         return buildInfo(movie);
     }
 
-    const nativeNodeModel = Object.freeze({
-        text:baseModel.text,
-        element:baseModel.element,
-        freeze:baseModel.freeze,
-        fragment(value){
-            if(Array.isArray(value) && value.every(isTypedNode)){
-                return freezeNodes(value);
-            }
-            return baseModel.fragment(value);
-        },
-        ownership:"typed-node-model"
-    });
-
-    global.TVTrackerMediaDetailsNodeModel = nativeNodeModel;
     global.TVTrackerMovieDetailsNativePanels = Object.freeze({
         build,
         ownership:"typed-node-panels"
     });
-    global.renderMovieActiveTabContentHTML = build;
 })(window);
