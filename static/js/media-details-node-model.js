@@ -25,6 +25,7 @@
     function sanitizeURL(value){
         const raw = String(value || "").trim();
         if(!raw) return "";
+        if(/^[\\/]{2}/.test(raw)) return "";
         if(raw.startsWith("/") || raw.startsWith("#")) return raw;
         try{
             const base = global.location && global.location.origin ? global.location.origin : "http://localhost";
