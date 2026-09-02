@@ -2,7 +2,7 @@
 
 ## Scope
 
-This audit records current ownership at baseline `455e41c` through PR #107: History Vue ownership from PR #102, Media Details native composition from PR #103, Upcoming native composition from PR #104, final History fallback cleanup from PR #105, typed Show Details chrome from PR #106, and complete typed Show tab-panel composition from PR #107. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of services that Vue still consumes through bridges.
+This audit records current ownership at baseline `8cfef1b` through PR #108: History Vue ownership from PR #102, Media Details native composition from PR #103, Upcoming native composition from PR #104, final History fallback cleanup from PR #105, typed Show Details chrome from PR #106, complete typed Show tab-panel composition from PR #107, and dead Show composer removal from PR #108. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of services that Vue still consumes through bridges.
 
 Search duplicate renderer ownership is already removed. Watchlist and History no longer stage legacy HTML. The audited follow-up physically removes dead Show Details HTML composition and its stale streaming-region render wrapper while preserving established state, interaction, provider request/catalog, refresh, lazy-load, and routing services.
 
@@ -27,7 +27,7 @@ Search duplicate renderer ownership is already removed. Watchlist and History no
 | Upcoming / notifications | Vue-native `UpcomingNotificationsSurface.vue` | canonical schedule/timing, episode mutation, notification persistence/API, and interaction services | PASS — PR #104 removed legacy page composition; retained dependencies are services |
 | History | Vue-native `HistorySurface.vue` through `history-vue-bridge.js` | `DATA.history` truth plus DOM-free state/view-model helpers | PASS — PR #105 removed the final placeholder, skeleton composer, and History-specific failure fallback |
 | Show details | Vue native page shell through `show-details-vue-bridge.js` + typed detail-node model | detail events plus tracker/provider request/catalog/routing/lazy-load services | PASS — chrome, every Info subtab, and Episodes are directly composed typed nodes; dead HTML composers and the stale provider render wrapper are physically removed |
-| Movie details | Vue native page shell through `movie-details-vue-bridge.js` + typed detail-node model | detail events, provider services, shared fragment helpers | PAGE COMPOSER REMOVED — shared helpers remain service/fragment dependencies until final `ui.js` cleanup |
+| Movie details | Vue native page shell through `movie-details-vue-bridge.js` + typed detail-node model | detail events, provider services, one active-tab panel fragment | CHROME TYPED — poster, metadata, external links, tracking actions, and six primary tabs are native typed nodes; panels remain the sole fragment boundary |
 | Episode tracking | Vue interaction owner | authoritative watched/history mutation and durable save semantics | RETAIN SERVICES — not dead-code cleanup |
 | Pending-save recovery | no persistent warning UI | `db.js` queue/retry/storage recovery | PASS — silent retry/storage protection preserved and pending-save runtime copy is product-neutral |
 
@@ -45,7 +45,7 @@ The obsolete `static/js/history-activity.js` compatibility placeholder and its p
 
 PRs #103, #104, #106, and #107 changed these ownership boundaries after the earlier History audit:
 
-- `show-details-vue-bridge.js` directly builds the complete typed Show node model. `movie-details-vue-bridge.js` still converts named legacy HTML fragments. The removed full-page composers are no longer dependencies; retained interaction binders and domain helpers remain explicit services.
+- `show-details-vue-bridge.js` directly builds the complete typed Show node model. `movie-details-vue-bridge.js` directly builds typed Movie chrome and retains only `renderMovieActiveTabContentHTML(movie)` as a named panel fragment. The removed full-page composers are no longer dependencies; retained interaction binders and domain helpers remain explicit services.
 - `upcoming-notifications-vue-bridge.js` builds structured Upcoming and Notifications models directly. It does not capture a legacy `renderUpcoming` composer; canonical schedule/timing, episode mutation, notification API/persistence, and DOM interaction services remain retained dependencies.
 - `HistorySurface.vue` and `TrackerListsSurface.vue` continue to use structured view models and Vue-native composition.
 
@@ -53,7 +53,7 @@ The old Detail and Upcoming page composers are already removed. The audited Show
 
 ## Required legacy dependencies that still block broad `app.js` / `ui.js` deletion
 
-- Movie Details still consumes named fragment factories. Show Details no longer consumes fragments, but still retains interaction binders and domain services.
+- Movie Details consumes one named active-tab panel fragment. Its chrome is typed; Show Details consumes no fragments, while both retain interaction binders and domain services.
 - Upcoming still consumes canonical schedule/timing, loggability, background refresh, episode mutation, notification request/persistence, and interaction services.
 - Episode tracking still delegates authoritative mutations and durable write semantics to established services.
 - Discover retains its stability gate and legacy hub composition until a replacement is proven under direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance coverage.
@@ -63,11 +63,11 @@ These dependencies mean the correct strategy remains incremental ownership repla
 ## Cleanup order
 
 1. COMPLETED: remove the audited dead Show HTML composers and stale Show provider render wrapper; retain interaction binders and domain/provider/routing/lazy-load services.
-2. NEXT: replace Movie fragment factories with typed native composition.
-3. AFTER MOVIE: remove the media-details node-model `fragment()` parser only after Movie has no fragment calls.
-4. Re-audit retained Upcoming timing, mutation, notification, interaction, and unused skeleton helpers without weakening release or persistence semantics.
-5. Finish Discover native ownership under direct-route, refresh, Back/Forward, provider-failure, and mobile acceptance coverage.
-6. Re-audit `app.js` / `ui.js`; retain only explicitly named shared state/service owners or remove the shells if no such ownership remains.
+2. COMPLETED IN THIS SLICE: replace Movie chrome fragment factories with typed native composition.
+3. NEXT: migrate the remaining Movie active-tab panels to typed nodes.
+4. AFTER PANELS: remove proven-dead Movie HTML composers and callers, then remove the media-details node-model `fragment()` parser when no fragment calls remain.
+5. Re-audit retained Upcoming timing, mutation, notification, interaction, and unused skeleton helpers without weakening release or persistence semantics.
+6. Finish Discover native ownership, then re-audit `app.js` / `ui.js` and retain only explicitly named shared owners.
 
 ## Regression gates
 
@@ -84,4 +84,4 @@ Every cleanup PR must prove:
 
 Watchlist and History native composition are merged and deployed. PR #105 removed History's inert placeholder/script, legacy skeleton composer, and bridge failure DOM fallback.
 
-Media Details and Upcoming native composition are merged through PRs #103 and #104, and Show Details has full typed composition through PR #107 plus physical composer cleanup in this audited follow-up. Broad `app.js` / `ui.js` deletion remains intentionally blocked while Movie fragments, shared interaction/domain services, and the Discover legacy owner are active.
+Media Details and Upcoming native composition are merged through PRs #103 and #104, and Show Details has full typed composition through PR #107 plus physical composer cleanup in PR #108. Movie chrome is now typed with one active-tab panel fragment remaining. Broad `app.js` / `ui.js` deletion remains intentionally blocked while that panel fragment, shared interaction/domain services, and the Discover legacy owner are active.

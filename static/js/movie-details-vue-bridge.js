@@ -20,15 +20,25 @@
 
     function nodeModel(){
         const model = global.TVTrackerMediaDetailsNodeModel;
-        if(!model || model.ownership !== "typed-node-model" || typeof model.fragment !== "function"){
+        if(
+            !model ||
+            model.ownership !== "typed-node-model" ||
+            typeof model.text !== "function" ||
+            typeof model.element !== "function" ||
+            typeof model.fragment !== "function" ||
+            typeof model.freeze !== "function"
+        ){
             throw new Error("Media Details typed node model unavailable");
         }
         return model;
     }
 
-    function callString(name,...args){
-        const fn = global[name];
-        return typeof fn === "function" ? String(fn(...args) || "") : "";
+    function text(value){
+        return nodeModel().text(value);
+    }
+
+    function element(tag,attrs={},children=[]){
+        return nodeModel().element(tag,attrs,children);
     }
 
     function fragment(name,...args){
@@ -38,7 +48,9 @@
     }
 
     function imageURL(path,size){
-        return callString("trackerImageURL",path,size);
+        return typeof global.trackerImageURL === "function"
+            ? String(global.trackerImageURL(path,size) || "")
+            : "";
     }
 
     function buildPoster(movie){
@@ -51,12 +63,21 @@
                 ]);
             }
         }
-        return fragment("renderPosterTitlePlaceholderHTML",movie,"movie");
+        const label = (typeof global.getMediaPosterPlaceholderLabel === "function"
+            ? String(global.getMediaPosterPlaceholderLabel(movie,"movie") || "")
+            : "") || String(movie && (movie.title || movie.name || movie.original_title) || "Untitled Movie");
+        return Object.freeze([
+            factory.element("div",{class:"poster-placeholder media-title-placeholder",title:label},[
+                factory.element("span",{},[factory.text(label)])
+            ])
+        ]);
     }
 
     function buildBackdrop(movie){
         if(movie && movie.backdrop_path){
-            const background = callString("trackerBackgroundImage",movie.backdrop_path,"original");
+            const background = typeof global.trackerBackgroundImage === "function"
+                ? String(global.trackerBackgroundImage(movie.backdrop_path,"original") || "")
+                : "";
             if(background){
                 return "linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), " + background;
             }
@@ -65,54 +86,250 @@
     }
 
     function separatorNode(){
-        const factory = nodeModel();
-        return factory.element("span",{class:"modal-meta-separator"},[factory.text("•")]);
+        return element("span",{class:"modal-meta-separator"},[text("•")]);
+    }
+
+    function appendGroup(target,nodes){
+        const clean = Array.isArray(nodes) ? nodes.filter(Boolean) : [];
+        if(!clean.length) return;
+        if(target.length) target.push(separatorNode());
+        clean.forEach(node=>target.push(node));
+    }
+
+    function linkOrText(label,href,extraClass=""){
+        const cleanLabel = String(label || "").trim();
+        if(!cleanLabel) return null;
+        return href
+            ? element("a",{class:"show-detail-entity-link show-detail-inline-link " + extraClass,href},[text(cleanLabel)])
+            : element("span",{},[text(cleanLabel)]);
+    }
+
+    function unknownNodes(){
+        return Object.freeze([element("span",{},[text("Unknown")])]);
+    }
+
+    function getCertification(movie){
+        const results = movie && movie.release_dates && Array.isArray(movie.release_dates.results)
+            ? movie.release_dates.results
+            : [];
+        const us = results.find(item=>String(item && item.iso_3166_1 || "").toUpperCase() === "US");
+        const release = us && Array.isArray(us.release_dates)
+            ? us.release_dates.find(item=>String(item && item.certification || "").trim())
+            : null;
+        return release ? String(release.certification || "").trim() : "";
+    }
+
+    function buildYearNodes(movie){
+        const year = String(movie && movie.year || "").trim();
+        if(!year) return unknownNodes();
+        const route = typeof global.getYearDetailRoute === "function" ? global.getYearDetailRoute(year,"movie") : "";
+        return Object.freeze([linkOrText(year,route,"show-detail-year-link")]);
+    }
+
+    function buildCertificationNodes(movie){
+        const certification = getCertification(movie);
+        if(!certification) return unknownNodes();
+        const route = typeof global.getCertificationDetailRoute === "function"
+            ? global.getCertificationDetailRoute("movie",certification)
+            : "";
+        return Object.freeze([linkOrText(certification,route,"show-detail-certification-link")]);
+    }
+
+    function buildRuntimeNodes(movie){
+        const runtime = Number(movie && movie.runtime || 0);
+        const minutes = Math.round(runtime);
+        if(!Number.isFinite(minutes) || minutes <= 0) return unknownNodes();
+        const hours = Math.floor(minutes / 60);
+        const remainder = minutes % 60;
+        const label = !hours ? minutes + "m" : (remainder ? hours + "h " + remainder + "m" : hours + "h");
+        const route = typeof global.getRuntimeBrowseRoute === "function" ? global.getRuntimeBrowseRoute(movie.runtime,"movie") : "";
+        return Object.freeze([route
+            ? element("a",{class:"show-detail-entity-link show-runtime-link",href:route,title:"Browse titles by runtime"},[text(label)])
+            : text(label)
+        ]);
+    }
+
+    function buildDirectorNodes(movie){
+        const seen = new Set();
+        const directors = (Array.isArray(movie && movie.crew) ? movie.crew : [])
+            .filter(person=>String(person && person.job || "").toLowerCase() === "director")
+            .filter(person=>{
+                const key = String(person && (person.id || person.name) || "");
+                if(!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        if(!directors.length) return Object.freeze([]);
+        const children = [text("Directed by ")];
+        directors.forEach((person,index)=>{
+            if(index) children.push(element("span",{class:"show-detail-comma-separator"},[text(", ")]));
+            const id = Number(person && person.id || 0);
+            const name = String(person && person.name || "Unknown").trim();
+            const route = id > 0 && typeof global.getPersonDetailRoute === "function"
+                ? global.getPersonDetailRoute("director",id,name,"movie")
+                : "";
+            const link = linkOrText(name,route,"show-detail-person-link");
+            if(link) children.push(link);
+        });
+        return children.length > 1 ? Object.freeze([element("span",{},children)]) : Object.freeze([]);
+    }
+
+    function buildGenreNodes(movie){
+        const genres = (Array.isArray(movie && movie.genres) ? movie.genres : [])
+            .map(genre=>({
+                id:Number(genre && typeof genre === "object" ? genre.id || 0 : 0),
+                name:String(genre && typeof genre === "object" ? genre.name || "" : genre || "").trim()
+            }))
+            .filter(genre=>genre.name);
+        if(!genres.length) return Object.freeze([]);
+        const children = [];
+        genres.forEach((genre,index)=>{
+            if(index) children.push(element("span",{class:"show-genre-separator"},[text("•")]));
+            const route = typeof global.getShowGenreRoute === "function" ? global.getShowGenreRoute(genre,"movie") : "";
+            const usableRoute = route && route !== "/app/list/watching" ? route : "";
+            const key = genre.id > 0 && typeof global.buildRouteKey === "function" ? global.buildRouteKey(genre.id,genre.name) : "";
+            children.push(usableRoute
+                ? element("a",{
+                    class:"show-genre-link",
+                    href:route,
+                    "data-genre-key":key,
+                    "data-genre-name":genre.name,
+                    "data-genre-media":"movie",
+                    "data-genre-route":route
+                },[text(genre.name)])
+                : element("span",{class:"show-genre-link-disabled"},[text(genre.name)]));
+        });
+        return Object.freeze([element("span",{class:"show-genre-link-list"},children)]);
+    }
+
+    function buildAdultNodes(movie){
+        return movie && movie.adult === true
+            ? Object.freeze([element("span",{class:"adult-movie-badge"},[text("ADULT")])])
+            : Object.freeze([]);
     }
 
     function ratingNodes(rating){
-        const factory = nodeModel();
         if(!(rating > 0)){
-            return Object.freeze([factory.element("span",{},[factory.text("Unknown")])]);
+            return unknownNodes();
         }
         return Object.freeze([
-            factory.element("span",{class:"tmdb-rating-group"},[
-                factory.element("span",{class:"tmdb-rating-inline"},[factory.text(rating.toFixed(1))]),
-                factory.element("span",{class:"tmdb-rating-slash"},[factory.text("/")]),
-                factory.element("span",{class:"tmdb-rating-ten"},[factory.text("10")])
+            element("span",{class:"tmdb-rating-group"},[
+                element("span",{class:"tmdb-rating-inline"},[text(rating.toFixed(1))]),
+                element("span",{class:"tmdb-rating-slash"},[text("/")]),
+                element("span",{class:"tmdb-rating-ten"},[text("10")])
             ])
         ]);
     }
 
     function buildMeta(movie){
-        const factory = nodeModel();
         const items = [];
-        const add = function(nodes){
-            const clean = Array.isArray(nodes) ? nodes.filter(Boolean) : [];
-            if(!clean.length) return;
-            if(items.length) items.push(separatorNode());
-            clean.forEach(node=>items.push(node));
-        };
-        const unknown = ()=>Object.freeze([factory.element("span",{},[factory.text("Unknown")])]);
-        const certification = typeof global.getMovieCertification === "function"
-            ? String(global.getMovieCertification(movie) || "")
-            : "";
         const rating = Number(movie && movie.vote_average || 0);
 
-        add(movie && movie.year ? fragment("renderYearLinkHTML",movie.year,"movie") : unknown());
-        add(certification ? fragment("renderCertificationLinkHTML","movie",certification) : unknown());
-        add(movie && movie.runtime ? fragment("renderRuntimeDetailLinkHTML",movie.runtime,"movie") : unknown());
-
-        const directedBy = fragment("renderMovieDirectedByHTML",movie);
-        if(directedBy.length) add(directedBy);
-        const genresHTML = callString("renderMovieGenresHTML",movie);
-        if(genresHTML && genresHTML.trim() !== "Unknown"){
-            add(factory.fragment(genresHTML));
-        }
-        const adult = fragment("renderAdultMovieBadgeHTML",movie,"movie");
-        if(adult.length) add(adult);
-        add(ratingNodes(rating));
+        appendGroup(items,buildYearNodes(movie));
+        appendGroup(items,buildCertificationNodes(movie));
+        appendGroup(items,buildRuntimeNodes(movie));
+        appendGroup(items,buildDirectorNodes(movie));
+        appendGroup(items,buildGenreNodes(movie));
+        appendGroup(items,buildAdultNodes(movie));
+        appendGroup(items,ratingNodes(rating));
 
         return Object.freeze(items);
+    }
+
+    function externalLink(label,href,className){
+        return element("a",{class:className,href,target:"_blank",rel:"noopener noreferrer"},label === "Trailer"
+            ? [element("img",{class:"v2-play-icon",src:"/static/assets/icons/ui-play.svg",alt:""},[]),text(label)]
+            : [text(label)]);
+    }
+
+    function buildExternalLinks(movie){
+        const ids = movie && movie.external_ids ? movie.external_ids : {};
+        const videos = movie && movie.videos && Array.isArray(movie.videos.results) ? movie.videos.results : [];
+        const trailer = videos.find(video=>
+            String(video && video.site || "").toLowerCase() === "youtube" &&
+            String(video && video.type || "").toLowerCase().includes("trailer")
+        );
+        const homepage = typeof global.safeExternalURL === "function" ? global.safeExternalURL(movie && movie.homepage) : "";
+        const links = [];
+        if(trailer && trailer.key) links.push(externalLink("Trailer","https://www.youtube.com/watch?v=" + trailer.key,"v2-clean-link v2-trailer-link"));
+        if(ids.imdb_id) links.push(externalLink("IMDb","https://www.imdb.com/title/" + ids.imdb_id + "/","v2-clean-link v2-external-pill"));
+        if(movie && movie.id) links.push(externalLink("TMDB","https://www.themoviedb.org/movie/" + movie.id,"v2-clean-link v2-external-pill"));
+        if(homepage) links.push(externalLink("Official Site \u2197",homepage,"v2-clean-link v2-external-pill"));
+        if(!links.length) return Object.freeze([]);
+        const children = [];
+        links.forEach((link,index)=>{
+            if(index) children.push(separatorNode());
+            children.push(link);
+        });
+        return Object.freeze([element("div",{class:"modal-meta modal-meta-under-status v2-show-info-links-line v2-show-action-line"},children)]);
+    }
+
+    function trackingButton(state,action,label){
+        const active = !!state[action];
+        return element("button",{
+            class:"modal-status-button movie-page-status-button" + (active ? " active" : ""),
+            type:"button",
+            "data-movie-tracking-action":action,
+            "aria-pressed":active ? "true" : "false"
+        },[text(label)]);
+    }
+
+    function favoriteButton(active){
+        const label = active ? "Remove from favorites" : "Add to favorites";
+        return element("button",{
+            class:"favorite-heart-button" + (active ? " active" : ""),
+            type:"button",
+            "data-movie-tracking-action":"favorite",
+            "aria-pressed":active ? "true" : "false",
+            "aria-label":label,
+            title:label
+        },[element("svg",{class:"favorite-heart-icon",viewBox:"0 0 24 24","aria-hidden":"true",focusable:"false"},[
+            element("path",{d:"M12 20.4 4.35 13.2A5.25 5.25 0 0 1 11.7 5.7L12 6l.3-.3a5.25 5.25 0 0 1 7.35 7.5Z",fill:active ? "currentColor" : "none",stroke:"currentColor","stroke-width":"1.8","stroke-linecap":"round","stroke-linejoin":"round"},[])
+        ])]);
+    }
+
+    function buildActions(movie){
+        const rawState = typeof global.getMovieTrackingState === "function"
+            ? global.getMovieTrackingState(movie && movie.id)
+            : null;
+        const state = {
+            watched:!!(rawState && rawState.watched),
+            plan:!!(rawState && rawState.plan),
+            favorite:!!(rawState && rawState.favorite)
+        };
+        const children = [
+            trackingButton(state,"watched","Watched"),
+            trackingButton(state,"plan","Plan to Watch"),
+            favoriteButton(state.favorite)
+        ];
+        if(state.watched || state.plan || state.favorite){
+            children.push(element("button",{
+                class:"remove-show-button remove-movie-button",
+                type:"button",
+                "data-movie-tracking-action":"remove"
+            },[text("Remove")]));
+        }
+        return Object.freeze([element("div",{
+            class:"modal-status-buttons show-page-status-buttons movie-page-status-buttons",
+            "aria-label":"Movie tracking actions"
+        },children)]);
+    }
+
+    function buildTabs(){
+        const requested = String(global.activeMovieDetailsTab || "Info");
+        const tabs = ["Info","Cast","Crew","Details","Genres","Releases"];
+        const active = tabs.includes(requested) ? requested : "Info";
+        return Object.freeze([element("div",{
+            class:"show-detail-tabs movie-detail-tabs",
+            role:"tablist",
+            "aria-label":"Movie details sections"
+        },tabs.map(tab=>element("button",{
+            type:"button",
+            class:"show-detail-tab" + (active === tab ? " active" : ""),
+            "data-movie-detail-tab":tab,
+            role:"tab",
+            "aria-selected":active === tab ? "true" : "false"
+        },[text(tab)])))]);
     }
 
     function buildViewModel(state){
@@ -144,9 +361,9 @@
             backdropStyle:buildBackdrop(movie),
             poster:buildPoster(movie),
             meta:buildMeta(movie),
-            externalLinks:fragment("renderMovieExternalLinksHTML",movie),
-            actions:fragment("renderMovieActionButtonsHTML",movie),
-            tabs:fragment("renderMovieTabsHTML"),
+            externalLinks:buildExternalLinks(movie),
+            actions:buildActions(movie),
+            tabs:buildTabs(),
             tabContent:fragment("renderMovieActiveTabContentHTML",movie)
         });
     }
