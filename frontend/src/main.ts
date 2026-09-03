@@ -318,10 +318,10 @@ const historyOwner: HistoryVueOwner = Object.freeze({
 });
 
 const upcomingNotificationsOwner: UpcomingNotificationsVueOwner = Object.freeze({
-  render(model: UpcomingNotificationsViewModel): void {
+  render(model: UpcomingNotificationsViewModel): boolean {
     const rootId = model.surface === 'upcoming' ? 'show-list' : 'notifications-content';
     const root = document.getElementById(rootId);
-    if (!root) return;
+    if (!root) return false;
     if (model.surface === 'upcoming') {
       unmountHistory();
       unmountTrackerLists();
@@ -337,6 +337,7 @@ const upcomingNotificationsOwner: UpcomingNotificationsVueOwner = Object.freeze(
       notificationsRoot = root;
       notificationsApp = app;
     }
+    return true;
   },
   unmount: unmountUpcomingNotifications
 });

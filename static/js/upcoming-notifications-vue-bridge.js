@@ -389,8 +389,8 @@
 
     function renderWithVue(surface,model){
         if(!vueOwner || !model) return false;
+        if(vueOwner.render(model) !== true) return false;
         lastModels.set(surface,model);
-        vueOwner.render(model);
         if(surface === "upcoming") attachUpcomingInteractions(); else attachNotificationInteractions();
         return true;
     }
@@ -462,19 +462,21 @@
     async function renderNotificationsPage(){
         if(!vueOwner){
             const loaded = await loadVueOwner("notifications");
-            if(!loaded || !vueOwner){ reportLoadFailure("notifications"); return; }
+            if(!loaded || !vueOwner){ reportLoadFailure("notifications"); return false; }
         }
-        renderWithVue("notifications",buildNotificationsModel("loading"));
+        if(!renderWithVue("notifications",buildNotificationsModel("loading"))) return false;
+        let model;
         try{
             await csrfRequest("/api/notifications/read-all",{method:"POST"});
             const root = global.document;
             if(root && typeof root.querySelectorAll === "function") root.querySelectorAll(".notification-unread-dot").forEach(dot=>{ dot.hidden = true; });
             const payload = await csrfRequest("/api/notifications");
             const items = Array.isArray(payload.notifications) ? payload.notifications : [];
-            renderWithVue("notifications",buildNotificationsModel(items.length ? "ready" : "empty",items));
+            model = buildNotificationsModel(items.length ? "ready" : "empty",items);
         }catch(error){
-            renderWithVue("notifications",buildNotificationsModel("error"));
+            model = buildNotificationsModel("error");
         }
+        return renderWithVue("notifications",model);
     }
 
     function openNotificationsPage(){

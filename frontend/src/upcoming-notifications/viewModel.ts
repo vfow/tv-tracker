@@ -66,13 +66,13 @@ export interface NotificationsViewModel {
 export type UpcomingNotificationsViewModel = UpcomingViewModel | NotificationsViewModel;
 
 export type UpcomingNotificationsVueOwner = Readonly<{
-  render: (model: UpcomingNotificationsViewModel) => void;
+  render: (model: UpcomingNotificationsViewModel) => boolean;
   unmount: (surface?: UpcomingNotificationsSurface) => void;
 }>;
 
 export type UpcomingNotificationsVueBridge = Readonly<{
   attachVueOwner: (owner: UpcomingNotificationsVueOwner) => void;
   renderUpcoming: (startBackgroundRefresh?: boolean) => Promise<void>;
-  renderNotificationsPage: () => Promise<void>;
+  renderNotificationsPage: () => Promise<boolean>;
   ownership: 'vue-dom';
 }>;

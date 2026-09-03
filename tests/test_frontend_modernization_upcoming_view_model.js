@@ -45,7 +45,8 @@ deepFreeze(upcomingItems);
 
 const root = {
   dataset:{},
-  querySelectorAll(){ return []; }
+  interactionQueries:0,
+  querySelectorAll(){ this.interactionQueries += 1; return []; }
 };
 const context = {
   window:{
@@ -82,12 +83,23 @@ context.window.window = context.window;
 vm.createContext(context);
 vm.runInContext(source,context);
 
+let rejectedRenders = 0;
 context.window.TVTrackerUpcomingNotificationsVueBridge.attachVueOwner({
-  render(model){ rendered = model; },
+  render(){ rejectedRenders += 1; return false; },
   unmount(){}
 });
 
 (async()=>{
+  await context.window.TVTrackerUpcomingNotificationsVueBridge.renderUpcoming(false);
+  assert.strictEqual(rejectedRenders,1,'the bridge must call the attached owner once');
+  assert.strictEqual(rendered,null,'a false owner result must not report or retain a completed render');
+  assert.strictEqual(root.interactionQueries,0,'a false owner result must not attach interactions');
+
+  context.window.TVTrackerUpcomingNotificationsVueBridge.attachVueOwner({
+    render(model){ rendered = model; return true; },
+    unmount(){}
+  });
+  assert.strictEqual(rendered,null,'a rejected model must not replay when a ready owner attaches');
   await context.window.TVTrackerUpcomingNotificationsVueBridge.renderUpcoming(true);
   assert(rendered);
   assert.strictEqual(rendered.surface,'upcoming');
@@ -143,5 +155,31 @@ context.window.TVTrackerUpcomingNotificationsVueBridge.attachVueOwner({
   assert(calls.routes.some(([showId,season,number])=>showId === 42 && season === 2 && number === 3));
   assert.strictEqual(JSON.stringify(upcomingItems),inputSnapshot);
   assert.strictEqual(refreshCalls,1);
+
+  const readyRenderFailure = new Error('ready owner render failed');
+  const notificationStates = [];
+  context.window.TVTrackerUpcomingNotificationsVueBridge.attachVueOwner({
+    render(model){
+      notificationStates.push(model.state);
+      if(model.surface === 'notifications' && model.state === 'ready') throw readyRenderFailure;
+      return true;
+    },
+    unmount(){}
+  });
+  context.window.fetch = async path=>({
+    ok:true,
+    async json(){
+      if(path === '/api/notifications/read-all') return {ok:true};
+      if(path === '/api/notifications') return {notifications:[{id:1,message:'Fresh',createdAt:'2026-09-03T00:00:00Z'}]};
+      throw new Error('unexpected notification request: ' + path);
+    }
+  });
+  await assert.rejects(
+    context.window.TVTrackerUpcomingNotificationsVueBridge.renderNotificationsPage(),
+    error=>error === readyRenderFailure,
+    'a ready owner render exception must propagate instead of becoming Vue error-model success'
+  );
+  assert.deepStrictEqual(notificationStates.slice(-2),['loading','ready']);
+  assert(!notificationStates.includes('error'),'a ready owner render exception must not be converted to an error model');
   console.log('Upcoming structured batching view-model behavior passed.');
 })().catch(error=>{ console.error(error); process.exit(1); });
