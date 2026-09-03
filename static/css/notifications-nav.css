@@ -1,33 +1,9 @@
-@media (min-width:992px){
-    :root{
-        --tt-sidebar-width:220px;
-    }
-}
-
 .sidebar-notifications-link{
-    position:relative;
+    display:none !important;
 }
 
-.sidebar .sidebar-nav .sidebar-notifications-link{
-    padding-top:10px;
-    padding-bottom:10px;
-}
-
-.sidebar-notifications-label{
-    position:relative;
-    display:inline-block;
-    font-family:"League Gothic",sans-serif;
-    font-size:50px;
-    font-weight:400;
-    line-height:1;
-    white-space:nowrap;
-}
-
-.sidebar-notifications-label .sidebar-notification-unread-dot{
-    top:-1px;
-    right:-9px;
-    width:8px;
-    height:8px;
+.notifications-page .notifications-loading{
+    display:none !important;
 }
 
 .tv-runtime-save-status[data-state="saved"]{
