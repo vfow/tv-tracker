@@ -1,0 +1,25 @@
+.sidebar-notifications-link{
+    position:relative;
+}
+
+.sidebar .sidebar-nav .sidebar-notifications-link{
+    padding-top:16px;
+    padding-bottom:16px;
+}
+
+.sidebar-notifications-label{
+    position:relative;
+    display:inline-block;
+    font-family:"League Gothic",sans-serif;
+    font-size:34px;
+    font-weight:400;
+    line-height:1;
+    white-space:nowrap;
+}
+
+.sidebar-notifications-label .sidebar-notification-unread-dot{
+    top:-1px;
+    right:-9px;
+    width:8px;
+    height:8px;
+}
