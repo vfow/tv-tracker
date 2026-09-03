@@ -77,13 +77,6 @@ jobs:
           elif new not in source:
               raise SystemExit("fresh-schema table expectation was not in the expected shape")
 
-          marker = '''            (6, None),\n        )\n\n    def test_nulls_not_distinct_index_is_not_certified'''
-          replacement = '''            (7, None),\n        )\n\n    def test_nulls_not_distinct_index_is_not_certified'''
-          if marker in source:
-              source = source.replace(marker, replacement, 1)
-          elif replacement not in source:
-              raise SystemExit("NULLS NOT DISTINCT schema-version expectation was not in the expected shape")
-
           tests.write_text(source, encoding="utf-8")
           PY
           if git diff --quiet -- tvtracker/migrations/registry_v7.py tests/test_phase13_foundations.py; then
