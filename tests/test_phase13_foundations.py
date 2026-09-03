@@ -441,6 +441,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
                 "0004_final_notification_schema",
                 "0005_push_schema",
                 "0006_notification_settings_consolidation",
+                "0007_multi_user_database_foundation",
             ],
         )
         self.assertEqual(
@@ -454,7 +455,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
         )
         self.assertEqual(
             MIGRATIONS[-1].schema_contract.legacy_schema_versions,
-            (4, 5),
+            (4, 5, 6),
         )
         adoption_seed_sql = MIGRATIONS[-1].schema_contract.adoption_seed_sql
         self.assertIsNotNone(adoption_seed_sql)
@@ -789,6 +790,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 "tv_tracker_security_events",
                 "tv_tracker_shows",
                 "tv_tracker_state",
+                "tv_tracker_users",
             },
         )
         self.assertEqual(
@@ -1135,9 +1137,37 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
         }
         schema_meta_before = rows_before_adoption["schema_meta"]
         schema_meta_after = rows_after_adoption["schema_meta"]
+        owner_scoped_rows = set(preserved_queries) - {
+            "admin",
+            "schema_meta",
+            "notification_settings",
+        }
+        for name in owner_scoped_rows:
+            self.assertEqual(
+                rows_after_adoption[name][:-1],
+                rows_before_adoption[name],
+            )
+            self.assertIsNone(rows_after_adoption[name][-1])
+
+        notification_settings_before = rows_before_adoption["notification_settings"]
+        notification_settings_after = rows_after_adoption["notification_settings"]
         self.assertEqual(
-            {name: row for name, row in rows_after_adoption.items() if name != "schema_meta"},
-            {name: row for name, row in rows_before_adoption.items() if name != "schema_meta"},
+            notification_settings_after[:12],
+            notification_settings_before[:12],
+        )
+        self.assertGreaterEqual(
+            notification_settings_after[12],
+            notification_settings_before[12],
+        )
+        self.assertEqual(
+            notification_settings_after[13:15],
+            rows_before_adoption["final_settings"][1:3],
+        )
+        self.assertIsNone(notification_settings_after[-1])
+
+        self.assertEqual(
+            rows_after_adoption["admin"],
+            rows_before_adoption["admin"],
         )
         self.assertEqual(schema_meta_after[0], 1)
         self.assertEqual(schema_meta_after[1], DATABASE_SCHEMA_VERSION)
@@ -1275,7 +1305,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 "SELECT schema_version, to_regclass('tv_tracker_migrations') "
                 "FROM tv_tracker_schema_meta WHERE singleton_id = 1"
             ),
-            (DATABASE_SCHEMA_VERSION, None),
+            (DATABASE_SCHEMA_VERSION - 1, None),
         )
 
     def test_complete_ledger_repairs_missing_and_behind_schema_version(self):
