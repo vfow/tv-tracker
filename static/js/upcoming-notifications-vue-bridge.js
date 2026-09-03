@@ -3,10 +3,86 @@
 
     const manifestUrl = "/static/vue/manifest.json";
     const notificationServices = global.TVTrackerNotifications || null;
+    const NOTIFICATION_HISTORY_SCOPE_KEY = "tv-tracker-notification-history-scope:v1";
+    let notificationHistoryScopePromise = null;
     let vueOwner = null;
     let trackerListsVueOwner = null;
     let loadPromise = null;
     const lastModels = new Map();
+
+    function notificationHistoryStorage(){
+        try{
+            if(!global.localStorage || typeof global.localStorage.getItem !== "function" || typeof global.localStorage.setItem !== "function") return null;
+            return global.localStorage;
+        }catch(error){ return null; }
+    }
+
+    function storedNotificationHistoryScope(){
+        const storage = notificationHistoryStorage();
+        if(!storage) return Object.freeze({mode:"all",latestId:0,latestCreatedAt:""});
+        let raw = "";
+        try{ raw = String(storage.getItem(NOTIFICATION_HISTORY_SCOPE_KEY) || ""); }
+        catch(error){ return Object.freeze({mode:"all",latestId:0,latestCreatedAt:""}); }
+        if(!raw) return null;
+        try{
+            const parsed = JSON.parse(raw);
+            const latestId = Number(parsed && parsed.latestId || 0);
+            const latestCreatedAt = String(parsed && parsed.latestCreatedAt || "");
+            if(!Number.isFinite(latestId) || latestId < 0) return null;
+            return Object.freeze({mode:"after",latestId,latestCreatedAt});
+        }catch(error){ return null; }
+    }
+
+    function saveNotificationHistoryScope(scope){
+        const storage = notificationHistoryStorage();
+        if(!storage || !scope || scope.mode !== "after") return;
+        try{
+            storage.setItem(NOTIFICATION_HISTORY_SCOPE_KEY,JSON.stringify({
+                latestId:Number(scope.latestId || 0),
+                latestCreatedAt:String(scope.latestCreatedAt || "")
+            }));
+        }catch(error){}
+    }
+
+    async function ensureNotificationHistoryScope(){
+        const stored = storedNotificationHistoryScope();
+        if(stored) return stored;
+        if(notificationHistoryScopePromise) return notificationHistoryScopePromise;
+        notificationHistoryScopePromise = csrfRequest("/api/notifications/status")
+        .then(payload=>{
+            const scope = Object.freeze({
+                mode:"after",
+                latestId:Math.max(0,Number(payload && payload.latestId || 0)),
+                latestCreatedAt:String(payload && payload.latestCreatedAt || "")
+            });
+            saveNotificationHistoryScope(scope);
+            return scope;
+        })
+        .catch(()=>{
+            const scope = Object.freeze({mode:"after",latestId:0,latestCreatedAt:new Date().toISOString()});
+            saveNotificationHistoryScope(scope);
+            return scope;
+        })
+        .finally(()=>{ notificationHistoryScopePromise = null; });
+        return notificationHistoryScopePromise;
+    }
+
+    function notificationIsAfterScope(item,scope){
+        if(!scope || scope.mode !== "after") return true;
+        const itemId = Number(item && item.id || 0);
+        const baselineId = Number(scope.latestId || 0);
+        const itemTime = Date.parse(String(item && item.createdAt || ""));
+        const baselineTime = Date.parse(String(scope.latestCreatedAt || ""));
+        if(Number.isFinite(itemTime) && Number.isFinite(baselineTime) && itemTime !== baselineTime){
+            return itemTime > baselineTime;
+        }
+        return itemId > baselineId;
+    }
+
+    function filterNotificationItems(items,scope){
+        const source = Array.isArray(items) ? items : [];
+        return source.filter(item=>notificationIsAfterScope(item,scope));
+    }
 
     function rootFor(surface){
         if(!global.document || typeof global.document.getElementById !== "function") return null;
@@ -467,11 +543,12 @@
         if(!renderWithVue("notifications",buildNotificationsModel("loading"))) return false;
         let model;
         try{
+            const historyScope = await ensureNotificationHistoryScope();
             await csrfRequest("/api/notifications/read-all",{method:"POST"});
             const root = global.document;
             if(root && typeof root.querySelectorAll === "function") root.querySelectorAll(".notification-unread-dot").forEach(dot=>{ dot.hidden = true; });
             const payload = await csrfRequest("/api/notifications");
-            const items = Array.isArray(payload.notifications) ? payload.notifications : [];
+            const items = filterNotificationItems(Array.isArray(payload.notifications) ? payload.notifications : [],historyScope);
             model = buildNotificationsModel(items.length ? "ready" : "empty",items);
         }catch(error){
             model = buildNotificationsModel("error");
