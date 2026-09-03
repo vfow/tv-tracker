@@ -29,3 +29,7 @@
     width:8px;
     height:8px;
 }
+
+.tv-runtime-save-status[data-state="saved"]{
+    display:none !important;
+}
