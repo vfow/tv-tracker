@@ -215,6 +215,7 @@ class MultiUserPhase2PostgreSQLTests(unittest.TestCase):
         self.assertEqual(run_migrations(self.connection_factory, MIGRATIONS), [])
 
     def test_user_table_rejects_duplicate_normalized_identifiers_and_bad_roles(self):
+        run_migrations(self.connection_factory, MIGRATIONS)
         first_user = new_user_id()
         self.execute(
             """
