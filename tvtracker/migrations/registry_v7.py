@@ -249,7 +249,10 @@ actual_user_constraints AS (
            constraint_row.convalidated
                AND NOT constraint_row.condeferrable
                AND NOT constraint_row.condeferred
-               AND NOT constraint_row.connoinherit AS healthy
+               AND (
+                   constraint_row.contype <> 'c'
+                   OR NOT constraint_row.connoinherit
+               ) AS healthy
     FROM user_relation
     JOIN pg_catalog.pg_constraint AS constraint_row
       ON constraint_row.conrelid = user_relation.oid

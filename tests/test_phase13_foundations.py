@@ -441,6 +441,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
                 "0004_final_notification_schema",
                 "0005_push_schema",
                 "0006_notification_settings_consolidation",
+                "0007_multi_user_database_foundation",
             ],
         )
         self.assertEqual(
@@ -454,7 +455,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
         )
         self.assertEqual(
             MIGRATIONS[-1].schema_contract.legacy_schema_versions,
-            (4, 5),
+            (4, 5, 6),
         )
         adoption_seed_sql = MIGRATIONS[-1].schema_contract.adoption_seed_sql
         self.assertIsNotNone(adoption_seed_sql)
@@ -789,6 +790,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 "tv_tracker_security_events",
                 "tv_tracker_shows",
                 "tv_tracker_state",
+                "tv_tracker_users",
             },
         )
         self.assertEqual(
