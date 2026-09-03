@@ -1137,9 +1137,16 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
         }
         schema_meta_before = rows_before_adoption["schema_meta"]
         schema_meta_after = rows_after_adoption["schema_meta"]
+        owner_scoped_rows = set(preserved_queries) - {"admin", "schema_meta"}
+        for name in owner_scoped_rows:
+            self.assertEqual(
+                rows_after_adoption[name][:-1],
+                rows_before_adoption[name],
+            )
+            self.assertIsNone(rows_after_adoption[name][-1])
         self.assertEqual(
-            {name: row for name, row in rows_after_adoption.items() if name != "schema_meta"},
-            {name: row for name, row in rows_before_adoption.items() if name != "schema_meta"},
+            rows_after_adoption["admin"],
+            rows_before_adoption["admin"],
         )
         self.assertEqual(schema_meta_after[0], 1)
         self.assertEqual(schema_meta_after[1], DATABASE_SCHEMA_VERSION)
@@ -1277,7 +1284,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 "SELECT schema_version, to_regclass('tv_tracker_migrations') "
                 "FROM tv_tracker_schema_meta WHERE singleton_id = 1"
             ),
-            (DATABASE_SCHEMA_VERSION, None),
+            (DATABASE_SCHEMA_VERSION - 1, None),
         )
 
     def test_complete_ledger_repairs_missing_and_behind_schema_version(self):
