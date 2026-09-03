@@ -6,6 +6,10 @@
     display:none !important;
 }
 
+#settings-v2-notification-list > .notifications-loading{
+    display:none !important;
+}
+
 .tv-runtime-save-status[data-state="saved"]{
     display:none !important;
 }
