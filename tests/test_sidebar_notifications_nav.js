@@ -17,7 +17,9 @@ assert(html.includes('sidebar-notification-unread-dot'),'Sidebar Notifications m
 assert(html.indexOf("filename='js/notifications-nav.js'") > html.indexOf("filename='js/app-router.js'"),'Notifications nav bridge must load after the router');
 assert(html.includes("filename='css/notifications-nav.css'"),'Notifications nav styling must be loaded by the app shell');
 assert(css.includes('right:-9px'),'Unread dot must sit just beyond the final S instead of at the far sidebar edge');
-assert(css.includes('font-size:34px'),'Long Notifications label must fit the fixed-width sidebar on one line');
+assert(css.includes('font-size:50px'),'Notifications must match the other desktop sidebar labels');
+assert(css.includes('--tt-sidebar-width:220px'),'Desktop sidebar may grow so the full-size Notifications label fits');
+assert(css.includes('.tv-runtime-save-status[data-state="saved"]'),'Routine Saved status badge must be hidden while save failures remain visible');
 
 function classList(){
     const values = new Set();
@@ -63,8 +65,8 @@ const fetch = async requestPath=>({
             return {latestId:10,latestCreatedAt:'2026-09-03T00:00:00Z'};
         }
         return {notifications:[
-            {id:10,createdAt:'2026-09-03T00:00:00Z',read:false},
-            {id:11,createdAt:'2026-09-03T00:01:00Z',read:false}
+            {id:10,createdAt:'2026-09-03T00:00:00Z',read:false,type:'new_episode'},
+            {id:11,createdAt:'2026-09-03T00:01:00Z',read:false,type:'new_episode'}
         ]};
     }
 });
@@ -81,7 +83,7 @@ const win = {
         links.forEach(link=>link.classList.toggle('active',link.dataset.page === page));
     }
 };
-const context = {window:win,console,Object,String,Number,Array,Date,JSON,Promise,Error,Set};
+const context = {window:win,console,Object,String,Number,Array,Date,JSON,Promise,Error,Set,Proxy,Reflect,encodeURIComponent};
 vm.createContext(context);
 vm.runInContext(source,context,{filename:'notifications-nav.js'});
 
@@ -89,11 +91,13 @@ vm.runInContext(source,context,{filename:'notifications-nav.js'});
     const api = win.TVTrackerNotificationsNav;
     assert(api,'Notifications nav runtime must expose its bridge');
     const filtered = api.filterNotificationItems([
-        {id:9,createdAt:'2026-09-02T23:59:00Z'},
-        {id:10,createdAt:'2026-09-03T00:00:00Z'},
-        {id:11,createdAt:'2026-09-03T00:01:00Z'}
+        {id:9,createdAt:'2026-09-02T23:59:00Z',type:'new_episode'},
+        {id:10,createdAt:'2026-09-03T00:00:00Z',type:'new_episode'},
+        {id:11,createdAt:'2026-09-03T00:01:00Z',type:'new_episode'},
+        {id:12,createdAt:'2026-09-03T00:02:00Z',type:'ended'}
     ],{mode:'after',latestId:10,latestCreatedAt:'2026-09-03T00:00:00Z'});
-    assert.deepStrictEqual(Array.from(filtered,item=>item.id),[11],'Sidebar unread state must respect the browser notification-history reset boundary');
+    assert.deepStrictEqual(Array.from(filtered,item=>item.id),[11],'Sidebar unread state must respect the browser history boundary and suppress ended-status noise');
+    assert.strictEqual(api.isEndedNotification({type:'ended'}),true,'Ended notifications must be classified for cleanup');
 
     api.setNotificationsActive();
     assert.strictEqual(links[2].classList.contains('active'),true,'Notifications nav item must become active on the Notifications page');
