@@ -88,6 +88,7 @@ onMounted(() => {
           aria-label="Notification settings"
         >
           <div v-if="bridgeUnavailable" class="notifications-empty">Notification settings are temporarily unavailable.</div>
+          <div v-else class="notifications-loading">Loading notification settings…</div>
         </div>
       </section>
     </div>
