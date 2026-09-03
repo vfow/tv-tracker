@@ -28,6 +28,8 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.head_ref }}
       - name: Apply Phase 2 migration contract fixes
         if: github.event_name == 'pull_request' && github.head_ref == 'multi-user/phase2-database-foundation'
         run: |
