@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -28,42 +28,6 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.head_ref }}
-      - name: Apply final Phase 2 regression alignment
-        if: github.event_name == 'pull_request' && github.head_ref == 'multi-user/phase2-database-foundation'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("tests/test_phase13_foundations.py")
-          source = path.read_text(encoding="utf-8")
-
-          old = '''        self.assertEqual(\n            {name: row for name, row in rows_after_adoption.items() if name != "schema_meta"},\n            {name: row for name, row in rows_before_adoption.items() if name != "schema_meta"},\n        )\n        self.assertEqual(schema_meta_after[0], 1)'''
-          new = '''        owner_scoped_rows = set(preserved_queries) - {"admin", "schema_meta"}\n        for name in owner_scoped_rows:\n            self.assertEqual(\n                rows_after_adoption[name][:-1],\n                rows_before_adoption[name],\n            )\n            self.assertIsNone(rows_after_adoption[name][-1])\n        self.assertEqual(\n            rows_after_adoption["admin"],\n            rows_before_adoption["admin"],\n        )\n        self.assertEqual(schema_meta_after[0], 1)'''
-          if old in source:
-              source = source.replace(old, new, 1)
-          elif new not in source:
-              raise SystemExit("legacy-row preservation expectation was not in the expected shape")
-
-          old = '''            (DATABASE_SCHEMA_VERSION, None),\n        )\n\n    def test_complete_ledger_repairs_missing_and_behind_schema_version'''
-          new = '''            (DATABASE_SCHEMA_VERSION - 1, None),\n        )\n\n    def test_complete_ledger_repairs_missing_and_behind_schema_version'''
-          if old in source:
-              source = source.replace(old, new, 1)
-          elif new not in source:
-              raise SystemExit("failed-certification schema-version expectation was not in the expected shape")
-
-          path.write_text(source, encoding="utf-8")
-          PY
-          if git diff --quiet -- tests/test_phase13_foundations.py; then
-            echo "Final Phase 2 regression alignment already applied."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add tests/test_phase13_foundations.py
-            git commit -m "test: align Phase 2 migration regressions"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
-          fi
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548
         with:
           python-version: '3.12'
