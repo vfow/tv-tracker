@@ -70,6 +70,71 @@
         return "S" + Number(episode.season_number || 0) + "E" + String(Number(episode.episode_number || 0)).padStart(2,"0") + " — " + String(episode.name || "Untitled Episode");
     }
 
+    function getUpcomingBatchKey(show,episode){
+        return [
+            String(show.tmdb_id),
+            String(episode.season_number),
+            String(episode.air_date || ""),
+            String(episode.type || "")
+        ].join("-");
+    }
+
+    function prepareUpcomingDisplayItems(groupItems){
+        const displayItems = [];
+        const used = new Set();
+
+        groupItems.forEach((item,index)=>{
+            if(used.has(index)) return;
+
+            const show = item.show;
+            const episode = item.episode;
+            if(episode.type === "future"){
+                const batchIndexes = groupItems
+                .map((candidate,candidateIndex)=>({candidate,candidateIndex}))
+                .filter(entry=>{
+                    const other = entry.candidate;
+                    const otherEpisode = other.episode;
+                    return (
+                        otherEpisode.type === "future" &&
+                        String(other.show.tmdb_id) === String(show.tmdb_id) &&
+                        Number(otherEpisode.season_number) === Number(episode.season_number) &&
+                        String(otherEpisode.air_date || "") === String(episode.air_date || "")
+                    );
+                });
+
+                batchIndexes.forEach(entry=>used.add(entry.candidateIndex));
+                const sortedBatch = batchIndexes
+                .map(entry=>entry.candidate)
+                .sort((a,b)=>Number(a.episode.episode_number) - Number(b.episode.episode_number));
+
+                displayItems.push({
+                    item:sortedBatch[0],
+                    extraEpisodes:sortedBatch.slice(1).map(batchItem=>batchItem.episode),
+                    isBatch:sortedBatch.length > 1,
+                    batchKey:getUpcomingBatchKey(show,sortedBatch[0].episode)
+                });
+                return;
+            }
+
+            const sameBatchBehind = (item.behindEpisodes || [])
+            .filter(extra=>(
+                Number(extra.season_number) === Number(episode.season_number) &&
+                String(extra.air_date || "") === String(episode.air_date || "")
+            ))
+            .sort((a,b)=>Number(a.episode_number) - Number(b.episode_number));
+
+            used.add(index);
+            displayItems.push({
+                item,
+                extraEpisodes:sameBatchBehind,
+                isBatch:sameBatchBehind.length > 0,
+                batchKey:getUpcomingBatchKey(show,episode)
+            });
+        });
+
+        return displayItems;
+    }
+
     function batchEpisodeModel(show,episode){
         const canLog = typeof global.isEpisodeAired === "function"
             ? !!global.isEpisodeAired(episode.air_date,episode,show)
@@ -147,9 +212,7 @@
         groupOrder.forEach(name=>{
             const groupItems = items.filter(item=>item && item.group === name);
             if(!groupItems.length) return;
-            const displays = typeof global.prepareUpcomingDisplayItems === "function"
-                ? global.prepareUpcomingDisplayItems(groupItems)
-                : groupItems.map(item=>({item,extraEpisodes:[],isBatch:false,batchKey:""}));
+            const displays = prepareUpcomingDisplayItems(groupItems);
             const showNotificationBell = !bellAssigned;
             bellAssigned = true;
             groups.push(Object.freeze({

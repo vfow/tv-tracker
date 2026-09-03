@@ -6,7 +6,7 @@ Upcoming and Notifications now use structured view models rendered natively by V
 
 - `app.js` remains authoritative for Upcoming schedule selection, ordering, release timing, loggability, background refresh, and episode mutation services.
 - `notifications-runtime.js` remains authoritative for notification settings, live notification polling/toasts, unread state services, and shared relative-time behavior.
-- `upcoming-notifications-vue-bridge.js` is a DOM-free composition boundary for Upcoming data and the Notifications page data request/interaction boundary.
+- `upcoming-notifications-vue-bridge.js` owns DOM-free Upcoming view-model composition, including private same-show/season/date batch grouping and batch-key composition, and the Notifications page data request/interaction boundary.
 - `UpcomingNotificationsSurface.vue` owns the live Upcoming and Notifications page DOM. It does not use `v-html`.
 - `app-router.js` remains the sole browser History/route owner and no longer writes the Upcoming skeleton directly into `#show-list`.
 
@@ -14,11 +14,12 @@ Upcoming and Notifications now use structured view models rendered natively by V
 
 - `ui.js` no longer owns `renderUpcoming(startBackgroundRefresh=true)`.
 - `ui.js` no longer owns `renderUpcomingBatchEpisodesHTML(show,episodes)`.
+- `ui.js` no longer owns `prepareUpcomingDisplayItems(items)` or `getUpcomingBatchKey(show, episode)`; batching composition is private to the structured Upcoming bridge.
 - The obsolete `renderUpcomingMediaRowSkeletonHTML()` and `renderUpcomingSkeletonHTML()` helpers have been removed from `ui.js`; Upcoming loading DOM is owned by `UpcomingNotificationsSurface.vue`.
 - The Notifications page no longer relies on `notifications-runtime.js` to compose page HTML before Vue renders it.
 
 ## Preserved behavior
 
-The migration preserves group ordering, batch expansion, NEW badges, episode routes, release/loggability checks, quick-log actions, background schedule refresh, notification unread-dot refresh, notification read-all/list/delete APIs, swipe-delete behavior, and notification settings navigation.
+The migration preserves group and item ordering, adjacent and non-adjacent same-date batches, authoritative schedule objects, batch episode arrays and IDs, batch expansion, NEW badges, episode routes, release/loggability checks, quick-log actions, background schedule refresh, notification unread-dot refresh, notification read-all/list/delete APIs, swipe-delete behavior, and notification settings navigation. Batch composition does not mutate schedule inputs.
 
 Regression ownership contracts now assert the structured Upcoming bridge for loading/background-refresh behavior and explicitly reject restoration of the retired `ui.js` renderer or router skeleton write.
