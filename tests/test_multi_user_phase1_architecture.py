@@ -40,11 +40,20 @@ class MultiUserPhase1ArchitectureTests(unittest.TestCase):
         self.assertEqual(auth.PUBLIC_REGISTRATION_OPEN_PHASE, 8)
         self.assertFalse(auth.public_registration_enabled())
 
-    def test_phase_1_does_not_expose_signup_routes(self):
+    def test_existing_signup_surface_remains_informational_only(self):
         routes = (ROOT / "tvtracker" / "web" / "routes.py").read_text(encoding="utf-8")
+        login_template = (ROOT / "templates" / "login.html").read_text(encoding="utf-8")
+
+        # The pre-existing GET /signup route only selects the placeholder auth tab.
+        self.assertIn('@app.get("/signup")', routes)
+        self.assertIn('session["auth_tab"] = "signup"', routes)
+        self.assertIn("Registration coming soon", login_template)
+
+        # Phase 1 must not expose any account-creation POST endpoint or signup form.
         for route in ("/signup", "/register"):
-            self.assertNotIn(f'@app.get("{route}")', routes)
             self.assertNotIn(f'@app.post("{route}")', routes)
+        self.assertNotIn('action="/signup"', login_template)
+        self.assertNotIn('action="/register"', login_template)
         self.assertFalse((ROOT / "templates" / "signup.html").exists())
         self.assertFalse((ROOT / "templates" / "register.html").exists())
 
