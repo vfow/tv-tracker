@@ -28,6 +28,9 @@ assert(main.includes('TVTrackerUpcomingNotificationsVueBridge?: UpcomingNotifica
 assert(main.includes('upcomingNotificationsOwner'));
 assert(main.includes('window.TVTrackerUpcomingNotificationsVueBridge?.attachVueOwner(upcomingNotificationsOwner)'));
 assert(main.includes("model.surface === 'upcoming' ? 'show-list' : 'notifications-content'"));
+assert(main.includes('render(model: UpcomingNotificationsViewModel): boolean'));
+assert(main.includes('if (!root) return false;'));
+assert(main.includes('notificationsApp = app;\n    }\n    return true;'));
 
 assert(!bridge.includes('legacyRenderUpcoming'));
 assert(!bridge.includes('rememberModel'));
@@ -43,6 +46,15 @@ assert(bridge.includes('global.isEpisodeLoggable(episode,show,episode.season_num
 assert(bridge.includes('global.refreshUpcomingDataInBackground()'));
 assert(bridge.includes('renderWithVue("upcoming",model)'));
 assert(bridge.includes('renderWithVue("notifications",buildNotificationsModel'));
+assert(bridge.includes('if(vueOwner.render(model) !== true) return false;'));
+assert(bridge.indexOf('if(vueOwner.render(model) !== true) return false;') < bridge.indexOf('lastModels.set(surface,model);'));
+assert(bridge.includes('return false;'));
+assert(bridge.includes('model = buildNotificationsModel(items.length ? "ready" : "empty",items);'));
+assert(bridge.includes('model = buildNotificationsModel("error");'));
+assert(bridge.includes('return renderWithVue("notifications",model);'));
+assert(bridge.indexOf('return renderWithVue("notifications",model);') > bridge.indexOf('}catch(error){'));
+assert(viewModel.includes('renderNotificationsPage: () => Promise<boolean>'));
+assert(viewModel.includes('render: (model: UpcomingNotificationsViewModel) => boolean'));
 assert(bridge.includes('/api/notifications/read-all'));
 assert(bridge.includes('/api/notifications/status'));
 assert(bridge.includes('/api/notifications/'));
@@ -61,6 +73,12 @@ assert(!ui.includes('function prepareUpcomingDisplayItems(groupItems)'));
 assert(!ui.includes('function getUpcomingBatchKey(show,episode)'));
 assert(ui.includes('function isRecentlyAvailableEpisode(episode,show=null)'));
 assert(notifications.includes('async function renderNotificationsPage()'));
+assert(notifications.includes('const owner = global.TVTrackerUpcomingNotificationsVueBridge;'));
+assert(notifications.includes('owner.ownership !== "vue-dom"'));
+assert(notifications.includes('await owner.renderNotificationsPage()'));
+assert(notifications.includes('if(rendered !== true)'));
+assert(notifications.includes('commitLiveNotificationVersions(items)'));
+assert(!notifications.includes('await global.TVTrackerNotifications.renderNotificationsPage()'));
 assert(notifications.includes('mountUpcomingBell'));
 assert(router.includes('if(path === "/app/upcoming")'));
 assert(router.includes('if(path === "/app/notifications")'));

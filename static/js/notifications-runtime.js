@@ -447,6 +447,11 @@
         });
     }
 
+    function commitLiveNotificationVersions(items){
+        rememberNotificationVersions(items);
+        liveNotificationLatestVersion = items.length ? notificationVersion(items[0]) : "";
+    }
+
     function latestVersionFromStatus(status){
         if(!status || !status.latestId){ return ""; }
         return String(status.latestId) + ":" + String(status.latestCreatedAt || "");
@@ -614,8 +619,7 @@
         if(liveNotificationBootstrapped){ return; }
         try{
             const items = await fetchNotificationItems();
-            rememberNotificationVersions(items);
-            liveNotificationLatestVersion = items.length ? notificationVersion(items[0]) : "";
+            commitLiveNotificationVersions(items);
             liveNotificationBootstrapped = true;
             updateBellDots(items.some(item=>item && item.read === false));
         }catch(error){
@@ -643,15 +647,25 @@
                 const id = String(item.id);
                 return !liveNotificationVersions.has(id) || liveNotificationVersions.get(id) !== String(item.createdAt || "");
             });
-            rememberNotificationVersions(items);
-            liveNotificationLatestVersion = items.length ? notificationVersion(items[0]) : "";
 
-            if(!fresh.length){ return; }
+            if(!fresh.length){
+                commitLiveNotificationVersions(items);
+                return;
+            }
             if(isNotificationsPageActive()){
-                await renderNotificationsPage();
+                const owner = global.TVTrackerUpcomingNotificationsVueBridge;
+                if(!owner || owner.ownership !== "vue-dom" || typeof owner.renderNotificationsPage !== "function"){
+                    throw new Error("TV Tracker Notifications Vue renderer unavailable during live polling");
+                }
+                const rendered = await owner.renderNotificationsPage();
+                if(rendered !== true){
+                    throw new Error("TV Tracker Notifications Vue renderer did not render during live polling");
+                }
+                commitLiveNotificationVersions(items);
                 return;
             }
 
+            commitLiveNotificationVersions(items);
             fresh
             .filter(item=>item && item.read === false)
             .sort((a,b)=>Date.parse(a.createdAt || "") - Date.parse(b.createdAt || ""))
