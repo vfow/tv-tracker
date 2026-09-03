@@ -4,108 +4,109 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.resolve(__dirname,'..');
-const html = fs.readFileSync(path.join(ROOT,'templates/index.html'),'utf8');
 const css = fs.readFileSync(path.join(ROOT,'static/css/notifications-nav.css'),'utf8');
 const source = fs.readFileSync(path.join(ROOT,'static/js/notifications-nav.js'),'utf8');
 
-const discoverAt = html.indexOf('data-page="discover"');
-const notificationsAt = html.indexOf('data-page="notifications"');
-const profileAt = html.indexOf('data-page="profile"');
-assert(discoverAt >= 0 && notificationsAt > discoverAt && profileAt > notificationsAt,'Notifications must sit between Discover and Profile in the desktop sidebar');
-assert(html.includes('sidebar-notifications-label">NOTiFiCATIONS<span'),'Sidebar label must use the requested NOTiFiCATIONS treatment');
-assert(html.includes('sidebar-notification-unread-dot'),'Sidebar Notifications must contain its own unread dot');
-assert(html.indexOf("filename='js/notifications-nav.js'") > html.indexOf("filename='js/app-router.js'"),'Notifications nav bridge must load after the router');
-assert(html.includes("filename='css/notifications-nav.css'"),'Notifications nav styling must be loaded by the app shell');
-assert(css.includes('right:-9px'),'Unread dot must sit just beyond the final S instead of at the far sidebar edge');
-assert(css.includes('font-size:50px'),'Notifications must match the other desktop sidebar labels');
-assert(css.includes('--tt-sidebar-width:220px'),'Desktop sidebar may grow so the full-size Notifications label fits');
-assert(css.includes('.tv-runtime-save-status[data-state="saved"]'),'Routine Saved status badge must be hidden while save failures remain visible');
+assert(css.includes('.sidebar-notifications-link'),'Notifications sidebar selector must remain covered before JavaScript removes the node');
+assert(css.includes('display:none !important'),'Notifications sidebar entry must never flash while the app boots');
+assert(!css.includes('--tt-sidebar-width:220px'),'Removing Notifications must restore the normal desktop sidebar width');
+assert(css.includes('.notifications-page .notifications-loading'),'The transient Notifications loading copy must never be visible');
+assert(css.includes('.tv-runtime-save-status[data-state="saved"]'),'Routine Saved status badge must stay hidden');
+assert(!source.includes('setInterval('),'Removed sidebar entry must not leave a useless unread polling loop behind');
 
-function classList(){
-    const values = new Set();
+function classList(initial=[]){
+    const values = new Set(initial);
     return {
+        add(name){ values.add(name); },
+        remove(name){ values.delete(name); },
         toggle(name,on){ if(on) values.add(name); else values.delete(name); },
         contains(name){ return values.has(name); }
     };
 }
 
-const dot = {hidden:true};
 const links = ['shows','discover','notifications','profile','settings'].map(page=>({
     dataset:{page},
-    classList:classList(),
+    classList:classList(page === 'shows' ? ['active'] : []),
     attrs:{},
+    removed:false,
+    remove(){ this.removed = true; },
     setAttribute(name,value){ this.attrs[name] = value; },
-    removeAttribute(name){ delete this.attrs[name]; },
-    querySelector(selector){
-        return page === 'notifications' && selector === '.sidebar-notification-unread-dot' ? dot : null;
-    },
-    addEventListener(){}
+    removeAttribute(name){ delete this.attrs[name]; }
 }));
 const notificationLink = links[2];
-const store = new Map([[
-    'tv-tracker-notification-history-scope:v1',
-    JSON.stringify({latestId:10,latestCreatedAt:'2026-09-03T00:00:00Z'})
-]]);
+const showsPage = {classList:classList(['active-page'])};
+const notificationsPage = {classList:classList()};
+const pages = [showsPage,notificationsPage];
+const renderOrder = [];
+
+function response(payload={notifications:[]}){
+    return {
+        ok:true,
+        status:200,
+        async json(){ return payload; },
+        clone(){ return response(payload); }
+    };
+}
+
 const document = {
     readyState:'complete',
-    hidden:false,
     querySelector(selector){
-        return selector === '.sidebar [data-page="notifications"]' ? notificationLink : null;
+        if(selector === '.sidebar [data-page="notifications"]') return notificationLink.removed ? null : notificationLink;
+        if(selector === 'meta[name="csrf-token"]') return {content:'csrf'};
+        return null;
     },
     querySelectorAll(selector){
-        return selector === '.app-primary-nav [data-page]' ? links : [];
+        if(selector === '.app-primary-nav [data-page]') return links.filter(link=>!link.removed);
+        if(selector === '.page') return pages;
+        return [];
     },
+    getElementById(id){ return id === 'notifications-page' ? notificationsPage : null; },
     addEventListener(){}
 };
-const fetch = async requestPath=>({
-    ok:true,
-    status:200,
-    async json(){
-        if(requestPath === '/api/notifications/status'){
-            return {latestId:10,latestCreatedAt:'2026-09-03T00:00:00Z'};
-        }
-        return {notifications:[
-            {id:10,createdAt:'2026-09-03T00:00:00Z',read:false,type:'new_episode'},
-            {id:11,createdAt:'2026-09-03T00:01:00Z',read:false,type:'new_episode'}
-        ]};
+
+const fetch = async requestPath=>{
+    if(String(requestPath).startsWith('/api/notifications')) return response({notifications:[]});
+    return response({});
+};
+
+const services = {
+    async renderNotificationsPage(){
+        renderOrder.push('render-start');
+        assert.strictEqual(notificationsPage.classList.contains('active-page'),false,'Notifications must stay hidden while its data/model is prepared');
+        await Promise.resolve();
+        renderOrder.push('render-ready');
+        return true;
     }
-});
+};
+
 const win = {
     document,
     fetch,
-    localStorage:{getItem:key=>store.get(key) || null,setItem:(key,value)=>store.set(key,value)},
-    location:{pathname:'/app/list/watching',href:''},
+    URL,
+    location:{pathname:'/app/list/watching',origin:'https://example.test'},
     activePage:'shows',
-    setInterval(){ return 1; },
-    addEventListener(){},
-    console,
-    setAppPrimaryNavActive(page){
-        links.forEach(link=>link.classList.toggle('active',link.dataset.page === page));
-    }
+    TVTrackerNotifications:services,
+    updateShellTitle(){ renderOrder.push('title'); },
+    console
 };
-const context = {window:win,console,Object,String,Number,Array,Date,JSON,Promise,Error,Set,Proxy,Reflect,encodeURIComponent};
+const context = {window:win,console,Object,String,Number,Array,Date,JSON,Promise,Error,Set,Proxy,Reflect,URL,encodeURIComponent};
 vm.createContext(context);
 vm.runInContext(source,context,{filename:'notifications-nav.js'});
 
 (async()=>{
-    const api = win.TVTrackerNotificationsNav;
-    assert(api,'Notifications nav runtime must expose its bridge');
-    const filtered = api.filterNotificationItems([
-        {id:9,createdAt:'2026-09-02T23:59:00Z',type:'new_episode'},
-        {id:10,createdAt:'2026-09-03T00:00:00Z',type:'new_episode'},
-        {id:11,createdAt:'2026-09-03T00:01:00Z',type:'new_episode'},
-        {id:12,createdAt:'2026-09-03T00:02:00Z',type:'ended'}
-    ],{mode:'after',latestId:10,latestCreatedAt:'2026-09-03T00:00:00Z'});
-    assert.deepStrictEqual(Array.from(filtered,item=>item.id),[11],'Sidebar unread state must respect the browser history boundary and suppress ended-status noise');
-    assert.strictEqual(api.isEndedNotification({type:'ended'}),true,'Ended notifications must be classified for cleanup');
+    assert.strictEqual(notificationLink.removed,true,'NOTiFiCATIONS must be removed from the desktop sidebar DOM');
+    assert.strictEqual(typeof win.TVTrackerNotifications.openNotificationsPage,'function','Notifications route must remain available from the bell/URL');
 
-    api.setNotificationsActive();
-    assert.strictEqual(links[2].classList.contains('active'),true,'Notifications nav item must become active on the Notifications page');
-    assert.strictEqual(links[0].classList.contains('active'),false,'Shows must not remain active on the Notifications page');
+    await win.TVTrackerNotifications.openNotificationsPage({fromRoute:true});
 
-    await api.syncUnread();
-    assert.strictEqual(dot.hidden,false,'Unread dot must become visible for a new unread notification after the local history boundary');
-    console.log('sidebar notifications navigation regression passed');
+    assert.deepStrictEqual(renderOrder.slice(0,2),['render-start','render-ready'],'Notifications content must be prepared before the page is revealed');
+    assert.strictEqual(notificationsPage.classList.contains('active-page'),true,'Notifications page must appear only after its ready render finishes');
+    assert.strictEqual(showsPage.classList.contains('active-page'),false,'Previous page must be hidden after Notifications is ready');
+    assert.strictEqual(links[0].classList.contains('active'),true,'Notifications still belongs to the Shows/Upcoming navigation context');
+    assert.strictEqual(links[1].classList.contains('active'),false);
+    assert.strictEqual(links[3].classList.contains('active'),false);
+
+    console.log('notifications sidebar removal and instant route regression passed');
 })().catch(error=>{
     console.error(error);
     process.exit(1);
