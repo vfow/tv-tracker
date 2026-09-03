@@ -9,9 +9,16 @@ type SettingsOwner = Readonly<{
 
 type BackupSummary = Readonly<{
   shows?: number;
+  movies?: number;
   historyEntries?: number;
   favorites?: number;
 }>;
+
+type TrackerDataWindow = Window & {
+  DATA?: {
+    movies?: Record<string, unknown>;
+  };
+};
 
 declare global {
   interface Window {
@@ -25,7 +32,11 @@ declare global {
 }
 
 const bridgeUnavailable = ref(false);
-const summary = window.getBackupSummary?.() ?? { shows: 0, historyEntries: 0, favorites: 0 };
+const rawSummary = window.getBackupSummary?.() ?? { shows: 0, historyEntries: 0, favorites: 0 };
+const summary: BackupSummary = {
+  ...rawSummary,
+  movies: Object.keys((window as TrackerDataWindow).DATA?.movies ?? {}).length
+};
 
 const sections = computed(() => window.TVTrackerSettings?.sections ?? [
   { id: 'profile', label: 'PROFILE' },
@@ -38,6 +49,7 @@ const sections = computed(() => window.TVTrackerSettings?.sections ?? [
 
 const formattedSummary = computed(() => ({
   shows: Number(summary.shows ?? 0).toLocaleString(),
+  movies: Number(summary.movies ?? 0).toLocaleString(),
   historyEntries: Number(summary.historyEntries ?? 0).toLocaleString(),
   favorites: Number(summary.favorites ?? 0).toLocaleString()
 }));
@@ -114,10 +126,11 @@ onMounted(() => {
     <div class="settings-v2-body" data-settings-body>
       <section class="settings-v2-section">
         <h2>Data</h2>
-        <p class="settings-v2-copy">Export, import, or create a readable report of your TV Tracker data.</p>
+        <p class="settings-v2-copy">Export, import, or create a readable report of your data.</p>
         <p v-if="bridgeUnavailable" class="settings-v2-copy" role="status">Some data tools are temporarily unavailable.</p>
         <div class="settings-v2-summary">
           <div><span>Shows</span><strong>{{ formattedSummary.shows }}</strong></div>
+          <div><span>Movies</span><strong>{{ formattedSummary.movies }}</strong></div>
           <div><span>History Entries</span><strong>{{ formattedSummary.historyEntries }}</strong></div>
           <div><span>Favorites</span><strong>{{ formattedSummary.favorites }}</strong></div>
         </div>
