@@ -3,6 +3,7 @@
 
     const HISTORY_SCOPE_KEY = "tv-tracker-notification-history-scope:v1";
     const POLL_MS = 30 * 1000;
+    const rawFetch = typeof global.fetch === "function" ? global.fetch.bind(global) : null;
     let syncPromise = null;
     let pollTimer = null;
 
@@ -121,6 +122,103 @@
         }catch(error){}
     }
 
+    function isEndedNotification(item){
+        return String(item && item.type || "").trim().toLowerCase() === "ended";
+    }
+
+    function requestPath(input){
+        const raw = typeof input === "string"
+            ? input
+            : (input && typeof input.url === "string" ? input.url : "");
+        if(!raw) return "";
+        if(raw.charAt(0) === "/") return raw.split("?")[0];
+        if(typeof global.URL === "function"){
+            try{
+                const base = global.location && global.location.origin ? global.location.origin : "http://localhost";
+                return new global.URL(raw,base).pathname;
+            }catch(error){}
+        }
+        return raw.split("?")[0];
+    }
+
+    function installEndedResponseFilter(){
+        if(typeof global.fetch !== "function" || global.fetch.__tvtrackerEndedFilter === true) return;
+        const previousFetch = global.fetch.bind(global);
+        const wrappedFetch = async function(input,init){
+            const response = await previousFetch(input,init);
+            const method = String(init && init.method || (input && input.method) || "GET").toUpperCase();
+            if(
+                method !== "GET" ||
+                requestPath(input) !== "/api/notifications" ||
+                !response || !response.ok ||
+                typeof response.clone !== "function" ||
+                typeof Proxy !== "function"
+            ){
+                return response;
+            }
+            try{
+                const payload = await response.clone().json();
+                const source = Array.isArray(payload && payload.notifications) ? payload.notifications : [];
+                const notifications = source.filter(item=>!isEndedNotification(item));
+                if(notifications.length === source.length) return response;
+                const filteredPayload = Object.assign({},payload,{notifications});
+                return new Proxy(response,{
+                    get(target,property){
+                        if(property === "json") return async()=>filteredPayload;
+                        const value = Reflect.get(target,property,target);
+                        return typeof value === "function" ? value.bind(target) : value;
+                    }
+                });
+            }catch(error){
+                return response;
+            }
+        };
+        wrappedFetch.__tvtrackerEndedFilter = true;
+        global.fetch = wrappedFetch;
+    }
+
+    function csrfToken(){
+        if(!global.document || typeof global.document.querySelector !== "function") return "";
+        const meta = global.document.querySelector('meta[name="csrf-token"]');
+        return meta ? String(meta.content || "") : "";
+    }
+
+    async function requestRawJSON(path){
+        if(!rawFetch) return {};
+        const response = await rawFetch(path,{
+            method:"GET",
+            credentials:"same-origin",
+            cache:"no-store",
+            headers:{Accept:"application/json"}
+        });
+        if(!response.ok) throw new Error("notification cleanup request failed: " + response.status);
+        try{ return await response.json(); }catch(error){ return {}; }
+    }
+
+    async function purgeEndedNotifications(){
+        if(!rawFetch) return 0;
+        const payload = await requestRawJSON("/api/notifications");
+        const ended = (Array.isArray(payload.notifications) ? payload.notifications : [])
+            .filter(isEndedNotification)
+            .map(item=>Number(item && item.id || 0))
+            .filter(id=>Number.isInteger(id) && id > 0);
+        if(!ended.length) return 0;
+        const token = csrfToken();
+        const results = await Promise.all(ended.map(async id=>{
+            const response = await rawFetch("/api/notifications/" + encodeURIComponent(String(id)),{
+                method:"DELETE",
+                credentials:"same-origin",
+                cache:"no-store",
+                headers:{
+                    Accept:"application/json",
+                    "X-CSRF-Token":token
+                }
+            });
+            return !!(response && response.ok);
+        }));
+        return results.filter(Boolean).length;
+    }
+
     async function requestJSON(path){
         const response = await global.fetch(path,{
             method:"GET",
@@ -162,7 +260,9 @@
     }
 
     function filterNotificationItems(items,scope){
-        return (Array.isArray(items) ? items : []).filter(item=>isAfterScope(item,scope));
+        return (Array.isArray(items) ? items : []).filter(item=>{
+            return !isEndedNotification(item) && isAfterScope(item,scope);
+        });
     }
 
     async function syncUnread(){
@@ -211,12 +311,17 @@
     }
 
     function boot(){
+        installEndedResponseFilter();
         installActiveNavBridge();
         bindLink();
         if(String(global.location && global.location.pathname || "") === "/app/notifications"){
             setNotificationsActive();
         }
-        void syncUnread();
+        void purgeEndedNotifications().catch(error=>{
+            if(global.console && typeof global.console.warn === "function"){
+                global.console.warn("Old ended notifications could not be removed",error);
+            }
+        }).finally(()=>{ void syncUnread(); });
         schedulePoll();
     }
 
@@ -233,6 +338,8 @@
         syncUnread,
         setNotificationsActive,
         filterNotificationItems,
+        purgeEndedNotifications,
+        isEndedNotification,
         scopeKey:HISTORY_SCOPE_KEY
     });
 
