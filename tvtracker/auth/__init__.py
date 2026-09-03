@@ -1,5 +1,11 @@
-"""Authentication domain: session checks, admin account cache, security-event rate limiting, CSRF, and password hashing."""
+"""Authentication domain: session checks, admin account cache, security-event rate limiting, CSRF, password hashing, and registration rollout policy."""
 
+from tvtracker.auth.registration_policy import (
+    PUBLIC_REGISTRATION_ENABLED,
+    PUBLIC_REGISTRATION_OPEN_PHASE,
+    PUBLIC_REGISTRATION_POLICY,
+    public_registration_enabled,
+)
 from tvtracker.auth.security import (
     ACCOUNT_CHANGE_MAX_ATTEMPTS,
     ACCOUNT_CHANGE_WINDOW_SECONDS,
@@ -37,6 +43,9 @@ __all__ = [
     "LOGIN_WINDOW_SECONDS",
     "MIN_ADMIN_PASSWORD_CHARS",
     "PASSWORD_HASHER",
+    "PUBLIC_REGISTRATION_ENABLED",
+    "PUBLIC_REGISTRATION_OPEN_PHASE",
+    "PUBLIC_REGISTRATION_POLICY",
     "account_change_is_limited",
     "check_csrf",
     "clear_login_failures",
@@ -46,6 +55,7 @@ __all__ = [
     "is_authenticated",
     "login_is_limited",
     "login_required",
+    "public_registration_enabled",
     "read_admin_account",
     "record_login_failure",
     "record_security_event",
