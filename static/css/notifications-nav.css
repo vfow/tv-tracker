@@ -2,7 +2,8 @@
     display:none !important;
 }
 
-.notifications-page .notifications-loading{
+.notifications-page .notifications-loading,
+#settings-v2-notification-list > .notifications-loading{
     display:none !important;
 }
 
