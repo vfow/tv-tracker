@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS tv_tracker_users (
         status IN ('unverified', 'active', 'deactivated', 'pending_deletion')
     ),
     CONSTRAINT tv_tracker_users_username_check CHECK (
-        username ~ '^[A-Za-z0-9_]{{3,30}}$'
+        username ~ '^[A-Za-z0-9_]{3,30}$'
     ),
     CONSTRAINT tv_tracker_users_username_normalized_check CHECK (
         username_normalized = lower(username)
