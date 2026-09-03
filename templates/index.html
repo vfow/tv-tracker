@@ -15,6 +15,7 @@
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='assets/icons/favicon.svg') }}">
 <link rel="preload" href="{{ url_for('static', filename='assets/league-gothic.regular.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notifications-nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/settings-v2.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/runtime-health.css') }}">
@@ -33,6 +34,10 @@
 
         <a class="tw-font-league" data-page="discover" href="/app/discover">
             DiSCOVER
+        </a>
+
+        <a class="sidebar-notifications-link tw-font-league" data-page="notifications" href="/app/notifications">
+            <span class="sidebar-notifications-label">NOTiFiCATIONS<span class="notification-unread-dot sidebar-notification-unread-dot" aria-hidden="true" hidden></span></span>
         </a>
 
         <a class="tw-font-league" data-page="profile" href="/app/profile">
@@ -222,6 +227,7 @@
 <script src="{{ url_for('static', filename='js/settings-vue-loader.js') }}"></script>
 <script src="{{ url_for('static', filename='js/provider-freshness.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app-router.js') }}"></script>
+<script src="{{ url_for('static', filename='js/notifications-nav.js') }}"></script>
 <script src="{{ url_for('static', filename='js/interaction-quality.js') }}"></script>
 <script src="{{ url_for('static', filename='js/startup.js') }}"></script>
 
