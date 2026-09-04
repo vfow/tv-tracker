@@ -6,7 +6,7 @@
     }
 
     const persistDurablePendingSaveQueue = persistPendingSaveQueue;
-    const LARGE_SHOW_SAVE_REQUEST_BYTES = 16 * 1024 * 1024;
+    const LARGE_SHOW_SAVE_REQUEST_BYTES = 36 * 1024 * 1024;
 
     persistPendingSaveQueue = function(){
         if(PENDING_SAVE_STORE){
@@ -50,10 +50,9 @@
     // A tracked show is the atomic server record for status and watched-episode
     // mutations. Long-running shows can legitimately exceed db.js's generic
     // 2 MiB single-record guard once provider/season metadata has accumulated.
-    // The Flask endpoint already accepts requests up to 40 MiB, so allow one
-    // show record to travel by itself up to a conservative 16 MiB ceiling.
-    // This also lets an older oversized operation at the head of the durable
-    // queue drain instead of blocking every later status/episode save.
+    // The Flask endpoint accepts requests up to 40 MiB, so allow one show record
+    // to travel by itself up to 36 MiB and keep a safety margin for request
+    // framing and future payload fields. History/state limits stay unchanged.
     if(typeof takeServerDeltaBatch === "function"){
         const takeConservativeServerDeltaBatch = takeServerDeltaBatch;
 
@@ -228,6 +227,106 @@
                     }
                 }
             }
+        };
+    }
+
+    function queuedSaveFailureBlocksLaterOperations(error){
+        if(error instanceof TypeError){
+            return true;
+        }
+
+        const status = Number(error && error.status || 0);
+        const code = error && error.payload
+        ? String(error.payload.code || "")
+        : "";
+
+        return (
+            status === 401 ||
+            status === 403 ||
+            status >= 500 ||
+            code === "database_unavailable"
+        );
+    }
+
+    // One bad record must never hold the entire tracker hostage. The original
+    // queue always retried index 0 and returned immediately on failure, so a
+    // permanently unsendable show could block status/episode saves for every
+    // other show. Attempt each queued operation once per drain pass, keep failed
+    // operations for retry, and continue with later operations when the failure
+    // is record-specific. Connection/auth/server failures still stop the pass.
+    if(typeof processPendingSaveQueue === "function"){
+        processPendingSaveQueue = function(){
+            if(PENDING_SAVE_PROCESSING){
+                return PENDING_SAVE_PROCESSING;
+            }
+
+            PENDING_SAVE_PROCESSING = (async()=>{
+                const attemptedOperationIds = new Set();
+                let firstToastError = null;
+                let firstToastOperation = null;
+                let blockedBySharedFailure = false;
+
+                while(true){
+                    const queuedOperation = PENDING_SAVE_OPERATIONS.find(item=>{
+                        const id = item && item.id ? String(item.id) : "";
+                        return id && !attemptedOperationIds.has(id);
+                    });
+
+                    if(!queuedOperation || blockedBySharedFailure){
+                        break;
+                    }
+
+                    const operation = cloneTrackerData(queuedOperation);
+                    attemptedOperationIds.add(String(operation.id));
+
+                    try{
+                        SAVE_IN_FLIGHT += 1;
+                        await persistQueuedSaveOperation(operation);
+                        removePendingSaveOperation(operation.id);
+                        SYNC_FAILURES = 0;
+                        SYNC_WARNING_SHOWN = false;
+                    }catch(error){
+                        console.error("TV Tracker has an unsaved operation",error);
+
+                        if(!firstToastError && !(operation && operation.silent)){
+                            firstToastError = error;
+                            firstToastOperation = operation;
+                        }
+
+                        blockedBySharedFailure = queuedSaveFailureBlocksLaterOperations(error);
+                    }finally{
+                        SAVE_IN_FLIGHT = Math.max(0,SAVE_IN_FLIGHT - 1);
+                    }
+                }
+
+                if(PENDING_SAVE_OPERATIONS.length > 0){
+                    PENDING_SAVE_FAILURES += 1;
+                    const shouldToast =
+                    PENDING_SAVE_FAILURES === 1 &&
+                    firstToastError &&
+                    typeof showToast === "function" &&
+                    !(firstToastOperation && firstToastOperation.silent);
+
+                    if(shouldToast){
+                        showToast(friendlySaveError(firstToastError),{duration:3600});
+                    }
+
+                    updateUnsavedStateIndicator();
+                    schedulePendingSaveRetry();
+                    return false;
+                }
+
+                PENDING_SAVE_FAILURES = 0;
+                updateUnsavedStateIndicator();
+                return true;
+            })().finally(()=>{
+                PENDING_SAVE_PROCESSING = null;
+                if(SYNC_STARTED && document.visibilityState === "visible"){
+                    scheduleNextSync(250);
+                }
+            });
+
+            return PENDING_SAVE_PROCESSING;
         };
     }
 })();
