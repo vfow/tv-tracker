@@ -442,6 +442,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
                 "0005_push_schema",
                 "0006_notification_settings_consolidation",
                 "0007_multi_user_database_foundation",
+                "0008_account_creation_email_tokens",
             ],
         )
         self.assertEqual(
@@ -455,7 +456,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
         )
         self.assertEqual(
             MIGRATIONS[-1].schema_contract.legacy_schema_versions,
-            (4, 5, 6),
+            (4, 5, 6, 7),
         )
         adoption_seed_sql = MIGRATIONS[-1].schema_contract.adoption_seed_sql
         self.assertIsNotNone(adoption_seed_sql)
@@ -484,6 +485,7 @@ class Phase13MigrationFoundationTests(unittest.TestCase):
             "tv_tracker_push_subscriptions",
             "tv_tracker_push_presence",
             "tv_tracker_push_deliveries",
+            "tv_tracker_account_tokens",
         ):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", migration_sql)
         for column in ("timezone_mode", "media_type", "session_version"):
@@ -772,6 +774,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
         self.assertEqual(
             tables,
             {
+                "tv_tracker_account_tokens",
                 "tv_tracker_admin",
                 "tv_tracker_changes",
                 "tv_tracker_final_notification_settings",
@@ -1287,6 +1290,9 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
             self.skipTest("NULLS NOT DISTINCT syntax requires PostgreSQL 15+")
 
         self.apply_unledgered_current_schema()
+        schema_version_before = self.fetchone(
+            "SELECT schema_version FROM tv_tracker_schema_meta WHERE singleton_id = 1"
+        )[0]
         self.execute(
             """
             DROP INDEX tv_tracker_push_subscriptions_device_idx;
@@ -1305,7 +1311,7 @@ class Phase13PostgreSQLIntegrationTests(unittest.TestCase):
                 "SELECT schema_version, to_regclass('tv_tracker_migrations') "
                 "FROM tv_tracker_schema_meta WHERE singleton_id = 1"
             ),
-            (DATABASE_SCHEMA_VERSION - 1, None),
+            (schema_version_before, None),
         )
 
     def test_complete_ledger_repairs_missing_and_behind_schema_version(self):
@@ -1870,7 +1876,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
 
         self.assertIn("python tests/run_all.py", ci_commands)
         migration_command = '"$PYTHON_BIN" -m tvtracker.migrations'
-        restart_command = "curl --fail --silent --show-error \\"
+        restart_command = "curl --fail --silent --show-error \\\\"
         self.assertIn(migration_command, deploy_commands)
         self.assertIn(restart_command, deploy_commands)
         self.assertLess(
