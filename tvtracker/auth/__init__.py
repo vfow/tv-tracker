@@ -1,4 +1,4 @@
-"""Authentication domain: account identity, session checks, admin account cache, security-event rate limiting, CSRF, password hashing, and registration rollout policy."""
+"""Authentication domain: account identity, sessions, security, and registration policy."""
 
 from tvtracker.auth.accounts import (
     ACCOUNT_ROLES,
@@ -40,6 +40,19 @@ from tvtracker.auth.security import (
     record_security_event,
     security_event_count,
 )
+from tvtracker.auth.users import (
+    AUTH_KIND_USER,
+    MIN_USER_PASSWORD_CHARS,
+    current_user,
+    is_authenticated_user,
+    login_identifier_key,
+    read_user_by_id,
+    read_user_by_identifier,
+    revoke_all_user_sessions,
+    update_user_password,
+    user_can_enter_app,
+    user_session_marker,
+)
 
 __all__ = [
     "ACCOUNT_CHANGE_MAX_ATTEMPTS",
@@ -50,9 +63,11 @@ __all__ = [
     "ADMIN_ACCOUNT_CACHE_AT",
     "ADMIN_ACCOUNT_CACHE_TTL_SECONDS",
     "ADMIN_ACCOUNT_LOCK",
+    "AUTH_KIND_USER",
     "LOGIN_MAX_ATTEMPTS",
     "LOGIN_WINDOW_SECONDS",
     "MIN_ADMIN_PASSWORD_CHARS",
+    "MIN_USER_PASSWORD_CHARS",
     "PASSWORD_HASHER",
     "PUBLIC_REGISTRATION_ENABLED",
     "PUBLIC_REGISTRATION_OPEN_PHASE",
@@ -63,8 +78,11 @@ __all__ = [
     "clear_login_failures",
     "clear_security_events",
     "client_key",
+    "current_user",
     "invalidate_admin_account_cache",
     "is_authenticated",
+    "is_authenticated_user",
+    "login_identifier_key",
     "login_is_limited",
     "login_required",
     "new_user_id",
@@ -72,8 +90,14 @@ __all__ = [
     "normalize_username",
     "public_registration_enabled",
     "read_admin_account",
+    "read_user_by_id",
+    "read_user_by_identifier",
     "record_login_failure",
     "record_security_event",
+    "revoke_all_user_sessions",
     "security_event_count",
+    "update_user_password",
+    "user_can_enter_app",
+    "user_session_marker",
     "validated_username",
 ]

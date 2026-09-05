@@ -132,14 +132,14 @@ onMounted(() => {
               id="admin-new-password-input"
               class="settings-v2-input"
               type="password"
-              minlength="16"
+              minlength="10"
               autocomplete="new-password"
               placeholder="Leave blank to keep current password"
             >
           </div>
           <div class="settings-v2-field">
             <label for="admin-confirm-password-input">Confirm New Password</label>
-            <input id="admin-confirm-password-input" class="settings-v2-input" type="password" minlength="16" autocomplete="new-password">
+            <input id="admin-confirm-password-input" class="settings-v2-input" type="password" minlength="10" autocomplete="new-password">
           </div>
           <p id="admin-account-status" class="settings-v2-copy" aria-live="polite"></p>
           <div class="settings-v2-actions">
@@ -151,10 +151,16 @@ onMounted(() => {
       <section class="settings-v2-section">
         <h2>Session</h2>
         <p class="settings-v2-copy">Sign out of this session.</p>
-        <form method="post" action="/logout" @submit="cleanupLogout">
-          <input type="hidden" name="csrf_token" :value="csrfToken()">
-          <button class="settings-v2-button" type="submit">Log Out</button>
-        </form>
+        <div class="settings-v2-actions">
+          <form method="post" action="/logout" @submit="cleanupLogout">
+            <input type="hidden" name="csrf_token" :value="csrfToken()">
+            <button class="settings-v2-button" type="submit">Log Out</button>
+          </form>
+          <form method="post" action="/account/sign-out-all" @submit="cleanupLogout">
+            <input type="hidden" name="csrf_token" :value="csrfToken()">
+            <button class="settings-v2-button" type="submit">Sign Out All Devices</button>
+          </form>
+        </div>
       </section>
     </div>
   </div>
