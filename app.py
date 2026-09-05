@@ -16,6 +16,8 @@ from flask import Flask, session
 
 from tvtracker.application import build_flask_application
 from tvtracker.auth import security as auth_security
+from tvtracker.auth import users as user_auth
+from tvtracker.auth.phase3_routes import install_multi_user_phase3_routes
 from tvtracker.auth.security import (
     MIN_ADMIN_PASSWORD_CHARS,
     PASSWORD_HASHER,
@@ -107,7 +109,29 @@ MAX_BODY_BYTES = 40 * 1024 * 1024
 # TMDB proxy allowlist, validation, and cache live in tvtracker.media.tmdb_proxy.
 # These names stay importable from app for patch-compatible tests and tools.
 def authenticated() -> bool:
+    if session.get("auth_kind") == user_auth.AUTH_KIND_USER:
+        return user_auth.is_authenticated_user(session, database_connection)
     return auth_security.is_authenticated(session, read_admin_account)
+
+
+def current_user() -> dict[str, Any] | None:
+    return user_auth.current_user(session, database_connection)
+
+
+def read_user_by_identifier(identifier: str) -> dict[str, Any] | None:
+    return user_auth.read_user_by_identifier(database_connection, identifier)
+
+
+def login_identifier_key(key: str, identifier: str) -> str:
+    return user_auth.login_identifier_key(key, identifier)
+
+
+def update_user_password(user_id: Any, password_hash: str) -> int:
+    return user_auth.update_user_password(database_connection, user_id, password_hash)
+
+
+def revoke_all_user_sessions(user_id: Any) -> int:
+    return user_auth.revoke_all_user_sessions(database_connection, user_id)
 
 
 def login_required(view):
@@ -289,6 +313,12 @@ def run_notification_check(now: datetime | None = None) -> dict[str, Any]:
 
 
 def create_app() -> Flask:
+    def register_application_routes(application: Flask) -> None:
+        # Phase 3 registers first so UUID-user login/account requests can be
+        # intercepted while unmatched requests continue to the legacy admin.
+        install_multi_user_phase3_routes(application, sys.modules[__name__])
+        register_routes(application, deps=sys.modules[__name__])
+
     return build_flask_application(
         __name__,
         secret_key=required_env("SECRET_KEY"),
@@ -296,10 +326,7 @@ def create_app() -> Flask:
         permanent_session_lifetime=timedelta(days=7),
         trust_proxy_headers=env_flag("TRUST_PROXY_HEADERS"),
         prepare_schema=ensure_schema,
-        register_routes=lambda application: register_routes(
-            application,
-            deps=sys.modules[__name__],
-        ),
+        register_routes=register_application_routes,
         install_client_error_reporting=lambda application: install_client_error_reporting(
             application,
             login_required=login_required,
