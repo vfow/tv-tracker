@@ -12,19 +12,15 @@
     font: 600 0.875rem/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/*
+ * Save/sync state is implementation detail. Keep the runtime save pill hidden
+ * for success, retry, conflict, offline, and other background transitions.
+ * Actionable session/storage warnings use the separate .tv-runtime-warning UI.
+ */
 .tv-runtime-save-status {
+    display: none;
     bottom: 1rem;
     padding: 0.65rem 0.85rem;
-}
-
-/*
- * Routine state synchronization can happen in the background and complete very
- * quickly. Keep those successful save transitions silent so the status pill does
- * not flash during normal browsing; warning/error states remain visible below.
- */
-.tv-runtime-save-status[data-state="saving"],
-.tv-runtime-save-status[data-state="saved"] {
-    display: none;
 }
 
 .tv-runtime-save-status[data-state="saving"] {
