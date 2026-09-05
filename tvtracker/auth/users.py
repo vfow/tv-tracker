@@ -7,7 +7,7 @@ from uuid import UUID
 
 from flask import g
 
-from tvtracker.auth.accounts import normalize_email, normalize_username
+from tvtracker.auth.accounts import USERNAME_RE, normalize_email, normalize_username
 
 
 AUTH_KIND_USER = "user"
@@ -54,6 +54,13 @@ def read_user_by_identifier(
 
     candidate = str(identifier).strip()
     if not candidate:
+        return None
+
+    # UUID-account usernames are ASCII letters/numbers/underscores by schema.
+    # An identifier outside that username grammar can still be an email when it
+    # contains ``@``. Everything else belongs to the temporary legacy-admin
+    # fallback and must not force a UUID-account database lookup first.
+    if "@" not in candidate and USERNAME_RE.fullmatch(candidate) is None:
         return None
 
     normalized_username = normalize_username(candidate)
