@@ -4,16 +4,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_routine_state_saves_do_not_flash_global_status_pill():
+def test_global_save_status_pill_is_internal_only():
     css = (ROOT / "static/css/runtime-health.css").read_text(encoding="utf-8")
 
-    assert '.tv-runtime-save-status[data-state="saving"],' in css
-    assert '.tv-runtime-save-status[data-state="saved"] {' in css
-    assert "display: none;" in css
+    save_block = css.split(".tv-runtime-save-status {", 1)[1].split("}", 1)[0]
+    assert "display: none;" in save_block
 
-    # Actionable states must still be available to the user.
-    assert '.tv-runtime-save-status[data-state="warning"]' in css
-    assert '.tv-runtime-save-status[data-state="error"]' in css
+    # Actionable session/storage warnings still have their own visible surface.
+    warning_block = css.split(".tv-runtime-warning {", 1)[1].split("}", 1)[0]
+    assert "display: none;" not in warning_block
 
 
 def test_tracker_rows_are_painted_during_scroll():
