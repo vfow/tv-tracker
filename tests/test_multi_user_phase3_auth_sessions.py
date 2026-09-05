@@ -128,6 +128,14 @@ class MultiUserPhase3AuthTests(unittest.TestCase):
             template_folder=str(ROOT / "templates"),
         )
         self.app.secret_key = "phase3-test-secret"
+        # Shared login templates link to Phase 4 recovery pages. Supply their
+        # URLs without installing Phase 4's account interceptor in this test.
+        self.app.add_url_rule(
+            "/forgot-password", "phase4_forgot_password_page", lambda: "forgot"
+        )
+        self.app.add_url_rule(
+            "/account/resend-verification", "phase4_resend_verification_page", lambda: "resend"
+        )
         install_multi_user_phase3_routes(self.app, self.deps)
 
         @self.app.post("/login")

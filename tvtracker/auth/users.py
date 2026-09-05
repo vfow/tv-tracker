@@ -8,6 +8,7 @@ from uuid import UUID
 from flask import g
 
 from tvtracker.auth.accounts import USERNAME_RE, normalize_email, normalize_username
+from tvtracker.auth.account_flows import revoke_recovery_tokens
 
 
 AUTH_KIND_USER = "user"
@@ -188,6 +189,8 @@ def update_user_password(
                 (password_hash, parsed_user_id),
             )
             row = cursor.fetchone()
+            if row is not None:
+                revoke_recovery_tokens(cursor, parsed_user_id)
         connection.commit()
     if row is None:
         raise RuntimeError("User account could not be updated")

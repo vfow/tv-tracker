@@ -18,9 +18,9 @@
         <button class="auth-tab tw-min-h-[46px] tw-cursor-pointer tw-border-0 tw-border-l tw-border-solid tw-border-[#262626] tw-bg-[#0d0d0d] tw-font-extrabold tw-tracking-[.04em] tw-text-[#777] tw-transition-colors focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.active]:tw-bg-white [&.active]:tw-text-black{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
     </div>
 
-    <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
         {% if notice %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-noticeBorder tw-bg-tt-noticeBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-notice">{{ notice }}</div>{% endif %}
         {% if error %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-dangerBorder tw-bg-tt-dangerBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-danger">{{ error }}</div>{% endif %}
+    <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
         {% if login_action is defined %}
             {% set resolved_login_action = login_action %}
         {% else %}
@@ -34,12 +34,31 @@
             <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-py-[13px] tw-text-base tw-text-white tw-shadow-none tw-outline-none tw-transition-colors focus:tw-border-[#8b8b8b] focus:tw-bg-[#141414] focus:tw-shadow-none focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white" id="password" name="password" type="password" required autocomplete="current-password" aria-label="Password">
             <button class="submit-button tw-mt-6 tw-w-full tw-min-h-[48px] tw-cursor-not-allowed tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-p-[13px] tw-font-bold tw-text-[#666] tw-transition focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.is-ready]:tw-cursor-pointer [&.is-ready]:tw-border-white [&.is-ready]:tw-bg-white [&.is-ready]:tw-text-black [&.is-ready:hover]:tw-translate-y-[-1px] [&.is-ready:hover]:tw-bg-[#d8d8d8]" id="sign-in-button" type="submit" disabled>SIGN IN</button>
         </form>
+        <div class="tw-mt-5 tw-flex tw-flex-wrap tw-gap-x-4 tw-gap-y-2 tw-text-sm">
+            <a class="tw-text-[#ccc]" href="{{ url_for('phase4_forgot_password_page') }}">Forgot password?</a>
+            <a class="tw-text-[#ccc]" href="{{ url_for('phase4_resend_verification_page') }}">Resend verification</a>
+        </div>
     </section>
 
     <section class="auth-panel" id="signup-panel" role="tabpanel" aria-labelledby="signup-tab"{% if initial_tab != 'signup' %} hidden{% endif %}>
+        {% if public_registration_enabled %}
+        <form method="post" action="{{ url_for('phase4_signup_post') }}" autocomplete="on">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label class="tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="signup-email">Email</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-text-white" id="signup-email" name="email" type="email" required autocomplete="email">
+            <label class="tw-mt-4 tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="signup-username">Username</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-text-white" id="signup-username" name="signup_username" type="text" minlength="3" maxlength="30" pattern="[A-Za-z0-9_]{3,30}" required autocomplete="username">
+            <label class="tw-mt-4 tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="signup-password">Password</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-text-white" id="signup-password" name="signup_password" type="password" minlength="10" required autocomplete="new-password">
+            <label class="tw-mt-4 tw-mb-[7px] tw-block tw-text-[13px] tw-uppercase tw-tracking-[1px] tw-text-[#bbb]" for="signup-confirm-password">Confirm password</label>
+            <input class="tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border tw-border-solid tw-border-[#2b2b2b] tw-bg-[#111] tw-px-[14px] tw-text-white" id="signup-confirm-password" name="signup_confirm_password" type="password" minlength="10" required autocomplete="new-password">
+            <button class="tw-mt-6 tw-w-full tw-min-h-[48px] tw-rounded-lg tw-border-0 tw-bg-white tw-font-bold tw-text-black" type="submit">CREATE ACCOUNT</button>
+        </form>
+        {% else %}
         <div class="tw-flex tw-min-h-[210px] tw-flex-col tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-[#222] tw-bg-[#0d0d0d] tw-p-7 tw-text-center">
             <h2 class="tw-m-0 tw-font-league tw-text-[45px] tw-font-normal tw-tracking-[.03em]">Registration coming soon</h2>
         </div>
+        {% endif %}
     </section>
 </main>
 <script src="{{ url_for('static', filename='js/login.js') }}"></script>

@@ -16,9 +16,13 @@ from tvtracker.auth.accounts import (
     normalize_username,
     validated_username,
 )
-from tvtracker.migrations import DATABASE_SCHEMA_VERSION, MIGRATIONS, run_migrations
+from tvtracker.migrations import run_migrations
 from tvtracker.migrations.registry import MIGRATIONS as V6_MIGRATIONS
-from tvtracker.migrations.registry_v7 import _OWNER_SCOPED_RELATIONS
+from tvtracker.migrations.registry_v7 import (
+    DATABASE_SCHEMA_VERSION as PHASE2_SCHEMA_VERSION,
+    MIGRATIONS as PHASE2_MIGRATIONS,
+    _OWNER_SCOPED_RELATIONS,
+)
 
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
@@ -28,19 +32,19 @@ OWNER_RELATIONS = tuple(table_name for table_name, _index_name, _keys in _OWNER_
 
 class MultiUserPhase2DatabaseFoundationTests(unittest.TestCase):
     def test_schema_version_seven_extends_without_rewriting_v1_v6(self):
-        self.assertEqual(DATABASE_SCHEMA_VERSION, 7)
-        self.assertEqual(MIGRATIONS[-1].migration_id, "0007_multi_user_database_foundation")
+        self.assertEqual(PHASE2_SCHEMA_VERSION, 7)
+        self.assertEqual(PHASE2_MIGRATIONS[-1].migration_id, "0007_multi_user_database_foundation")
         self.assertEqual(
-            [(migration.migration_id, migration.checksum) for migration in MIGRATIONS[:6]],
+            [(migration.migration_id, migration.checksum) for migration in PHASE2_MIGRATIONS[:6]],
             [(migration.migration_id, migration.checksum) for migration in V6_MIGRATIONS],
         )
-        self.assertTrue(all(migration.schema_contract is None for migration in MIGRATIONS[:-1]))
-        self.assertIsNotNone(MIGRATIONS[-1].schema_contract)
-        self.assertEqual(MIGRATIONS[-1].schema_contract.schema_version, 7)
-        self.assertEqual(MIGRATIONS[-1].schema_contract.legacy_schema_versions, (4, 5, 6))
+        self.assertTrue(all(migration.schema_contract is None for migration in PHASE2_MIGRATIONS[:-1]))
+        self.assertIsNotNone(PHASE2_MIGRATIONS[-1].schema_contract)
+        self.assertEqual(PHASE2_MIGRATIONS[-1].schema_contract.schema_version, 7)
+        self.assertEqual(PHASE2_MIGRATIONS[-1].schema_contract.legacy_schema_versions, (4, 5, 6))
 
     def test_user_schema_locks_identity_role_and_lifecycle_foundation(self):
-        migration_sql = MIGRATIONS[-1].sql
+        migration_sql = PHASE2_MIGRATIONS[-1].sql
         for fragment in (
             "CREATE TABLE IF NOT EXISTS tv_tracker_users",
             "user_id UUID CONSTRAINT tv_tracker_users_pkey PRIMARY KEY",
@@ -53,8 +57,8 @@ class MultiUserPhase2DatabaseFoundationTests(unittest.TestCase):
             "session_version BIGINT NOT NULL DEFAULT 1",
             "deletion_requested_at TIMESTAMPTZ",
             "deletion_due_at TIMESTAMPTZ",
-            "UNIQUE (email_normalized)",
-            "UNIQUE (username_normalized)",
+            "CONSTRAINT tv_tracker_users_email_normalized_key UNIQUE (email_normalized)",
+            "CONSTRAINT tv_tracker_users_username_normalized_key UNIQUE (username_normalized)",
             "role IN ('user', 'admin')",
             "status IN ('unverified', 'active', 'deactivated', 'pending_deletion')",
             "username ~ '^[A-Za-z0-9_]{3,30}$'",
@@ -66,7 +70,7 @@ class MultiUserPhase2DatabaseFoundationTests(unittest.TestCase):
             self.assertIn(fragment, migration_sql)
 
     def test_every_phase1_owned_boundary_gets_nullable_uuid_scaffolding(self):
-        migration_sql = MIGRATIONS[-1].sql
+        migration_sql = PHASE2_MIGRATIONS[-1].sql
         expected_relations = (
             "tv_tracker_shows",
             "tv_tracker_history",
@@ -160,8 +164,8 @@ class MultiUserPhase2PostgreSQLTests(unittest.TestCase):
 
     def test_v6_data_is_preserved_and_left_unassigned_by_phase2(self):
         self.assertEqual(
-            run_migrations(self.connection_factory, MIGRATIONS[:6]),
-            [migration.migration_id for migration in MIGRATIONS[:6]],
+            run_migrations(self.connection_factory, PHASE2_MIGRATIONS[:6]),
+            [migration.migration_id for migration in PHASE2_MIGRATIONS[:6]],
         )
         self.execute(
             """
@@ -175,8 +179,8 @@ class MultiUserPhase2PostgreSQLTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            run_migrations(self.connection_factory, MIGRATIONS),
-            [MIGRATIONS[-1].migration_id],
+            run_migrations(self.connection_factory, PHASE2_MIGRATIONS),
+            [PHASE2_MIGRATIONS[-1].migration_id],
         )
         self.assertEqual(
             self.fetchone("SELECT schema_version FROM tv_tracker_schema_meta WHERE singleton_id = 1"),
@@ -212,10 +216,10 @@ class MultiUserPhase2PostgreSQLTests(unittest.TestCase):
                     ),
                     (0,),
                 )
-        self.assertEqual(run_migrations(self.connection_factory, MIGRATIONS), [])
+        self.assertEqual(run_migrations(self.connection_factory, PHASE2_MIGRATIONS), [])
 
     def test_user_table_rejects_duplicate_normalized_identifiers_and_bad_roles(self):
-        run_migrations(self.connection_factory, MIGRATIONS)
+        run_migrations(self.connection_factory, PHASE2_MIGRATIONS)
         first_user = new_user_id()
         self.execute(
             """
