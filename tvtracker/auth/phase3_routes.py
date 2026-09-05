@@ -6,6 +6,7 @@ from typing import Any
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from flask import jsonify, redirect, render_template, request, session, url_for
 
+from tvtracker.auth.phase4_routes import install_multi_user_phase4_routes
 from tvtracker.auth.users import AUTH_KIND_USER, MIN_USER_PASSWORD_CHARS, user_can_enter_app, user_session_marker
 
 
@@ -30,11 +31,12 @@ def _render_login_error(message: str, status_code: int):
 def install_multi_user_phase3_routes(app, deps) -> None:
     """Layer UUID-user authentication over the legacy singleton admin safely.
 
-    Phase 3 deliberately does not create accounts. If a login identifier does not
-    resolve to ``tv_tracker_users`` the request falls through to the existing
-    singleton-admin route, keeping the current owner account usable until the
-    explicit Phase 7 migration/removal step.
+    Phase 4 is installed first so its account/email extensions can handle the
+    UUID-user operations it owns while unmatched requests continue through this
+    Phase 3 compatibility bridge and, finally, the legacy singleton admin.
     """
+
+    install_multi_user_phase4_routes(app, deps)
 
     def current_uuid_user() -> dict[str, Any] | None:
         return deps.current_user()
@@ -173,14 +175,13 @@ def install_multi_user_phase3_routes(app, deps) -> None:
                     "code": "invalid_current_password",
                 }), 400
 
-            # Username changes are intentionally Phase 4. Keeping the existing
-            # value in this bridge lets the already-deployed Settings UI remain
-            # usable for Phase 3 password changes without pulling email/account
-            # creation work forward.
+            # Phase 4 handles changed UUID usernames before this interceptor.
+            # Reaching this branch means the username is unchanged and this
+            # remains the canonical password-change path from Phase 3.
             if requested_username and requested_username != account["username"]:
                 return jsonify({
                     "ok": False,
-                    "error": "Username changes are not available yet",
+                    "error": "Username change could not be completed",
                     "code": "username_change_unavailable",
                 }), 409
 
