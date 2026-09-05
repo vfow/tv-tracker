@@ -7,7 +7,6 @@ const vm = require("vm");
 
 const ROOT = path.resolve(__dirname,"..");
 const feedbackSource = fs.readFileSync(path.join(ROOT,"static/js/feedback.js"),"utf8");
-const policySource = fs.readFileSync(path.join(ROOT,"static/js/feedback-dismiss-policy.js"),"utf8");
 const template = fs.readFileSync(path.join(ROOT,"templates/index.html"),"utf8");
 
 class FakeClassList{
@@ -85,7 +84,6 @@ const window = {
 window.window = window;
 
 vm.runInNewContext(feedbackSource,{window},{filename:"feedback.js"});
-vm.runInNewContext(policySource,{window,Object},{filename:"feedback-dismiss-policy.js"});
 
 const root = document.getElementById("tv-feedback-root");
 assert(root,"feedback root must exist");
@@ -117,8 +115,7 @@ const noDismissCard = root.children.find(card=>{
 assert(noDismissCard,"explicit non-dismissible feedback should still be allowed");
 assert.strictEqual(noDismissCard.querySelector(".tv-feedback-dismiss"),null);
 
-const feedbackPosition = template.indexOf("js/feedback.js");
-const policyPosition = template.indexOf("js/feedback-dismiss-policy.js");
-assert(feedbackPosition >= 0 && policyPosition > feedbackPosition,"dismiss policy must load immediately after feedback.js");
+assert(template.includes("js/feedback.js"),"canonical feedback module must remain loaded");
+assert(!template.includes("js/feedback-dismiss-policy.js"),"dismiss behavior must not create a second visible feedback API owner");
 
 console.log("Feedback dismiss policy checks passed.");
