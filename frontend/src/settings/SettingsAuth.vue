@@ -106,7 +106,7 @@ onMounted(() => {
     <div class="settings-v2-body" data-settings-body>
       <section class="settings-v2-section">
         <h2>Auth</h2>
-        <p class="settings-v2-copy">Change the private login username or password. Saving account changes signs out logged-in sessions.</p>
+        <p class="settings-v2-copy">Change your login username or password. Password changes sign out logged-in sessions.</p>
         <p v-if="bridgeUnavailable" class="settings-v2-copy" role="status">Account settings are temporarily unavailable.</p>
         <form id="admin-account-form" autocomplete="on" @submit="saveAccount">
           <div class="settings-v2-field">
@@ -115,7 +115,8 @@ onMounted(() => {
               id="admin-username-input"
               class="settings-v2-input"
               type="text"
-              maxlength="80"
+              maxlength="30"
+              pattern="[A-Za-z0-9_]{3,30}"
               autocomplete="username"
               :value="initialUsername"
               placeholder="Loading account..."
@@ -146,6 +147,14 @@ onMounted(() => {
             <button id="save-admin-account" class="settings-v2-button settings-v2-button--primary" type="submit">Save Account Changes</button>
           </div>
         </form>
+      </section>
+
+      <section class="settings-v2-section">
+        <h2>Email</h2>
+        <p class="settings-v2-copy">Changing your email requires your current password and confirmation from the new address. Your current email stays active until the new address is verified.</p>
+        <div class="settings-v2-actions">
+          <a class="settings-v2-button" href="/account/email">Change Email</a>
+        </div>
       </section>
 
       <section class="settings-v2-section">
