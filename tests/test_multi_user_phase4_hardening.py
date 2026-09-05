@@ -5,7 +5,7 @@ import unittest
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import psycopg
 from argon2 import PasswordHasher
@@ -31,6 +31,8 @@ class _RouteDeps:
 
     def __init__(self, account=None):
         self.account = account
+        self.security_counts = {}
+        self.security_events = []
 
     @staticmethod
     def login_required(view):
@@ -55,14 +57,23 @@ class _RouteDeps:
     def account_change_is_limited(_key):
         return False
 
-    @staticmethod
-    def record_security_event(_event_type, _key):
-        return None
+    def security_event_count(self, event_type, key, _window):
+        return self.security_counts.get((event_type, key), 0)
+
+    def record_security_event(self, event_type, key):
+        self.security_events.append((event_type, key))
+        pair = (event_type, key)
+        self.security_counts[pair] = self.security_counts.get(pair, 0) + 1
 
 
 def _app_with_phase4(deps: _RouteDeps) -> Flask:
     app = Flask(__name__, template_folder=str(ROOT / "templates"))
     app.secret_key = "phase4-hardening-test"
+    app.testing = True
+    # Production registers these login endpoints alongside Phase 4. Keep
+    # real templates so broken links still fail this focused route suite.
+    app.add_url_rule("/login", "login", lambda: "login")
+    app.add_url_rule("/login", "login_post", lambda: "login", methods=["POST"])
     install_multi_user_phase4_routes(app, deps)
     return app
 
@@ -73,6 +84,63 @@ def _prime_csrf(client) -> None:
 
 
 class MultiUserPhase4RouteHardeningTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"APP_PUBLIC_URL": "https://tracker.example.test"})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_recovery_links_ignore_attacker_host(self):
+        from tvtracker.auth.phase4_routes import _absolute_url
+        app = _app_with_phase4(_RouteDeps())
+        with app.test_request_context(base_url="https://attacker.example/"):
+            self.assertEqual(
+                _absolute_url("phase4_reset_password_page", token="test-token"),
+                "https://tracker.example.test/reset-password?token=test-token",
+            )
+
+    def test_email_throttle_rejects_before_account_lookup_or_delivery(self):
+        deps = _RouteDeps()
+        app = _app_with_phase4(deps)
+        client = app.test_client()
+        _prime_csrf(client)
+        with patch("tvtracker.auth.phase4_routes.user_for_email", return_value=None) as lookup:
+            for _ in range(5):
+                self.assertEqual(client.post("/forgot-password", data={"email": "a@example.test"}).status_code, 200)
+            response = client.post("/forgot-password", data={"email": "A@example.test"})
+            self.assertEqual(response.status_code, 429)
+            self.assertEqual(response.headers["Retry-After"], "900")
+            self.assertEqual(lookup.call_count, 5)
+        self.assertNotIn("a@example.test", repr(deps.security_events))
+
+    def test_client_throttle_covers_reset_password_hashing(self):
+        deps = _RouteDeps()
+        deps.security_counts[("account_email_attempt", "client:phase4-test-client")] = 30
+        deps.PASSWORD_HASHER = Mock()
+        client = _app_with_phase4(deps).test_client()
+        response = client.post("/reset-password", data={"password": "long enough password", "confirm_password": "long enough password"})
+        self.assertEqual(response.status_code, 429)
+        deps.PASSWORD_HASHER.hash.assert_not_called()
+
+    def test_email_forms_enforce_csrf_before_account_lookup(self):
+        from tvtracker.auth.security import check_csrf
+        deps = _RouteDeps()
+        deps.check_csrf = check_csrf
+        client = _app_with_phase4(deps).test_client()
+        with patch("tvtracker.auth.phase4_routes.user_for_email") as lookup:
+            self.assertEqual(client.post("/forgot-password", data={"email": "a@example.test"}).status_code, 403)
+            lookup.assert_not_called()
+        self.assertEqual(deps.security_events, [])
+
+    def test_recovery_pages_are_not_cacheable(self):
+        client = _app_with_phase4(_RouteDeps()).test_client()
+        _prime_csrf(client)
+        for path in ("/forgot-password", "/reset-password?token=secret", "/account/resend-verification"):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["Cache-Control"], "no-store")
+                self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+
     def test_forgot_password_does_not_reveal_account_existence_or_mail_failure(self):
         app = _app_with_phase4(_RouteDeps())
         client = app.test_client()

@@ -5,7 +5,7 @@ from uuid import UUID
 
 import psycopg
 
-from tvtracker.auth.account_flows import AccountFlowError, IdentifierUnavailableError
+from tvtracker.auth.account_flows import AccountFlowError, IdentifierUnavailableError, revoke_recovery_tokens
 from tvtracker.auth.accounts import normalize_username, validated_username
 
 
@@ -101,6 +101,8 @@ def update_account_credentials(
                 updated = cursor.fetchone()
                 if updated is None:
                     raise AccountFlowError("Account could not be updated")
+                if password_hash is not None:
+                    revoke_recovery_tokens(cursor, canonical_user_id)
             connection.commit()
     except psycopg.errors.UniqueViolation as error:
         raise IdentifierUnavailableError("That username is already in use") from error

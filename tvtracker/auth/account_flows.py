@@ -69,9 +69,26 @@ def _insert_token(
     user_id: UUID,
     purpose: str,
     pending_email: str | None = None,
+    expected_email: str | None = None,
 ) -> IssuedToken:
     if purpose not in TOKEN_PURPOSES:
         raise ValueError("Unsupported account token purpose")
+
+    # Serialize issuance and consumption on the account, including simultaneous
+    # resends where neither transaction initially sees a previous token.
+    cursor.execute(
+        "SELECT status, email_normalized FROM tv_tracker_users WHERE user_id = %s FOR UPDATE",
+        (user_id,),
+    )
+    account = cursor.fetchone()
+    allowed_states = {"unverified"} if purpose == VERIFY_EMAIL else {"active", "unverified"}
+    if purpose == EMAIL_CHANGE:
+        allowed_states = {"active"}
+        pending_email = validated_email(pending_email or "")
+    if account is None or account[0] not in allowed_states:
+        raise InvalidTokenError("This account cannot use that link")
+    if expected_email is not None and account[1] != normalize_email(expected_email):
+        raise InvalidTokenError("The account changed. Please request a new link")
 
     raw_token = secrets.token_urlsafe(32)
     token_hash = hash_token(raw_token)
@@ -113,6 +130,7 @@ def issue_token(
     user_id: UUID | str,
     purpose: str,
     pending_email: str | None = None,
+    expected_email: str | None = None,
 ) -> IssuedToken:
     parsed_user_id = UUID(str(user_id))
     with connection_factory() as connection:
@@ -122,6 +140,7 @@ def issue_token(
                 user_id=parsed_user_id,
                 purpose=purpose,
                 pending_email=pending_email,
+                expected_email=expected_email,
             )
         connection.commit()
     return token
@@ -204,6 +223,21 @@ def user_for_email(connection_factory: Callable[[], Any], email: str) -> dict[st
 
 
 def _lock_live_token(cursor: Any, *, raw_token: str, purpose: str):
+    if not raw_token or len(raw_token) > 256:
+        raise InvalidTokenError("This link is invalid or has expired")
+    # Always acquire account then token locks, matching token issuance and
+    # credential changes. Recheck token validity after acquiring both locks.
+    cursor.execute(
+        """
+        SELECT u.user_id FROM tv_tracker_users u
+        JOIN tv_tracker_account_tokens t ON t.user_id = u.user_id
+        WHERE t.token_hash = %s AND t.purpose = %s
+        FOR UPDATE OF u
+        """,
+        (hash_token(raw_token), purpose),
+    )
+    if cursor.fetchone() is None:
+        raise InvalidTokenError("This link is invalid or has expired")
     cursor.execute(
         """
         SELECT token_id, user_id, pending_email, pending_email_normalized
@@ -220,6 +254,18 @@ def _lock_live_token(cursor: Any, *, raw_token: str, purpose: str):
     if row is None:
         raise InvalidTokenError("This link is invalid or has expired")
     return row
+
+
+def revoke_recovery_tokens(cursor: Any, user_id: UUID) -> None:
+    """Invalidate old recovery/email-change links in the credential transaction."""
+    cursor.execute(
+        """
+        UPDATE tv_tracker_account_tokens SET used_at = NOW()
+        WHERE user_id = %s AND purpose IN ('password_reset', 'email_change')
+          AND used_at IS NULL
+        """,
+        (user_id,),
+    )
 
 
 def verify_email_token(connection_factory: Callable[[], Any], raw_token: str) -> UUID:
@@ -271,10 +317,7 @@ def reset_password_token(
             )
             if cursor.rowcount != 1:
                 raise InvalidTokenError("This reset link is no longer usable")
-            cursor.execute(
-                "UPDATE tv_tracker_account_tokens SET used_at = NOW() WHERE token_id = %s",
-                (row[0],),
-            )
+            revoke_recovery_tokens(cursor, user_id)
         connection.commit()
     return user_id
 
@@ -300,6 +343,7 @@ def confirm_email_change_token(
                         session_version = session_version + 1,
                         updated_at = NOW()
                     WHERE user_id = %s
+                      AND status = 'active'
                     RETURNING session_version
                     """,
                     (pending_email, pending_normalized, user_id),
@@ -307,10 +351,7 @@ def confirm_email_change_token(
                 version_row = cursor.fetchone()
                 if version_row is None:
                     raise InvalidTokenError("This email-change link is no longer usable")
-                cursor.execute(
-                    "UPDATE tv_tracker_account_tokens SET used_at = NOW() WHERE token_id = %s",
-                    (row[0],),
-                )
+                revoke_recovery_tokens(cursor, user_id)
             connection.commit()
     except psycopg.errors.UniqueViolation as error:
         raise IdentifierUnavailableError("That email address is already in use") from error

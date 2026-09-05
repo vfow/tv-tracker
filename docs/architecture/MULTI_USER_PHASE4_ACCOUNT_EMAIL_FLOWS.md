@@ -33,6 +33,12 @@ Password resets increment `session_version`, invalidating every existing browser
 
 The old email remains the login email until the new-address confirmation token succeeds.
 
+Issuance and consumption lock the account before its token rows. Concurrent
+resends therefore leave only one usable link of that purpose. Password changes,
+password resets, and confirmed email changes revoke outstanding password-reset
+and email-change links in the same transaction. A request that resolved an old
+email before an email switch cannot issue a fresh token to that old address.
+
 ## Email flows
 
 Phase 4 adds:
@@ -49,6 +55,7 @@ The authentication UI does not hard-code a product name into email subjects. Mai
 
 The mail service reads:
 
+- `APP_PUBLIC_URL` (the canonical HTTPS origin, with no path/query/credentials);
 - `MAIL_HOST`;
 - `MAIL_PORT`;
 - `MAIL_SECURITY` (`ssl`, `starttls`, or `plain`);
@@ -59,7 +66,32 @@ The mail service reads:
 
 SMTP authentication is optional by design, matching the Phase 1 AlwaysData finding that services hosted on AlwaysData can use the account SMTP server without authentication. Port 465 can use `ssl`; port 587 can use `starttls`.
 
+Email links use `APP_PUBLIC_URL`, never the request Host or forwarded host.
+Mail is unavailable until this origin and the SMTP sender configuration are
+valid. Authenticated SMTP requires TLS. `.env.example` lists all configuration
+keys without supplying real credentials or enabling registration.
+
+Account/email POSTs retain CSRF validation and use the existing database-backed
+security-event store to limit requests to 30 per client and 5 per normalized
+recipient in 15 minutes. Recipient keys are hashed. Reset-password hashing is
+covered by the client limit; username-change password failures count toward the
+existing account-change limit. Closed signup returns before CSRF, throttle
+storage, account access, hashing, or delivery. Recovery/account pages use
+`Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+
 Phase 4 code and tests deliberately do not claim that a production sender exists. Before email-backed signup can be accepted in production, the actual AlwaysData account must still be checked for a usable non-personal sender/address and for any restricted-profile SMTP limits. Registration remains closed regardless.
+
+## Remaining production acceptance
+
+- Confirm the available AlwaysData sender and sending limits in the actual account.
+- Configure the canonical origin and SMTP values on the host.
+- Apply migration 0008 through the normal accepted deployment process and verify
+  the live release SHA and health response.
+- With controlled test accounts, verify real inbox delivery for verification,
+  resend, reset, and email change, including expired/reused links and recovery
+  after a delivery failure. Mock SMTP tests do not certify inbox delivery.
+- Keep the legacy owner login and registration lock intact. Account ownership
+  migration and public signup remain later-phase work.
 
 ## Explicitly deferred
 

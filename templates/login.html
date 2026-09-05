@@ -18,9 +18,9 @@
         <button class="auth-tab tw-min-h-[46px] tw-cursor-pointer tw-border-0 tw-border-l tw-border-solid tw-border-[#262626] tw-bg-[#0d0d0d] tw-font-extrabold tw-tracking-[.04em] tw-text-[#777] tw-transition-colors focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-[3px] focus-visible:tw-outline-white [&.active]:tw-bg-white [&.active]:tw-text-black{% if initial_tab == 'signup' %} active{% endif %}" id="signup-tab" type="button" role="tab" aria-controls="signup-panel" aria-selected="{{ 'true' if initial_tab == 'signup' else 'false' }}" data-auth-tab="signup">SIGN UP</button>
     </div>
 
-    <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
         {% if notice %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-noticeBorder tw-bg-tt-noticeBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-notice">{{ notice }}</div>{% endif %}
         {% if error %}<div class="tw-m-0 tw-mb-4 tw-border tw-border-solid tw-border-tt-dangerBorder tw-bg-tt-dangerBg tw-px-3 tw-py-2.5 tw-text-sm tw-text-tt-danger">{{ error }}</div>{% endif %}
+    <section class="auth-panel" id="login-panel" role="tabpanel" aria-labelledby="login-tab"{% if initial_tab == 'signup' %} hidden{% endif %}>
         {% if login_action is defined %}
             {% set resolved_login_action = login_action %}
         {% else %}

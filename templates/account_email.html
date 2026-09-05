@@ -14,7 +14,7 @@
     <p class="tw-m-0 tw-mb-5 tw-text-tt-muted">Current email: <strong class="tw-text-white">{{ email }}</strong></p>
     {% if notice %}<div class="tw-mb-4 tw-border tw-border-solid tw-border-tt-noticeBorder tw-bg-tt-noticeBg tw-p-3 tw-text-sm tw-text-tt-notice">{{ notice }}</div>{% endif %}
     {% if error %}<div class="tw-mb-4 tw-border tw-border-solid tw-border-tt-dangerBorder tw-bg-tt-dangerBg tw-p-3 tw-text-sm tw-text-tt-danger">{{ error }}</div>{% endif %}
-    {% if not mail_configured %}<p class="tw-text-sm tw-text-tt-muted">Email delivery is not configured on this environment yet.</p>{% endif %}
+    {% if not mail_configured %}<p class="tw-text-sm tw-text-tt-muted">Email delivery is temporarily unavailable. Please try again later.</p>{% endif %}
     <form method="post" action="{{ url_for('phase4_email_change_post') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="tw-mb-2 tw-block tw-text-sm" for="email">New email</label>

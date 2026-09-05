@@ -6,6 +6,7 @@ import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr
+from urllib.parse import urlsplit
 
 
 class MailConfigurationError(RuntimeError):
@@ -14,6 +15,23 @@ class MailConfigurationError(RuntimeError):
 
 class MailDeliveryError(RuntimeError):
     pass
+
+
+def public_app_url() -> str:
+    """Use an operator-set origin, never an untrusted request Host header."""
+    value = os.environ.get("APP_PUBLIC_URL", "").strip().rstrip("/")
+    try:
+        parsed = urlsplit(value)
+        valid_port = parsed.port
+    except ValueError as error:
+        raise MailConfigurationError("APP_PUBLIC_URL must be a valid HTTPS origin") from error
+    if (
+        parsed.scheme != "https" or not parsed.hostname or parsed.username
+        or parsed.password or parsed.path or parsed.query or parsed.fragment
+        or any(char.isspace() for char in value) or "\\" in value
+    ):
+        raise MailConfigurationError("APP_PUBLIC_URL must be a valid HTTPS origin")
+    return value
 
 
 @dataclass(frozen=True)
@@ -29,6 +47,7 @@ class MailConfig:
 
     @classmethod
     def from_environment(cls) -> "MailConfig":
+        public_app_url()
         host = os.environ.get("MAIL_HOST", "").strip()
         security = os.environ.get("MAIL_SECURITY", "starttls").strip().lower()
         if security not in {"ssl", "starttls", "plain"}:
@@ -59,6 +78,8 @@ class MailConfig:
             raise MailConfigurationError(
                 "MAIL_USERNAME and MAIL_PASSWORD must either both be set or both be empty"
             )
+        if username and security == "plain":
+            raise MailConfigurationError("Authenticated SMTP requires TLS")
 
         return cls(
             host=host,

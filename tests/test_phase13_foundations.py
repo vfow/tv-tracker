@@ -1876,7 +1876,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
 
         self.assertIn("python tests/run_all.py", ci_commands)
         migration_command = '"$PYTHON_BIN" -m tvtracker.migrations'
-        restart_command = "curl --fail --silent --show-error \\\\"
+        restart_command = "curl --fail --silent --show-error " + chr(92)
         self.assertIn(migration_command, deploy_commands)
         self.assertIn(restart_command, deploy_commands)
         self.assertLess(

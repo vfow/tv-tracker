@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from psycopg import sql
 from tvtracker.auth.account_flows import (
     EMAIL_CHANGE,
     PASSWORD_RESET,
+    VERIFY_EMAIL,
     InvalidTokenError,
     confirm_email_change_token,
     create_user_with_verification_token,
@@ -128,6 +130,7 @@ class MultiUserPhase4ContractTests(unittest.TestCase):
 
     def test_mail_configuration_is_provider_neutral_and_supports_alwaysdata_no_auth(self):
         values = {
+            "APP_PUBLIC_URL": "https://tracker.example.test",
             "MAIL_HOST": "smtp-example.alwaysdata.net",
             "MAIL_PORT": "587",
             "MAIL_SECURITY": "starttls",
@@ -148,6 +151,7 @@ class MultiUserPhase4ContractTests(unittest.TestCase):
 
     def test_mail_configuration_rejects_partial_credentials(self):
         values = {
+            "APP_PUBLIC_URL": "https://tracker.example.test",
             "MAIL_HOST": "smtp.example.test",
             "MAIL_PORT": "587",
             "MAIL_SECURITY": "starttls",
@@ -204,6 +208,58 @@ class MultiUserPhase4PostgreSQLTests(unittest.TestCase):
             username="Alice_User",
             password_hash=self.hasher.hash("correct horse battery staple"),
         )
+
+    def test_concurrent_resends_leave_only_one_usable_verification_link(self):
+        user_id, original = self.new_unverified_user()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(issue_token, self.connection_factory, user_id=user_id, purpose=VERIFY_EMAIL) for _ in range(2)]
+            tokens = [future.result(timeout=10) for future in futures]
+        live_hash = self.fetchone(
+            "SELECT token_hash FROM tv_tracker_account_tokens WHERE user_id = %s AND used_at IS NULL", (user_id,)
+        )[0]
+        self.assertEqual(self.fetchone(
+            "SELECT COUNT(*) FROM tv_tracker_account_tokens WHERE user_id = %s AND used_at IS NULL", (user_id,)
+        )[0], 1)
+        for token in [original, *tokens]:
+            if hash_token(token.raw_token) != live_hash:
+                with self.assertRaises(InvalidTokenError):
+                    verify_email_token(self.connection_factory, token.raw_token)
+
+    def test_password_change_revokes_preexisting_reset_and_email_change_links(self):
+        from tvtracker.auth.users import update_user_password
+        user_id, verification = self.new_unverified_user()
+        verify_email_token(self.connection_factory, verification.raw_token)
+        reset = issue_token(self.connection_factory, user_id=user_id, purpose=PASSWORD_RESET)
+        change = issue_token(self.connection_factory, user_id=user_id, purpose=EMAIL_CHANGE, pending_email="new@example.test")
+        update_user_password(self.connection_factory, user_id, self.hasher.hash("new secure password"))
+        with self.assertRaises(InvalidTokenError):
+            reset_password_token(self.connection_factory, raw_token=reset.raw_token, password_hash="unused")
+        with self.assertRaises(InvalidTokenError):
+            confirm_email_change_token(self.connection_factory, change.raw_token)
+
+    def test_old_address_reset_link_is_revoked_after_email_switch(self):
+        user_id, verification = self.new_unverified_user()
+        verify_email_token(self.connection_factory, verification.raw_token)
+        reset = issue_token(self.connection_factory, user_id=user_id, purpose=PASSWORD_RESET)
+        change = issue_token(self.connection_factory, user_id=user_id, purpose=EMAIL_CHANGE, pending_email="new@example.test")
+        confirm_email_change_token(self.connection_factory, change.raw_token)
+        with self.assertRaises(InvalidTokenError):
+            reset_password_token(self.connection_factory, raw_token=reset.raw_token, password_hash="unused")
+        # A request that looked up the old email before the switch must not
+        # issue a fresh recovery token after the switch commits.
+        with self.assertRaises(InvalidTokenError):
+            issue_token(self.connection_factory, user_id=user_id,
+                        purpose=PASSWORD_RESET, expected_email="alice@example.test")
+
+    def test_token_purpose_and_account_state_cannot_be_bypassed(self):
+        user_id, verification = self.new_unverified_user()
+        with self.assertRaises(InvalidTokenError):
+            reset_password_token(self.connection_factory, raw_token=verification.raw_token, password_hash="unused")
+        verify_email_token(self.connection_factory, verification.raw_token)
+        change = issue_token(self.connection_factory, user_id=user_id, purpose=EMAIL_CHANGE, pending_email="new@example.test")
+        self.execute("UPDATE tv_tracker_users SET status = 'deactivated' WHERE user_id = %s", (user_id,))
+        with self.assertRaises(InvalidTokenError):
+            confirm_email_change_token(self.connection_factory, change.raw_token)
 
     def test_verification_token_is_hashed_single_use_and_activates_account(self):
         user_id, token = self.new_unverified_user()

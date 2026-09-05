@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
@@ -27,6 +28,7 @@ from tvtracker.auth.mail import (
     MailDeliveryError,
     email_change_email,
     mail_is_configured,
+    public_app_url,
     password_reset_email,
     verification_email,
 )
@@ -50,7 +52,7 @@ def _password_matches(hasher: Any, password_hash: str, password: str) -> bool:
 
 
 def _absolute_url(endpoint: str, *, token: str) -> str:
-    return url_for(endpoint, token=token, _external=True)
+    return public_app_url() + url_for(endpoint, token=token, _external=False)
 
 
 def install_multi_user_phase4_routes(app, deps) -> None:
@@ -60,6 +62,39 @@ def install_multi_user_phase4_routes(app, deps) -> None:
     policy remains false. The POST route rejects requests before any account is
     created unless Phase 8 deliberately opens that policy after acceptance.
     """
+
+    @app.before_request
+    def limit_account_email_requests():
+        paths = {"/signup", "/forgot-password", "/reset-password",
+                 "/account/resend-verification", "/account/email"}
+        if request.method != "POST" or request.path not in paths:
+            return None
+        if request.path == "/signup" and not public_registration_enabled():
+            return None  # Closed signup must not touch even rate-limit storage.
+        deps.check_csrf()
+        event = "account_email_attempt"
+        client = "client:" + deps.client_key()
+        keys = [(client, 30)]
+        # Shared per-recipient limits also apply across different client IPs.
+        email = str(request.form.get("email") or "").strip().lower()
+        if email:
+            keys.append(("email:" + hashlib.sha256(email.encode()).hexdigest(), 5))
+        if any(deps.security_event_count(event, key, 900) >= limit for key, limit in keys):
+            return render_template(
+                "account_flow_result.html", title="Try again later",
+                message="Too many attempts. Please try again in 15 minutes.",
+                success=False,
+            ), 429, {"Retry-After": "900"}
+        for key, _limit in keys:
+            deps.record_security_event(event, key)
+        return None
+
+    @app.after_request
+    def account_email_response_headers(response):
+        if request.path.startswith("/account/") or request.path in {"/forgot-password", "/reset-password"}:
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     @app.context_processor
     def phase4_auth_template_context():
@@ -152,6 +187,10 @@ def install_multi_user_phase4_routes(app, deps) -> None:
                 }
             ), 429
 
+        # Failed password checks count too; otherwise this path bypasses the
+        # existing account-change throttle.
+        deps.record_security_event("account_change_attempt", key)
+
         current_password = str(payload.get("currentPassword") or "")
         if not current_password:
             return jsonify(
@@ -192,7 +231,6 @@ def install_multi_user_phase4_routes(app, deps) -> None:
                     }
                 ), 400
 
-        deps.record_security_event("account_change_attempt", key)
         password_hash = (
             deps.PASSWORD_HASHER.hash(new_password) if new_password else None
         )
@@ -359,19 +397,20 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             app.logger.warning("Verification email delivery is unavailable")
             return resend_page(notice=RESEND_VERIFICATION_NOTICE)
 
-        token = issue_token(
-            deps.database_connection,
-            user_id=account["user_id"],
-            purpose=VERIFY_EMAIL,
-        )
         try:
+            token = issue_token(
+                deps.database_connection,
+                user_id=account["user_id"],
+                purpose=VERIFY_EMAIL,
+                expected_email=account["email"],
+            )
             verification_email(
                 to_address=account["email"],
                 verification_url=_absolute_url(
                     "phase4_verify_email", token=token.raw_token
                 ),
             )
-        except (MailConfigurationError, MailDeliveryError):
+        except (MailConfigurationError, MailDeliveryError, InvalidTokenError):
             app.logger.warning("Verification email delivery failed")
         return resend_page(notice=RESEND_VERIFICATION_NOTICE)
 
@@ -394,19 +433,20 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             app.logger.warning("Password-reset email delivery is unavailable")
             return forgot_page(notice=PASSWORD_RESET_NOTICE)
 
-        token = issue_token(
-            deps.database_connection,
-            user_id=account["user_id"],
-            purpose=PASSWORD_RESET,
-        )
         try:
+            token = issue_token(
+                deps.database_connection,
+                user_id=account["user_id"],
+                purpose=PASSWORD_RESET,
+                expected_email=account["email"],
+            )
             password_reset_email(
                 to_address=account["email"],
                 reset_url=_absolute_url(
                     "phase4_reset_password_page", token=token.raw_token
                 ),
             )
-        except (MailConfigurationError, MailDeliveryError):
+        except (MailConfigurationError, MailDeliveryError, InvalidTokenError):
             app.logger.warning("Password-reset email delivery failed")
         return forgot_page(notice=PASSWORD_RESET_NOTICE)
 
@@ -490,13 +530,14 @@ def install_multi_user_phase4_routes(app, deps) -> None:
         if not mail_is_configured():
             return account_page(error="Email service is temporarily unavailable.", status=503)
 
-        token = issue_token(
-            deps.database_connection,
-            user_id=account["user_id"],
-            purpose=EMAIL_CHANGE,
-            pending_email=display_email,
-        )
         try:
+            token = issue_token(
+                deps.database_connection,
+                user_id=account["user_id"],
+                purpose=EMAIL_CHANGE,
+                pending_email=display_email,
+                expected_email=account["email"],
+            )
             email_change_email(
                 to_address=display_email,
                 verification_url=_absolute_url(
@@ -507,6 +548,8 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             return account_page(
                 error="Email service is temporarily unavailable.", status=503
             )
+        except InvalidTokenError:
+            return account_page(error="Your account changed. Please sign in again.", status=409)
         return account_page(
             notice="Check the new address for a confirmation link. Your current email stays active until then."
         )
