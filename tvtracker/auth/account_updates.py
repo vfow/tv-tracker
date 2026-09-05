@@ -60,29 +60,44 @@ def update_account_credentials(
                             "That username is already in use"
                         )
 
-                cursor.execute(
-                    """
-                    UPDATE tv_tracker_users
-                    SET username = %s,
-                        username_normalized = %s,
-                        password_hash = CASE
-                            WHEN %s IS NULL THEN password_hash
-                            ELSE %s
-                        END,
-                        session_version = session_version + 1,
-                        updated_at = NOW()
-                    WHERE user_id = %s
-                      AND status = 'active'
-                    RETURNING session_version
-                    """,
-                    (
-                        display_username,
-                        normalized_username,
-                        password_hash,
-                        password_hash,
-                        canonical_user_id,
-                    ),
-                )
+                if password_hash is None:
+                    cursor.execute(
+                        """
+                        UPDATE tv_tracker_users
+                        SET username = %s,
+                            username_normalized = %s,
+                            session_version = session_version + 1,
+                            updated_at = NOW()
+                        WHERE user_id = %s
+                          AND status = 'active'
+                        RETURNING session_version
+                        """,
+                        (
+                            display_username,
+                            normalized_username,
+                            canonical_user_id,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE tv_tracker_users
+                        SET username = %s,
+                            username_normalized = %s,
+                            password_hash = %s,
+                            session_version = session_version + 1,
+                            updated_at = NOW()
+                        WHERE user_id = %s
+                          AND status = 'active'
+                        RETURNING session_version
+                        """,
+                        (
+                            display_username,
+                            normalized_username,
+                            password_hash,
+                            canonical_user_id,
+                        ),
+                    )
                 updated = cursor.fetchone()
                 if updated is None:
                     raise AccountFlowError("Account could not be updated")
