@@ -6,7 +6,6 @@ from typing import Any
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from flask import jsonify, redirect, render_template, request, session, url_for
 
-from tvtracker.auth.phase4_routes import install_multi_user_phase4_routes
 from tvtracker.auth.users import AUTH_KIND_USER, MIN_USER_PASSWORD_CHARS, user_can_enter_app, user_session_marker
 
 
@@ -31,12 +30,10 @@ def _render_login_error(message: str, status_code: int):
 def install_multi_user_phase3_routes(app, deps) -> None:
     """Layer UUID-user authentication over the legacy singleton admin safely.
 
-    Phase 4 is installed first so its account/email extensions can handle the
-    UUID-user operations it owns while unmatched requests continue through this
-    Phase 3 compatibility bridge and, finally, the legacy singleton admin.
+    This installer owns only the Phase 3 authentication/session bridge. Later
+    account-flow phases are composed explicitly by the application so Phase 3
+    remains independently testable and does not gain hidden database behavior.
     """
-
-    install_multi_user_phase4_routes(app, deps)
 
     def current_uuid_user() -> dict[str, Any] | None:
         return deps.current_user()
@@ -175,9 +172,9 @@ def install_multi_user_phase3_routes(app, deps) -> None:
                     "code": "invalid_current_password",
                 }), 400
 
-            # Phase 4 handles changed UUID usernames before this interceptor.
-            # Reaching this branch means the username is unchanged and this
-            # remains the canonical password-change path from Phase 3.
+            # A later account-flow layer may intercept changed UUID usernames
+            # before this compatibility path. Reaching this branch with a
+            # changed username keeps the Phase 3 contract fail-closed.
             if requested_username and requested_username != account["username"]:
                 return jsonify({
                     "ok": False,
