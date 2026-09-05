@@ -18,6 +18,7 @@ from tvtracker.application import build_flask_application
 from tvtracker.auth import security as auth_security
 from tvtracker.auth import users as user_auth
 from tvtracker.auth.phase3_routes import install_multi_user_phase3_routes
+from tvtracker.auth.phase4_routes import install_multi_user_phase4_routes
 from tvtracker.auth.security import (
     MIN_ADMIN_PASSWORD_CHARS,
     PASSWORD_HASHER,
@@ -314,8 +315,10 @@ def run_notification_check(now: datetime | None = None) -> dict[str, Any]:
 
 def create_app() -> Flask:
     def register_application_routes(application: Flask) -> None:
-        # Phase 3 registers first so UUID-user login/account requests can be
-        # intercepted while unmatched requests continue to the legacy admin.
+        # Phase 4 is the narrower account-flow owner and must run before the
+        # Phase 3 compatibility bridge; unmatched requests still fall through
+        # to the legacy singleton-admin routes during migration.
+        install_multi_user_phase4_routes(application, sys.modules[__name__])
         install_multi_user_phase3_routes(application, sys.modules[__name__])
         register_routes(application, deps=sys.modules[__name__])
 
