@@ -105,4 +105,33 @@
             return savePreparedTrackedShow(showObject,status);
         };
     }
+
+    if(
+        global.TVTrackerTrackerListsStateBridge &&
+        typeof global.TVTrackerTrackerListsStateBridge.viewModel === "function"
+    ){
+        const trackerListsBridge = global.TVTrackerTrackerListsStateBridge;
+        const originalViewModel = trackerListsBridge.viewModel.bind(trackerListsBridge);
+
+        global.TVTrackerTrackerListsStateBridge = Object.freeze(Object.assign({},trackerListsBridge,{
+            viewModel(){
+                const model = originalViewModel();
+                if(!model || !Array.isArray(model.items)){
+                    return model;
+                }
+
+                const items = model.items.map(item=>{
+                    if(!item || typeof item !== "object"){
+                        return item;
+                    }
+                    const episodeText = String(item.episodeText || "").replace(/^Stopped after /,"Stopped at ");
+                    return episodeText === item.episodeText
+                        ? item
+                        : Object.freeze(Object.assign({},item,{episodeText}));
+                });
+
+                return Object.freeze(Object.assign({},model,{items:Object.freeze(items)}));
+            }
+        }));
+    }
 })(window);
