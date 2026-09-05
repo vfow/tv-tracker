@@ -4,7 +4,7 @@ import os
 import unittest
 import uuid
 from pathlib import Path
-from types import SimpleNamespace
+from unittest.mock import patch
 
 import psycopg
 from argon2 import PasswordHasher
@@ -137,7 +137,7 @@ class MultiUserPhase4ContractTests(unittest.TestCase):
             "MAIL_FROM_NAME": "",
             "APP_DISPLAY_NAME": "My Watchlist",
         }
-        with unittest.mock.patch.dict(os.environ, values, clear=False):
+        with patch.dict(os.environ, values, clear=False):
             config = MailConfig.from_environment()
         self.assertEqual(config.host, "smtp-example.alwaysdata.net")
         self.assertEqual(config.port, 587)
@@ -155,7 +155,7 @@ class MultiUserPhase4ContractTests(unittest.TestCase):
             "MAIL_PASSWORD": "",
             "MAIL_FROM_ADDRESS": "noreply@example.test",
         }
-        with unittest.mock.patch.dict(os.environ, values, clear=False):
+        with patch.dict(os.environ, values, clear=False):
             with self.assertRaises(MailConfigurationError):
                 MailConfig.from_environment()
 
