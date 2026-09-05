@@ -17,14 +17,14 @@ from tvtracker.auth.account_flows import (
     ensure_email_available,
     issue_token,
     reset_password_token,
-    update_username,
     user_for_email,
     validated_email,
     verify_email_token,
 )
-from tvtracker.auth.accounts import validated_username
+from tvtracker.auth.account_updates import update_account_credentials
 from tvtracker.auth.mail import (
     MailConfigurationError,
+    MailDeliveryError,
     email_change_email,
     mail_is_configured,
     password_reset_email,
@@ -32,6 +32,14 @@ from tvtracker.auth.mail import (
 )
 from tvtracker.auth.registration_policy import public_registration_enabled
 from tvtracker.auth.users import MIN_USER_PASSWORD_CHARS
+
+
+RESEND_VERIFICATION_NOTICE = (
+    "If that account still needs verification, a new link will be sent."
+)
+PASSWORD_RESET_NOTICE = (
+    "If an account exists for that email, a reset link will be sent."
+)
 
 
 def _password_matches(hasher: Any, password_hash: str, password: str) -> bool:
@@ -49,7 +57,7 @@ def install_multi_user_phase4_routes(app, deps) -> None:
     """Install Phase 4 account creation and email flows.
 
     Signup code exists in this phase, but the source-controlled registration
-    policy remains false.  The POST route rejects requests before any account is
+    policy remains false. The POST route rejects requests before any account is
     created unless Phase 8 deliberately opens that policy after acceptance.
     """
 
@@ -185,12 +193,17 @@ def install_multi_user_phase4_routes(app, deps) -> None:
                 ), 400
 
         deps.record_security_event("account_change_attempt", key)
+        password_hash = (
+            deps.PASSWORD_HASHER.hash(new_password) if new_password else None
+        )
         try:
-            validated_username(requested_username)
-            display_username, normalized_username, session_version = update_username(
-                deps.database_connection,
-                user_id=account["user_id"],
-                username=requested_username,
+            display_username, normalized_username, session_version = (
+                update_account_credentials(
+                    deps.database_connection,
+                    user_id=account["user_id"],
+                    username=requested_username,
+                    password_hash=password_hash,
+                )
             )
         except IdentifierUnavailableError as error:
             return jsonify({"ok": False, "error": str(error), "code": error.code}), 409
@@ -204,9 +217,6 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             ), 400
 
         if new_password:
-            deps.update_user_password(
-                account["user_id"], deps.PASSWORD_HASHER.hash(new_password)
-            )
             session.clear()
             return jsonify(
                 {
@@ -217,7 +227,7 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             )
 
         # Keep this browser signed in after a username-only change while the
-        # session-version bump invalidates every other browser generation.
+        # single session-version bump invalidates every other browser generation.
         session["user_login_key"] = normalized_username
         session["session_version"] = session_version
         return jsonify(
@@ -290,7 +300,7 @@ def install_multi_user_phase4_routes(app, deps) -> None:
                 notice="",
                 initial_tab="signup",
             ), 400
-        except MailConfigurationError:
+        except (MailConfigurationError, MailDeliveryError):
             return render_template(
                 "login.html",
                 csrf_token=session["csrf_token"],
@@ -338,25 +348,32 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             account = user_for_email(deps.database_connection, email)
         except AccountFlowError as error:
             return resend_page(error=str(error), status=400)
-        if account is None:
-            return resend_page(error="No account was found for that email.", status=404)
-        if account["email_verified_at"] is not None and account["status"] == "active":
-            return resend_page(notice="That email is already verified.")
-        if account["status"] != "unverified":
-            return resend_page(error="This account cannot be verified from here.", status=409)
+
+        if (
+            account is None
+            or account["status"] != "unverified"
+            or account["email_verified_at"] is not None
+        ):
+            return resend_page(notice=RESEND_VERIFICATION_NOTICE)
         if not mail_is_configured():
-            return resend_page(error="Email service is temporarily unavailable.", status=503)
+            app.logger.warning("Verification email delivery is unavailable")
+            return resend_page(notice=RESEND_VERIFICATION_NOTICE)
 
         token = issue_token(
             deps.database_connection,
             user_id=account["user_id"],
             purpose=VERIFY_EMAIL,
         )
-        verification_email(
-            to_address=account["email"],
-            verification_url=_absolute_url("phase4_verify_email", token=token.raw_token),
-        )
-        return resend_page(notice="A new verification link was sent.")
+        try:
+            verification_email(
+                to_address=account["email"],
+                verification_url=_absolute_url(
+                    "phase4_verify_email", token=token.raw_token
+                ),
+            )
+        except (MailConfigurationError, MailDeliveryError):
+            app.logger.warning("Verification email delivery failed")
+        return resend_page(notice=RESEND_VERIFICATION_NOTICE)
 
     @app.get("/forgot-password")
     def phase4_forgot_password_page():
@@ -370,23 +387,28 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             account = user_for_email(deps.database_connection, email)
         except AccountFlowError as error:
             return forgot_page(error=str(error), status=400)
-        if account is None:
-            return forgot_page(error="No account was found for that email.", status=404)
-        if account["status"] not in {"active", "unverified"}:
-            return forgot_page(error="This account is currently unavailable.", status=409)
+
+        if account is None or account["status"] not in {"active", "unverified"}:
+            return forgot_page(notice=PASSWORD_RESET_NOTICE)
         if not mail_is_configured():
-            return forgot_page(error="Email service is temporarily unavailable.", status=503)
+            app.logger.warning("Password-reset email delivery is unavailable")
+            return forgot_page(notice=PASSWORD_RESET_NOTICE)
 
         token = issue_token(
             deps.database_connection,
             user_id=account["user_id"],
             purpose=PASSWORD_RESET,
         )
-        password_reset_email(
-            to_address=account["email"],
-            reset_url=_absolute_url("phase4_reset_password_page", token=token.raw_token),
-        )
-        return forgot_page(notice="A password reset link was sent.")
+        try:
+            password_reset_email(
+                to_address=account["email"],
+                reset_url=_absolute_url(
+                    "phase4_reset_password_page", token=token.raw_token
+                ),
+            )
+        except (MailConfigurationError, MailDeliveryError):
+            app.logger.warning("Password-reset email delivery failed")
+        return forgot_page(notice=PASSWORD_RESET_NOTICE)
 
     @app.get("/reset-password")
     def phase4_reset_password_page():
@@ -474,10 +496,17 @@ def install_multi_user_phase4_routes(app, deps) -> None:
             purpose=EMAIL_CHANGE,
             pending_email=display_email,
         )
-        email_change_email(
-            to_address=display_email,
-            verification_url=_absolute_url("phase4_confirm_email_change", token=token.raw_token),
-        )
+        try:
+            email_change_email(
+                to_address=display_email,
+                verification_url=_absolute_url(
+                    "phase4_confirm_email_change", token=token.raw_token
+                ),
+            )
+        except (MailConfigurationError, MailDeliveryError):
+            return account_page(
+                error="Email service is temporarily unavailable.", status=503
+            )
         return account_page(
             notice="Check the new address for a confirmation link. Your current email stays active until then."
         )
