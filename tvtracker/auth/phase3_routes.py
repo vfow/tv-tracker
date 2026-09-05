@@ -23,6 +23,7 @@ def _render_login_error(message: str, status_code: int):
         error=message,
         notice="",
         initial_tab="login",
+        login_action=request.path,
     ), status_code
 
 
