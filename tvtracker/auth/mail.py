@@ -12,6 +12,10 @@ class MailConfigurationError(RuntimeError):
     pass
 
 
+class MailDeliveryError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class MailConfig:
     host: str
@@ -91,24 +95,27 @@ def send_account_email(
     message.set_content(text_body)
 
     context = ssl.create_default_context()
-    if resolved.security == "ssl":
-        smtp = smtplib.SMTP_SSL(
-            resolved.host,
-            resolved.port,
-            timeout=15,
-            context=context,
-        )
-    else:
-        smtp = smtplib.SMTP(resolved.host, resolved.port, timeout=15)
+    try:
+        if resolved.security == "ssl":
+            smtp = smtplib.SMTP_SSL(
+                resolved.host,
+                resolved.port,
+                timeout=15,
+                context=context,
+            )
+        else:
+            smtp = smtplib.SMTP(resolved.host, resolved.port, timeout=15)
 
-    with smtp:
-        smtp.ehlo()
-        if resolved.security == "starttls":
-            smtp.starttls(context=context)
+        with smtp:
             smtp.ehlo()
-        if resolved.username:
-            smtp.login(resolved.username, resolved.password)
-        smtp.send_message(message)
+            if resolved.security == "starttls":
+                smtp.starttls(context=context)
+                smtp.ehlo()
+            if resolved.username:
+                smtp.login(resolved.username, resolved.password)
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        raise MailDeliveryError("Account email could not be delivered") from error
 
 
 def verification_email(*, to_address: str, verification_url: str) -> None:
