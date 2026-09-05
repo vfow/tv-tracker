@@ -248,7 +248,7 @@
             message:text,
             severity,
             duration,
-            dismissible:options.dismissible !== false && (persistent || options.dismissible === true),
+            dismissible:options.dismissible !== false,
             actionLabel:String(options.actionLabel || ""),
             onAction:typeof options.onAction === "function" ? options.onAction : null,
             timer:null,
