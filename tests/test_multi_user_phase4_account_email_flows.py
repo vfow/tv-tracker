@@ -264,7 +264,12 @@ class MultiUserPhase4PostgreSQLTests(unittest.TestCase):
             purpose=PASSWORD_RESET,
         )
         self.execute(
-            "UPDATE tv_tracker_account_tokens SET expires_at = NOW() - INTERVAL '1 second' WHERE token_hash = %s",
+            """
+            UPDATE tv_tracker_account_tokens
+            SET created_at = NOW() - INTERVAL '31 minutes',
+                expires_at = NOW() - INTERVAL '1 second'
+            WHERE token_hash = %s
+            """,
             (hash_token(token.raw_token),),
         )
         with self.assertRaises(InvalidTokenError):
