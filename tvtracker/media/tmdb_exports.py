@@ -24,7 +24,7 @@ def _urlopen(request_object, timeout):
     # Remove once callers patch the tvtracker.media transport directly.
     from app import urlopen
 
-    return urlopen(request_object, timeout)
+    return urlopen(request_object, timeout=timeout)
 
 
 TMDB_NETWORK_EXPORT_CACHE_TTL_SECONDS = 6 * 60 * 60
