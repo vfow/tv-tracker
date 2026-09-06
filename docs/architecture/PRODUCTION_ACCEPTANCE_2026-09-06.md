@@ -49,9 +49,23 @@ Discover genre tabs, opening a show from the hub, its Back button, and browser
 Back/Forward passed live checks. At the observed 1363px viewport, the document
 had no horizontal overflow. This is not the final 320px/375px/mobile matrix.
 
+## Collections repair and Trending release
+
+PR #137 fixed the shared urllib timeout forwarding error. Its head passed all
+465 Python tests and the JavaScript suite, and merged as
+`10695aaa0f0e076047218043ae493b62b79dceb3`. Deployment, restart, and the required
+SHA health check passed. Reloading the previously failing Dark Knight collection
+then displayed its three movie cards and filter controls on production.
+
+PR #136 incorporated that verified main and passed full CI again. It merged as
+`493f5b52ad7afbad11366315c36e6cfecf2e36b5`; deployment, restart, and public health
+checks passed. Live Trending Movies Today displayed the Vue owner marker and
+20 cards after navigating from Discover.
+
 ## Remaining roadmap
 
-Sprint 3 still includes Browse, Genre, Collections, Person, and full-page Trending
-composition, followed by proven-dead frontend cleanup. Fresh whole-system/torture,
+Sprint 3 still includes Browse, Genre, Collections index, and Person composition;
+Collection Details is the next native slice under verification. Full-page
+Trending is now native. Proven-dead frontend cleanup, fresh whole-system/torture,
 mobile, complete authenticated production, documentation, and observability gates
 remain outstanding. Registration remains closed.

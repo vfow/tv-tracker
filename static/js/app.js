@@ -150,6 +150,7 @@ var collectionIndexPollTimer = null;
 var collectionIndexHydrationRun = 0;
 var collectionDetailPageState = {collectionId:"",routeSlug:"",loading:false,error:"",collection:null,movies:[],filters:null,labels:null,visibleMovies:[],totalResults:0,availableGenres:[],availableLanguages:[]};
 var selectedCollectionId = null;
+var collectionDetailRequestId = 0;
 var discoverGenreMedia = "tv";
 var librarySearchQuery = "";
 var librarySearchRouteTimer = null;
@@ -6061,10 +6062,7 @@ function renderActiveCollectionsPage(){
 }
 
 function renderActiveCollectionDetailPage(){
-    if(typeof renderCollectionDetailPage === "function"){
-        renderCollectionDetailPage(collectionDetailPageState);
-        attachCollectionDetailPageEvents();
-    }
+    window.TVTrackerDiscoverVueBridge?.renderCollection(collectionDetailPageState);
 }
 
 async function loadCollectionsIndexResults(options={}){
@@ -6173,6 +6171,8 @@ async function openCollectionDetailPage(collectionId,options={}){
         return;
     }
 
+    const requestId = ++collectionDetailRequestId;
+    const isCurrent = ()=>requestId === collectionDetailRequestId && activePage === "collection-detail" && String(selectedCollectionId || "") === id;
     const fromRoute = options && options.fromRoute === true;
     const replaceRoute = options && options.replaceRoute === true;
     const routeSlug = buildRouteSlug(options && options.routeSlug || "");
@@ -6221,11 +6221,11 @@ async function openCollectionDetailPage(collectionId,options={}){
 
     try{
         const collection = await tmdbGetCollectionDetails(id);
-        if(String(selectedCollectionId || "") !== id){
+        if(!isCurrent()){
             return;
         }
-        const canonicalRoute = getCollectionDetailRoute(id,collection.name);
         await ensureBrowseReferenceData("movie").catch(()=>{});
+        if(!isCurrent()){ return; }
         const movies = Array.isArray(collection.parts) ? collection.parts : [];
         const detailBuilt = buildCollectionDetailState(collection,movies,requestedFilters,collectionDetailPageState.labels);
         collectionDetailPageState = Object.assign({
@@ -6246,6 +6246,7 @@ async function openCollectionDetailPage(collectionId,options={}){
             updateShellTitle();
         }
     }catch(error){
+        if(!isCurrent()){ return; }
         if(isTMDBNotFoundError(error)){
             renderAppRouteNotFoundPage();
             return;
@@ -6328,73 +6329,6 @@ function attachCollectionsPageEvents(){
         button.addEventListener("click",function(){
             const currentPage = Math.max(1,Math.floor(Number(collectionsPageState && collectionsPageState.page || 1)));
             applyCollectionsIndexState({page:currentPage + 1});
-        });
-    });
-}
-
-function attachCollectionDetailPageEvents(){
-    const backButton = document.getElementById("collection-detail-page-back-button");
-    if(backButton){
-        backButton.addEventListener("click",function(){
-            navigateBackOrRouteFallback("/app/collections");
-        });
-    }
-
-    document.querySelectorAll("[data-collection-detail-set]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const key = String(button.dataset.collectionDetailSet || "");
-            const value = String(button.dataset.collectionDetailValue || "");
-            const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
-            if(key === "year"){
-                applyCollectionDetailFilterState({year:normalizeCollectionDetailYear(value),decade:""});
-            }else if(key === "decade"){
-                applyCollectionDetailFilterState({year:"",decade:normalizeCollectionDetailDecade(value)});
-            }else if(key === "language"){
-                applyCollectionDetailFilterState({language:normalizeLanguageCode(value)});
-            }else if(key === "sort"){
-                applyCollectionDetailFilterState({sort:normalizeCollectionDetailSort(value)});
-            }else if(key === "genre"){
-                const genre = normalizeCollectionId(value);
-                const genres = genre && current.genres.includes(genre) ? current.genres.filter(id=>id !== genre) : (genre ? current.genres.concat(genre) : []);
-                applyCollectionDetailFilterState({genres});
-            }
-        });
-    });
-
-    document.querySelectorAll("[data-collection-detail-remove]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const key = String(button.dataset.collectionDetailRemove || "");
-            const value = String(button.dataset.collectionDetailValue || "");
-            const current = createCollectionDetailFilterState(collectionDetailPageState && collectionDetailPageState.filters || {});
-            if(key === "year"){
-                applyCollectionDetailFilterState({year:""});
-            }else if(key === "decade"){
-                applyCollectionDetailFilterState({decade:""});
-            }else if(key === "language"){
-                applyCollectionDetailFilterState({language:""});
-            }else if(key === "genres"){
-                applyCollectionDetailFilterState({genres:current.genres.filter(id=>id !== normalizeCollectionId(value))});
-            }else if(key === "sort"){
-                applyCollectionDetailFilterState({sort:COLLECTION_DETAIL_DEFAULT_SORT});
-            }
-        });
-    });
-
-    document.querySelectorAll("[data-collection-detail-clear]").forEach(button=>{
-        button.addEventListener("click",function(){
-            applyCollectionDetailFilterState(createCollectionDetailFilterState());
-        });
-    });
-
-    document.querySelectorAll(".collection-movie-card[data-media-id]").forEach(card=>{
-        card.addEventListener("click",async function(event){
-            if(typeof isPlainAppLinkClick === "function" && !isPlainAppLinkClick(event)){ return; }
-            event.preventDefault();
-            const movieId = Number(this.dataset.mediaId || 0);
-            if(!movieId){ return; }
-            const collection = collectionDetailPageState && collectionDetailPageState.collection ? collectionDetailPageState.collection : {};
-            const backRoute = getCollectionDetailRouteWithFilters(collectionDetailPageState.collectionId,collection.name || collectionDetailPageState.routeSlug || "collection",collectionDetailPageState.filters);
-            await openMoviePage(movieId,{movieName:this.dataset.mediaName || "",navigationContext:"discover",backRoute});
         });
     });
 }
