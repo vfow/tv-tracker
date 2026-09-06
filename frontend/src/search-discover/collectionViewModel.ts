@@ -1,4 +1,4 @@
-import type { DiscoverListingItem } from './discoverViewModel';
+import type { DiscoverCollectionItem, DiscoverListingItem } from './discoverViewModel';
 
 export type CollectionEyeKey = 'fadeWatched' | 'hideWatched' | 'hidePlan' | 'hideFavorites';
 export type CollectionFilterKey = 'year' | 'decade' | 'genre' | 'language' | 'sort';
@@ -24,4 +24,20 @@ export type CollectionActions = Readonly<{
   clearFilters: () => void;
   toggleEye: (key: CollectionEyeKey) => void;
   openMedia: (item: DiscoverListingItem, route: string) => Promise<void>;
+}>;
+
+export type CollectionsIndexViewModel = Readonly<{
+  bodyState: 'loading' | 'error' | 'ready' | 'empty'; error: string;
+  searchDraft: string; emptyTitle: string; emptyMessage: string; hasMore: boolean;
+  items: readonly DiscoverCollectionItem[];
+  genres: readonly CollectionOption[]; decades: readonly CollectionOption[];
+  sorts: readonly CollectionOption[]; chips: readonly CollectionChip[];
+}>;
+export type CollectionsIndexActions = Readonly<{
+  back: () => void;
+  searchDraft: (value: string) => void;
+  search: (value: string) => void;
+  setFilter: (key: 'genre' | 'decade' | 'sort', value: string) => void;
+  clearFilter: (key: string) => void;
+  viewMore: () => void;
 }>;

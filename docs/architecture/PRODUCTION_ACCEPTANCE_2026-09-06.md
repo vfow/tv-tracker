@@ -62,10 +62,17 @@ PR #136 incorporated that verified main and passed full CI again. It merged as
 checks passed. Live Trending Movies Today displayed the Vue owner marker and
 20 cards after navigating from Discover.
 
+PR #138 passed 467 Python tests (including the real Chrome Collection Details
+fixture), all 78 JavaScript files, and build/security gates. It merged as
+`81e5cffccb364504c9472fdc7cb5fb43b3483627`; deployment completed successfully.
+The live Dark Knight collection displayed the Vue owner marker and three cards.
+Selecting Release Date — Oldest changed the URL to `?sort=date-asc` and ordered
+Batman Begins, The Dark Knight, then The Dark Knight Rises.
+
 ## Remaining roadmap
 
-Sprint 3 still includes Browse, Genre, Collections index, and Person composition;
-Collection Details is the next native slice under verification. Full-page
-Trending is now native. Proven-dead frontend cleanup, fresh whole-system/torture,
+Sprint 3 still includes Browse, Genre, and Person composition; the Collections
+index is the next native slice under verification. Collection Details and
+full-page Trending are now native. Proven-dead frontend cleanup, fresh whole-system/torture,
 mobile, complete authenticated production, documentation, and observability gates
 remain outstanding. Registration remains closed.
