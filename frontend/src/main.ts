@@ -1,4 +1,4 @@
-import { createApp, type App as VueApp } from 'vue';
+import { createApp, h, shallowRef, type App as VueApp } from 'vue';
 
 import EpisodeTrackingController from './episode-tracking/EpisodeTrackingController.vue';
 import FoundationProbe from './FoundationProbe.vue';
@@ -10,6 +10,8 @@ import ShowDetails from './media-details/ShowDetails.vue';
 import type { ShowDetailsVueBridge, ShowDetailsVueOwner, ShowDetailsViewModel } from './media-details/showViewModel';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
+import CollectionDetails from './search-discover/CollectionDetails.vue';
+import type { CollectionActions, CollectionViewModel } from './search-discover/collectionViewModel';
 import type { DiscoverRendererActions, DiscoverViewModel, TrendingActions, TrendingViewModel } from './search-discover/discoverViewModel';
 import TrendingPage from './search-discover/TrendingPage.vue';
 import SearchResults from './search-discover/SearchResults.vue';
@@ -70,8 +72,15 @@ type DiscoverVueOwner = Readonly<{
 type DiscoverBridge = Readonly<{
   attachVueOwner: (owner: DiscoverVueOwner) => void;
   attachTrendingOwner: (owner: TrendingVueOwner) => void;
+  attachCollectionOwner: (owner: CollectionVueOwner) => void;
+  collectionActions: CollectionActions;
   actions: DiscoverRendererActions;
   trendingActions: TrendingActions;
+}>;
+
+type CollectionVueOwner = Readonly<{
+  render: (model: CollectionViewModel) => void;
+  unmount: () => void;
 }>;
 
 type TrendingVueOwner = Readonly<{
@@ -105,6 +114,9 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let collectionApp: VueApp<Element> | null = null;
+let collectionRoot: Element | null = null;
+const collectionModel = shallowRef<CollectionViewModel | null>(null);
 let trendingApp: VueApp<Element> | null = null;
 let movieDetailsApp: VueApp<Element> | null = null;
 let movieDetailsRoot: Element | null = null;
@@ -147,6 +159,13 @@ function unmountDiscover(): void {
   if (discoverApp) discoverApp.unmount();
   discoverApp = null;
   discoverRoot = null;
+}
+
+function unmountCollection(): void {
+  if (collectionApp) collectionApp.unmount();
+  collectionApp = null;
+  collectionRoot = null;
+  collectionModel.value = null;
 }
 
 function unmountTrending(): void {
@@ -273,12 +292,37 @@ const trendingOwner: TrendingVueOwner = Object.freeze({
     const root = document.getElementById('genre-detail-content');
     const bridge = window.TVTrackerDiscoverVueBridge;
     if (!root || !bridge) return;
+    unmountCollection();
     unmountTrending();
     root.replaceChildren();
     trendingApp = createApp(TrendingPage, { model, actions: bridge.trendingActions });
     trendingApp.mount(root);
   },
   unmount: unmountTrending
+});
+
+const collectionOwner: CollectionVueOwner = Object.freeze({
+  render(model: CollectionViewModel): void {
+    const root = document.getElementById('genre-detail-content');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    if (collectionApp && collectionRoot === root && root.querySelector('[data-tvtracker-collection-detail-owner="vue"]')) {
+      collectionModel.value = model;
+      return;
+    }
+    unmountTrending();
+    unmountCollection();
+    root.replaceChildren();
+    collectionRoot = root;
+    collectionModel.value = model;
+    collectionApp = createApp({
+      setup: () => () => collectionModel.value ? h(CollectionDetails, {
+        key: collectionModel.value.id, model: collectionModel.value, actions: bridge.collectionActions
+      }) : null
+    });
+    collectionApp.mount(root);
+  },
+  unmount: unmountCollection
 });
 
 const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
@@ -379,6 +423,7 @@ window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerDiscoverVueBridge?.attachTrendingOwner?.(trendingOwner);
+window.TVTrackerDiscoverVueBridge?.attachCollectionOwner?.(collectionOwner);
 window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);

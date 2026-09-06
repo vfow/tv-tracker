@@ -33,6 +33,8 @@
         "war":"discover-genre-tone-war"
     });
 
+    let collectionOwner = null;
+    let lastCollectionModel = null;
     let vueOwner = null;
     let loadPromise = null;
     let lastModel = null;
@@ -246,14 +248,16 @@
     }
 
     function renderLoadFailure(){
+        const collection = lastCollectionModel && isCollectionVisible(lastCollectionModel.id);
         const trending = lastTrendingModel && isTrendingVisible(lastTrendingModel.key);
-        if(trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
+        if(collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.renderSurfaceFailure === "function"){
+            const surface = collection ? "collection" : trending ? "trending" : "discover";
             runtime.renderSurfaceFailure({
-                rootId:trending ? "genre-detail-content" : "search-results",
-                marker:trending ? "data-tvtracker-trending-vue-load-failed" : "data-tvtracker-discover-vue-load-failed",
-                title:trending ? "Trending unavailable" : "Discover unavailable",
+                rootId:collection || trending ? "genre-detail-content" : "search-results",
+                marker:"data-tvtracker-" + surface + "-vue-load-failed",
+                title:collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
                 message:"Reload the page to try again."
             });
         }
@@ -383,6 +387,114 @@
         }
     }
 
+const COLLECTION_DETAIL_SORT_OPTIONS = Object.freeze([
+    {value:"collection-order",label:"Collection Order"},
+    {value:"date-desc",label:"Release Date — Newest"},
+    {value:"date-asc",label:"Release Date — Oldest"},
+    {value:"popularity-desc",label:"Popularity — High to Low"},
+    {value:"popularity-asc",label:"Popularity — Low to High"},
+    {value:"rating-desc",label:"Rating — High to Low"},
+    {value:"rating-asc",label:"Rating — Low to High"},
+    {value:"title-asc",label:"Title — A to Z"},
+    {value:"title-desc",label:"Title — Z to A"}
+]);
+
+
+    function isCollectionVisible(id){
+        return global.activePage === "collection-detail" && String(global.selectedCollectionId || "") === String(id);
+    }
+
+    function buildCollectionModel(state){
+        const filters = global.createCollectionDetailFilterState(state.filters || {});
+        const collection = state.collection || {};
+        const title = String(collection.name || "Collection").trim() || "Collection";
+        const source = Array.isArray(state.visibleMovies) ? state.visibleMovies : (state.movies || []);
+        const items = buildTrendingModel({key:"collection",media:"movie"},source,state.loading,state.error).items;
+        const options = (source, key, label, selected) => Object.freeze((source || []).map(item=>Object.freeze({value:String(item[key]),label:String(item[label]),selected:selected(String(item[key]))})));
+        const genres = options(state.availableGenres,"id","name",id=>filters.genres.includes(id));
+        const languages = options(state.availableLanguages,"code","name",code=>filters.language === code);
+        const sorts = options(COLLECTION_DETAIL_SORT_OPTIONS,"value","label",value=>filters.sort === value);
+        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+        const selectedDecade = Number(filters.decade) || (filters.year ? Math.floor(Number(filters.year) / 10) * 10 : 0);
+        const visibleDecade = selectedDecade ? Math.max(1870,Math.min(currentDecade,selectedDecade)) : 0;
+        const decades = [];
+        for(let decade=currentDecade;decade>=1870;decade-=10){
+            decades.push(Object.freeze({value:String(decade),label:decade+"s",selected:decade===selectedDecade}));
+        }
+        const years = visibleDecade ? Array.from({length:10},(_,index)=>{
+            const value = String(visibleDecade + index);
+            return Object.freeze({value,label:value,selected:filters.year===value});
+        }) : [];
+        const chips = [];
+        const push = (key,value,label)=>chips.push(Object.freeze({key,value,label}));
+        if(filters.year){ push("year",filters.year,filters.year); }
+        else if(filters.decade){ push("decade",filters.decade,filters.decade+"s"); }
+        filters.genres.forEach(id=>push("genres",id,genres.find(item=>item.value===id)?.label || global.getCollectionGenreLabel(id)));
+        if(filters.language){ push("language",filters.language,global.getLanguageName(filters.language)); }
+        if(filters.sort !== "collection-order"){ push("sort",filters.sort,sorts.find(item=>item.value===filters.sort)?.label || "Collection Order"); }
+        return Object.freeze({
+            id:String(state.collectionId || ""),title,
+            route:global.getCollectionDetailRouteWithFilters(state.collectionId,collection.name || state.routeSlug || "collection",filters),
+            bodyState:state.error ? "error" : items.length ? "ready" : state.loading ? "loading" : "empty",
+            error:String(state.error || ""),emptyMessage:global.getCollectionDetailEmptyMessage(state),
+            showFilters:!state.loading && !state.error && !!state.collection,
+            countLabel:items.length === 1 ? "1 movie" : items.length + " movies",
+            filters:Object.freeze({...filters,genres:Object.freeze(filters.genres.slice())}),items,
+            genres,languages:languages.length ? Object.freeze([Object.freeze({value:"",label:"Any",selected:!filters.language}),...languages]) : languages,
+            sorts,decades:Object.freeze(decades),years:Object.freeze(years),chips:Object.freeze(chips),
+            currentDecade,visibleDecade,yearLabel:global.getBrowseYearControlLabel(filters)
+        });
+    }
+
+    function renderCollection(state){
+        if(!state || !isCollectionVisible(state.collectionId)){ return; }
+        lastCollectionModel = buildCollectionModel(state);
+        if(collectionOwner){ collectionOwner.render(lastCollectionModel); }
+        else{ void loadVueDiscover(); }
+        if(typeof global.ensureBrowseGlobalInteractionEvents === "function"){ global.ensureBrowseGlobalInteractionEvents(); }
+    }
+
+    function attachCollectionOwner(owner){
+        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
+            throw new TypeError("Invalid Vue Collection owner");
+        }
+        collectionOwner = owner;
+        if(lastCollectionModel && isCollectionVisible(lastCollectionModel.id)){ collectionOwner.render(lastCollectionModel); }
+    }
+
+    const collectionActions = Object.freeze({
+        back(){ global.navigateBackOrRouteFallback("/app/collections"); },
+        setFilter(key,value){
+            const current = global.createCollectionDetailFilterState(global.collectionDetailPageState.filters || {});
+            if(key === "genre"){
+                const genre = global.normalizeCollectionId(value);
+                const genres = genre && current.genres.includes(genre) ? current.genres.filter(id=>id!==genre) : genre ? current.genres.concat(genre) : [];
+                global.applyCollectionDetailFilterState({genres});
+            }else if(key === "year" || key === "decade"){
+                global.applyCollectionDetailFilterState({year:"",decade:"",[key]:value});
+            }else if(key === "language" || key === "sort"){
+                global.applyCollectionDetailFilterState({[key]:value});
+            }
+        },
+        removeFilter(key,value){
+            if(key === "genres"){
+                const current = global.createCollectionDetailFilterState(global.collectionDetailPageState.filters || {});
+                global.applyCollectionDetailFilterState({genres:current.genres.filter(id=>id!==value)});
+            }else if(["year","decade","language","sort"].includes(key)){
+                global.applyCollectionDetailFilterState({[key]:key === "sort" ? "collection-order" : ""});
+            }
+        },
+        clearFilters(){ global.applyCollectionDetailFilterState(global.createCollectionDetailFilterState()); },
+        toggleEye(key){
+            if(!["fadeWatched","hideWatched","hidePlan","hideFavorites"].includes(key)){ return; }
+            const current = global.createCollectionDetailFilterState(global.collectionDetailPageState.filters || {});
+            global.applyCollectionDetailFilterState({[key]:!current[key]});
+        },
+        async openMedia(item,backRoute){
+            if(item && item.id){ await global.openMoviePage(item.id,{movieName:item.name,navigationContext:"discover",backRoute}); }
+        }
+    });
+
     const trendingActions = Object.freeze({
         back(){
             if(typeof global.navigateBackOrRouteFallback === "function"){
@@ -428,6 +540,10 @@
     });
 
     global.TVTrackerDiscoverVueBridge = Object.freeze({
+        attachCollectionOwner,
+        renderCollection,
+        buildCollectionModel,
+        collectionActions,
         attachVueOwner,
         attachTrendingOwner,
         renderTrending,
