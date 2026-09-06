@@ -239,13 +239,6 @@
         }
     }
 
-    function isPlainClick(event){
-        if(typeof global.isPlainAppLinkClick === "function"){
-            return global.isPlainAppLinkClick(event);
-        }
-        return !!event && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-    }
-
     function setRoute(config,replace=false){
         if(!config || !global.TVTrackerRouter || typeof global.TVTrackerRouter.setPathRoute !== "function"){ return; }
         global.TVTrackerRouter.setPathRoute(routeFor(config.key),replace);
@@ -290,65 +283,10 @@
     }
 
     function renderFullPage(config,items,loading,error=""){
-        if(typeof global.document === "undefined"){ return; }
-        const content = global.document.getElementById("genre-detail-content");
-        if(!content){ return; }
-        const safe = typeof global.escapeHTML === "function" ? global.escapeHTML : value=>String(value || "").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
-        const body = error
-        ? `<div class="empty-state genre-detail-empty"><h2>Trending could not load</h2><p>${safe(error)}</p></div>`
-        : items.length
-        ? `<div class="genre-tight-grid">${items.map(item=>{
-            const card = typeof global.renderGenrePosterGridCard === "function" ? global.renderGenrePosterGridCard(item) : "";
-            return card.replace('class="genre-result-card','class="genre-result-card trending-result-card');
-        }).join("")}</div>`
-        : loading
-        ? `<div class="genre-tight-grid genre-tight-grid-loading">${typeof global.renderTrackerPosterSkeletonCards === "function" ? global.renderTrackerPosterSkeletonCards(12) : ""}</div>`
-        : `<div class="empty-state genre-detail-empty"><h2>No trending titles found</h2><p>Try again later.</p></div>`;
-
-        content.innerHTML = `
-            <div class="genre-detail-page-inner trending-page-inner">
-                <div class="genre-detail-header trending-page-header">
-                    <button type="button" class="show-page-back-button genre-page-back-button" id="trending-page-back-button" aria-label="Back"><img src="/static/assets/icons/arrow-narrow-left.svg" alt=""></button>
-                    <div><h1 class="genre-detail-title">${safe(config.title)}</h1></div>
-                </div>
-                <div class="genre-result-content">${body}</div>
-            </div>
-        `;
-        attachFullPageEvents(config);
-    }
-
-    function attachFullPageEvents(config){
-        if(typeof global.document === "undefined"){ return; }
-        const back = global.document.getElementById("trending-page-back-button");
-        if(back){
-            back.addEventListener("click",()=>{
-                if(typeof global.navigateBackOrRouteFallback === "function"){
-                    global.navigateBackOrRouteFallback("/app/discover");
-                }else if(global.history && global.history.length > 1){
-                    global.history.back();
-                }else if(global.location){
-                    global.location.assign("/app/discover");
-                }
-            });
+        const bridge = global.TVTrackerDiscoverVueBridge;
+        if(bridge && typeof bridge.renderTrending === "function"){
+            bridge.renderTrending(config,items,loading,error);
         }
-        global.document.querySelectorAll(".trending-result-card[data-media-id]").forEach(card=>{
-            card.addEventListener("click",async event=>{
-                if(!isPlainClick(event)){ return; }
-                event.preventDefault();
-                event.stopPropagation();
-                const id = Number(card.dataset.mediaId || 0);
-                const name = card.dataset.mediaName || card.dataset.showName || "";
-                if(!id){ return; }
-                const backRoute = routeFor(config.key);
-                if(config.media === "movie" && typeof global.openMoviePage === "function"){
-                    await global.openMoviePage(id,{movieName:name,navigationContext:"discover",backRoute});
-                    return;
-                }
-                if(typeof global.openShowDetailsPage === "function"){
-                    await global.openShowDetailsPage(id,{showName:name,navigationContext:"discover",backRoute});
-                }
-            });
-        });
     }
 
     async function openPage(key,options={}){
