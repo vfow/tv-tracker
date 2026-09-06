@@ -19,6 +19,11 @@ composition. Keep their card, filter, event, and state helpers until each caller
 has a proven native replacement. Search/Discover request state stays in `app.js`;
 Trending loading/cache stays in `trending.js`; History API stays in `app-router.js`.
 
+The subsequent full-page Trending slice uses `TrendingPage.vue` and the existing
+Discover bridge. `trending.js` no longer composes its full page or binds card/back
+events; its feed/cache/state/router services remain. See
+`FRONTEND_TRENDING_NATIVE_PAGE.md` for that boundary and validation.
+
 Validation and release evidence for this continuation is tracked in
 `FRONTEND_DISCOVER_HUB_COMPLETION.md`. The historical cleanup order below must not
 be used to reimplement work already present in this baseline.

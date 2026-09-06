@@ -36,6 +36,8 @@
     let vueOwner = null;
     let loadPromise = null;
     let lastModel = null;
+    let trendingOwner = null;
+    let lastTrendingModel = null;
 
     function normalizeMedia(value){
         const media = String(value || "").trim().toLowerCase();
@@ -244,13 +246,14 @@
     }
 
     function renderLoadFailure(){
-        if(vueOwner || !isHubVisible()){ return; }
+        const trending = lastTrendingModel && isTrendingVisible(lastTrendingModel.key);
+        if(trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.renderSurfaceFailure === "function"){
             runtime.renderSurfaceFailure({
-                rootId:"search-results",
-                marker:"data-tvtracker-discover-vue-load-failed",
-                title:"Discover unavailable",
+                rootId:trending ? "genre-detail-content" : "search-results",
+                marker:trending ? "data-tvtracker-trending-vue-load-failed" : "data-tvtracker-discover-vue-load-failed",
+                title:trending ? "Trending unavailable" : "Discover unavailable",
                 message:"Reload the page to try again."
             });
         }
@@ -332,6 +335,72 @@
         }
     }
 
+    function isTrendingVisible(key){
+        const api = global.TVTrackerTrending;
+        return global.activePage === "discovery-detail"
+            && !!api && typeof api.parseRoute === "function"
+            && api.parseRoute(global.location.pathname,global.location.search) === key;
+    }
+
+    function buildTrendingModel(config,items,loading,error){
+        const cleanItems = (Array.isArray(items) ? items : [])
+        .filter(item=>item && Number(item.id || 0) > 0)
+        .map(item=>{
+            const rating = Number(item.vote_average || 0);
+            return Object.freeze({
+                ...buildMediaItem(item,config.media),
+                rating:rating > 0 ? rating.toFixed(1) : "",
+                faded:!!item._eyeFaded,
+                firstAirDate:String(item.first_air_date || item.date || "")
+            });
+        });
+        return Object.freeze({
+            key:String(config.key),
+            title:String(config.title || "Trending"),
+            bodyState:error ? "error" : cleanItems.length ? "ready" : loading ? "loading" : "empty",
+            error:String(error || ""),
+            items:Object.freeze(cleanItems)
+        });
+    }
+
+    function renderTrending(config,items,loading,error=""){
+        if(!config || !isTrendingVisible(config.key)){ return; }
+        lastTrendingModel = buildTrendingModel(config,items,loading,error);
+        if(trendingOwner){
+            trendingOwner.render(lastTrendingModel);
+        }else{
+            void loadVueDiscover();
+        }
+    }
+
+    function attachTrendingOwner(owner){
+        if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function"){
+            throw new TypeError("Invalid Vue Trending owner");
+        }
+        trendingOwner = owner;
+        if(lastTrendingModel && isTrendingVisible(lastTrendingModel.key)){
+            trendingOwner.render(lastTrendingModel);
+        }
+    }
+
+    const trendingActions = Object.freeze({
+        back(){
+            if(typeof global.navigateBackOrRouteFallback === "function"){
+                global.navigateBackOrRouteFallback("/app/discover");
+            }
+        },
+        async openMedia(item,key){
+            if(!item || !item.id){ return; }
+            const api = global.TVTrackerTrending;
+            const backRoute = api ? api.routeFor(key) : "/app/discover";
+            if(item.media === "movie" && typeof global.openMoviePage === "function"){
+                await global.openMoviePage(item.id,{movieName:item.name,navigationContext:"discover",backRoute});
+            }else if(typeof global.openShowDetailsPage === "function"){
+                await global.openShowDetailsPage(item.id,{showName:item.name,navigationContext:"discover",backRoute});
+            }
+        }
+    });
+
     const actions = Object.freeze({
         setGenreMedia(media){
             const cleanMedia = normalizeMedia(media);
@@ -360,6 +429,10 @@
 
     global.TVTrackerDiscoverVueBridge = Object.freeze({
         attachVueOwner,
+        attachTrendingOwner,
+        renderTrending,
+        buildTrendingModel,
+        trendingActions,
         render,
         renderLoadFailure,
         renderLoading,

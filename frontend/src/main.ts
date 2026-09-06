@@ -10,7 +10,8 @@ import ShowDetails from './media-details/ShowDetails.vue';
 import type { ShowDetailsVueBridge, ShowDetailsVueOwner, ShowDetailsViewModel } from './media-details/showViewModel';
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
-import type { DiscoverRendererActions, DiscoverViewModel } from './search-discover/discoverViewModel';
+import type { DiscoverRendererActions, DiscoverViewModel, TrendingActions, TrendingViewModel } from './search-discover/discoverViewModel';
+import TrendingPage from './search-discover/TrendingPage.vue';
 import SearchResults from './search-discover/SearchResults.vue';
 import type { SearchRendererActions, SearchViewModel } from './search-discover/searchViewModel';
 import TrackerListsSurface from './tracker-lists/TrackerListsSurface.vue';
@@ -68,7 +69,14 @@ type DiscoverVueOwner = Readonly<{
 
 type DiscoverBridge = Readonly<{
   attachVueOwner: (owner: DiscoverVueOwner) => void;
+  attachTrendingOwner: (owner: TrendingVueOwner) => void;
   actions: DiscoverRendererActions;
+  trendingActions: TrendingActions;
+}>;
+
+type TrendingVueOwner = Readonly<{
+  render: (model: TrendingViewModel) => void;
+  unmount: () => void;
 }>;
 
 type VueFoundationBridge = Readonly<{
@@ -97,6 +105,7 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let trendingApp: VueApp<Element> | null = null;
 let movieDetailsApp: VueApp<Element> | null = null;
 let movieDetailsRoot: Element | null = null;
 let showDetailsApp: VueApp<Element> | null = null;
@@ -138,6 +147,11 @@ function unmountDiscover(): void {
   if (discoverApp) discoverApp.unmount();
   discoverApp = null;
   discoverRoot = null;
+}
+
+function unmountTrending(): void {
+  if (trendingApp) trendingApp.unmount();
+  trendingApp = null;
 }
 
 function unmountMovieDetails(): void {
@@ -254,6 +268,19 @@ const discoverOwner: DiscoverVueOwner = Object.freeze({
   unmount: unmountDiscover
 });
 
+const trendingOwner: TrendingVueOwner = Object.freeze({
+  render(model: TrendingViewModel): void {
+    const root = document.getElementById('genre-detail-content');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    unmountTrending();
+    root.replaceChildren();
+    trendingApp = createApp(TrendingPage, { model, actions: bridge.trendingActions });
+    trendingApp.mount(root);
+  },
+  unmount: unmountTrending
+});
+
 const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
   render(model: MovieDetailsViewModel): void {
     const root = document.getElementById('show-detail-content');
@@ -351,6 +378,7 @@ mountEpisodeTrackingController();
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
+window.TVTrackerDiscoverVueBridge?.attachTrendingOwner?.(trendingOwner);
 window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);

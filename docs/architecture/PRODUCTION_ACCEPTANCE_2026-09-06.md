@@ -39,6 +39,16 @@ Local pure validation checks use a stub only for the unavailable database import
 full exact-head CI must run with real dependencies before merge. Live retry
 recovery must be verified after deployment.
 
+PR #135 passed exact-head full CI and merged as
+`b769c7afb345681efa92a8cb8850ddf100d97c22`. Deployment repeated the suite,
+restarted successfully, and passed the merged-SHA health check. A fresh
+authenticated Discover load subsequently completed without the recurring movie
+save rejection in the browser error log. No deliberate tracker edit was needed.
+
+Discover genre tabs, opening a show from the hub, its Back button, and browser
+Back/Forward passed live checks. At the observed 1363px viewport, the document
+had no horizontal overflow. This is not the final 320px/375px/mobile matrix.
+
 ## Remaining roadmap
 
 Sprint 3 still includes Browse, Genre, Collections, Person, and full-page Trending

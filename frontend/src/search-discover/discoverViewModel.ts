@@ -61,3 +61,21 @@ export type DiscoverRendererActions = Readonly<{
   setGenreMedia: (media: DiscoverMediaType) => void;
   openMedia: (item: DiscoverPosterItem) => Promise<void>;
 }>;
+
+export type DiscoverListingItem = DiscoverPosterItem & Readonly<{
+  rating: string;
+  faded: boolean;
+}>;
+
+export type TrendingViewModel = Readonly<{
+  key: string;
+  title: string;
+  bodyState: 'loading' | 'error' | 'ready' | 'empty';
+  error: string;
+  items: readonly DiscoverListingItem[];
+}>;
+
+export type TrendingActions = Readonly<{
+  back: () => void;
+  openMedia: (item: DiscoverListingItem, key: string) => Promise<void>;
+}>;
