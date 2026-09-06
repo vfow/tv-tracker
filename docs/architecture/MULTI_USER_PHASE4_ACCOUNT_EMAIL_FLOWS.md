@@ -83,6 +83,15 @@ Phase 4 code and tests deliberately do not claim that a production sender exists
 
 ## Remaining production acceptance
 
+The first deployment after PR #132 failed before activation: the command-line
+entrypoint imported the historical v6 registry and rejected the existing v7
+database (`7 > 6`). The CLI now imports the current package registry, matching
+the application. Regression coverage invokes `python -m tvtracker.migrations`
+against fresh and v7 databases, checks repeatability, and verifies preservation
+of historical checksums and existing unassigned tracker data. This fix does not
+change migration SQL or relax schema validation. Production migration and health
+verification must still succeed before deployment is accepted.
+
 - Confirm the available AlwaysData sender and sending limits in the actual account.
 - Configure the canonical origin and SMTP values on the host.
 - Apply migration 0008 through the normal accepted deployment process and verify

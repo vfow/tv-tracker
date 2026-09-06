@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 
 from tvtracker.database import connect_database
-from tvtracker.migrations.registry import MIGRATIONS
-from tvtracker.migrations.runner import run_migrations
+from tvtracker.migrations import MIGRATIONS, run_migrations
 
 
 def main() -> int:
