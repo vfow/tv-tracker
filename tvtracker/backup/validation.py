@@ -273,6 +273,10 @@ def validate_profile_record(raw_profile: Any) -> dict[str, Any]:
             if not isinstance(value, (str, int, float)):
                 raise BackupValidationError("Profile favorite movie entry is invalid")
             movie[field] = str(value).strip()[:limit]
+        if "adult" in raw_movie:
+            if not isinstance(raw_movie["adult"], bool):
+                raise BackupValidationError("Profile favorite movie adult classification is invalid")
+            movie["adult"] = raw_movie["adult"]
         normalized_movies.append(movie)
     profile["favorite_movies"] = normalized_movies
 
@@ -402,7 +406,7 @@ def validate_movie_tracking_state(raw_value: Any) -> dict[str, Any]:
     allowed_fields = {
         "id", "tmdb_id", "movie_id", "title", "poster_path", "backdrop_path",
         "release_date", "year", "watched", "plan", "plan_to_watch", "favorite",
-        "watched_at", "updated_at", "status",
+        "watched_at", "updated_at", "status", "adult",
     }
     for raw_movie_id, raw_record in raw_value.items():
         movie_id = normalized_identifier(raw_movie_id, "Movie tracking identifier", maximum=160)
@@ -410,6 +414,8 @@ def validate_movie_tracking_state(raw_value: Any) -> dict[str, Any]:
             raise BackupValidationError("Movie tracking record is invalid")
         if set(raw_record) - allowed_fields:
             raise BackupValidationError("Movie tracking record contains unsupported fields")
+        if "adult" in raw_record and not isinstance(raw_record["adult"], bool):
+            raise BackupValidationError("Movie tracking adult classification is invalid")
         record_id = normalized_identifier(
             raw_record.get("id") or raw_record.get("tmdb_id") or raw_record.get("movie_id") or movie_id,
             "Movie tracking record identifier",
@@ -438,6 +444,8 @@ def validate_movie_tracking_state(raw_value: Any) -> dict[str, Any]:
             "watched_at": "",
             "updated_at": "",
         }
+        if "adult" in raw_record:
+            record["adult"] = raw_record["adult"]
         for field, limit in {
             "title": 240,
             "poster_path": 500,
@@ -723,4 +731,3 @@ def validate_sync_delta_payload(payload: dict[str, Any]) -> tuple[
         history_order,
         state_upsert,
     )
-
