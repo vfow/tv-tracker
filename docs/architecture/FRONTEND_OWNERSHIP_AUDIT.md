@@ -1,5 +1,28 @@
 # Frontend Ownership Audit
 
+## Continuation audit — baseline `476a1e9`
+
+The current source supersedes the older baseline notes below. Watchlist, History,
+Upcoming, Show Details, and Movie Details panels already use native composition;
+do not rebuild these completed surfaces. Movie panels are now composed by
+`movie-details-native-panels.js`, rather than the historical fragment boundary.
+
+Discover hub composition already lives in `DiscoverHub.vue`. This continuation
+moves its loading gate from `ui.js` into `discover-vue-bridge.js`, feeds the existing
+Vue loading model, and removes the unused hub HTML composers and event binders.
+Late asset completion/failure and late render calls are guarded against replacing
+another route. The shared Trending request can settle a newer gate after timeout,
+and a timeout while away remains bounded when returning to Discover.
+
+Discover browse, genre, collections, and person pages still have live legacy
+composition. Keep their card, filter, event, and state helpers until each caller
+has a proven native replacement. Search/Discover request state stays in `app.js`;
+Trending loading/cache stays in `trending.js`; History API stays in `app-router.js`.
+
+Validation and release evidence for this continuation is tracked in
+`FRONTEND_DISCOVER_HUB_COMPLETION.md`. The historical cleanup order below must not
+be used to reimplement work already present in this baseline.
+
 ## Scope
 
 This audit records current ownership at baseline `8cfef1b` through PR #108: History Vue ownership from PR #102, Media Details native composition from PR #103, Upcoming native composition from PR #104, final History fallback cleanup from PR #105, typed Show Details chrome from PR #106, complete typed Show tab-panel composition from PR #107, and dead Show composer removal from PR #108. It is intended to prevent duplicate renderers, duplicate History API ownership, stale fallback patches, and unsafe deletion of services that Vue still consumes through bridges.

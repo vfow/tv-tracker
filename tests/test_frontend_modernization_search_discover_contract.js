@@ -32,8 +32,9 @@ assert(app.includes('function shouldShowDiscoverHub()'));
 
 assert(!ui.includes('function renderSearchResults(resultsList)'), 'legacy Search renderer must stay deleted after Vue ownership transfer');
 assert(searchBridge.includes('global.renderSearchResults = render'), 'Search runtime renderer hook must be owned by the Vue bridge');
-assert(ui.includes('function renderDiscoverHubContent()'));
-assert(ui.includes('window.renderDiscoverHub = renderDiscoverHub'));
+assert(!ui.includes('function renderDiscoverHubContent()'));
+assert(fs.readFileSync('static/js/discover-vue-bridge.js','utf8').includes('global.renderDiscoverHubContent = render;'));
+assert(fs.readFileSync('static/js/discover-vue-bridge.js','utf8').includes('window.renderDiscoverHub = renderDiscoverHub'));
 assert(trending.includes('global.TVTrackerTrending = Object.freeze({'));
 assert(router.includes('openSearchPage(params.query || "",{fromRoute:true'));
 assert(router.includes('openDiscoverHomePage({fromRoute:true})'));

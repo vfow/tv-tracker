@@ -4,7 +4,7 @@ const path = require("path");
 const vm = require("vm");
 const { extractBetween } = require("./helpers/extract.js");
 
-const uiSource = fs.readFileSync(path.join(__dirname,"..","static","js","ui.js"),"utf8");
+const uiSource = fs.readFileSync(path.join(__dirname,"..","static","js","discover-vue-bridge.js"),"utf8");
 const source = extractBetween(
   uiSource,
   "// --TVT-discover-gate-owner-begin--",
@@ -24,14 +24,14 @@ async function flush(){
     await new Promise(resolve=>setTimeout(resolve,0));
 }
 
-function load(trendingDeferred){
+function load(trendingDeferred, timers={setTimeout,clearTimeout}){
     let finalRenders = 0;
     const results = {innerHTML:"",dataset:{}};
     const win = {
         activePage:"discover",
         discoverHubState:{loaded:false,loading:true,error:"",sections:[]},
         shouldShowDiscoverHub:()=>true,
-        renderDiscoverHubSkeleton:title=>`<section data-skeleton="${title}"></section>`,
+        TVTrackerDiscoverVueBridge:{renderLoading(){ results.loading = true; }},
         renderDiscoverHubContent:()=>{ finalRenders += 1; },
         document:{getElementById:id=>id === "search-results" ? results : null},
         TVTrackerTrending:{
@@ -41,7 +41,7 @@ function load(trendingDeferred){
             })
         }
     };
-    const context = {window:win,console,setTimeout,clearTimeout,Promise,Object,String};
+    const context = {window:win,console,...timers,Promise,Object,String};
     vm.createContext(context);
     vm.runInContext(source,context);
     return {win,results,getFinalRenders:()=>finalRenders};
@@ -54,7 +54,7 @@ function load(trendingDeferred){
 
         env.win.renderDiscoverHub();
         assert.strictEqual(env.getFinalRenders(),0,"initial Discover render should stay on the skeleton");
-        assert.ok(env.results.innerHTML.includes("data-skeleton=\"TV Shows\""));
+        assert.strictEqual(env.results.loading,true,"loading must be delegated to the Vue owner");
 
         env.win.discoverHubState = {loaded:true,loading:false,error:"",sections:[{key:"tv/popular"}]};
         env.win.renderDiscoverHub();
@@ -92,6 +92,39 @@ function load(trendingDeferred){
         trend.reject(new Error("Trending failed"));
         await flush();
         assert.strictEqual(env.getFinalRenders(),1,"failed requests must still release the gate instead of freezing Discover");
+    }
+
+    {
+        const trend = deferred();
+        let expire;
+        const env = load(trend, {setTimeout(fn){ expire = fn; return 1; },clearTimeout(){}});
+        env.win.renderDiscoverHub();
+        await flush();
+        expire();
+        assert.strictEqual(env.getFinalRenders(),1,"timeout must release a stalled request");
+        env.win.renderDiscoverHub();
+        env.win.discoverHubState = {loaded:true,loading:false,sections:[]};
+        trend.resolve([]);
+        await flush();
+        assert.strictEqual(env.win.TVTrackerDiscoverStability.isGateActive(),false,
+            "a reused request must settle the refreshed gate without another timeout");
+        assert.strictEqual(env.getFinalRenders(),2);
+    }
+
+    {
+        const trend = deferred();
+        let expire;
+        const env = load(trend, {setTimeout(fn){ expire = fn; return 1; },clearTimeout(){}});
+        env.win.renderDiscoverHub();
+        env.win.activePage = 'search';
+        expire();
+        assert.strictEqual(env.getFinalRenders(),0,"timeout must not overwrite another route");
+        env.win.activePage = 'discover';
+        env.win.renderDiscoverHub();
+        assert.strictEqual(env.win.TVTrackerDiscoverStability.isGateActive(),false,
+            "returning after a hidden timeout must not leave an unbounded gate");
+        trend.resolve([]);
+        await flush();
     }
 
     assert.ok(source.includes("loadHubRows(false)"),"Discover stability should coordinate the existing Trending loader");

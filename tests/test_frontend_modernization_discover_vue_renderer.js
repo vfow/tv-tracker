@@ -47,10 +47,12 @@ const template = fs.readFileSync('templates/index.html', 'utf8');
     };
 
     const context = {
-        URL,
+        URL, setTimeout, clearTimeout,
         window:{
             location:{pathname:'/app/list/watching',origin:'https://example.test'},
             discoverGenreMedia:'tv',
+            activePage:'discover',
+            get discoverHubState(){ return legacyState; },
             TVTrackerDiscoverStateBridge:{
                 ownership:'legacy-read-only',
                 snapshot(){ return legacyState; }
@@ -116,7 +118,7 @@ const template = fs.readFileSync('templates/index.html', 'utf8');
 
     bridge.actions.setGenreMedia('movie');
     assert.strictEqual(context.window.discoverGenreMedia, 'movie');
-    assert(calls.some(call=>call[0] === 'rerender'));
+    assert.strictEqual(rendered.activeGenreMedia, 'movie', 'genre switching must rerender through the bridge coordinator');
 
     await bridge.actions.openMedia({id:40,media:'movie',name:'Movie'});
     await bridge.actions.openMedia({id:41,media:'tv',name:'Show'});
@@ -151,9 +153,9 @@ const template = fs.readFileSync('templates/index.html', 'utf8');
     assert(main.includes('window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);'));
     assert(main.includes('unmountDiscover();'), 'Search/Discover owners must coordinate their shared root');
     assert(main.includes('unmountSearch();'), 'Discover/Search owners must coordinate their shared root');
-    assert(ui.includes('function renderDiscoverHub()'), 'Discover stability gate must remain legacy-owned in this bounded slice');
-    assert(ui.includes('function renderDiscoverHubContent()'), 'legacy Discover content renderer may remain physically while runtime ownership moves');
-    assert(ui.includes('window.renderDiscoverHub = renderDiscoverHub'), 'stability gate entry point must remain unchanged');
+    assert(bridgeSource.includes('function renderDiscoverHub()'), 'Discover bridge must own the stability coordinator');
+    assert(!ui.includes('function renderDiscoverHubContent()'), 'retired Discover renderer must be physically absent');
+    assert(bridgeSource.includes('window.renderDiscoverHub = renderDiscoverHub'), 'stability gate entry point must remain unchanged');
     assert(bridgeSource.includes('global.renderDiscoverHubContent = render'), 'runtime stable Discover content ownership must move to Vue bridge');
 
     const stateBridgeIndex = template.indexOf("filename='js/discover-state-bridge.js'");

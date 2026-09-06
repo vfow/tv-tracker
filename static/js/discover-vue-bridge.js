@@ -225,24 +225,35 @@
         });
     }
 
-    function discoverRoot(){
-        return global.document && typeof global.document.getElementById === "function"
-            ? global.document.getElementById("search-results")
-            : null;
+    function isHubVisible(){
+        if(typeof global.activePage === "string"){
+            return global.activePage === "discover"
+                && (typeof global.shouldShowDiscoverHub !== "function" || global.shouldShowDiscoverHub());
+        }
+        return /^\/app\/discover\/?$/.test(String(global.location && global.location.pathname || ""));
     }
 
     function renderLoading(){
-        const root = discoverRoot();
-        if(!root){ return; }
-        const skeletons = Array.from({length:8}).map(()=>'<div class="tt-skeleton-poster-card" aria-hidden="true"><div class="tt-skeleton-poster"></div><div class="tt-skeleton-line tt-skeleton-line-title"></div><div class="tt-skeleton-line tt-skeleton-line-meta"></div></div>').join("");
-        root.innerHTML = '<div class="discover-page-shell" data-tvtracker-discover-vue-loading="true" role="status" aria-label="Loading Discover"><section class="discover-section-group"><h2 class="discover-group-title">TV Shows</h2><div class="discover-section"><div class="discover-card-row discover-card-row-loading">' + skeletons + '</div></div></section></div>';
+        if(!isHubVisible()){ return; }
+        lastModel = Object.freeze({...buildViewModel(),bodyState:"loading"});
+        if(vueOwner){
+            vueOwner.render(lastModel);
+            return;
+        }
+        void loadVueDiscover();
     }
 
     function renderLoadFailure(){
-        if(vueOwner){ return; }
-        const root = discoverRoot();
-        if(!root){ return; }
-        root.innerHTML = '<div class="discover-page-shell" data-tvtracker-discover-vue-load-failed="true" role="alert"><div class="empty-state search-empty-state"><h2>Discover unavailable</h2><p>Reload the page to try again.</p></div></div>';
+        if(vueOwner || !isHubVisible()){ return; }
+        const runtime = global.TVTrackerClientRuntime;
+        if(runtime && typeof runtime.renderSurfaceFailure === "function"){
+            runtime.renderSurfaceFailure({
+                rootId:"search-results",
+                marker:"data-tvtracker-discover-vue-load-failed",
+                title:"Discover unavailable",
+                message:"Reload the page to try again."
+            });
+        }
     }
 
     function reportLoadFailure(){
@@ -256,6 +267,7 @@
         if(vueOwner){ return Promise.resolve(true); }
         if(loadPromise){ return loadPromise; }
         if(typeof global.fetch !== "function"){
+            reportLoadFailure();
             renderLoadFailure();
             return Promise.resolve(false);
         }
@@ -271,7 +283,10 @@
                 throw new Error("invalid Vue manifest entry");
             }
             const base = global.location && global.location.origin ? global.location.origin : "http://localhost";
-            return import(new URL("/static/vue/" + file,base).href).then(()=>true);
+            return import(new URL("/static/vue/" + file,base).href).then(()=>{
+                if(!vueOwner){ throw new Error("Discover Vue owner unavailable"); }
+                return true;
+            });
         })
         .catch(()=>{
             reportLoadFailure();
@@ -295,13 +310,13 @@
     }
 
     function render(){
+        if(!isHubVisible()){ return; }
         lastModel = buildViewModel();
         if(vueOwner){
             vueOwner.render(lastModel);
             updateDiscoverShellAfterRender();
             return;
         }
-        renderLoading();
         updateDiscoverShellAfterRender();
         void loadVueDiscover();
     }
@@ -311,7 +326,7 @@
             throw new TypeError("Invalid Vue Discover owner");
         }
         vueOwner = owner;
-        if(lastModel){
+        if(lastModel && isHubVisible()){
             vueOwner.render(lastModel);
             updateDiscoverShellAfterRender();
         }
@@ -347,11 +362,157 @@
         attachVueOwner,
         render,
         renderLoadFailure,
+        renderLoading,
         actions,
         buildViewModel,
         ownership:"vue-content"
     });
     global.renderDiscoverHubContent = render;
+
+
+// --TVT-discover-gate-owner-begin--
+const DISCOVER_GATE_MAX_MS = 12000;
+let discoverGateActive = false;
+let discoverGateStableReady = false;
+let discoverGateTrendingSettled = false;
+let discoverGateTrendingPromise = null;
+let discoverGateTimer = null;
+let discoverGateCycleId = 0;
+let discoverGateExpired = false;
+
+function discoverGateIsHubVisible(){
+    if(window.activePage !== "discover"){
+        return false;
+    }
+    if(typeof window.shouldShowDiscoverHub === "function"){
+        return !!window.shouldShowDiscoverHub();
+    }
+    return true;
+}
+
+function discoverGateBaseSettled(){
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {};
+    return state.loading !== true && (state.loaded === true || !!state.error);
+}
+
+function discoverGateRenderSkeleton(){
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if(bridge && typeof bridge.renderLoading === "function"){
+        bridge.renderLoading();
+    }
+}
+
+function discoverGateClearTimer(){
+    if(discoverGateTimer){
+        clearTimeout(discoverGateTimer);
+        discoverGateTimer = null;
+    }
+}
+
+function discoverGateRelease(force=false){
+    if(!discoverGateActive || !discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!force && (!discoverGateBaseSettled() || !discoverGateTrendingSettled)){
+        discoverGateRenderSkeleton();
+        return false;
+    }
+    discoverGateActive = false;
+    discoverGateStableReady = true;
+    discoverGateClearTimer();
+    window.renderDiscoverHubContent();
+    return true;
+}
+
+function discoverGateEnsureTrending(){
+    if(discoverGateTrendingPromise){
+        return discoverGateTrendingPromise;
+    }
+    const api = window.TVTrackerTrending;
+    if(!api || typeof api.loadHubRows !== "function"){
+        discoverGateTrendingSettled = true;
+        discoverGateRelease(false);
+        return Promise.resolve([]);
+    }
+
+    discoverGateTrendingSettled = false;
+    discoverGateTrendingPromise = Promise.resolve()
+    .then(()=>api.loadHubRows(false))
+    .catch(()=>[])
+    .finally(()=>{
+        // A refresh can reuse a request started before the previous gate timed out.
+        // Its completion settles the shared request for the current gate as well.
+        discoverGateTrendingSettled = true;
+        discoverGateTrendingPromise = null;
+        discoverGateRelease(false);
+    });
+    return discoverGateTrendingPromise;
+}
+
+function discoverGateBegin(){
+    if(!discoverGateIsHubVisible()){
+        return false;
+    }
+    if(!discoverGateActive){
+        discoverGateActive = true;
+        discoverGateStableReady = false;
+        discoverGateExpired = false;
+        discoverGateTrendingSettled = false;
+        discoverGateCycleId += 1;
+        discoverGateClearTimer();
+        const cycle = discoverGateCycleId;
+        discoverGateTimer = setTimeout(()=>{
+            if(cycle === discoverGateCycleId){
+                discoverGateExpired = true;
+                discoverGateTrendingSettled = true;
+                discoverGateRelease(true);
+            }
+        },DISCOVER_GATE_MAX_MS);
+        discoverGateRenderSkeleton();
+        discoverGateEnsureTrending();
+        return true;
+    }
+    discoverGateRenderSkeleton();
+    return true;
+}
+
+function renderDiscoverHub(){
+    if(!discoverGateIsHubVisible()){
+        return;
+    }
+
+    const state = window.discoverHubState && typeof window.discoverHubState === "object"
+    ? window.discoverHubState
+    : {loaded:false,loading:false,error:"",sections:[],genres:[]};
+
+    if(state.loading === true){
+        discoverGateStableReady = false;
+    }
+
+    if(discoverGateStableReady && state.loading !== true){
+        return window.renderDiscoverHubContent();
+    }
+
+    discoverGateBegin();
+    if(discoverGateExpired || (discoverGateBaseSettled() && discoverGateTrendingSettled)){
+        discoverGateRelease(discoverGateExpired);
+    }
+    return undefined;
+}
+
+window.TVTrackerDiscoverStability = Object.freeze({
+    available:true,
+    begin:discoverGateBegin,
+    release:discoverGateRelease,
+    isGateActive:()=>discoverGateActive,
+    isStableReady:()=>discoverGateStableReady,
+    baseSettled:discoverGateBaseSettled,
+    MAX_GATE_MS:DISCOVER_GATE_MAX_MS
+});
+window.renderDiscoverHub = renderDiscoverHub;
+// --TVT-discover-gate-owner-end--
 
     const currentPath = String(global.location && global.location.pathname || "");
     if(/^\/app\/discover(?:\/|$)/.test(currentPath)){
