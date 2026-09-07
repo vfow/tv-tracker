@@ -68,11 +68,17 @@ fixture), all 78 JavaScript files, and build/security gates. It merged as
 The live Dark Knight collection displayed the Vue owner marker and three cards.
 Selecting Release Date — Oldest changed the URL to `?sort=date-asc` and ordered
 Batman Begins, The Dark Knight, then The Dark Knight Rises.
+Opening Batman Begins and using Back returned to the same `?sort=date-asc` route
+and the same three-card order.
+
+On September 7, PR #139 passed its exact-head CI and merged as
+`dd3733c762756d33107c427a16d439f77d5a0f7a`. Its deployment workflow completed
+successfully. Live index acceptance is tracked separately from those gates.
 
 ## Remaining roadmap
 
-Sprint 3 still includes Browse, Genre, and Person composition; the Collections
-index is the next native slice under verification. Collection Details and
-full-page Trending are now native. Proven-dead frontend cleanup, fresh whole-system/torture,
+Sprint 3 still includes Browse and Genre/discovery listing composition; Person
+is the next native slice under verification. Collections index, Collection
+Details, and full-page Trending are now native. Proven-dead frontend cleanup, fresh whole-system/torture,
 mobile, complete authenticated production, documentation, and observability gates
 remain outstanding. Registration remains closed.
