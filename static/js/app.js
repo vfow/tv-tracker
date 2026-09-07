@@ -143,7 +143,6 @@ var discoverHubState = {
     collections:[]
 };
 var collectionsPageState = {loaded:false,loading:false,error:"",collections:[],filteredCollections:[],visibleCollections:[],query:"",genre:"",decade:"",sort:"popularity.desc",page:1,totalPages:1,totalResults:0,availableGenres:[],availableDecades:[],building:false,sourceDate:"",indexedCount:0,totalIds:0,cursor:0};
-var collectionSearchTimer = null;
 var collectionSearchController = null;
 var collectionSearchRequestId = 0;
 var collectionIndexPollTimer = null;
@@ -6031,34 +6030,7 @@ function showCollectionDetailPageShell(navigationContext="discover"){
 }
 
 function renderActiveCollectionsPage(){
-    if(typeof renderCollectionsIndexPage === "function"){
-        const activeInput = typeof document !== "undefined" ? document.querySelector("[data-collection-search]") : null;
-        const shouldRestoreSearchFocus = !!(activeInput && document.activeElement === activeInput);
-        const searchFocusState = shouldRestoreSearchFocus ? {
-            value:String(activeInput.value || ""),
-            start:typeof activeInput.selectionStart === "number" ? activeInput.selectionStart : null,
-            end:typeof activeInput.selectionEnd === "number" ? activeInput.selectionEnd : null
-        } : null;
-        if(searchFocusState){
-            collectionsPageState.searchDraft = searchFocusState.value;
-        }
-        renderCollectionsIndexPage(collectionsPageState);
-        attachCollectionsPageEvents();
-        if(searchFocusState){
-            const nextInput = document.querySelector("[data-collection-search]");
-            if(nextInput){
-                nextInput.value = searchFocusState.value;
-                if(typeof nextInput.focus === "function"){
-                    try{ nextInput.focus({preventScroll:true}); }catch(error){ nextInput.focus(); }
-                }
-                if(searchFocusState.start !== null && typeof nextInput.setSelectionRange === "function"){
-                    const max = nextInput.value.length;
-                    nextInput.setSelectionRange(Math.min(searchFocusState.start,max),Math.min(searchFocusState.end === null ? searchFocusState.start : searchFocusState.end,max));
-                }
-            }
-        }
-        restoreCollectionReturnPositionSoon(getCollectionsRoute(collectionsPageState));
-    }
+    window.TVTrackerDiscoverVueBridge?.renderIndex(collectionsPageState);
 }
 
 function renderActiveCollectionDetailPage(){
@@ -6255,82 +6227,6 @@ async function openCollectionDetailPage(collectionId,options={}){
         collectionDetailPageState.error = "Couldn’t load this collection. Try again later.";
         renderActiveCollectionDetailPage();
     }
-}
-
-function attachCollectionsPageEvents(){
-    if(typeof ensureBrowseGlobalInteractionEvents === "function"){
-        ensureBrowseGlobalInteractionEvents();
-    }
-    const backButton = document.getElementById("collections-page-back-button");
-    if(backButton){
-        backButton.addEventListener("click",function(){
-            navigateBackOrRouteFallback("/app/discover");
-        });
-    }
-
-    const collectionSearchInput = document.querySelector("[data-collection-search]");
-    if(collectionSearchInput){
-        collectionSearchInput.addEventListener("input",function(){
-            const value = String(this.value || "");
-            collectionsPageState.searchDraft = value;
-            cancelCollectionsLiveSearchRequest();
-            if(collectionSearchTimer && typeof window.clearTimeout === "function"){
-                window.clearTimeout(collectionSearchTimer);
-            }
-            collectionSearchTimer = window.setTimeout(function(){
-                applyCollectionsIndexState({query:value,searchDraft:value,page:1},{replaceRoute:true});
-            },360);
-        });
-        collectionSearchInput.addEventListener("keydown",function(event){
-            if(event && event.key === "Enter"){
-                event.preventDefault();
-                if(collectionSearchTimer && typeof window.clearTimeout === "function"){
-                    window.clearTimeout(collectionSearchTimer);
-                }
-                const value = String(collectionSearchInput.value || "");
-                collectionsPageState.searchDraft = value;
-                applyCollectionsIndexState({query:value,searchDraft:value,page:1},{replaceRoute:true});
-            }
-        });
-    }
-
-    document.querySelectorAll("[data-collection-filter]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const filter = String(button.dataset.collectionFilter || "");
-            const value = String(button.dataset.collectionValue || "");
-            if(filter === "genre"){
-                applyCollectionsIndexState({genre:normalizeCollectionId(value),page:1});
-            }else if(filter === "decade"){
-                applyCollectionsIndexState({decade:normalizeCollectionsIndexDecade(value),page:1});
-            }else if(filter === "sort"){
-                applyCollectionsIndexState({sort:normalizeCollectionsIndexSort(value),page:1});
-            }
-            if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
-        });
-    });
-
-    document.querySelectorAll("[data-collection-clear]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const filter = String(button.dataset.collectionClear || "");
-            if(filter === "query"){
-                applyCollectionsIndexState({query:"",page:1});
-            }else if(filter === "genre"){
-                applyCollectionsIndexState({genre:"",page:1});
-            }else if(filter === "decade"){
-                applyCollectionsIndexState({decade:"",page:1});
-            }else if(filter === "all"){
-                applyCollectionsIndexState({genre:"",decade:"",sort:COLLECTIONS_DEFAULT_SORT,page:1});
-            }
-            if(typeof closeBrowseMenus === "function"){ closeBrowseMenus(); }
-        });
-    });
-
-    document.querySelectorAll("[data-collection-view-more]").forEach(button=>{
-        button.addEventListener("click",function(){
-            const currentPage = Math.max(1,Math.floor(Number(collectionsPageState && collectionsPageState.page || 1)));
-            applyCollectionsIndexState({page:currentPage + 1});
-        });
-    });
 }
 
 function isTMDBNotFoundError(error){

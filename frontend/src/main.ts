@@ -11,7 +11,8 @@ import type { ShowDetailsVueBridge, ShowDetailsVueOwner, ShowDetailsViewModel } 
 import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
 import CollectionDetails from './search-discover/CollectionDetails.vue';
-import type { CollectionActions, CollectionViewModel } from './search-discover/collectionViewModel';
+import CollectionsIndex from './search-discover/CollectionsIndex.vue';
+import type { CollectionActions, CollectionViewModel, CollectionsIndexActions, CollectionsIndexViewModel } from './search-discover/collectionViewModel';
 import type { DiscoverRendererActions, DiscoverViewModel, TrendingActions, TrendingViewModel } from './search-discover/discoverViewModel';
 import TrendingPage from './search-discover/TrendingPage.vue';
 import SearchResults from './search-discover/SearchResults.vue';
@@ -74,9 +75,13 @@ type DiscoverBridge = Readonly<{
   attachTrendingOwner: (owner: TrendingVueOwner) => void;
   attachCollectionOwner: (owner: CollectionVueOwner) => void;
   collectionActions: CollectionActions;
+  attachIndexOwner: (owner: CollectionsIndexOwner) => void;
+  indexActions: CollectionsIndexActions;
   actions: DiscoverRendererActions;
   trendingActions: TrendingActions;
 }>;
+
+type CollectionsIndexOwner = Readonly<{ render: (model: CollectionsIndexViewModel) => void; unmount: () => void }>;
 
 type CollectionVueOwner = Readonly<{
   render: (model: CollectionViewModel) => void;
@@ -114,6 +119,9 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let collectionsIndexApp: VueApp<Element> | null = null;
+let collectionsIndexRoot: Element | null = null;
+const collectionsIndexModel = shallowRef<CollectionsIndexViewModel | null>(null);
 let collectionApp: VueApp<Element> | null = null;
 let collectionRoot: Element | null = null;
 const collectionModel = shallowRef<CollectionViewModel | null>(null);
@@ -159,6 +167,13 @@ function unmountDiscover(): void {
   if (discoverApp) discoverApp.unmount();
   discoverApp = null;
   discoverRoot = null;
+}
+
+function unmountCollectionsIndex(): void {
+  if (collectionsIndexApp) collectionsIndexApp.unmount();
+  collectionsIndexApp = null;
+  collectionsIndexRoot = null;
+  collectionsIndexModel.value = null;
 }
 
 function unmountCollection(): void {
@@ -292,6 +307,7 @@ const trendingOwner: TrendingVueOwner = Object.freeze({
     const root = document.getElementById('genre-detail-content');
     const bridge = window.TVTrackerDiscoverVueBridge;
     if (!root || !bridge) return;
+    unmountCollectionsIndex();
     unmountCollection();
     unmountTrending();
     root.replaceChildren();
@@ -311,6 +327,7 @@ const collectionOwner: CollectionVueOwner = Object.freeze({
       return;
     }
     unmountTrending();
+    unmountCollectionsIndex();
     unmountCollection();
     root.replaceChildren();
     collectionRoot = root;
@@ -323,6 +340,29 @@ const collectionOwner: CollectionVueOwner = Object.freeze({
     collectionApp.mount(root);
   },
   unmount: unmountCollection
+});
+
+const collectionsIndexOwner: CollectionsIndexOwner = Object.freeze({
+  render(model: CollectionsIndexViewModel): void {
+    const root = document.getElementById('genre-detail-content');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    if (collectionsIndexApp && collectionsIndexRoot === root && root.querySelector('[data-tvtracker-collections-index-owner="vue"]')) {
+      collectionsIndexModel.value = model;
+      return;
+    }
+    unmountTrending();
+    unmountCollection();
+    unmountCollectionsIndex();
+    root.replaceChildren();
+    collectionsIndexRoot = root;
+    collectionsIndexModel.value = model;
+    collectionsIndexApp = createApp({setup: () => () => collectionsIndexModel.value ? h(CollectionsIndex, {
+      model: collectionsIndexModel.value, actions: bridge.indexActions
+    }) : null});
+    collectionsIndexApp.mount(root);
+  },
+  unmount: unmountCollectionsIndex
 });
 
 const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
@@ -424,6 +464,7 @@ window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerDiscoverVueBridge?.attachTrendingOwner?.(trendingOwner);
 window.TVTrackerDiscoverVueBridge?.attachCollectionOwner?.(collectionOwner);
+window.TVTrackerDiscoverVueBridge?.attachIndexOwner?.(collectionsIndexOwner);
 window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);

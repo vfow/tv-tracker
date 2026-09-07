@@ -33,6 +33,8 @@
         "war":"discover-genre-tone-war"
     });
 
+    let indexOwner = null;
+    let lastIndexModel = null;
     let collectionOwner = null;
     let lastCollectionModel = null;
     let vueOwner = null;
@@ -248,16 +250,17 @@
     }
 
     function renderLoadFailure(){
+        const index = lastIndexModel && isIndexVisible();
         const collection = lastCollectionModel && isCollectionVisible(lastCollectionModel.id);
         const trending = lastTrendingModel && isTrendingVisible(lastTrendingModel.key);
-        if(collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
+        if(index ? indexOwner : collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.renderSurfaceFailure === "function"){
-            const surface = collection ? "collection" : trending ? "trending" : "discover";
+            const surface = index ? "collections-index" : collection ? "collection" : trending ? "trending" : "discover";
             runtime.renderSurfaceFailure({
-                rootId:collection || trending ? "genre-detail-content" : "search-results",
+                rootId:index || collection || trending ? "genre-detail-content" : "search-results",
                 marker:"data-tvtracker-" + surface + "-vue-load-failed",
-                title:collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
+                title:index ? "Collections unavailable" : collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
                 message:"Reload the page to try again."
             });
         }
@@ -400,6 +403,89 @@ const COLLECTION_DETAIL_SORT_OPTIONS = Object.freeze([
 ]);
 
 
+const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
+    {value:"name.asc",label:"Collection Name"},
+    {value:"size.desc",label:"Collection Size"},
+    {value:"date.desc",label:"Newest First"},
+    {value:"date.asc",label:"Oldest First"},
+    {value:"rating.desc",label:"Highest Rated"},
+    {value:"rating.asc",label:"Lowest Rated"},
+    {value:"popularity.desc",label:"Most Popular"},
+    {value:"popularity.asc",label:"Least Popular"}
+]);
+
+
+    function isIndexVisible(){ return global.activePage === "collections-index"; }
+
+    function buildIndexModel(state){
+        const visible = Array.isArray(state.visibleCollections) ? state.visibleCollections : (state.collections || []);
+        const items = Object.freeze(visible.filter(isPromotableCollection).map(buildCollectionItem));
+        const genres = (state.availableGenres || []).map(item=>Object.freeze({value:String(item.id),label:String(item.name || "Genre "+item.id),selected:String(state.genre || "")===String(item.id)}));
+        const decades = (state.availableDecades || []).map(value=>Object.freeze({value:String(value),label:value+"s",selected:String(state.decade || "")===String(value)}));
+        const sorts = COLLECTION_INDEX_SORT_OPTIONS.map(item=>Object.freeze({...item,selected:String(state.sort || "popularity.desc")===item.value}));
+        const chips = [];
+        if(state.genre){ chips.push(Object.freeze({key:"genre",value:String(state.genre),label:"Genre: "+(genres.find(item=>item.value===String(state.genre))?.label || "Genre "+state.genre)})); }
+        if(state.decade){ chips.push(Object.freeze({key:"decade",value:String(state.decade),label:"Decade: "+state.decade+"s"})); }
+        if(state.sort && state.sort!=="popularity.desc"){ chips.push(Object.freeze({key:"sort",value:String(state.sort),label:"Sort: "+(sorts.find(item=>item.value===state.sort)?.label || "Most Popular")})); }
+        const any = selected=>Object.freeze({value:"",label:"Any",selected});
+        const hasSearch = !!String(state.query || "").trim();
+        const hasFilters = hasSearch || chips.length>0;
+        return Object.freeze({
+            bodyState:state.error ? "error" : items.length ? "ready" : state.loading || state.liveSearchLoading || state.building ? "loading" : "empty",
+            error:String(state.error || ""),items,
+            searchDraft:typeof state.searchDraft === "string" ? state.searchDraft : String(state.query || ""),
+            genres:Object.freeze(genres.length ? [any(!state.genre),...genres] : []),
+            decades:Object.freeze(decades.length ? [any(!state.decade),...decades] : []),
+            sorts:Object.freeze(sorts),chips:Object.freeze(chips),
+            hasMore:visible.length<Number(state.totalResults || visible.length || 0),
+            emptyTitle:hasSearch ? "No matching collections found." : "No collections found",
+            emptyMessage:hasFilters ? "Try another search or change one or more filters." : "Try again later."
+        });
+    }
+
+    function afterIndexRender(){
+        global.ensureBrowseGlobalInteractionEvents();
+        global.restoreCollectionReturnPositionSoon(global.getCollectionsRoute(global.collectionsPageState));
+    }
+
+    function renderIndex(state){
+        if(!isIndexVisible()){ return; }
+        lastIndexModel = buildIndexModel(state || {});
+        if(indexOwner){ indexOwner.render(lastIndexModel);afterIndexRender(); }
+        else{ void loadVueDiscover(); }
+    }
+
+    function attachIndexOwner(owner){
+        if(!owner || typeof owner.render!=="function" || typeof owner.unmount!=="function"){ throw new TypeError("Invalid Vue collections index owner"); }
+        indexOwner = owner;
+        if(lastIndexModel && isIndexVisible()){ indexOwner.render(lastIndexModel);afterIndexRender(); }
+    }
+
+    const indexActions = Object.freeze({
+        back(){ global.navigateBackOrRouteFallback("/app/discover"); },
+        searchDraft(value){
+            if(!isIndexVisible()){ return; }
+            global.collectionsPageState.searchDraft = String(value || "");
+            global.cancelCollectionsLiveSearchRequest();
+        },
+        search(value){
+            if(!isIndexVisible()){ return; }
+            global.applyCollectionsIndexState({query:String(value || ""),searchDraft:String(value || ""),page:1},{replaceRoute:true});
+        },
+        setFilter(key,value){
+            if(!isIndexVisible() || !["genre","decade","sort"].includes(key)){ return; }
+            global.applyCollectionsIndexState({[key]:value,page:1});
+        },
+        clearFilter(key){
+            if(!isIndexVisible()){ return; }
+            if(key==="all"){ global.applyCollectionsIndexState({genre:"",decade:"",sort:"popularity.desc",page:1}); }
+            else if(["query","genre","decade","sort"].includes(key)){ global.applyCollectionsIndexState({[key]:key==="sort"?"popularity.desc":"",page:1}); }
+        },
+        viewMore(){
+            if(isIndexVisible()){ global.applyCollectionsIndexState({page:Math.max(1,Math.floor(Number(global.collectionsPageState.page || 1)))+1}); }
+        }
+    });
+
     function isCollectionVisible(id){
         return global.activePage === "collection-detail" && String(global.selectedCollectionId || "") === String(id);
     }
@@ -540,6 +626,10 @@ const COLLECTION_DETAIL_SORT_OPTIONS = Object.freeze([
     });
 
     global.TVTrackerDiscoverVueBridge = Object.freeze({
+        attachIndexOwner,
+        renderIndex,
+        buildIndexModel,
+        indexActions,
         attachCollectionOwner,
         renderCollection,
         buildCollectionModel,
