@@ -2,6 +2,10 @@
 
 ## September 2026 continuation
 
+The second service cleanup is recorded in `FRONTEND_SERVICE_CLEANUP_2026-09.md`.
+It removes 87 disconnected functions while retaining native backup compatibility
+and active Profile/Episode rendering. The full ownership exit gate remains open.
+
 The first final-audit cleanup removes 80 disconnected functions. See
 `FRONTEND_OWNERSHIP_CLEANUP_2026-09.md` for the reviewed removal list and retained
 Profile/Episode/service boundaries. The full function classification is still open.
