@@ -3,7 +3,9 @@
 ## Scope and baseline
 
 Baseline: `b413996339c2cd50dbebad3e5dc3e1dd89acb37c` (PR #143).
-This continues Sprint 3 after the first 80-function removal. The remaining
+This continues Sprint 3 after the first 80-function removal. PR #144 then removed
+four of these 87 controls and merged as `2758af885c5b1ea4ff502fd690ee93283a26760c`;
+this branch incorporates that main, leaving 83 additional functions to remove. The remaining
 staged cleanup was recovered and reviewed against the current main commit.
 
 This slice removes 87 disconnected app functions and three unconsumed transient
@@ -50,6 +52,11 @@ and unsupported envelopes, old imported records, exact established projection,
 server acknowledgement timing and rejected restore isolation. All 49 source
 contracts and both final TVmaze contracts pass. TypeScript, Vite and Tailwind
 builds pass and reproduce the committed assets with no generated diff.
+
+The initial full CI run found a stale source assertion for the removed, uncalled
+`isCaughtUp` helper. The contract now checks the native Watchlist loggability path
+and canonical release-moment comparison, with the existing before/after-release
+behavior regression retained.
 
 Full PostgreSQL/Chrome regression and dependency security gates must run on the
 exact PR head in CI before merge. The local runtime has no Flask/psycopg, PostgreSQL

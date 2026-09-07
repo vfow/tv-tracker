@@ -47,6 +47,14 @@ which is distinct from ownership of the Episode page renderer.
 
 ## Removed functions
 
+PR #144 subsequently removed four disconnected metadata-sync Settings controls:
+the summary reader and pause/continue/retry entry points had no shipped caller
+after the Settings migration. At that checkpoint the compatible JSON importer
+still referenced the queue runner, so its dependencies remained. The broader
+caller review is recorded in `FRONTEND_SERVICE_CLEANUP_2026-09.md`; it establishes
+that the importer itself has no remaining shipped entry point. Network metadata
+refresh is a separate live Profile Stats service and remains unchanged.
+
 | Source | Removed function |
 | --- | --- |
 | `static/js/app.js` | `loadDiscoverPreviewSeason` |

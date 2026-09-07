@@ -43,8 +43,14 @@ class ReleaseTimingUIContracts(unittest.TestCase):
         self.assertIn("function formatAirDate(dateString,episodeInfo=null,showInfo=null)", self.app)
         self.assertIn("getEpisodeReleaseTimeText(\n        dateString,\n        episodeInfo,\n        showInfo", self.app)
 
-    def test_caught_up_status_uses_release_moment(self):
-        self.assertIn("const releaseDate = makeEpisodeReleaseDate(\n        nextEp.air_date,\n        nextEp,\n        show", self.app)
+    def test_watching_availability_uses_canonical_release_moment(self):
+        # The removed isCaughtUp helper had no runtime caller. The native
+        # Watchlist delegates availability to the live loggability service.
+        self.assertIn("global.isEpisodeLoggable(nextEp,show,nextEp.season)", self.tracker_lists)
+        start = self.app.index("function isEpisodeAired(")
+        end = self.app.index("function getEpisodeNumberFromInfo(", start)
+        self.assertIn("makeEpisodeReleaseDate(\n        airDateString,\n        episodeInfo,\n        showInfo", self.app[start:end])
+        self.assertIn("return new Date() >= releaseDate", self.app[start:end])
 
     def test_timing_prefetch_refreshes_existing_active_surfaces(self):
         self.assertIn('refreshCallback("timing")', self.release)
