@@ -3403,237 +3403,6 @@ async function openDiscoverShowModal(searchShow){
     });
 }
 
-async function loadDiscoverPreviewSeason(show,seasonNumber){
-    if(!show || !canUseTMDBShow(show)){
-        return;
-    }
-
-    const previewId = String(show.tmdb_id);
-
-    try{
-        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
-
-        if(
-            discoverPreviewShow &&
-            String(discoverPreviewShow.tmdb_id) === previewId
-        ){
-            renderDiscoverShowModalPreservingScroll(show);
-        }
-    }catch(error){
-        if(
-            discoverPreviewShow &&
-            String(discoverPreviewShow.tmdb_id) === previewId
-        ){
-            showToast("Could not load that season");
-            renderDiscoverShowModalPreservingScroll(show);
-        }
-    }
-}
-
-async function toggleDiscoverPreviewSeason(show,seasonNumber){
-    if(!show || !Number.isFinite(Number(seasonNumber))){
-        return;
-    }
-
-    const previewKey = "discover-" + String(show.tmdb_id || "preview");
-
-    if(!expandedSeasons[previewKey]){
-        expandedSeasons[previewKey] = {};
-    }
-
-    const key = String(seasonNumber);
-    const willOpen = !expandedSeasons[previewKey][key];
-    expandedSeasons[previewKey][key] = willOpen;
-    renderDiscoverShowModalPreservingScroll(show);
-
-    if(willOpen && !seasonDataAlreadyLoaded(show,seasonNumber,false)){
-        await loadDiscoverPreviewSeason(show,seasonNumber);
-    }
-}
-
-
-
-async function addDiscoverPreviewShow(status){
-
-    if(!discoverPreviewShow){
-        return;
-    }
-
-    try{
-
-        const showObject = discoverPreviewShow;
-
-        await savePreparedShow(showObject,status);
-
-    }catch(error){
-
-        showToast(error.message || "Network error");
-
-    }
-
-}
-
-
-
-async function addDiscoverSeasonAsWatched(showId,season){
-    const show = discoverPreviewShow;
-    const seasonNumber = Number(season);
-
-    if(
-        !show ||
-        String(show.tmdb_id) !== String(showId) ||
-        !Number.isFinite(seasonNumber)
-    ){
-        return;
-    }
-
-    try{
-        await ensureSeasonLoaded(show,seasonNumber,false,{skipSave:true});
-
-        const newlyMarkedEpisodes = getAiredUnwatchedEpisodesInSeason(
-            show,
-            seasonNumber
-        );
-
-        if(newlyMarkedEpisodes.length === 0){
-            showToast("No aired episodes to log");
-            return;
-        }
-
-        show.status = "watching";
-        show.was_unreleased_when_added = false;
-        show.completed_at = "";
-        DATA.shows[String(show.tmdb_id)] = show;
-
-        markEpisodesWatchedInSeason(show,seasonNumber,newlyMarkedEpisodes);
-        const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
-        await autoCompleteShowAfterLogging(show);
-
-        discoverPreviewShow = null;
-        selectedShowId = String(show.tmdb_id);
-        selectedEpisodeContext = null;
-        expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
-
-        refreshAfterLocalShowChange(show.tmdb_id,true);
-        renderShowModalPreservingScroll(show);
-        showToast(
-            "Marked " + newlyMarkedEpisodes.length +
-            (newlyMarkedEpisodes.length === 1 ? " episode" : " episodes") +
-            " watched in Season " + seasonNumber
-        );
-
-        await waitForNextPaint();
-        await saveShowMutation(show.tmdb_id,addedEntries,[]);
-    }catch(error){
-        showToast(error.message || "Could not log season");
-    }
-}
-
-
-async function addDiscoverEpisodeAsWatched(showId,season,episode){
-    const show = discoverPreviewShow;
-    const seasonNumber = Number(season);
-    const episodeNumber = Number(episode);
-
-    if(
-        !show ||
-        String(show.tmdb_id) !== String(showId) ||
-        !Number.isFinite(seasonNumber) ||
-        !Number.isFinite(episodeNumber)
-    ){
-        return;
-    }
-
-    try{
-        for(let seasonToLoad = 1; seasonToLoad <= seasonNumber; seasonToLoad++){
-            await ensureSeasonLoaded(show,seasonToLoad,false,{skipSave:true});
-        }
-
-        const episodeData = getEpisodeData(show,seasonNumber,episodeNumber);
-
-        if(!isEpisodeAired(episodeData.air_date,episodeData,show)){
-            showToast("This episode has not aired yet");
-            return;
-        }
-
-        const newlyMarkedEpisodes = await getEpisodesToBeMarked(
-            show,
-            seasonNumber,
-            episodeNumber
-        );
-
-        show.status = "watching";
-        show.was_unreleased_when_added = false;
-        show.completed_at = "";
-        DATA.shows[String(show.tmdb_id)] = show;
-
-        markEpAndPrevious(show.tmdb_id,seasonNumber,episodeNumber);
-        const addedEntries = addHistoryEntries(show,newlyMarkedEpisodes);
-        await autoCompleteShowAfterLogging(show);
-
-        discoverPreviewShow = null;
-        selectedShowId = String(show.tmdb_id);
-        selectedEpisodeContext = null;
-        expandedSeasons[selectedShowId] = {[String(seasonNumber)]:true};
-
-        refreshAfterLocalShowChange(show.tmdb_id,true);
-        renderShowModalPreservingScroll(show);
-        showToast(
-            newlyMarkedEpisodes.length > 0
-            ? getWatchedMessage(show,newlyMarkedEpisodes)
-            : show.title + " added to Watching"
-        );
-
-        await waitForNextPaint();
-        await saveShowMutation(show.tmdb_id,addedEntries,[]);
-    }catch(error){
-        showToast(error.message || "Could not add and mark episode");
-    }
-}
-
-
-async function handleAddShowClick(searchShow){
-
-    try{
-
-        if(DATA.shows[String(searchShow.id)]){
-
-            showToast("Already added");
-            return;
-
-        }
-        const details = await tmdbGetShowDetails(searchShow.id);
-        const showObject = createShowObject(details,"plan");
-        await loadSeasonData(showObject,1);
-
-        const released = hasAnyAiredEpisode(showObject);
-
-        if(!released){
-
-            showObject.was_unreleased_when_added = true;
-
-            await savePreparedShow(showObject,"plan");
-
-            return;
-
-        }
-
-        pendingShow = showObject;
-
-        openStatusPopup(showObject);
-
-    }catch(error){
-
-        showToast(error.message || "Network error");
-
-    }
-
-}
-
-
-
-
-
 async function savePreparedShow(showObject,status){
 
     const released = hasAnyAiredEpisode(showObject);
@@ -10518,14 +10287,6 @@ async function openEpisodeModal(showId,season,episode,options={}){
     }
 }
 
-async function openDiscoverEpisodeModal(showId,season,episode){
-    return openEpisodeModal(showId,season,episode,{
-        backToShow:true,
-        discoverPreview:true
-    });
-}
-
-
 async function removeShow(showId){
 
     const show = DATA.shows[String(showId)];
@@ -13747,16 +13508,20 @@ function getMovieHistoryId(movieId){
 }
 
 function isMovieHistoryEntry(entry,movieId=""){
-    if(!entry || typeof entry !== "object"){
+    if(!isMovieHistoryRecord(entry)){
         return false;
     }
-    const mediaType = String(entry.media_type || entry.type || "").toLowerCase();
+    // Classification without a target preserves older/unknown movie records.
+    if(arguments.length < 2){
+        return true;
+    }
     const id = normalizeMovieTrackingId(movieId);
-    const entryId = normalizeMovieTrackingId(entry.movie_id || (mediaType === "movie" ? entry.tmdb_id : ""));
-    if(mediaType !== "movie" && !entry.movie_id){
+    if(!id){
         return false;
     }
-    return id ? entryId === id : !!entryId;
+    const mediaType = cleanString(entry.media_type || entry.type).toLowerCase();
+    const entryId = normalizeMovieTrackingId(entry.movie_id || (mediaType === "movie" ? entry.tmdb_id : ""));
+    return entryId === id;
 }
 
 function removeMovieHistoryEntries(movieId){
@@ -17623,10 +17388,6 @@ function exportHTMLReport(){
 }
 
 const FRONTEND_SCHEMA_VERSION = 5;
-
-function isMovieHistoryEntry(entry){
-    return isMovieHistoryRecord(entry);
-}
 
 function suspiciousHistoryReferences(data){
     const source = data && typeof data === "object" ? data : {};

@@ -99,3 +99,27 @@ Person PR #140 merged as `74cc8cf55114bb199bf622f4df1747c770762581`.
 CI `34099185970` and deployment `34099443558` passed, including restart and
 SHA-aware public health. Collections index live search, detail navigation and Back
 restored `/app/collections?q=Dark%20Knight` with its two matches.
+
+
+## September 7 — Movie fix and Browse release verified
+
+PR #141 merged as `778d4e99b0fd52980171014e12bda1a1bc7f49c5`.
+CI `34100315105` and deploy `34100536461` passed. Live Dark Knight Cast showed
+Christian Bale/Bruce Wayne and the other actors visibly; Crew showed Christopher
+Nolan/Director. The director link opened native Person details, and switching to
+TV removed the unsupported Director filter and preserved the canonical TV URL.
+This closes the movie-panel visibility finding above.
+
+PR #142 passed CI `34101242078` (471 Python tests, 81 JavaScript files, real Chrome
+fixtures, build and dependency gates) and merged as
+`80c73bc81773176002f2dd91f6540e22ea219570`. Deploy `34127601487`, job
+`101759853463`, passed full regressions, provenance, deployment, restart and
+merged-SHA public health. The live Browse Movies page rendered results with
+`runtime=150-179`. Searching countries for `uk` exposed United Kingdom; selecting
+it retained runtime and added `country=gb`. Inception opened from those results;
+its Back button restored the exact filtered Browse URL and visible heading.
+
+Remaining: final ownership classification/removal, fresh whole-system audit and
+additional torture exercises, formal responsive acceptance, full authenticated
+production acceptance, documentation and observability release gates. The earlier
+roadmap notes are historical progress entries, not current completion claims.

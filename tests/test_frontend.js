@@ -35,7 +35,7 @@ const upcomingNotificationsVue = fs.readFileSync('frontend/src/upcoming-notifica
 const upcomingVueBridge = fs.readFileSync('static/js/upcoming-notifications-vue-bridge.js','utf8');
 const db = fs.readFileSync('static/js/db.js','utf8');
 
-assert(ui.includes('function renderTrackerListSkeletonRows(count=5,label="Loading",options={})'));
+assert(!ui.includes('function renderTrackerListSkeletonRows('));
 assert(!ui.includes('renderUpcomingMediaRowSkeletonHTML'));
 assert(!ui.includes('renderUpcomingSkeletonHTML'));
 assert(!ui.includes('function renderHistorySkeletonHTML()'));
@@ -65,7 +65,8 @@ assert(tmdb.includes('The key is held by Flask'));
 assert(!ui.includes('TVTrackerStaticAdapter'));
 assert(ui.includes('function safeExternalURL'));
 assert(searchResultsVue.includes('data-person-role="person"'));
-assert(ui.includes('const homepageURL = show ? safeExternalURL(show.homepage) : "";'));
+assert(fs.readFileSync('static/js/show-details-vue-bridge.js','utf8').includes('global.safeExternalURL(show && show.homepage)'));
+assert(fs.readFileSync('static/js/movie-details-vue-bridge.js','utf8').includes('global.safeExternalURL(movie && movie.homepage)'));
 assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
 assert(ui.includes('for="library-year-filter">Year</label>'));
 assert(ui.includes('setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter())'));

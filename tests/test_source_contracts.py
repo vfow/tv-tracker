@@ -50,7 +50,11 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('async function verifyRegularEpisodeCompletionData(show)', app_js)
         self.assertIn('function hasKnownFutureRegularEpisode(show)', app_js)
         self.assertIn('function reopenCompletedShowAfterUnwatch(show,seasonNumber)', app_js)
-        self.assertEqual(app_js.count('await autoCompleteShowAfterLogging(show);'), 5)
+        # The three live logging services retain completion semantics.
+        # Two former Discover-preview callers were unreachable and removed.
+        for name in ('updateEpisodeWatched', 'markSeasonWatchedLegacyFlow', 'markNextEpisode'):
+            body = re.split(r'\n(?:async )?function ', app_js.split('function ' + name + '(', 1)[1], maxsplit=1)[0]
+            self.assertIn('await autoCompleteShowAfterLogging(show);', body)
         self.assertEqual(app_js.count('reopenCompletedShowAfterUnwatch(show,'), 3)
         self.assertIn('show.status === "paused"', app_js)
         self.assertIn('show.status === "dropped"', app_js)
@@ -290,7 +294,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('getNavigationFallbackRoute', app_js)
         self.assertIn('renderTrackerDetailSkeletonHTML', ui)
         self.assertIn('renderTrackerEpisodeSkeletonHTML', ui)
-        self.assertIn('renderTrackerPosterSkeletonCards', ui)
+        self.assertNotIn('renderTrackerPosterSkeletonCards', ui)
+        self.assertIn('tt-skeleton-poster-card', self.read('frontend/src/search-discover/BrowseListing.vue'))
         self.assertIn('tt-detail-skeleton', css)
         self.assertIn('tt-episode-skeleton', css)
         self.assertIn('route-error-hero', css)
@@ -358,7 +363,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         routes = self.read('tvtracker/web/routes.py')
         ui = self.read('static/js/ui.js')
         self.assertIn('function safeExternalURL', ui)
-        self.assertIn('const homepageURL = show ? safeExternalURL(show.homepage) : "";', ui)
+        self.assertIn('global.safeExternalURL(show && show.homepage)', self.read('static/js/show-details-vue-bridge.js'))
+        self.assertIn('global.safeExternalURL(movie && movie.homepage)', self.read('static/js/movie-details-vue-bridge.js'))
         self.assertNotIn('href="${escapeHTML(show.homepage)}"', ui)
         self.assertIn('"script-src \'self\'"', routes)
         self.assertIn('"style-src \'self\' \'unsafe-inline\'"', routes)
@@ -402,7 +408,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('search/collection', app_js)
         self.assertIn('tmdbSearchCollectionsPage', app_js)
         self.assertIn('data-collection-search', self.read('frontend/src/search-discover/CollectionsIndex.vue'))
-        self.assertIn('renderMovieTitleWithAdultBadgeHTML', ui)
+        self.assertNotIn('renderMovieTitleWithAdultBadgeHTML', ui)
+        self.assertIn('v-if="item.adult"', self.read('frontend/src/search-discover/BrowseListing.vue'))
         self.assertIn('adult-movie-badge', css)
         self.assertIn('adult-movie-badge', search_vue)
         self.assertIn('"person","collection"', app_js)
@@ -578,7 +585,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         details_block = panels[details_start:panels.index('function genreChip(genre)', details_start)]
 
         self.assertNotIn('function renderMovieCompanyLogosHTML', ui)
-        self.assertIn('function renderCompanyLogoTilesHTML(companies,media="tv")', ui)
+        self.assertNotIn('function renderCompanyLogoTilesHTML(', ui)
+        self.assertIn('function companyNodes(movie)', panels)
         self.assertIn('movie-info-tagline', info_block)
         self.assertIn('movie.overview || "Unknown"', info_block)
         self.assertNotIn('renderMovieGenresHTML(movie)', info_block)
@@ -612,7 +620,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('function renderCrewJobGroupsHTML(source,media="tv",emptyText="Unknown")', ui)
         self.assertIn('movie-crew-department-list', source_css)
         self.assertIn('movie-crew-department-list', built_css)
-        self.assertIn('function renderCompanyLogoTilesHTML(companies,media="tv")', ui)
+        self.assertNotIn('function renderCompanyLogoTilesHTML(', ui)
+        self.assertIn('function companyNodes(movie)', panels)
         self.assertIn('function buildCompanyDetails(show)', show_detail_block)
         self.assertIn('global.getCompanyDetailRoute(id,name,"tv")', show_detail_block)
         self.assertIn('background:#f3f3f3;', source_css)
@@ -713,8 +722,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
             )
         self.assertIn('font:inherit;', source_css)
         self.assertIn('font:inherit;', built_css)
-        self.assertIn('margin-top:22px;', source_css)
-        self.assertIn('margin-top:22px;', built_css)
+        for css in (source_css, built_css):
+            self.assert_css_rule_has(css, '.show-genres-tab-section', 'margin-top:22px')
 
 
     def test_movie_genres_people_media_and_discover_gradients_exist(self):
@@ -774,7 +783,8 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn(r'/app\/language\/(tv|movie)', router)
         self.assertIn(r'/app\/country\/(tv|movie)', router)
         self.assertIn(r'/app\/year\/(tv|movie)', router)
-        self.assertIn('data-discovery-media="${escapeHTML(media)}"', ui)
+        self.assertIn('"data-discovery-media":media', show_details_bridge)
+        self.assertIn('"data-discovery-media":media', self.read('static/js/movie-details-native-panels.js'))
         self.assertIn('code === original', show_details_bridge)
         self.assertIn('discoveryEntity(label,"language",code', show_details_bridge)
         self.assertIn('movieRoute:route("movie")', self.read('static/js/discover-vue-bridge.js'))
@@ -836,7 +846,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('params.certification_country = "US";', browse)
         routing_63c = self.read('tvtracker/web/routing.py')
         self.assertIn('APP_CERTIFICATION_PATH_RE = re.compile(r"^/app/certification/movie/', routing_63c)
-        self.assertIn('if(media !== "movie")', ui)
+        self.assertIn("state.type==='certification' && media==='tv'", self.read('static/js/discover-vue-bridge.js'))
         self.assertIn('params["first_air_date.gte"] = today;', browse)
         self.assertIn('return "/app/browse/"', browse)
 
@@ -982,7 +992,7 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('href="/app/upcoming"', template)
         self.assertIn('href="/app/history"', template)
         self.assertIn('class="watchlist-card-link"', self.read('frontend/src/tracker-lists/TrackerListsSurface.vue'))
-        self.assertIn('class="app-route-card-link" href=', ui)
+        self.assertIn(':href="item.route"', self.read('frontend/src/search-discover/BrowseListing.vue'))
         self.assertIn('class="genre-result-card search-result-poster-card"', search_vue)
         self.assertIn('class="search-person-card"', search_vue)
         self.assertIn('class="genre-result-card person-result-card"', self.read('frontend/src/search-discover/PersonDetails.vue'))
@@ -1111,12 +1121,12 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('providerGroup("Rent",providers.rent,providers)', show_details_bridge)
         self.assertIn('providerGroup("Buy",providers.buy,providers)', show_details_bridge)
 
-        self.assertIn('function renderFavoriteHeartButtonHTML(active,attributes="")', ui)
-        self.assertIn('Add to favorites', ui)
-        self.assertIn('Remove from favorites', ui)
+        self.assertNotIn('function renderFavoriteHeartButtonHTML(', ui)
+        for bridge in ('show-details-vue-bridge.js', 'movie-details-vue-bridge.js'):
+            self.assertIn('active ? "Remove from favorites" : "Add to favorites"', self.read('static/js/' + bridge))
         self.assertIn('favorite-heart-button', source_css)
         self.assertIn('favorite-heart-button', built_css)
-        self.assertIn('v2-rail-button-icon', ui)
+        self.assertIn('v2-rail-button-icon', show_details_bridge)
 
         self.assertIn('async function refreshOpenTrackedShowMetadata(showId)', app)
         self.assertIn('if(!show || !shouldRefreshShow(show)){ return false; }', app)
@@ -1216,8 +1226,9 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('getCollectionPosterSlots(collection).length >= 1', app_js)
         self.assertIn('if(activePage === "collection-detail")', app_js)
         self.assertIn('applyCollectionDetailFilterState(Object.assign({},current,nextEye));', app_js)
-        self.assertIn('function renderMediaPosterPlaceholderHTML(item,media="movie",extraClass="")', ui)
-        self.assertIn('function renderPosterTitlePlaceholderHTML(item,media="movie",extraClass="")', ui)
+        self.assertNotIn('function renderMediaPosterPlaceholderHTML(', ui)
+        self.assertNotIn('function renderPosterTitlePlaceholderHTML(', ui)
+        self.assertIn('{{ item.placeholderLabel }}', self.read('frontend/src/search-discover/BrowseListing.vue'))
         self.assertIn('function getCollectionPosterSlotsForRender(collection)', ui)
         self.assertIn('collection-stack-placeholder', self.read('frontend/src/search-discover/CollectionsIndex.vue'))
         self.assertNotIn('`<div class="genre-card-placeholder">${mediaType === "movie" ? "MOVIE" : "TV"}</div>`', ui)

@@ -2,6 +2,10 @@
 
 ## September 2026 continuation
 
+The first final-audit cleanup removes 80 disconnected functions. See
+`FRONTEND_OWNERSHIP_CLEANUP_2026-09.md` for the reviewed removal list and retained
+Profile/Episode/service boundaries. The full function classification is still open.
+
 Full-page Trending (`TrendingPage.vue`), Collection Details (`CollectionDetails.vue`),
 and the Collections index (`CollectionsIndex.vue`) now have native composition.
 Their obsolete composers and dedicated legacy binders are removed. The current
