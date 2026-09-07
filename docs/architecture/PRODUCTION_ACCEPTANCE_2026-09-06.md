@@ -82,3 +82,20 @@ is the next native slice under verification. Collections index, Collection
 Details, and full-page Trending are now native. Proven-dead frontend cleanup, fresh whole-system/torture,
 mobile, complete authenticated production, documentation, and observability gates
 remain outstanding. Registration remains closed.
+
+
+## September 7 — Movie panel visibility regression
+
+Live Dark Knight Cast tab contained Christian Bale, Heath Ledger and the remaining
+credits in the DOM, but its ancestor `.v2-show-info-section` computed to
+`display:none`. The same inherited rule hid the native Synopsis, Crew, Details,
+Genres and Releases panels. A scoped movie-panel CSS rule restores their display
+while retaining the old rule for other consumers. The new Chrome fixture loads
+the committed CSS and Vue bundle and checks rendered geometry, selected tabs,
+all six panel contents, and actor/director routes. Exact-head CI and live acceptance
+are required before closing this finding.
+
+Person PR #140 merged as `74cc8cf55114bb199bf622f4df1747c770762581`.
+CI `34099185970` and deployment `34099443558` passed, including restart and
+SHA-aware public health. Collections index live search, detail navigation and Back
+restored `/app/collections?q=Dark%20Knight` with its two matches.

@@ -2864,6 +2864,11 @@
         @apply tw-hidden;
     }
 
+    /* Vue renders only the selected movie panel; it must be visible. */
+    .movie-detail-tab-content .v2-show-info-section{
+        @apply tw-block;
+    }
+
     .v2-more-like-section{
         @apply tw-mt-7;
     }
