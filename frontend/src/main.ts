@@ -12,6 +12,8 @@ import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
 import CollectionDetails from './search-discover/CollectionDetails.vue';
 import CollectionsIndex from './search-discover/CollectionsIndex.vue';
+import PersonDetails from './search-discover/PersonDetails.vue';
+import type { PersonActions, PersonViewModel } from './search-discover/personViewModel';
 import type { CollectionActions, CollectionViewModel, CollectionsIndexActions, CollectionsIndexViewModel } from './search-discover/collectionViewModel';
 import type { DiscoverRendererActions, DiscoverViewModel, TrendingActions, TrendingViewModel } from './search-discover/discoverViewModel';
 import TrendingPage from './search-discover/TrendingPage.vue';
@@ -77,9 +79,13 @@ type DiscoverBridge = Readonly<{
   collectionActions: CollectionActions;
   attachIndexOwner: (owner: CollectionsIndexOwner) => void;
   indexActions: CollectionsIndexActions;
+  attachPersonOwner: (owner: PersonOwner) => void;
+  personActions: PersonActions;
   actions: DiscoverRendererActions;
   trendingActions: TrendingActions;
 }>;
+
+type PersonOwner = Readonly<{render: (model: PersonViewModel) => void; unmount: () => void}>;
 
 type CollectionsIndexOwner = Readonly<{ render: (model: CollectionsIndexViewModel) => void; unmount: () => void }>;
 
@@ -119,6 +125,9 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let personApp: VueApp<Element> | null = null;
+let personRoot: Element | null = null;
+const personModel = shallowRef<PersonViewModel | null>(null);
 let collectionsIndexApp: VueApp<Element> | null = null;
 let collectionsIndexRoot: Element | null = null;
 const collectionsIndexModel = shallowRef<CollectionsIndexViewModel | null>(null);
@@ -167,6 +176,13 @@ function unmountDiscover(): void {
   if (discoverApp) discoverApp.unmount();
   discoverApp = null;
   discoverRoot = null;
+}
+
+function unmountPerson(): void {
+  if (personApp) personApp.unmount();
+  personApp = null;
+  personRoot = null;
+  personModel.value = null;
 }
 
 function unmountCollectionsIndex(): void {
@@ -365,6 +381,27 @@ const collectionsIndexOwner: CollectionsIndexOwner = Object.freeze({
   unmount: unmountCollectionsIndex
 });
 
+const personOwner: PersonOwner = Object.freeze({
+  render(model: PersonViewModel): void {
+    const root = document.getElementById('person-detail-content');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    if (personApp && personRoot === root && root.querySelector('[data-tvtracker-person-owner="vue"]')) {
+      personModel.value = model;
+      return;
+    }
+    unmountPerson();
+    root.replaceChildren();
+    personRoot = root;
+    personModel.value = model;
+    personApp = createApp({setup: () => () => personModel.value ? h(PersonDetails, {
+      key: personModel.value.id, model: personModel.value, actions: bridge.personActions
+    }) : null});
+    personApp.mount(root);
+  },
+  unmount: unmountPerson
+});
+
 const movieDetailsOwner: MovieDetailsVueOwner = Object.freeze({
   render(model: MovieDetailsViewModel): void {
     const root = document.getElementById('show-detail-content');
@@ -465,6 +502,7 @@ window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerDiscoverVueBridge?.attachTrendingOwner?.(trendingOwner);
 window.TVTrackerDiscoverVueBridge?.attachCollectionOwner?.(collectionOwner);
 window.TVTrackerDiscoverVueBridge?.attachIndexOwner?.(collectionsIndexOwner);
+window.TVTrackerDiscoverVueBridge?.attachPersonOwner?.(personOwner);
 window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
 window.TVTrackerMovieDetailsVueBridge?.attachVueOwner(movieDetailsOwner);

@@ -1,5 +1,18 @@
 # Frontend Ownership Audit
 
+## September 2026 continuation
+
+Full-page Trending (`TrendingPage.vue`), Collection Details (`CollectionDetails.vue`),
+and the Collections index (`CollectionsIndex.vue`) now have native composition.
+Their obsolete composers and dedicated legacy binders are removed. The current
+Person slice extends the same Discover bridge with `PersonDetails.vue`; canonical
+credit, tracker, provider, and router services remain authoritative. See each
+surface's `FRONTEND_*_NATIVE*.md` record for its exact boundary and verification.
+
+Browse, Genre/discovery listings, and the final repository-wide ownership audit
+remain. Historical baseline statements below describe earlier states and do not
+authorize rebuilding completed surfaces.
+
 ## Continuation audit — baseline `476a1e9`
 
 The current source supersedes the older baseline notes below. Watchlist, History,

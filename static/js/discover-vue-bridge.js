@@ -33,6 +33,8 @@
         "war":"discover-genre-tone-war"
     });
 
+    let personOwner = null;
+    let lastPersonModel = null;
     let indexOwner = null;
     let lastIndexModel = null;
     let collectionOwner = null;
@@ -250,17 +252,18 @@
     }
 
     function renderLoadFailure(){
+        const person = lastPersonModel && isPersonVisible(lastPersonModel.id);
         const index = lastIndexModel && isIndexVisible();
         const collection = lastCollectionModel && isCollectionVisible(lastCollectionModel.id);
         const trending = lastTrendingModel && isTrendingVisible(lastTrendingModel.key);
-        if(index ? indexOwner : collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
+        if(person ? personOwner : index ? indexOwner : collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.renderSurfaceFailure === "function"){
-            const surface = index ? "collections-index" : collection ? "collection" : trending ? "trending" : "discover";
+            const surface = person ? "person" : index ? "collections-index" : collection ? "collection" : trending ? "trending" : "discover";
             runtime.renderSurfaceFailure({
-                rootId:index || collection || trending ? "genre-detail-content" : "search-results",
+                rootId:person ? "person-detail-content" : index || collection || trending ? "genre-detail-content" : "search-results",
                 marker:"data-tvtracker-" + surface + "-vue-load-failed",
-                title:index ? "Collections unavailable" : collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
+                title:person ? "Person unavailable" : index ? "Collections unavailable" : collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
                 message:"Reload the page to try again."
             });
         }
@@ -414,6 +417,83 @@ const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
     {value:"popularity.asc",label:"Least Popular"}
 ]);
 
+
+
+    function isPersonVisible(id){
+        return global.activePage === "person-detail" && String(global.selectedPersonContext?.personId || "") === String(id);
+    }
+
+    function buildPersonModel(state){
+        const person = state.person;
+        const media = global.normalizePersonMediaType(state.media);
+        const role = global.normalizePersonRoleSlug(state.role);
+        const credits = Array.isArray(state.credits) ? state.credits : [];
+        const visible = global.applyEyeFiltersToItems(credits,media,state);
+        const items = Object.freeze(visible.map(item=>Object.freeze({
+            ...buildTrendingModel({key:"person",media},[item],false,"").items[0],
+            firstAirDate:String(item.first_air_date || ""),
+            roleLabel:String(item.person_role_label || (item.character ? "Actor: "+item.character : item.job || ""))
+        })));
+        const name = String(person?.name || "Person");
+        const routeLabel = String(person?.name || state.routeSlug || "");
+        const route = nextMedia=>global.getPersonDetailRoute(person && !global.personHasRole(person,role,nextMedia) ? "" : role,state.personId,routeLabel,nextMedia,state);
+        const roles = person ? global.getPersonAvailableRoles(person,media) : [];
+        const biography = String(person?.biography || "").trim();
+        const progress = global.getPersonProgressSummary(state);
+        return Object.freeze({
+            id:String(state.personId || ""),name,role,media,
+            bodyState:state.error ? "error" : items.length ? "ready" : state.loading ? "loading" : "empty",
+            error:String(state.error || ""),items,
+            emptyTitle:credits.length ? "No results found" : media === "movie" ? "No movies found" : "No shows found",
+            emptyMessage:credits.length ? "" : "Try switching the media filter.",
+            tvRoute:route("tv"),movieRoute:route("movie"),
+            roles:Object.freeze([Object.freeze({value:"",label:"All Roles",selected:!role}),...roles.map(item=>Object.freeze({value:item.key,label:item.label,selected:item.key===role}))]),
+            eyes:Object.freeze(global.createEyeFilterState(state)),
+            profile:person ? Object.freeze({photoUrl:imageURL(person.profile_path,"h632"),biography:biography || "No biography available yet.",longBio:biography.length>260,watched:progress.watched,total:progress.total,percent:Math.max(0,Math.min(100,progress.percent))}) : null
+        });
+    }
+
+    function renderPerson(state){
+        if(!state || !isPersonVisible(state.personId)){ return; }
+        lastPersonModel = buildPersonModel(state);
+        if(personOwner){ personOwner.render(lastPersonModel); }
+        else{ void loadVueDiscover(); }
+        global.ensureBrowseGlobalInteractionEvents();
+    }
+
+    function attachPersonOwner(owner){
+        if(!owner || typeof owner.render!=="function" || typeof owner.unmount!=="function"){ throw new TypeError("Invalid Vue person owner"); }
+        personOwner=owner;
+        if(lastPersonModel && isPersonVisible(lastPersonModel.id)){ personOwner.render(lastPersonModel); }
+    }
+
+    const personActions = Object.freeze({
+        back(){ global.navigateBackOrRouteFallback("/app/discover"); },
+        async setMedia(value){
+            const state=global.personPageState;
+            if(!isPersonVisible(state.personId)){ return; }
+            const media=global.normalizePersonMediaType(value);
+            if(media===state.media){ return; }
+            const role=state.person && global.personHasRole(state.person,state.role,media) ? state.role : "";
+            await global.openPersonPage(role,state.personId,{media,eyeState:global.createEyeFilterState(state),personName:state.person?.name || state.routeSlug || "",navigationContext:"discover"});
+        },
+        async setRole(value){
+            const state=global.personPageState;
+            if(!isPersonVisible(state.personId)){ return; }
+            const requested=global.normalizePersonRoleSlug(value);
+            const role=state.person && global.personHasRole(state.person,requested,state.media) ? requested : "";
+            if(role===global.normalizePersonRoleSlug(state.role)){ return; }
+            await global.openPersonPage(role,state.personId,{media:state.media,eyeState:global.createEyeFilterState(state),personName:state.person?.name || state.routeSlug || "",navigationContext:"discover"});
+        },
+        async toggleEye(key){
+            if(global.activePage==="person-detail"){ await global.handleEyeFilterToggle(key); }
+        },
+        async openMedia(item){
+            if(!item || !item.id){ return; }
+            if(item.media==="movie"){ await global.openMoviePage(item.id,{movieName:item.name}); }
+            else{ await global.openDiscoverShowModal({id:item.id,name:item.name,poster_path:item.posterPath,overview:item.overview,first_air_date:item.firstAirDate}); }
+        }
+    });
 
     function isIndexVisible(){ return global.activePage === "collections-index"; }
 
@@ -626,6 +706,10 @@ const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
     });
 
     global.TVTrackerDiscoverVueBridge = Object.freeze({
+        attachPersonOwner,
+        renderPerson,
+        buildPersonModel,
+        personActions,
         attachIndexOwner,
         renderIndex,
         buildIndexModel,
