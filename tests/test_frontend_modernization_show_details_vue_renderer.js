@@ -487,6 +487,8 @@ assert(!nodeModelSource.includes('function fragment(html)'));
 assert(nodeModelSource.includes('lower.startsWith("on")'));
 
 const deletedShowComposers = [
+    'renderShowModalPreservingScroll',
+    'renderSeasonEpisodeEmptyStateHTML',
     'getTVStatusSlugFromLabel',
     'renderStatusLinkHTML',
     'renderCompanyLinksHTML',
@@ -521,7 +523,6 @@ deletedShowComposers.forEach(name=>{
 
 const liveUiBoundaries = [
     'renderShowDetailsPagePreservingScroll',
-    'renderShowModalPreservingScroll',
     'renderShowModal',
     'attachShowDetailsPageEvents',
     'attachV2ShowModalEvents',
@@ -532,8 +533,7 @@ const liveUiBoundaries = [
     'getShowGenreRoute',
     'collectCrewJobGroups',
     'getCrewRouteRole',
-    'normalizeThemeItems',
-    'renderSeasonEpisodeEmptyStateHTML'
+    'normalizeThemeItems'
 ];
 liveUiBoundaries.forEach(name=>{
     assert(ui.includes(`function ${name}(`), `${name} remains an active ui.js boundary`);
