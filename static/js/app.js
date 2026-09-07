@@ -1805,35 +1805,6 @@ function queueCompatibleMetadataSync(targetData){
 
 
 
-function getMetadataSyncSummary(){
-
-    ensureMetadataSyncData();
-
-    const sync = DATA.metadata_sync;
-    const total = Number(sync.total || 0);
-    const completed = Number(sync.completed || 0);
-    const pending = Array.isArray(sync.pending) ? sync.pending.length : 0;
-    const failed = Array.isArray(sync.failed) ? sync.failed.length : 0;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    return {
-        active:sync.active === true,
-        paused:sync.paused === true,
-        running:metadataSyncRunning === true,
-        total:total,
-        completed:completed,
-        pending:pending,
-        failed:failed,
-        current:sync.current || "",
-        percent:Math.max(0,Math.min(100,percent)),
-        lastRun:sync.lastRun || "",
-        lastError:sync.lastError || ""
-    };
-
-}
-
-
-
 async function startMetadataSync(showToastMessage=true){
 
     ensureMetadataSyncData();
@@ -1860,60 +1831,6 @@ async function startMetadataSync(showToastMessage=true){
             renderSettings();
         }
     }
-
-}
-
-
-
-async function pauseMetadataSync(){
-
-    ensureMetadataSyncData();
-    DATA.metadata_sync.paused = true;
-    DATA.metadata_sync.current = "";
-    await saveData();
-    showToast("Metadata sync paused");
-    renderAll();
-
-}
-
-
-
-async function continueMetadataSync(){
-
-    ensureMetadataSyncData();
-    DATA.metadata_sync.paused = false;
-    DATA.metadata_sync.active = (DATA.metadata_sync.pending.length > 0 || DATA.metadata_sync.failed.length > 0);
-    await saveData();
-    renderAll();
-    startMetadataSync(true);
-
-}
-
-
-
-async function retryMetadataSyncFailures(){
-
-    ensureMetadataSyncData();
-
-    const failed = Array.isArray(DATA.metadata_sync.failed) ? DATA.metadata_sync.failed : [];
-
-    if(failed.length === 0){
-        showToast("No failed metadata items");
-        return;
-    }
-
-    const retryIds = failed.map(item=>String(item.showId || item.id || "")).filter(Boolean);
-
-    DATA.metadata_sync.pending = Array.from(new Set(DATA.metadata_sync.pending.concat(retryIds)));
-    DATA.metadata_sync.failed = [];
-    DATA.metadata_sync.active = DATA.metadata_sync.pending.length > 0;
-    DATA.metadata_sync.paused = false;
-    DATA.metadata_sync.total = Math.max(DATA.metadata_sync.total || 0, DATA.metadata_sync.completed + DATA.metadata_sync.pending.length);
-    DATA.metadata_sync.lastError = "";
-
-    await saveData();
-    renderAll();
-    startMetadataSync(true);
 
 }
 
