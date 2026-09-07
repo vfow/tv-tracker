@@ -45,6 +45,13 @@ Episode details remain active legacy surfaces and must not be described as Vue
 pages or deleted as dead code. Episode watched interactions have a Vue controller,
 which is distinct from ownership of the Episode page renderer.
 
+The follow-up audit removed four disconnected metadata-sync Settings controls:
+the summary reader and pause/continue/retry entry points had no shipped caller
+after the Settings migration. The compatible JSON importer still calls the queue
+runner, so that runner and all of its import, persistence, remapping, and recovery
+dependencies remain intact. Network metadata refresh is a separate live Profile
+Stats service and is unchanged.
+
 ## Removed functions
 
 | Source | Removed function |
