@@ -84,7 +84,11 @@ const removed = [
     "openStatusPopup",
     "renderMetadataSyncPanel",
     "renderCompatibleImportPreviewHTML",
-    "renderCompatibleCSVPreviewHTML"
+    "renderCompatibleCSVPreviewHTML",
+    "getMetadataSyncSummary",
+    "pauseMetadataSync",
+    "continueMetadataSync",
+    "retryMetadataSyncFailures"
 ];
 function walk(dir) {
     return fs.readdirSync(dir, {withFileTypes:true}).flatMap(entry => {
