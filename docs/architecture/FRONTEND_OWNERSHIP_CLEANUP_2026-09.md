@@ -137,3 +137,18 @@ following the removals. The new absence regression checks the entire shipped sou
 set. TypeScript, production Vue/Tailwind builds and exact-head CI remain mandatory
 before merge; deployment and production checks are recorded in the acceptance log.
 This is a cleanup slice, not closure of Sprint 3 or final release acceptance.
+
+## Serious finding: duplicate movie History matcher
+
+The complete shipped app declared `isMovieHistoryEntry` twice. The last declaration
+ignored the target movie ID, so `addMovieHistoryEntry` and `removeMovieHistoryEntries`
+could return deletion IDs for every movie, including unrelated/unknown old records.
+A whole-app synthetic regression reproduced this before repair. One matcher now
+preserves broad classification when no target is supplied and requires a valid,
+matching canonical ID for targeted mutation. Empty/invalid mutation targets are
+no-ops. The exported integrity API references that same single definition.
+
+The regression adds/rewatches one movie, removes it, and checks exact preservation
+of other movies, TV, specials and unknown old records. It also rejects a duplicate
+global matcher declaration. No real production History is changed by this test or
+repaired speculatively; any prior data loss would require separate evidence/restore.

@@ -13508,16 +13508,20 @@ function getMovieHistoryId(movieId){
 }
 
 function isMovieHistoryEntry(entry,movieId=""){
-    if(!entry || typeof entry !== "object"){
+    if(!isMovieHistoryRecord(entry)){
         return false;
     }
-    const mediaType = String(entry.media_type || entry.type || "").toLowerCase();
+    // Classification without a target preserves older/unknown movie records.
+    if(arguments.length < 2){
+        return true;
+    }
     const id = normalizeMovieTrackingId(movieId);
-    const entryId = normalizeMovieTrackingId(entry.movie_id || (mediaType === "movie" ? entry.tmdb_id : ""));
-    if(mediaType !== "movie" && !entry.movie_id){
+    if(!id){
         return false;
     }
-    return id ? entryId === id : !!entryId;
+    const mediaType = cleanString(entry.media_type || entry.type).toLowerCase();
+    const entryId = normalizeMovieTrackingId(entry.movie_id || (mediaType === "movie" ? entry.tmdb_id : ""));
+    return entryId === id;
 }
 
 function removeMovieHistoryEntries(movieId){
@@ -17384,10 +17388,6 @@ function exportHTMLReport(){
 }
 
 const FRONTEND_SCHEMA_VERSION = 5;
-
-function isMovieHistoryEntry(entry){
-    return isMovieHistoryRecord(entry);
-}
 
 function suspiciousHistoryReferences(data){
     const source = data && typeof data === "object" ? data : {};

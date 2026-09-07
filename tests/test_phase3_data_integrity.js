@@ -21,6 +21,9 @@ const OWNERSHIP_REGION = (()=>{
 
 const SCATTERED_OWNERS = extractFunctions(appSource, [
   "getHistoryIdsForSeason",
+  "isMovieHistoryEntry",
+  "normalizeMovieTrackingId",
+  "normalizeRouteId",
   "moveShowStorageKey",
   "markSeasonWatched",
   "unwatchFullyWatchedSeason",
