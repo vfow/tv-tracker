@@ -67,7 +67,7 @@ document.querySelector('[data-person-role-filter="director"]').click();await flu
 check(count()===1&&document.body.dataset.route.includes('role=director'),'role filter route');
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedMovie==='1','open movie');
 document.querySelector('[data-person-media="tv"]').click();await flush();
-check(count()===1&&document.body.dataset.route.includes('media=tv'),'TV switch');
+check(count()===1&&document.body.dataset.route==='/app/person/10-synthetic-person'&&document.querySelector('[data-person-media="tv"]').getAttribute('aria-selected')==='true','TV switch and canonical default route');
 check(!document.body.dataset.route.includes('role=director'),'unsupported role cleared');
 check(!!document.querySelector('.person-profile-bio-wrap.is-expanded'),'biography stays expanded during filtering');
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedShow==='3','open TV preview');
@@ -112,7 +112,7 @@ document.body.dataset.failures=JSON.stringify(failures);
                     f"--user-data-dir={profile}", "--dump-dom", f"http://127.0.0.1:{server.server_port}/fixture",
                 ], capture_output=True, text=True, timeout=25, check=False)
             self.assertEqual(result.returncode, 0, result.stderr[-2000:])
-            self.assertIn('data-acceptance="ready"', result.stdout, result.stdout[:3500])
+            self.assertTrue('data-acceptance="ready"' in result.stdout, result.stdout[:3500])
             self.assertIn('data-tvtracker-person-owner="vue"', result.stdout)
             self.assertIn('data-failures="[]"', result.stdout)
         finally:
