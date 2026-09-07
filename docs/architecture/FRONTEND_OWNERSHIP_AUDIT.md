@@ -9,8 +9,10 @@ Person slice extends the same Discover bridge with `PersonDetails.vue`; canonica
 credit, tracker, provider, and router services remain authoritative. See each
 surface's `FRONTEND_*_NATIVE*.md` record for its exact boundary and verification.
 
-Browse, Genre/discovery listings, and the final repository-wide ownership audit
-remain. Historical baseline statements below describe earlier states and do not
+Browse and Genre/discovery listings now use `BrowseListing.vue`,
+`BrowseControls.vue` and `BrowsePicker.vue` through the same bridge. Their replaced
+composers, binders and picker/year DOM mutation paths are removed. The final
+repository-wide ownership audit remains. Historical baseline statements below describe earlier states and do not
 authorize rebuilding completed surfaces.
 
 ## Continuation audit — baseline `476a1e9`

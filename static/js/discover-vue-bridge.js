@@ -252,18 +252,19 @@
     }
 
     function renderLoadFailure(){
+        const listing = lastListingModel && listingKind();
         const person = lastPersonModel && isPersonVisible(lastPersonModel.id);
         const index = lastIndexModel && isIndexVisible();
         const collection = lastCollectionModel && isCollectionVisible(lastCollectionModel.id);
         const trending = lastTrendingModel && isTrendingVisible(lastTrendingModel.key);
-        if(person ? personOwner : index ? indexOwner : collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
+        if(listing ? listingOwner : person ? personOwner : index ? indexOwner : collection ? collectionOwner : trending ? trendingOwner : (vueOwner || !isHubVisible())){ return; }
         const runtime = global.TVTrackerClientRuntime;
         if(runtime && typeof runtime.renderSurfaceFailure === "function"){
-            const surface = person ? "person" : index ? "collections-index" : collection ? "collection" : trending ? "trending" : "discover";
+            const surface = listing ? "browse-listing" : person ? "person" : index ? "collections-index" : collection ? "collection" : trending ? "trending" : "discover";
             runtime.renderSurfaceFailure({
-                rootId:person ? "person-detail-content" : index || collection || trending ? "genre-detail-content" : "search-results",
+                rootId:listing ? "genre-detail-content" : person ? "person-detail-content" : index || collection || trending ? "genre-detail-content" : "search-results",
                 marker:"data-tvtracker-" + surface + "-vue-load-failed",
-                title:person ? "Person unavailable" : index ? "Collections unavailable" : collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
+                title:listing ? "Browse unavailable" : person ? "Person unavailable" : index ? "Collections unavailable" : collection ? "Collection unavailable" : trending ? "Trending unavailable" : "Discover unavailable",
                 message:"Reload the page to try again."
             });
         }
@@ -466,6 +467,114 @@ const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
         personOwner=owner;
         if(lastPersonModel && isPersonVisible(lastPersonModel.id)){ personOwner.render(lastPersonModel); }
     }
+
+    let listingOwner = null;
+    let listingMediaRequestId = 0;
+    let lastListingModel = null;
+    function listingKind(){ return ({'browse-detail':'browse','genre-detail':'genre','discovery-detail':'discovery'})[global.activePage] || ''; }
+    function listingState(kind){ return kind === 'browse' ? global.browsePageState : kind === 'genre' ? global.genrePageState : global.discoveryPageState; }
+    function buildBrowseControls(filters,labels,hideSort){
+        const state=global.createBrowseFilterState(filters.media,filters), media=state.media;
+        const references=global.browseOptionState || {};
+        const choice=(key,value,label,multi=false,extra={})=>Object.freeze({key,value:String(value),label:String(label),multi,selected:multi ? state[key].includes(String(value)) : String(state[key] || '')===String(value),...extra});
+        const named=(key,id,fallback)=>global.getBrowseLabel(labels,key,id,fallback);
+        const menu=(key,label,choices,empty='',searchLabel='')=>Object.freeze({key,label,choices:Object.freeze(choices),empty,searchLabel});
+        const genres=global.getBrowseGenreOptions(media);
+        const menus=[menu('genre','GENRE',genres.map(item=>choice('genres',item.id,item.name,true)),'Genres are loading…')];
+        for(const [key,label,items] of [['country','COUNTRY',references.countries],['language','LANGUAGE',references.languages]]){
+            menus.push(menu(key,label,[choice(key,'','Any'),...(items || []).map(item=>choice(key,item.code,item.name,false,{search:`${item.name} ${item.code}${key==='country' && item.code.toLowerCase()==='gb' ? ' uk great britain britain' : ''}`}))],`${label==='COUNTRY' ? 'Countries' : 'Languages'} are loading…`,`Search ${key==='country' ? 'countries' : 'languages'}`));
+        }
+        menus.push(menu('service','SERVICE',global.getBrowseServiceOptions(media).filter(item=>(item.id || item.provider_id)&&(item.name || item.provider_name)).map(item=>{
+            const id=String(item.id || item.provider_id), name=String(item.name || item.provider_name);
+            return choice('providers',id,named('providers',id,name),true,{logo:imageURL(item.logo_path,'w92'),search:name});
+        }),'Streaming services are loading…','Search streaming services'));
+        const ranges=global.TVTrackerBrowse?.RUNTIME_RANGES?.[media] || {};
+        menus.push(menu('runtime','RUNTIME',[choice('runtime','','Any'),...Object.entries(ranges).map(([key,value])=>choice('runtime',key,value.label || key))]));
+        if(!hideSort){const date=media==='movie'?'Release Date':'First Air Date';menus.push(menu('sort','SORT',[
+            ['popularity-desc','Popularity — High to Low'],['popularity-asc','Popularity — Low to High'],['rating-desc','Rating — High to Low'],['rating-asc','Rating — Low to High'],['date-desc',`${date} — Newest`],['date-asc',`${date} — Oldest`]
+        ].map(([value,label])=>choice('sort',value,label))));}
+        const selectedPickers=Object.freeze({
+            theme:Object.freeze(state.themes.map(id=>choice('themes',id,named('themes',id,'Theme'),true))),
+            company:Object.freeze(state.companies.map(id=>choice('companies',id,named('companies',id,'Production Company'),true))),
+            network:Object.freeze(state.network ? [choice('network',state.network,named('networks',state.network,'Network'))] : [])
+        });
+        const otherChoices=media==='tv' ? [['returning-series','Returning Series'],['in-production','In Production'],['ended','Ended'],['canceled','Canceled']].map(([id,label])=>choice('statuses',id,label,true)) : [choice('certification','','Any'),...(references.movieCertifications || []).map(value=>choice('certification',String(value).toLowerCase(),value))];
+        const chips=[];const push=(key,value,label)=>chips.push(choice(key,value,label,Array.isArray(state[key])));
+        if(state.upcoming)push('upcoming','1','Upcoming');
+        if(state.year)push('year',state.year,state.year);else if(state.decade)push('decade',state.decade,state.decade+'s');
+        state.genres.forEach(id=>push('genres',id,named('genres',id,genres.find(item=>String(item.id)===id)?.name || 'Genre')));
+        if(state.country)push('country',state.country,global.getDiscoveryCountryName(state.country));
+        if(state.language)push('language',state.language,global.getLanguageName(state.language));
+        for(const items of Object.values(selectedPickers))items.forEach(item=>chips.push(item));
+        state.providers.forEach(id=>push('providers',id,named('providers',id,'Streaming Service')));
+        if(state.runtime)push('runtime',state.runtime,ranges[state.runtime]?.label || state.runtime);
+        state.statuses.forEach(value=>push('statuses',value,global.getStatusRouteLabel(value)));
+        if(state.certification)push('certification',state.certification,'US '+state.certification.toUpperCase());
+        return Object.freeze({media,menus:Object.freeze(menus),yearLabel:global.getBrowseYearControlLabel(state),currentDecade:Math.floor(new Date().getFullYear()/10)*10,selectedDecade:global.getBrowseSelectedDecade(state),year:state.year,upcoming:state.upcoming,eyes:Object.freeze(global.createEyeFilterState(state)),chips:Object.freeze(chips),showClear:chips.length>0 || state.sort!=='popularity-desc',selectedPickers,otherChoices:Object.freeze(otherChoices)});
+    }
+    function buildListingModel(kind,state){
+        const media=kind==='discovery' ? global.getDiscoveryPageMediaFromState() : normalizeMedia(state.media);
+        const filters=kind==='browse' ? global.createBrowseFilterState(media,state.filters) : kind==='genre' ? global.getGenreBrowseState() : global.getDiscoveryBrowseState();
+        const labels=global.createBrowseLabelState(kind==='browse' ? state.labels : state.browseLabels);
+        const category=kind==='discovery' && state.type==='discover-category';
+        const config=category ? global.getDiscoverCategoryConfig(state.value) : null;
+        const compatible=!(kind==='discovery' && state.type==='certification' && media==='tv');
+        const shows=Array.isArray(state.shows) ? state.shows : [];
+        const items=buildTrendingModel({key:kind,media},global.applyEyeFiltersToItems(shows,media,filters),false,'').items;
+        const word=media==='movie' ? 'movies' : 'shows';
+        const title=kind==='browse' ? `Browse ${media==='movie' ? 'Movies' : 'TV Shows'}` : String(state.name || (kind==='genre' ? global.getGenreDisplayNameFromSlug(state.slug) || 'Genre' : media==='movie' ? 'Movies' : 'Shows'));
+        return Object.freeze({kind,identity:kind==='browse' ? 'browse' : kind+':'+(state.genreId || state.type+':'+state.value),route:global.getCurrentAppRoute(),media,title,
+            showMedia:compatible && !category,controls:compatible ? buildBrowseControls(filters,labels,!!(config && ['popular','top-rated'].includes(config.category))) : null,
+            bodyState:state.error ? 'error' : items.length ? 'ready' : state.loading ? 'loading' : 'empty',error:String(state.error || ''),errorTitle:kind==='browse' ? 'Browse could not load' : kind==='genre' ? 'Genre could not load' : 'Page could not load',
+            emptyTitle:shows.length ? 'No results found' : `No ${word} found`,emptyMessage:category ? 'No titles are available for this category right now.' : 'Remove or change one or more filters.',
+            loadingMore:!!state.loading && items.length>0,hasMore:!state.loading && Number(state.page || 1)<Number(state.totalPages || 1),items
+        });
+    }
+    function renderListing(kind,state){
+        if(listingKind()!==kind || !state)return;
+        lastListingModel=buildListingModel(kind,state);
+        if(listingOwner)listingOwner.render(lastListingModel);else void loadVueDiscover();
+    }
+    function attachListingOwner(owner){
+        if(!owner || typeof owner.render!=='function' || typeof owner.unmount!=='function')throw new TypeError('Invalid Vue Browse listing owner');
+        listingOwner=owner;
+        const kind=listingKind();if(kind)renderListing(kind,listingState(kind));
+    }
+    const listingActions=Object.freeze({
+        back(){if(listingKind())global.navigateBackOrRouteFallback('/app/discover');},
+        async setMedia(media){
+            if(!listingKind())return;const serial=++listingMediaRequestId,route=global.getCurrentAppRoute(),current=global.getCurrentBrowseState();
+            if(current.media===media)return;
+            const mapped=await global.mapBrowseGenresForMedia(current,media,global.getCurrentBrowseLabels());
+            if(serial!==listingMediaRequestId || !listingKind() || global.getCurrentAppRoute()!==route)return;
+            await global.navigateToBrowseState(mapped.state,mapped.labels);
+        },
+        async choose(choice){
+            if(!listingKind())return;const api=global.getBrowseStateAPI(),current=global.getCurrentBrowseState(),labels=global.getCurrentBrowseLabels();
+            const next=choice.multi ? api.toggleMulti(current,choice.key,choice.value) : api.setSingle(current,choice.key,choice.key==='upcoming' ? choice.value==='1' : choice.value);
+            if(choice.label && ['genres','themes','companies','providers','network'].includes(choice.key))global.setBrowseLabel(labels,choice.key==='network'?'networks':choice.key,choice.value,choice.label);
+            await global.navigateToBrowseState(next,labels);
+        },
+        async remove(choice){if(listingKind())await global.navigateToBrowseState(global.getBrowseStateAPI().removeValue(global.getCurrentBrowseState(),choice.key,choice.value),global.getCurrentBrowseLabels());},
+        async clear(){if(listingKind())await global.navigateToBrowseState(global.getBrowseStateAPI().clearFilters(global.getCurrentBrowseState()),global.createBrowseLabelState());},
+        async toggleEye(key){if(listingKind())await global.handleEyeFilterToggle(key);},
+        async searchPicker(type,query){
+            if(!listingKind())return [];const route=global.getCurrentAppRoute();const items=await global.searchBrowsePicker(type,query);
+            if(!listingKind() || route!==global.getCurrentAppRoute())return [];
+            const counts=new Map();items.forEach(item=>{const name=String(item.name || '').toLocaleLowerCase();counts.set(name,(counts.get(name)||0)+1);});
+            return Object.freeze(items.slice(0,10).map(item=>{const name=String(item.name || ''),country=counts.get(name.toLocaleLowerCase())>1 && item.origin_country ? global.getDiscoveryCountryName(item.origin_country) : '';return Object.freeze({id:String(item.id),name,country,label:country?`${name} · ${country}`:name,logo:type==='company'?imageURL(item.logo_path,'w92'):''});}));
+        },
+        async viewMore(){const kind=listingKind();if(!kind || listingState(kind).loading)return;await (kind==='browse'?global.loadBrowsePageResults:kind==='genre'?global.loadGenrePageResults:global.loadDiscoveryFilterPageResults)({append:true});},
+        async openMedia(item){
+            const kind=listingKind();if(!kind || !item?.id)return;
+            if(kind==='browse'){
+                const backRoute=global.getBrowseRoute(global.getCurrentBrowseState());
+                if(item.media==='movie')await global.openMoviePage(item.id,{movieName:item.name,navigationContext:'discover',backRoute});
+                else await global.openShowDetailsPage(item.id,{showName:item.name,navigationContext:'discover',backRoute});
+            }else if(item.media==='movie')await global.openMoviePage(item.id,{movieName:item.name});
+            else await global.openDiscoverShowModal({id:item.id,name:item.name,poster_path:item.posterPath,overview:item.overview,first_air_date:item.firstAirDate});
+        }
+    });
 
     const personActions = Object.freeze({
         back(){ global.navigateBackOrRouteFallback("/app/discover"); },
@@ -706,6 +815,7 @@ const COLLECTION_INDEX_SORT_OPTIONS = Object.freeze([
     });
 
     global.TVTrackerDiscoverVueBridge = Object.freeze({
+        attachListingOwner, renderListing, buildListingModel, buildBrowseControls, listingActions,
         attachPersonOwner,
         renderPerson,
         buildPersonModel,

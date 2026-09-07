@@ -12,6 +12,8 @@ import SettingsNotifications from './notifications/SettingsNotifications.vue';
 import DiscoverHub from './search-discover/DiscoverHub.vue';
 import CollectionDetails from './search-discover/CollectionDetails.vue';
 import CollectionsIndex from './search-discover/CollectionsIndex.vue';
+import BrowseListing from './search-discover/BrowseListing.vue';
+import type { BrowseActions, BrowseListingModel } from './search-discover/browseViewModel';
 import PersonDetails from './search-discover/PersonDetails.vue';
 import type { PersonActions, PersonViewModel } from './search-discover/personViewModel';
 import type { CollectionActions, CollectionViewModel, CollectionsIndexActions, CollectionsIndexViewModel } from './search-discover/collectionViewModel';
@@ -79,11 +81,15 @@ type DiscoverBridge = Readonly<{
   collectionActions: CollectionActions;
   attachIndexOwner: (owner: CollectionsIndexOwner) => void;
   indexActions: CollectionsIndexActions;
+  attachListingOwner: (owner: BrowseListingOwner) => void;
+  listingActions: BrowseActions;
   attachPersonOwner: (owner: PersonOwner) => void;
   personActions: PersonActions;
   actions: DiscoverRendererActions;
   trendingActions: TrendingActions;
 }>;
+
+type BrowseListingOwner = Readonly<{render: (model: BrowseListingModel) => void; unmount: () => void}>;
 
 type PersonOwner = Readonly<{render: (model: PersonViewModel) => void; unmount: () => void}>;
 
@@ -125,6 +131,11 @@ let searchApp: VueApp<Element> | null = null;
 let searchRoot: Element | null = null;
 let discoverApp: VueApp<Element> | null = null;
 let discoverRoot: Element | null = null;
+let listingApp: VueApp<Element> | null = null;
+let listingRoot: Element | null = null;
+const listingModel = shallowRef<BrowseListingModel | null>(null);
+function unmountListing(): void { listingApp?.unmount(); listingApp=null; listingRoot=null; listingModel.value=null; }
+
 let personApp: VueApp<Element> | null = null;
 let personRoot: Element | null = null;
 const personModel = shallowRef<PersonViewModel | null>(null);
@@ -325,6 +336,7 @@ const trendingOwner: TrendingVueOwner = Object.freeze({
     if (!root || !bridge) return;
     unmountCollectionsIndex();
     unmountCollection();
+    unmountListing();
     unmountTrending();
     root.replaceChildren();
     trendingApp = createApp(TrendingPage, { model, actions: bridge.trendingActions });
@@ -342,6 +354,7 @@ const collectionOwner: CollectionVueOwner = Object.freeze({
       collectionModel.value = model;
       return;
     }
+    unmountListing();
     unmountTrending();
     unmountCollectionsIndex();
     unmountCollection();
@@ -367,6 +380,7 @@ const collectionsIndexOwner: CollectionsIndexOwner = Object.freeze({
       collectionsIndexModel.value = model;
       return;
     }
+    unmountListing();
     unmountTrending();
     unmountCollection();
     unmountCollectionsIndex();
@@ -379,6 +393,19 @@ const collectionsIndexOwner: CollectionsIndexOwner = Object.freeze({
     collectionsIndexApp.mount(root);
   },
   unmount: unmountCollectionsIndex
+});
+
+const listingOwner: BrowseListingOwner = Object.freeze({
+  render(model: BrowseListingModel): void {
+    const root = document.getElementById('genre-detail-content');
+    const bridge = window.TVTrackerDiscoverVueBridge;
+    if (!root || !bridge) return;
+    if (listingApp && listingRoot === root && root.querySelector('[data-tvtracker-browse-listing-owner="vue"]')) { listingModel.value=model; return; }
+    unmountTrending(); unmountCollection(); unmountCollectionsIndex(); unmountListing();
+    root.replaceChildren(); listingRoot=root; listingModel.value=model;
+    listingApp=createApp({setup:()=>()=>listingModel.value ? h(BrowseListing,{key:listingModel.value.identity,model:listingModel.value,actions:bridge.listingActions}) : null});
+    listingApp.mount(root);
+  }, unmount:unmountListing
 });
 
 const personOwner: PersonOwner = Object.freeze({
@@ -502,6 +529,7 @@ window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
 window.TVTrackerDiscoverVueBridge?.attachTrendingOwner?.(trendingOwner);
 window.TVTrackerDiscoverVueBridge?.attachCollectionOwner?.(collectionOwner);
 window.TVTrackerDiscoverVueBridge?.attachIndexOwner?.(collectionsIndexOwner);
+window.TVTrackerDiscoverVueBridge?.attachListingOwner?.(listingOwner);
 window.TVTrackerDiscoverVueBridge?.attachPersonOwner?.(personOwner);
 window.TVTrackerHistoryVueBridge?.attachVueOwner(historyOwner);
 window.TVTrackerTrackerListsVueBridge?.attachVueOwner(trackerListsOwner);
