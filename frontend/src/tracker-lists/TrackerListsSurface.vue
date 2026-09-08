@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import TrackerListControls from './TrackerListControls.vue';
 
 import type {
   TrackerListCardViewModel,
@@ -27,6 +28,7 @@ async function runAction(item: TrackerListCardViewModel, event: MouseEvent): Pro
 </script>
 
 <template>
+  <TrackerListControls :model="model.controls" :actions="actions" />
   <div data-tvtracker-tracker-lists-owner="vue-watchlist" style="display: contents">
     <div v-if="model.emptyState" class="empty-state">
       <h2>{{ model.emptyState.title }}</h2>

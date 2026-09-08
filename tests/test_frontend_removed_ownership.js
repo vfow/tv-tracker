@@ -5,6 +5,13 @@ const path = require('path');
 // Each removed entry was a disconnected renderer/helper in the ownership audit.
 // Scan shipped source and templates, including inline handlers and global names.
 const removed = [
+    "renderLibrarySearchControl",
+    "createLibraryFilterMenu",
+    "createLibrarySearchBox",
+    "removeLibrarySearchControl",
+    "closeLibraryFilterDropdown",
+    "setSelectOptions",
+
     "updateProfileSettingsPreview",
     "getProfileHeaderPreviewHTML",
     "renderMovieProvidersHTML",

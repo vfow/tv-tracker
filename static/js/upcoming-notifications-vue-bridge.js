@@ -494,7 +494,21 @@
         if(kind === "watching" && typeof global.updateShowStatus === "function") await global.updateShowStatus(id,"watching");
     }
 
-    const trackerListsActions = Object.freeze({perform:performTrackerListAction});
+    function changeTrackerListControl(key,value){
+        const fields = {query:"librarySearchQuery",genre:"libraryGenreFilter",network:"libraryNetworkFilter",year:"libraryYearFilter",sort:"librarySortMode"};
+        if(!Object.prototype.hasOwnProperty.call(fields,key)) return;
+        global[fields[key]] = String(value || (key === "query" ? "" : key === "sort" ? "default" : "all"));
+        void renderWatchlist();
+        if(key === "query"){
+            if(typeof global.scheduleLibrarySearchRouteUpdate === "function") global.scheduleLibrarySearchRouteUpdate();
+        }else if(typeof global.syncLibraryFilterRoute === "function") global.syncLibraryFilterRoute();
+    }
+
+    const trackerListsActions = Object.freeze({
+        perform:performTrackerListAction,
+        changeControl:changeTrackerListControl,
+        resetControls:()=>{ if(typeof global.resetLibraryFiltersToDefault === "function") global.resetLibraryFiltersToDefault(); }
+    });
 
     function attachTrackerListsVueOwner(owner){
         if(!owner || typeof owner.render !== "function" || typeof owner.unmount !== "function") throw new TypeError("Invalid Tracker Lists Vue owner");
@@ -502,7 +516,6 @@
     }
 
     async function renderWatchlist(){
-        if(typeof global.renderLibrarySearchControl === "function") global.renderLibrarySearchControl();
         const model = buildWatchlistModel();
         if(!model){ renderWatchlistLoadFailure(); return false; }
         if(!trackerListsVueOwner){
