@@ -41,7 +41,7 @@ export type SearchCollectionItem = Readonly<{
 }>;
 
 export type SearchResultItem = SearchPosterItem | SearchPersonItem | SearchCollectionItem;
-export type SearchBodyState = 'prompt' | 'loading' | 'results' | 'empty';
+export type SearchBodyState = 'prompt' | 'loading' | 'results' | 'empty' | 'error';
 
 export type SearchViewModel = Readonly<{
   query: string;
@@ -60,6 +60,7 @@ export type SearchViewModel = Readonly<{
 }>;
 
 export type SearchRendererActions = Readonly<{
+  retry: () => void | Promise<void>;
   setMedia: (media: SearchMediaType) => void;
   loadMore: () => void;
   openMedia: (item: SearchPosterItem) => void | Promise<void>;

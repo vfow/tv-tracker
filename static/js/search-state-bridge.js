@@ -166,7 +166,9 @@
         const cleanFilteredItems = Array.isArray(filteredItems) ? filteredItems : [];
         const visibleItems = cleanFilteredItems.slice(0,visibleLimit);
         const labels = {tv:"TV Shows",movie:"Movies",person:"People",collection:"Collections"};
-        const bodyState = !query
+        const bodyState = state.error === true
+            ? "error"
+            : !query
             ? "prompt"
             : state.loading && !visibleItems.length
                 ? "loading"
@@ -182,7 +184,7 @@
             }
             return buildMediaItem(item,media);
         });
-        const canLoadMore = !!query && (
+        const canLoadMore = state.error !== true && !!query && (
             visibleItems.length < cleanFilteredItems.length ||
             Number(state.page || 1) < Number(state.totalPages || 1)
         );
@@ -220,8 +222,12 @@
         root.innerHTML = '<div class="search-page-shell" data-tvtracker-search-vue-loading="true" role="status" aria-label="Loading search"><div class="search-results-body"><div class="genre-tight-grid genre-tight-grid-loading search-tight-grid">' + skeletons + '</div></div></div>';
     }
 
+    function isActiveSearchView(){
+        return global.activePage === "search" || global.activePage === "discover";
+    }
+
     function renderLoadFailure(){
-        if(vueOwner){ return; }
+        if(vueOwner || !isActiveSearchView()){ return; }
         const root = searchRoot();
         if(!root){ return; }
         root.innerHTML = '<div class="search-page-shell" data-tvtracker-search-vue-load-failed="true" role="alert"><div class="search-results-body"><div class="empty-state search-empty-state"><h2>Search unavailable</h2><p>Reload the page to try again.</p></div></div></div>';
@@ -275,6 +281,7 @@
 
     function render(resultsList){
         lastModel = buildViewModel(resultsList);
+        if(!isActiveSearchView()) return;
         if(vueOwner){
             vueOwner.render(lastModel);
             updateSearchShellAfterRender();
@@ -290,7 +297,7 @@
             throw new TypeError("Invalid Vue Search owner");
         }
         vueOwner = owner;
-        if(lastModel){
+        if(lastModel && isActiveSearchView()){
             vueOwner.render(lastModel);
             updateSearchShellAfterRender();
         }
@@ -303,6 +310,11 @@
     }
 
     const actions = Object.freeze({
+        retry(){
+            if(!isActiveSearchView()) return;
+            const query = String(global.discoverSearchState && global.discoverSearchState.query || "");
+            return global.searchShows(query,{skipRoute:true});
+        },
         setMedia(media){
             if(typeof global.setSearchMediaType === "function"){
                 global.setSearchMediaType(normalizeMedia(media));

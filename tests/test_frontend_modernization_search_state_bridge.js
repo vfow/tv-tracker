@@ -63,7 +63,7 @@ const vueBridge = context.window.TVTrackerSearchVueBridge;
 assert(vueBridge, 'Vue Search bridge should be exposed on window');
 assert.strictEqual(vueBridge.ownership, 'vue');
 assert.strictEqual(context.window.renderSearchResults, vueBridge.render, 'Vue bridge must be the runtime Search renderer entry point');
-assert.deepStrictEqual(Object.keys(vueBridge.actions).sort(), ['loadMore','openCollection','openMedia','openPerson','setMedia']);
+assert.deepStrictEqual(Object.keys(vueBridge.actions).sort(), ['loadMore','openCollection','openMedia','openPerson','retry','setMedia']);
 
 assert(typedAdapter.includes("import { normalizeSearchMediaType, type SearchRouteState } from './contracts';"));
 assert(typedAdapter.includes('TVTrackerSearchStateBridge?: LegacySearchStateBridge'));

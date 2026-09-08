@@ -126,7 +126,13 @@ function handleCollectionClick(event: MouseEvent, item: SearchCollectionItem): v
     </div>
 
     <div class="search-results-body">
-      <div v-if="model.bodyState === 'prompt'" class="empty-state search-empty-state">
+      <div v-if="model.bodyState === 'error'" class="empty-state search-empty-state" role="alert">
+        <h2>Search failed</h2>
+        <p>Couldn’t load this page. Try again later.</p>
+        <button type="button" class="view-more-button" @click="actions.retry">Try again</button>
+      </div>
+
+      <div v-else-if="model.bodyState === 'prompt'" class="empty-state search-empty-state">
         <p>Start typing to search.</p>
       </div>
 

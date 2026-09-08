@@ -3139,7 +3139,8 @@ function renderSearchIntro(){
         page:1,
         totalPages:1,
         visibleLimit:SEARCH_RESULT_BATCH_SIZE,
-        loading:false
+        loading:false,
+        error:false
     });
     if(typeof renderSearchResults === "function"){
         renderSearchResults([]);
@@ -3150,23 +3151,6 @@ function renderSearchLoading(query){
     if(typeof renderSearchResults === "function"){
         renderSearchResults(lastDiscoverSearchResults || []);
     }
-}
-
-function renderSearchError(){
-    const results = document.getElementById("search-results");
-
-    if(!results){
-        return;
-    }
-
-    results.innerHTML = `
-        <div class="search-page-shell">
-            <div class="empty-state search-empty-state">
-                <h2>Search failed</h2>
-                <p>Couldn’t load this page. Try again later.</p>
-            </div>
-        </div>
-    `;
 }
 
 function normalizeSearchResultItem(item,forcedMediaType=""){
@@ -5459,7 +5443,8 @@ async function searchShows(query,options={}){
         }
 
         discoverSearchState.loading = false;
-        renderSearchError();
+        discoverSearchState.error = true;
+        renderSearchResults([]);
         showToast(friendlyTMDBSearchError(error));
 
     }finally{
