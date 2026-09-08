@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { feedback } from '../ui/feedback';
+import ProfileAvatar from '../profile/ProfileAvatar.vue';
+import PresetAvatar from '../profile/PresetAvatar.vue';
 
 type ProfileDraft = {
   username?: string;
@@ -24,11 +26,7 @@ declare global {
     DATA?: { profile?: ProfileDraft };
     profileSettingsDraft?: ProfileDraft | null;
     createProfileSettingsDraft?: () => ProfileDraft;
-    getProfileAvatarInnerHTML?: (profile: ProfileDraft) => string;
-    getProfileHeaderPreviewHTML?: (profile: ProfileDraft) => string;
     getProfileInitial?: (username?: string) => string;
-    getPresetAvatarSVG?: (preset: string) => string;
-    updateProfileSettingsPreview?: () => void;
     openAvatarFilePicker?: () => void;
     openProfileHeaderFilePicker?: () => void;
     saveProfileSettings?: (settings: ProfileDraft) => Promise<unknown>;
@@ -41,7 +39,7 @@ declare global {
 const fallbackProfile = window.DATA?.profile && typeof window.DATA.profile === 'object'
   ? { ...window.DATA.profile }
   : {};
-const draft = window.createProfileSettingsDraft?.() ?? fallbackProfile;
+const draft = reactive(window.createProfileSettingsDraft?.() ?? fallbackProfile);
 if (typeof draft.adult_filter !== 'boolean') draft.adult_filter = true;
 window.profileSettingsDraft = draft;
 
@@ -59,8 +57,8 @@ const sections = computed(() => window.TVTrackerSettings?.sections ?? [
   { id: 'danger-zone', label: 'DANGER ZONE' }
 ]);
 
-const avatarHtml = computed(() => window.getProfileAvatarInnerHTML?.(draft) ?? '');
-const headerHtml = computed(() => window.getProfileHeaderPreviewHTML?.(draft) ?? '');
+const headerUpload = computed(() => draft.header_type === 'upload' && !!draft.header_image);
+const headerClass = computed(() => headerUpload.value ? 'profile-header-upload' : `profile-header-${headerPresets.some(([preset]) => preset === draft.header_preset) ? draft.header_preset : 'default'}`);
 const initial = computed(() => window.getProfileInitial?.(username.value) ?? (username.value.trim().charAt(0).toUpperCase() || 'U'));
 const presets = ['silhouette-1', 'silhouette-2', 'silhouette-3', 'silhouette-4'] as const;
 const headerPresets = [
@@ -82,30 +80,19 @@ function navigate(section: string, event: MouseEvent): void {
   window.TVTrackerSettings?.open(section, { fromRoute: false });
 }
 
-function refreshLegacyPreview(): void {
-  void nextTick(() => window.updateProfileSettingsPreview?.());
-}
-
 function onUsernameInput(): void {
   draft.username = username.value;
-  refreshLegacyPreview();
 }
 
 function chooseInitial(): void {
   draft.avatar_type = 'initial';
   draft.avatar_data = '';
-  refreshLegacyPreview();
 }
 
 function choosePreset(preset: string): void {
   draft.avatar_type = 'preset';
   draft.avatar_preset = preset;
   draft.avatar_data = '';
-  refreshLegacyPreview();
-}
-
-function presetSvg(preset: string): string {
-  return window.getPresetAvatarSVG?.(preset) ?? '';
 }
 
 function uploadAvatar(): void {
@@ -120,14 +107,12 @@ function uploadAvatar(): void {
 function removeAvatar(): void {
   draft.avatar_type = 'initial';
   draft.avatar_data = '';
-  refreshLegacyPreview();
 }
 
 function chooseHeaderPreset(preset: string): void {
   draft.header_type = 'preset';
   draft.header_preset = preset;
   draft.header_image = '';
-  refreshLegacyPreview();
 }
 
 function uploadHeader(): void {
@@ -143,7 +128,6 @@ function removeHeader(): void {
   draft.header_type = 'preset';
   draft.header_preset = 'default';
   draft.header_image = '';
-  refreshLegacyPreview();
 }
 
 async function saveProfile(): Promise<void> {
@@ -182,16 +166,12 @@ async function saveProfile(): Promise<void> {
 onMounted(() => {
   const required = [
     window.createProfileSettingsDraft,
-    window.getProfileAvatarInnerHTML,
-    window.getProfileHeaderPreviewHTML,
-    window.updateProfileSettingsPreview,
     window.saveProfileSettings
   ];
   bridgeUnavailable.value = required.some(item => typeof item !== 'function');
   if (bridgeUnavailable.value) {
     window.TVTrackerClientRuntime?.report?.({ category: 'runtime', surface: 'settings', code: 'vue_profile_bridge_unavailable' });
   }
-  refreshLegacyPreview();
 });
 </script>
 
@@ -214,11 +194,11 @@ onMounted(() => {
     <div class="settings-v2-body" data-settings-body>
       <section class="settings-v2-section settings-v2-profile-section">
         <h2>Profile</h2>
-        <p class="settings-v2-copy">Update how your profile appears in TV Tracker.</p>
+        <p class="settings-v2-copy">Update how your profile appears.</p>
         <p v-if="bridgeUnavailable" class="settings-v2-copy" role="status">Some profile controls are temporarily unavailable.</p>
 
         <div class="settings-v2-avatar-row">
-          <div id="settings-avatar-preview" class="settings-v2-avatar-preview" v-html="avatarHtml"></div>
+          <div id="settings-avatar-preview" class="settings-v2-avatar-preview"><ProfileAvatar :profile="draft" /></div>
           <div>
             <div class="settings-v2-field">
               <label for="profile-username-input">Username</label>
@@ -233,7 +213,7 @@ onMounted(() => {
             </div>
             <span class="settings-v2-label">Avatar</span>
             <div class="settings-v2-presets">
-              <button type="button" data-avatar-type="initial" title="Use username initial" @click="chooseInitial">
+              <button type="button" class="avatar-preset-button" :class="{ active: draft.avatar_type === 'initial' }" :aria-pressed="draft.avatar_type === 'initial'" data-avatar-type="initial" title="Use username initial" @click="chooseInitial">
                 <span class="avatar-initial-option">{{ initial }}</span>
               </button>
               <button
@@ -244,8 +224,10 @@ onMounted(() => {
                 :data-avatar-preset="preset"
                 title="Choose preset avatar"
                 @click="choosePreset(preset)"
-                v-html="presetSvg(preset)"
-              ></button>
+                class="avatar-preset-button"
+                :class="{ active: draft.avatar_type === 'preset' && draft.avatar_preset === preset }"
+                :aria-pressed="draft.avatar_type === 'preset' && draft.avatar_preset === preset"
+              ><PresetAvatar :preset="preset" /></button>
             </div>
             <div class="settings-v2-actions">
               <button id="upload-profile-avatar" class="settings-v2-button" type="button" @click="uploadAvatar">Upload Image</button>
@@ -256,14 +238,26 @@ onMounted(() => {
 
         <div class="settings-v2-field" style="margin-top:28px">
           <span class="settings-v2-label">Profile Header</span>
-          <div id="profile-header-preview-wrap" v-html="headerHtml"></div>
+          <div id="profile-header-preview-wrap">
+            <div id="settings-header-preview" :class="['settings-header-preview', headerClass]">
+              <template v-if="headerUpload">
+                <div class="profile-header-image-layer" aria-hidden="true"><img :src="draft.header_image" alt=""></div>
+                <div class="profile-header-image-overlay" aria-hidden="true"></div>
+              </template>
+              <div class="settings-header-preview-content">
+                <div class="settings-header-mini-avatar"><ProfileAvatar :profile="draft" /></div>
+                <span>{{ draft.username || 'Username' }}</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="settings-v2-header-presets">
           <button
             v-for="preset in headerPresets"
             :key="preset[0]"
             class="settings-v2-button profile-header-preset-button"
-            :class="`profile-header-${preset[0]}`"
+            :class="[`profile-header-${preset[0]}`, { active: !headerUpload && draft.header_preset === preset[0] }]"
+            :aria-pressed="!headerUpload && draft.header_preset === preset[0]"
             type="button"
             :data-profile-header-preset="preset[0]"
             @click="chooseHeaderPreset(preset[0])"

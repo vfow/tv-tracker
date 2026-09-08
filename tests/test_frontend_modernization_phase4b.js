@@ -34,7 +34,9 @@ for(const id of [
 }
 assert(profileSource.includes("window.openAvatarFilePicker()"),"Avatar upload/crop ownership must remain behind the existing UI service boundary");
 assert(profileSource.includes("window.openProfileHeaderFilePicker()"),"Header upload/crop ownership must remain behind the existing UI service boundary");
-assert(profileSource.includes("window.updateProfileSettingsPreview?.()"),"Profile previews must continue using the existing preview service");
+assert(profileSource.includes("const draft = reactive("),"Crop services and native previews must share one reactive draft");
+assert(profileSource.includes('<ProfileAvatar :profile="draft" />'),"Vue must compose the avatar previews");
+assert(!profileSource.includes('v-html'),"Profile Settings must not consume legacy HTML composers");
 assert(profileSource.includes("await window.saveProfileSettings(draft)"),"Profile persistence must remain behind the existing saveProfileSettings boundary");
 assert(!profileSource.includes("fetch("),"Profile Vue must not duplicate backend transport");
 assert(!profileSource.includes("saveData("),"Profile Vue must not bypass the canonical profile persistence service");
@@ -42,7 +44,8 @@ assert(!profileSource.includes("/api/"),"Profile Vue must not introduce a parall
 
 assert(appSource.includes("async function saveProfileSettings(settings)"),"Canonical Profile persistence must remain in app.js");
 assert(uiSource.includes("function createProfileSettingsDraft()"),"Canonical Profile draft construction must remain in ui.js");
-assert(uiSource.includes("function updateProfileSettingsPreview()"),"Canonical Profile preview bridge must remain in ui.js");
+assert(!uiSource.includes("updateProfileSettingsPreview"),"The duplicate Settings preview DOM writer must be removed");
+assert(!uiSource.includes("getProfileHeaderPreviewHTML"),"The obsolete Settings header composer must be removed");
 assert(uiSource.includes("function openAvatarFilePicker()"),"Canonical avatar upload/crop bridge must remain in ui.js");
 assert(uiSource.includes("function openProfileHeaderFilePicker()"),"Canonical header upload/crop bridge must remain in ui.js");
 
