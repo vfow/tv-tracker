@@ -10,7 +10,7 @@ const templateSource = fs.readFileSync('templates/index.html','utf8');
 for(const n of ['tracker-integrity.js','data-integrity.js','tracker-removal.js','upcoming-schedule-repair.js'])assert(!templateSource.includes(n),`${n} must no longer load as a separate script`);
 
 const OWNERSHIP_REGION = (()=>{
-  const start = appSource.indexOf("function cleanProviderHTML(");
+  const start = appSource.indexOf("function getLegacyMetadataMarker(");
   assert.ok(start >= 0,"ownership helpers must exist in app.js");
   const endFn = extractFunction(appSource, "removeExistingHistoryEntriesForEpisode");
   const end = appSource.indexOf(endFn) + endFn.length;

@@ -7,7 +7,7 @@ class TVmazeFinalContracts(unittest.TestCase):
     def test_upcoming_uses_canonical_release_before_raw_calendar_date(self):
         source = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
         start = source.index("function getUpcomingShows()")
-        end = source.index("function getPersonalScheduleEpisode", start)
+        end = source.index("function getUpcomingScheduleItems", start)
         body = source[start:end]
         self.assertLess(body.index("const aRelease = makeEpisodeReleaseDate"), body.index("const dateCompare = compareEpisodeCalendarDates"))
 

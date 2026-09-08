@@ -538,7 +538,7 @@ const liveUiBoundaries = [
 liveUiBoundaries.forEach(name=>{
     assert(ui.includes(`function ${name}(`), `${name} remains an active ui.js boundary`);
 });
-['openShowModal','closeShowModal'].forEach(name=>{
+['closeShowModal'].forEach(name=>{
     assert(app.includes(`function ${name}(`), `${name} remains an active app.js boundary`);
 });
 

@@ -11,7 +11,7 @@ const template = fs.readFileSync("templates/index.html","utf8");
 const backend = fs.readFileSync("app.py","utf8");
 
 const OWNERSHIP_REGION = (()=>{
-  const start = appSource.indexOf("function cleanProviderHTML(");
+  const start = appSource.indexOf("function getLegacyMetadataMarker(");
   assert.ok(start >= 0,"ownership helpers must exist in app.js");
   const endFn = extractFunction(appSource, "removeExistingHistoryEntriesForEpisode");
   const end = appSource.indexOf(endFn) + endFn.length;
@@ -24,16 +24,13 @@ const SCATTERED_OWNERS = extractFunctions(appSource, [
   "isMovieHistoryEntry",
   "normalizeMovieTrackingId",
   "normalizeRouteId",
-  "moveShowStorageKey",
   "markSeasonWatched",
   "unwatchFullyWatchedSeason",
   "markSeasonWatchedLegacyFlow",
   "getBackupSummary",
   "commitTrackerDataTransactionally",
   "getNativeBackupObject",
-  "validateNativeBackupObject",
-  "findTMDBTVDetailsByTitle",
-  "reapplyImportedWatchedProgress"
+  "validateNativeBackupObject"
 ]);
 
 const ENSURE_HISTORY_IDS = extractFunction(dbSource, "ensureHistoryIds");
@@ -216,8 +213,6 @@ function createContext(options={}){
       null,
       "title fallback must not take the first fuzzy result"
     );
-    const details = await context.findTMDBTVDetailsByTitle("Monster (2022)");
-    assert.strictEqual(details.id,2);
   }
 
   {
@@ -230,14 +225,15 @@ function createContext(options={}){
       network_sync:{pending:["local-tvdb-1"],failed:["local-tvdb-1"]}
     };
     const {context} = createContext({DATA});
-    show.tmdb_id = "555";
-    show.local_only = false;
-    context.moveShowStorageKey("local-tvdb-1","555",show);
-    assert.strictEqual(DATA.history[0].tmdb_id,"555","show-id remaps must migrate history references");
-    assert.deepStrictEqual(Array.from(DATA.profile.favorite_shows),["555"]);
-    assert.deepStrictEqual(Array.from(DATA.metadata_sync.pending),["555"]);
-    assert.strictEqual(DATA.metadata_sync.failed[0].showId,"555");
-    assert.deepStrictEqual(Array.from(DATA.network_sync.pending),["555"]);
+    const before = JSON.stringify(DATA);
+    const copy = context.getCleanTrackerDataCopy(DATA);
+    assert.strictEqual(JSON.stringify(DATA),before,"backup projection must not mutate live tracker data");
+    assert.ok(copy.shows["local-tvdb-1"],"older native local IDs must survive export/restore projection");
+    assert.strictEqual(copy.history[0].tmdb_id,"local-tvdb-1");
+    assert.deepStrictEqual(Array.from(copy.profile.favorite_shows),["local-tvdb-1"]);
+    assert.deepStrictEqual(Array.from(copy.metadata_sync.pending),["local-tvdb-1"]);
+    assert.strictEqual(copy.metadata_sync.failed[0].showId,"local-tvdb-1");
+    assert.deepStrictEqual(Array.from(copy.network_sync.pending),["local-tvdb-1"]);
   }
 
   {
@@ -251,18 +247,12 @@ function createContext(options={}){
         ]
       }]
     };
-    assert.ok(
-      appSource.includes("removeSpecialOnlyProgress(show,scanCompatibleWatchedEpisodes(compatibleShow))"),
-      "importCompatibleEpisodesIntoShow must apply the folded special-only progress cleanup"
-    );
-    const show = {
-      episodes_watched:{"1":[1,2]},
-      _imported_progress:{watched:{},specials:{}}
-    };
-    context.removeSpecialOnlyProgress(show,context.scanCompatibleWatchedEpisodes(compatible));
-    assert.deepStrictEqual(Array.from(show.episodes_watched["1"] || []),[2],"imported specials must not mark regular progress coordinates watched");
-    assert.deepStrictEqual(Object.keys(show._imported_progress.watched),["1-2"]);
-    assert.strictEqual(Object.keys(show._imported_progress.specials).length,1);
+    const before = JSON.stringify(compatible);
+    const scan = context.TVTrackerDataIntegrity.scanCompatibleWatchedEpisodes(compatible);
+    assert.deepStrictEqual(Array.from(scan.regular.keys()),["1-2"]);
+    assert.strictEqual(scan.specials.length,1);
+    assert.strictEqual(scan.specials[0].metadata.source_tvdb_episode_id,"901");
+    assert.strictEqual(JSON.stringify(compatible),before,"compatibility inspection must remain read-only");
   }
 
   {
@@ -276,8 +266,10 @@ function createContext(options={}){
         }
       }
     };
-    context.reapplyImportedWatchedProgress(show);
-    assert.deepStrictEqual(Array.from(show.episodes_watched["1"] || []),[2],"metadata hydration must never reapply special progress as a regular episode");
+    const importedProgress = JSON.stringify(show._imported_progress);
+    context.normalizeShowEpisodeProgress(show);
+    assert.deepStrictEqual(Object.keys(show.episodes_watched),[],"native normalization must not infer deliberate watched state from imported metadata");
+    assert.strictEqual(JSON.stringify(show._imported_progress),importedProgress,"older imported metadata must survive intact");
   }
 
   {
