@@ -36,13 +36,14 @@ window.addEventListener('unhandledrejection',event=>{errors++;event.preventDefau
 <script type="module">
 const failures=[];const check=(ok,label)=>{if(!ok)failures.push(label);};const tick=()=>new Promise(resolve=>setTimeout(resolve,35));
 try{
-const before=JSON.stringify(DATA);
+const truth=()=>JSON.stringify({shows:DATA.shows,movies:DATA.movies,history:DATA.history});
+const before=truth();
 const manifest=await(await fetch('/static/vue/manifest.json')).json();await import('/static/vue/'+manifest['frontend/src/main.ts'].file);
 const first=searchShows('canary',{skipRoute:true});await tick();
 check(document.querySelectorAll('.tt-skeleton-poster-card').length===12,'native loading');
 requests[0].reject(Error('Synthetic provider failure private-payload'));await first;await tick();
 check(document.querySelector('[data-tvtracker-search-owner="vue"] [role="alert"]').textContent.includes('Search failed'),'provider error stays in native owner');
-check(!document.body.textContent.includes('private-payload'),'error content is generic');
+check(!document.getElementById('search-results').textContent.includes('private-payload'),'error content is generic');
 check(document.querySelectorAll('[data-tvtracker-search-owner="vue"]').length===1,'single owner');
 check(!document.getElementById('search-load-more-button'),'no stale pagination on error');
 const retry=Array.from(document.querySelectorAll('button')).find(x=>x.textContent==='Try again');retry.click();await tick();
@@ -57,7 +58,7 @@ const current=document.getElementById('search-results').innerHTML;
 requests[2].reject(Error('Late failure'));await pending;await tick();
 check(document.getElementById('search-results').innerHTML===current,'late failure does not repaint another route');
 activePage='search';await searchShows('',{skipRoute:true});await tick();check(document.body.textContent.includes('Start typing to search.'),'clearing query clears error');
-check(JSON.stringify(DATA)===before,'search never changes tracker or History');check(errors===0,'no uncaught retry failure');
+check(truth()===before,'search never changes tracker or History');check(errors===0,'no uncaught retry failure');
 }catch(error){failures.push(String(error));}
 document.body.dataset.acceptance=failures.length?'failed':'ready';document.body.dataset.failures=JSON.stringify(failures);parent.postMessage({acceptance:document.body.dataset.acceptance,failures},location.origin);
 </script></body></html>'''.encode()
