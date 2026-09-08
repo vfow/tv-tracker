@@ -797,3 +797,16 @@ console.log('Real-path router runtime checks passed');
   assert.strictEqual(call[1],'data');
   assert.strictEqual(call[2].fromRoute,true);
 }
+
+// A delayed showPage synchronization must preserve the active Settings section.
+// Use the actual Settings state owner, not a mock route reconstruction.
+{
+  const {context,router}=createRouter('/app/settings/profile');
+  vm.runInContext(fs.readFileSync('static/js/settings.js','utf8'),context);
+  for(const section of ['profile','auth','notifications','streaming','data','danger-zone']){
+    context.window.TVTrackerSettings.open(section);
+    router.updateRouteFromState(false);
+    assert.strictEqual(router.currentRoute(),'/app/settings/'+section);
+    assert.strictEqual(router.parseRoute(context.window.location.pathname).params.section,section);
+  }
+}
