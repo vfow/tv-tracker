@@ -36,6 +36,11 @@ not display its existing failure state or emit `streaming_countries_failed`.
 The service now propagates the failure and still clears its in-flight promise.
 The next request retries. No request payload is added to diagnostics.
 
+Browser acceptance also exposed a focus bug: selecting an option restored focus
+to the country input, whose focus handler immediately reopened the closed menu.
+Focus restoration now suppresses that one focus-triggered open while preserving
+normal click/focus opening and the existing keyboard behavior.
+
 ## Verification and remaining gates
 
 The new browser acceptance uses the committed production bundle and real region
