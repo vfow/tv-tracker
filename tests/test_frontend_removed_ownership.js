@@ -7,6 +7,9 @@ const path = require('path');
 const removed = [
     "updateProfileSettingsPreview",
     "getProfileHeaderPreviewHTML",
+    "renderMovieProvidersHTML",
+    "installProviderRenderGuard",
+    "mountStreamingRegionSetting",
     "loadDiscoverPreviewSeason",
     "toggleDiscoverPreviewSeason",
     "addDiscoverPreviewShow",

@@ -40,6 +40,7 @@ const loading = ref(false);
 const saving = ref(false);
 const loadFailed = ref(false);
 const activeIndex = ref(-1);
+let restoringInputFocus = false;
 const inputElement = ref<HTMLInputElement | null>(null);
 const rootElement = ref<HTMLElement | null>(null);
 
@@ -87,23 +88,32 @@ async function ensureCountries(): Promise<void> {
 }
 
 async function openMenu(): Promise<void> {
+  if (restoringInputFocus) return;
   menuOpen.value = true;
   activeIndex.value = -1;
   await ensureCountries();
+}
+
+function focusInput(): void {
+  void nextTick(() => {
+    restoringInputFocus = true;
+    try { inputElement.value?.focus(); }
+    finally { restoringInputFocus = false; }
+  });
 }
 
 function choose(item: Country): void {
   chosen.value = item.code;
   query.value = item.name;
   closeMenu();
-  void nextTick(() => inputElement.value?.focus());
+  focusInput();
 }
 
 function clearRegion(): void {
   chosen.value = '';
   query.value = '';
   closeMenu();
-  void nextTick(() => inputElement.value?.focus());
+  focusInput();
 }
 
 function resolveInput(): string | null {

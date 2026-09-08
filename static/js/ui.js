@@ -1468,37 +1468,6 @@ function normalizeMovieThemeItems(movie){
     return normalizeThemeItems({_tmdb_keywords:source});
 }
 
-function renderMovieProvidersHTML(movie){
-    const region = typeof v2GetWatchRegion === "function" ? v2GetWatchRegion() : "US";
-    const providerRegion = movie && movie.watch_providers && movie.watch_providers.results ? movie.watch_providers.results[region] : null;
-    if(!providerRegion){
-        return `<div class="v2-api-empty">Unknown</div>`;
-    }
-    const renderGroup = function(label,providers){
-        if(!Array.isArray(providers) || !providers.length){
-            return "";
-        }
-        return `
-            <div class="v2-provider-group">
-                <div class="v2-provider-group-title">${escapeHTML(label)}</div>
-                <div class="v2-provider-list">
-                    ${providers.slice(0,10).map(provider=>{
-                        const logo = provider.logo_path ? `<img class="v2-provider-logo" src="${escapeHTML(trackerImageURL(provider.logo_path,"w92"))}" alt="">` : "";
-                        const providerName = provider && provider.provider_name ? provider.provider_name : (provider && provider.name ? provider.name : "Provider");
-                        return `<span class="v2-provider-pill v2-provider-pill-muted">${logo}<span>${escapeHTML(providerName)}</span></span>`;
-                    }).join("")}
-                </div>
-            </div>
-        `;
-    };
-    const groups = [
-        renderGroup("Streaming",providerRegion.flatrate),
-        renderGroup("Rent",providerRegion.rent),
-        renderGroup("Buy",providerRegion.buy)
-    ].filter(Boolean).join("");
-    return groups ? `<div class="show-release-provider-stack">${groups}</div>` : `<div class="v2-api-empty">Unknown</div>`;
-}
-
 function getMovieReleaseTypeLabel(type){
     const releaseTypes = {
         1:"Premiere",
