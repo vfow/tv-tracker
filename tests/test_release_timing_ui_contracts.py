@@ -39,7 +39,8 @@ class ReleaseTimingUIContracts(unittest.TestCase):
     def test_show_and_episode_surfaces_pass_show_identity_to_timing(self):
         show_bridge = (ROOT / "static/js/show-details-vue-bridge.js").read_text(encoding="utf-8")
         self.assertIn("global.isEpisodeLoggable(episode,show,seasonNumber)", show_bridge)
-        self.assertIn("formatAirDate(episodeData.air_date,episodeData,show)", self.ui)
+        episode_bridge = (ROOT / "static/js/episode-details-vue-bridge.js").read_text(encoding="utf-8")
+        self.assertIn("global.formatAirDate(episodeData.air_date,episodeData,show)", episode_bridge)
         self.assertIn("function formatAirDate(dateString,episodeInfo=null,showInfo=null)", self.app)
         self.assertIn("getEpisodeReleaseTimeText(\n        dateString,\n        episodeInfo,\n        showInfo", self.app)
 
