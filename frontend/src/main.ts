@@ -1,3 +1,5 @@
+import ProfileSurface from './profile/ProfileSurface.vue';
+import type { ProfileBridge, ProfileModel, ProfileOwner } from './profile/contracts';
 import EpisodeDetails from './episode-details/EpisodeDetails.vue';
 import type { EpisodeDetailsBridge, EpisodeDetailsModel, EpisodeDetailsOwner } from './episode-details/contracts';
 import { createApp, h, shallowRef, type App as VueApp } from 'vue';
@@ -114,6 +116,7 @@ type VueFoundationBridge = Readonly<{
 
 declare global {
   interface Window {
+    TVTrackerProfileVueBridge?: ProfileBridge;
     TVTrackerEpisodeDetailsBridge?: EpisodeDetailsBridge;
     TVTrackerVueFoundation?: VueFoundationBridge;
     TVTrackerSettingsBridge?: SettingsBridge;
@@ -163,6 +166,26 @@ const trackerListsModel = shallowRef<TrackerListsViewModel | null>(null);
 let historyApp: VueApp<Element> | null = null;
 let historyRoot: Element | null = null;
 let episodeTrackingControllerApp: VueApp<Element> | null = null;
+let profileApp: VueApp<Element> | null = null;
+let profileRoot: Element | null = null;
+const profileModel = shallowRef<ProfileModel | null>(null);
+function unmountProfile(): void {
+  profileApp?.unmount(); profileApp=null; profileRoot=null; profileModel.value=null;
+}
+const profileOwner: ProfileOwner = Object.freeze({
+  render(model: ProfileModel): void {
+    const root=document.getElementById('profile-content');
+    const bridge=window.TVTrackerProfileVueBridge;
+    if(!root || !bridge) return;
+    if(profileApp && profileRoot === root && root.querySelector('[data-tvtracker-profile-owner="vue"]')) {
+      profileModel.value=model; return;
+    }
+    unmountProfile(); root.replaceChildren(); profileRoot=root; profileModel.value=model;
+    profileApp=createApp({setup:()=>()=>profileModel.value ? h(ProfileSurface,{model:profileModel.value,actions:bridge.actions}) : null});
+    profileApp.mount(root);
+  }, unmount:unmountProfile
+});
+
 let episodeDetailsApp: VueApp<Element> | null = null;
 let episodeDetailsRoot: Element | null = null;
 const episodeDetailsModel = shallowRef<EpisodeDetailsModel | null>(null);
@@ -557,6 +580,7 @@ window.TVTrackerVueFoundation = Object.freeze({
 });
 
 mountEpisodeTrackingController();
+window.TVTrackerProfileVueBridge?.attachVueOwner(profileOwner);
 window.TVTrackerEpisodeDetailsBridge?.attachVueOwner(episodeDetailsOwner);
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
