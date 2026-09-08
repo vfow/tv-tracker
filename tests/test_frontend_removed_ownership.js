@@ -7,6 +7,7 @@ const path = require('path');
 const removed = [
     "stopNestedSeasonAction",
     "renderCrewJobGroupsHTML",
+    "renderSearchError",
     "renderV2ActorImageHTML",
     "renderV2ActorListHTML",
     "renderV2ActorGridHTML",

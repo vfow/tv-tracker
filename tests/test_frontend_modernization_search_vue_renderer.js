@@ -34,6 +34,7 @@ const tailwindConfig = fs.readFileSync('tailwind.config.js', 'utf8');
             lockSearchRouteBeforeResultOpen(){ return '/app/search?q=dune&media=movie'; },
             setSearchMediaType(media){ calls.push(['set-media',media]); },
             loadMoreSearchResults(){ calls.push(['load-more']); },
+            searchShows(query,options){calls.push(['retry',query,options]);},
             async openMoviePage(id,options){ calls.push(['movie',id,options]); },
             async openShowDetailsPage(id,options){ calls.push(['tv',id,options]); },
             async openPersonPage(role,id,options){ calls.push(['person',role,id,options]); },
@@ -127,6 +128,18 @@ const tailwindConfig = fs.readFileSync('tailwind.config.js', 'utf8');
     context.window.renderSearchResults([]);
     assert.strictEqual(rendered.bodyState, 'prompt');
 
+    context.window.discoverSearchState = {query:'failed',media:'movie',page:1,totalPages:3,error:true};
+    context.window.renderSearchResults([{id:11,media_type:'movie',title:'Old result'}]);
+    assert.strictEqual(rendered.bodyState,'error');
+    assert.strictEqual(rendered.canLoadMore,false);
+    await bridge.actions.retry();
+    assert(calls.some(call=>call[0]==='retry'&&call[1]==='failed'&&call[2].skipRoute));
+    const previous=rendered;
+    context.window.activePage='settings';
+    context.window.renderSearchResults([]);
+    assert.strictEqual(rendered,previous,'a late failure must not repaint after navigation');
+    context.window.activePage='search';
+
     bridge.actions.setMedia('person');
     bridge.actions.setMedia('unexpected');
     bridge.actions.loadMore();
@@ -143,7 +156,7 @@ const tailwindConfig = fs.readFileSync('tailwind.config.js', 'utf8');
     assert(calls.some(call=>call[0] === 'person' && call[2] === 52));
     assert(calls.some(call=>call[0] === 'collection' && call[1] === 53));
 
-    assert(viewModel.includes("export type SearchBodyState = 'prompt' | 'loading' | 'results' | 'empty';"));
+    assert(viewModel.includes("export type SearchBodyState = 'prompt' | 'loading' | 'results' | 'empty' | 'error';"));
     assert(viewModel.includes('SearchPosterItem'));
     assert(viewModel.includes('SearchPersonItem'));
     assert(viewModel.includes('SearchCollectionItem'));
