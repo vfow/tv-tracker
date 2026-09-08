@@ -27,7 +27,7 @@ class ProfileHomeNativeBrowserTests(unittest.TestCase):
         fixture = r'''<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/css/tailwind.css"></head><body><div id="profile-content"></div>
 <script src="/static/js/audit-utils.js"></script><script src="/static/js/app.js"></script><script src="/static/js/ui.js"></script>
 <script>
-DATA.shows={'42':{tmdb_id:42,title:'Favorite <b>show</b>',status:'finished',genres:['Drama'],network:'Synthetic network',episodes_watched:{'1':[1]},_episode_list:{'1':[{episode_number:1,runtime:45,air_date:'2020-01-01'}]}};
+DATA.shows={'42':{tmdb_id:42,title:'Favorite <b>show</b>',status:'finished',genres:['Drama'],network:'Synthetic network',episodes_watched:{'1':[1]},_episode_list:{'1':[{episode_number:1,runtime:45,air_date:'2020-01-01'}]}}};
 DATA.movies={};DATA.history=[{id:'episode',tmdb_id:42,season:1,episode:1,watched_at:'2020-01-02T00:00:00Z'},{id:'unknown',action:'legacy'}];
 DATA.profile={username:'<b>Alice</b>',avatar_type:'preset',avatar_preset:'silhouette-2',header_type:'preset',header_preset:'purple',favorite_shows:['42'],favorite_movies:[{id:'99',title:'Favorite movie',release_date:'2020-01-01'}]};
 activePage='profile';activeProfileView='home';let edits=[],opened=[],syncCalls=0;
