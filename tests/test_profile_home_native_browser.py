@@ -38,12 +38,13 @@ window.startNetworkMetadataSync=()=>{syncCalls++;};
 window.getNetworkMetadataSyncSummary=()=>({running:false,pending:0,failed:2});
 </script><script src="/static/js/profile-vue-bridge.js"></script>
 <script type="module">
-const failures=[];const check=(ok,label)=>{if(!ok)failures.push(label);};const tick=()=>new Promise(resolve=>setTimeout(resolve,35));
+let stage='initial';const failures=[];const check=(ok,label)=>{if(!ok)failures.push(label);};const tick=()=>new Promise(resolve=>setTimeout(resolve,35));
 const root=()=>document.getElementById('profile-content');
 try{
 const stats=getProfileStats();const truth=()=>JSON.stringify({shows:DATA.shows,movies:DATA.movies,history:DATA.history,profile:DATA.profile});const before=truth();
 const manifest=await(await fetch('/static/vue/manifest.json')).json();await import('/static/vue/'+manifest['frontend/src/main.ts'].file);
 await renderProfile();await tick();
+stage='home';
 check(root().querySelector('.profile-name').textContent==='<b>Alice</b>'&&!root().querySelector('.profile-name b'),'escaped username');
 check(!!root().querySelector('.profile-avatar svg')&&!!root().querySelector('.profile-header-purple'),'existing preset avatar and header');
 check(root().querySelectorAll('.profile-favorite-slot').length===16&&root().querySelectorAll('.profile-favorite-slot.filled').length===2,'eight slots per favorite kind');
@@ -51,7 +52,7 @@ root().querySelector('[data-favorite-kind="show"][data-favorite-action="open"]')
 check(opened.length===2&&opened.every(x=>x.options.navigationContext==='profile')&&opened[1].options.movieName==='Favorite movie','canonical favorite navigation');
 root().querySelector('[data-favorite-kind="show"][data-favorite-action="edit"]').click();document.getElementById('edit-favorite-movies-button').click();
 check(edits.join(',')==='show,movie','favorite editors use existing service');
-document.getElementById('open-profile-stats').click();await tick();
+stage='stats';document.getElementById('open-profile-stats').click();await tick();
 check(activeProfileView==='stats'&&document.activeElement.id==='profile-stats-back','stats view and keyboard focus');
 check(root().querySelectorAll('.profile-detail-stat-card').length===11,'all existing statistics cards');
 const values=Array.from(root().querySelectorAll('.profile-detail-stat-value')).map(x=>x.textContent);
@@ -61,14 +62,14 @@ check(syncCalls===1,'existing metadata sync starts once per stats render');
 check(document.documentElement.scrollWidth<=innerWidth+1,'stats fit width '+innerWidth);
 document.getElementById('profile-stats-back').click();await tick();check(document.activeElement.id==='open-profile-stats','home focus restored');
 check(truth()===before,'rendering and navigation preserve tracker, favorites and History');
-DATA.profile.avatar_type='upload';DATA.profile.avatar_data='data:image/webp;base64,UklGRg==';DATA.profile.header_type='upload';DATA.profile.header_image='data:image/webp;base64,UklGRg==';await renderProfile();await tick();
+stage='upload';DATA.profile.avatar_type='upload';DATA.profile.avatar_data='data:image/webp;base64,UklGRg==';DATA.profile.header_type='upload';DATA.profile.header_image='data:image/webp;base64,UklGRg==';await renderProfile();await tick();
 check(root().querySelector('.profile-avatar img').getAttribute('src')===DATA.profile.avatar_data&&!!root().querySelector('.profile-header-image-layer img'),'saved upload presentation');
-DATA.profile.avatar_type='initial';DATA.profile.header_type='preset';DATA.profile.favorite_shows=[];DATA.profile.favorite_movies=[];await renderProfile();await tick();
+stage='initial avatar';DATA.profile.avatar_type='initial';DATA.profile.header_type='preset';DATA.profile.favorite_shows=[];DATA.profile.favorite_movies=[];await renderProfile();await tick();
 check(root().querySelector('.profile-avatar-initial').textContent==='B'&&root().querySelectorAll('.profile-favorite-slot.empty').length===16,'initial and empty favorites');
 check(document.documentElement.scrollWidth<=innerWidth+1,'home fits width '+innerWidth);
 activePage='settings';const markup=root().innerHTML;await renderProfile();check(root().innerHTML===markup,'late profile refresh cannot replace another route');
 check(root().querySelectorAll('[data-tvtracker-profile-owner="vue"]').length===1&&typeof window.renderProfileHomeView==='undefined','one native Profile owner');
-}catch(error){failures.push(String(error));}
+}catch(error){failures.push(stage+': '+String(error.stack || error));}
 document.body.dataset.acceptance=failures.length?'failed':'ready';document.body.dataset.failures=JSON.stringify(failures);parent.postMessage({acceptance:document.body.dataset.acceptance,failures},location.origin);
 </script></body></html>'''.encode()
 
