@@ -581,7 +581,11 @@
             return "/app/profile";
         }
         if(activePage === "settings"){
-            return "/app/settings";
+            const settings = window.TVTrackerSettings;
+            const section = settings && typeof settings.current === "function" ? settings.current() : "profile";
+            return settings && typeof settings.routeFor === "function"
+                ? settings.routeFor(section)
+                : "/app/settings/profile";
         }
         if(activePage === "notifications"){
             return "/app/notifications";
