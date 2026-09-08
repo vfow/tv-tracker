@@ -1211,8 +1211,8 @@ function refreshUIAfterRemoteSync(changes=null,forceFull=false){
             ? (typeof discoverPreviewShow !== "undefined" ? discoverPreviewShow : null)
             : (DATA.shows && DATA.shows[String(context.showId)]);
 
-            if(show && typeof renderEpisodeModal === "function"){
-                renderEpisodeModal(show,context.season,context.episode,context);
+            if(show && typeof renderEpisodeDetails === "function"){
+                renderEpisodeDetails(show,context.season,context.episode,context);
             }
         }else if(
             typeof selectedShowId !== "undefined" &&

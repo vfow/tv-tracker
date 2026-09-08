@@ -34,23 +34,6 @@
         });
     }
 
-    function currentTarget(){
-        if(typeof selectedEpisodeContext === "undefined" || !selectedEpisodeContext){ return null; }
-        const id = String(selectedEpisodeContext.showId || "");
-        const season = Number(selectedEpisodeContext.season);
-        const episode = Number(selectedEpisodeContext.episode);
-        if(!id || !Number.isFinite(season) || !Number.isFinite(episode)){ return null; }
-
-        let show = typeof DATA !== "undefined" && DATA && DATA.shows ? DATA.shows[id] : null;
-        if(!show && typeof discoverPreviewShow !== "undefined" && discoverPreviewShow && String(discoverPreviewShow.tmdb_id) === id){
-            show = discoverPreviewShow;
-        }
-        if(!show && typeof showDetailPreview !== "undefined" && showDetailPreview && String(showDetailPreview.tmdb_id) === id){
-            show = showDetailPreview;
-        }
-        return show ? {id,season,episode,show,key:episodeKey(season,episode)} : null;
-    }
-
     function crewFor(target){
         const store = target && target.show && target.show._episode_crew_credits;
         return store && Array.isArray(store[target.key]) ? store[target.key] : null;
@@ -81,7 +64,7 @@
                         writeCachedV2EpisodeDetails(target.id,target.season,target.episode,details);
                     }
                 }catch(error){
-                    return [];
+                    throw error;
                 }
             }
 
@@ -99,54 +82,11 @@
         finally{ pending.delete(requestKey); }
     }
 
-    function renderCrew(target,crew){
-        if(!crew.length || typeof renderCrewJobGroupsHTML !== "function" || typeof document === "undefined"){ return; }
-        const content = document.getElementById("episode-detail-content");
-        const body = content && content.querySelector ? content.querySelector(".episode-page-body") : null;
-        if(!body){ return; }
-        const current = body.querySelector(".episode-page-crew-section");
-        if(current && current.dataset.episodeCrewKey === target.key){ return; }
-        if(current){ current.remove(); }
-        body.insertAdjacentHTML("beforeend",`
-            <section class="modal-section episode-page-crew-section" data-episode-crew-key="${target.key}">
-                <h3 class="modal-section-heading">Crew</h3>
-                ${renderCrewJobGroupsHTML(crew,"tv","")}
-            </section>
-        `);
-    }
-
-    async function refresh(){
-        const target = currentTarget();
-        if(!target){ return; }
-        const crew = crewFor(target) || await ensureCrew(target);
-        const latest = currentTarget();
-        if(latest && latest.id === target.id && latest.key === target.key){ renderCrew(latest,crew); }
-    }
-
-    let scheduled = false;
-    function schedule(){
-        if(scheduled){ return; }
-        scheduled = true;
-        setTimeout(()=>{ scheduled = false; refresh().catch(()=>{}); },0);
-    }
-
-    if(typeof document !== "undefined"){
-        const content = document.getElementById("episode-detail-content");
-        if(content && typeof MutationObserver !== "undefined"){
-            new MutationObserver(schedule).observe(content,{childList:true,subtree:true});
-        }
-    }
-    if(typeof window !== "undefined"){
-        window.TVTrackerEpisodeCrew = Object.freeze({jobs:JOBS.slice(),normalizeEpisodeCrew});
-    }
-    schedule();
-})();
-
-(function(){
-    if(typeof document === "undefined" || document.querySelector('script[data-episode-tabs-loader="true"]')){ return; }
-    const script = document.createElement("script");
-    script.src = "/static/js/episode-tabs.js";
-    script.async = false;
-    script.dataset.episodeTabsLoader = "true";
-    document.head.appendChild(script);
+    window.TVTrackerEpisodeCrew = Object.freeze({
+        jobs:JOBS.slice(),normalizeEpisodeCrew,
+        load:(show,season,episode)=>ensureCrew({
+            id:String(show.tmdb_id),season:Number(season),episode:Number(episode),show,
+            key:episodeKey(season,episode)
+        })
+    });
 })();

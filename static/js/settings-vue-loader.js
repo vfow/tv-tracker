@@ -43,6 +43,8 @@
         return loadPromise;
     }
 
+    // The existing bundle also owns Episode Details and its watched controller.
+    global.TVTrackerVueLoader = Object.freeze({load:loadVueSettings});
     document.addEventListener("tvtracker:settings-vue-needed",loadVueSettings);
     const currentPath = String(global.location && global.location.pathname || "");
     const settingsRoute = /^\/app\/settings(?:\/(?:profile|auth|notifications|streaming|data|danger-zone))?\/?$/.test(currentPath);

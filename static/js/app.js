@@ -9233,6 +9233,7 @@ function closeShowDetailsPage(){
 
 function closeShowModal(){
     selectedEpisodeContext = null;
+    if(window.TVTrackerEpisodeDetailsBridge) window.TVTrackerEpisodeDetailsBridge.release();
 
     const modal = document.getElementById("show-modal");
     if(modal){
@@ -9274,53 +9275,12 @@ function showEpisodeDetailPageShell(navigationContext=""){
 }
 
 function renderEpisodeDetailLoading(showId,seasonNumber,episodeNumber){
-    const content = document.getElementById("episode-detail-content");
-    if(!content){
-        return;
-    }
-
-    content.innerHTML = typeof renderTrackerEpisodeSkeletonHTML === "function"
-    ? renderTrackerEpisodeSkeletonHTML(seasonNumber,episodeNumber)
-    : `
-        <div class="episode-detail-page-inner">
-            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-            <div class="empty-state episode-detail-loading-state">
-                <h2>Loading episode</h2>
-                <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
-            </div>
-        </div>
-    `;
-
-    const backButton = document.getElementById("episode-open-show-button");
-    if(backButton){
-        backButton.addEventListener("click",closeEpisodeDetailsPage);
-    }
+    return window.TVTrackerEpisodeDetailsBridge.renderState("loading",showId,seasonNumber,episodeNumber);
 }
 
-function renderEpisodeDetailError(message){
-    const content = document.getElementById("episode-detail-content");
-    if(!content){
-        return;
-    }
-
-    content.innerHTML = `
-        <div class="episode-detail-page-inner">
-            <button class="episode-detail-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
-                <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-            </button>
-            <div class="empty-state episode-detail-loading-state">
-                <h2>Episode details failed to load</h2>
-                <p>Try again later.</p>
-            </div>
-        </div>
-    `;
-
-    const backButton = document.getElementById("episode-open-show-button");
-    if(backButton){
-        backButton.addEventListener("click",closeEpisodeDetailsPage);
-    }
+function renderEpisodeDetailError(){
+    const selected = selectedEpisodeContext || {};
+    return window.TVTrackerEpisodeDetailsBridge.renderState("error",selected.showId,selected.season,selected.episode);
 }
 
 function closeEpisodeDetailsPage(){
@@ -9350,7 +9310,7 @@ function renderActiveEpisodeDetailPage(){
 
     if(show){
         selectedEpisodeContext.discoverPreview = !(DATA.shows && DATA.shows[id]);
-        renderEpisodeModal(
+        renderEpisodeDetails(
             show,
             selectedEpisodeContext.season,
             selectedEpisodeContext.episode,
@@ -9477,7 +9437,7 @@ async function openEpisodeModal(showId,season,episode,options={}){
         return;
     }
 
-    renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+    renderEpisodeDetails(show,seasonNumber,episodeNumber,selectedEpisodeContext);
 
     if(neededLoad && !isDiscoverPreview){
         saveData({showIds:[id]});
@@ -9486,7 +9446,7 @@ async function openEpisodeModal(showId,season,episode,options={}){
     if(needsEpisodeV2Details){
         episodeDetailsPromise.then(changed=>{
             if(changed && isStillSelectedEpisode(show,seasonNumber,episodeNumber)){
-                renderEpisodeModal(show,seasonNumber,episodeNumber,selectedEpisodeContext);
+                renderEpisodeDetails(show,seasonNumber,episodeNumber,selectedEpisodeContext);
             }
         }).catch(error=>{
             if(isStillSelectedEpisode(show,seasonNumber,episodeNumber)){

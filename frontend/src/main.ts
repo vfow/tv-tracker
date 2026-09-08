@@ -1,3 +1,5 @@
+import EpisodeDetails from './episode-details/EpisodeDetails.vue';
+import type { EpisodeDetailsBridge, EpisodeDetailsModel, EpisodeDetailsOwner } from './episode-details/contracts';
 import { createApp, h, shallowRef, type App as VueApp } from 'vue';
 
 import EpisodeTrackingController from './episode-tracking/EpisodeTrackingController.vue';
@@ -112,6 +114,7 @@ type VueFoundationBridge = Readonly<{
 
 declare global {
   interface Window {
+    TVTrackerEpisodeDetailsBridge?: EpisodeDetailsBridge;
     TVTrackerVueFoundation?: VueFoundationBridge;
     TVTrackerSettingsBridge?: SettingsBridge;
     TVTrackerSearchVueBridge?: SearchBridge;
@@ -160,6 +163,28 @@ const trackerListsModel = shallowRef<TrackerListsViewModel | null>(null);
 let historyApp: VueApp<Element> | null = null;
 let historyRoot: Element | null = null;
 let episodeTrackingControllerApp: VueApp<Element> | null = null;
+let episodeDetailsApp: VueApp<Element> | null = null;
+let episodeDetailsRoot: Element | null = null;
+const episodeDetailsModel = shallowRef<EpisodeDetailsModel | null>(null);
+function unmountEpisodeDetails(): void {
+  episodeDetailsApp?.unmount(); episodeDetailsApp=null; episodeDetailsRoot=null; episodeDetailsModel.value=null;
+}
+const episodeDetailsOwner: EpisodeDetailsOwner = Object.freeze({
+  render(model: EpisodeDetailsModel): void {
+    const root = document.getElementById('episode-detail-content');
+    const bridge = window.TVTrackerEpisodeDetailsBridge;
+    if (!root || !bridge) return;
+    if (episodeDetailsApp && episodeDetailsRoot === root && root.querySelector('[data-tvtracker-episode-details-owner="vue"]')) {
+      episodeDetailsModel.value = model; return;
+    }
+    unmountEpisodeDetails(); root.replaceChildren(); episodeDetailsRoot=root; episodeDetailsModel.value=model;
+    episodeDetailsApp=createApp({setup:()=>()=>episodeDetailsModel.value ? h(EpisodeDetails, {
+      model:episodeDetailsModel.value,actions:bridge.actions
+    }) : null});
+    episodeDetailsApp.mount(root);
+  }, unmount:unmountEpisodeDetails
+});
+
 
 function mountEpisodeTrackingController(): void {
   if (episodeTrackingControllerApp || !document.body) return;
@@ -532,6 +557,7 @@ window.TVTrackerVueFoundation = Object.freeze({
 });
 
 mountEpisodeTrackingController();
+window.TVTrackerEpisodeDetailsBridge?.attachVueOwner(episodeDetailsOwner);
 window.TVTrackerSettingsBridge?.attachVueOwner(settingsOwner);
 window.TVTrackerSearchVueBridge?.attachVueOwner(searchOwner);
 window.TVTrackerDiscoverVueBridge?.attachVueOwner(discoverOwner);
