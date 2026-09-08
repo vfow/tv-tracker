@@ -52,9 +52,9 @@ assert(app.includes('reopenCompletedShowAfterUnwatch(show,seasonNumber)'), 'seas
 assert(app.includes('await saveShowMutation(id,addedEntries,deletedHistoryIds);'), 'episode mutation persistence ownership must remain legacy');
 assert(app.includes('isEpisodeLoggable(episodeData,show,season)'), 'future/unavailable episode blocking must remain in the mutation layer');
 
-assert(ui.includes('document.querySelectorAll(".episode-check-button")'), 'legacy episode listener remains physically present for rollback until cleanup phase');
-assert(ui.includes('document.querySelectorAll(".season-all-button")'), 'legacy season listener remains physically present for rollback until cleanup phase');
-assert(ui.includes('const toggleButton = document.getElementById("episode-toggle-watched-button")'), 'legacy episode-detail listener remains physically present for rollback until cleanup phase');
+assert(!ui.includes('const toggleButton = document.getElementById("episode-toggle-watched-button")'), 'obsolete Episode watched listener must be removed');
+assert(!ui.includes('await updateEpisodeWatched(show.tmdb_id,Number(this.dataset.season)'), 'duplicate Show episode watched listener must be removed');
+assert(!ui.includes('await markSeasonWatched(show.tmdb_id,Number(this.dataset.season)'), 'duplicate Show season watched listener must be removed');
 assert(watchlistRuntime.includes('await global.markNextEpisode(id);'), 'Vue-native Watchlist next-episode action must continue to call the established mutation');
 assert(watchlistRuntime.includes('ownership:"vue-dom"'), 'Watchlist remains a Vue-owned live DOM surface while preserving legacy mutation delegation');
 

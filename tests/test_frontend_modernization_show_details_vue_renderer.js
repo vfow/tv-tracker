@@ -419,7 +419,7 @@ const interactionInfoTabs = nodesWithClass(interactionInfoModel.tabContent,'show
 const interactionSeasonToggles = nodesWithClass(interactionEpisodeModel.tabContent,'season-toggle-area').map(runtimeElement);
 const interactionCalls = [];
 const interactionSource = ui.slice(
-    ui.indexOf('function stopNestedSeasonAction'),
+    ui.indexOf('function attachShowDetailsPageEvents'),
     ui.indexOf('function getEpisodeCountForNavigation')
 );
 const toggleSeasonSource = app.slice(
@@ -447,6 +447,11 @@ const interactionContext = {
     ensureSeasonLoaded(nextShow,season,force,options){ interactionCalls.push(['lazy-load',nextShow,season,force,options]); },
     saveData(options){ interactionCalls.push(['save',options]); }
 };
+const interactionDocument = interactionContext.document;
+interactionDocument.getElementById = id => id === 'show-detail-content' ? {
+    querySelector: interactionDocument.querySelector,
+    querySelectorAll: interactionDocument.querySelectorAll
+} : null;
 vm.createContext(interactionContext);
 vm.runInContext(toggleSeasonSource + '\n' + interactionSource,interactionContext);
 interactionContext.attachShowDetailsPageEvents(show,true);
@@ -545,7 +550,7 @@ liveUiBoundaries.forEach(name=>{
 assert(!ui.includes('function renderShowDetailsPageHTML(show,options={})'));
 assert(!ui.includes('function renderShowDetailsPage(show,options={})'));
 assert(ui.includes('function attachShowDetailsPageEvents(show,isTracked)'));
-assert(ui.includes('document.querySelectorAll(".season-toggle-area[data-season]")'));
+assert(ui.includes('root.querySelectorAll(".season-toggle-area[data-season]")'));
 assert(ui.includes('toggleSeason(show.tmdb_id,Number(this.dataset.season));'));
 assert(ui.includes('if(!isPlainAppLinkClick(event)){ return; }'));
 assert(!ui.includes('function renderShowDetailTabContentHTML(show)'), 'audited legacy Show composer must be physically deleted');

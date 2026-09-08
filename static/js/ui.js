@@ -326,29 +326,6 @@ function renderTrackerDetailSkeletonHTML(kind="show",backButtonId="show-page-bac
     `;
 }
 
-function renderTrackerEpisodeSkeletonHTML(seasonNumber,episodeNumber){
-    return `
-        <div class="episode-detail-page-inner tt-episode-skeleton-page">
-            <div class="show-page-hero-shell episode-page-hero-shell">
-                <button class="show-page-back-button episode-page-back-button" id="episode-open-show-button" type="button" aria-label="Back">
-                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-                </button>
-                <div class="show-page-hero episode-page-hero tt-episode-skeleton-still"></div>
-                <div class="show-page-identity-row episode-page-identity-row tt-episode-skeleton-copy">
-                    <div class="show-page-hero-content episode-page-hero-content">
-                        <div class="tt-skeleton-kicker"></div>
-                        <div class="tt-skeleton-heading"></div>
-                        <div class="tt-skeleton-line tt-skeleton-line-wide"></div>
-                        <div class="tt-skeleton-line tt-skeleton-line-mid"></div>
-                        <div class="tt-skeleton-action-row"><span></span><span></span><span></span></div>
-                        <p>S${Number(seasonNumber)}E${String(Number(episodeNumber)).padStart(2,"0")}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
 function getCollectionPosterSlotTitle(slot,collection){
     const title = slot && (slot.title || slot.name || slot.original_title)
     ? String(slot.title || slot.name || slot.original_title).trim()
@@ -1087,7 +1064,7 @@ function refreshInterfaceForDataChanges(change={}){
     if(selectedNeedsRefresh && selectedEpisodeContext){
         const show = typeof getShowForDetailPage === "function" ? getShowForDetailPage(selectedId) : (DATA.shows && DATA.shows[selectedId]);
         if(show){
-            renderEpisodeModal(
+            renderEpisodeDetails(
                 show,
                 selectedEpisodeContext.season,
                 selectedEpisodeContext.episode,
@@ -1450,19 +1427,6 @@ function collectCrewJobGroups(source){
     });
 }
 
-function renderCrewJobGroupsHTML(source,media="tv",emptyText="Unknown"){
-    const groups = collectCrewJobGroups(source);
-    if(!groups.length){
-        return `<div class="v2-api-empty">${escapeHTML(emptyText)}</div>`;
-    }
-    return `<div class="movie-crew-department-list crew-job-group-list">${groups.map(group=>`
-        <div class="show-detail-crew-group movie-crew-department-group crew-job-group">
-            <h3 class="modal-section-heading movie-crew-department-heading crew-job-heading">${escapeHTML(group.label)}</h3>
-            <div class="v2-actor-list movie-crew-list">${renderV2CrewMemberRows(group.people,group.jobKey,media)}</div>
-        </div>
-    `).join("")}</div>`;
-}
-
 function v2GetWatchRegion(){
     return "US";
 }
@@ -1521,76 +1485,6 @@ function getCrewRouteRole(person,fallbackRole=""){
     return String(job || "").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
 }
 
-function renderV2ActorImageHTML(actor){
-    if(actor && actor.profile_path){
-        return `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(actor.profile_path,"w185"))}" alt="">`;
-    }
-
-    return renderPersonSilhouettePlaceholderHTML("v2-actor-placeholder");
-}
-
-function getCastLayoutSetting(){
-    return "vertical";
-}
-
-function renderV2ActorListHTML(actors,limit=12,media="tv"){
-    const source = Array.isArray(actors) ? actors : [];
-    const list = limit === null ? source : source.slice(0,Number(limit || 12));
-
-    return list.map(actor=>{
-        const actorId = Number(actor && actor.id || 0);
-        const actorName = actor && actor.name || "Unknown Actor";
-        const cleanMedia = media === "movie" ? "movie" : "tv";
-        const route = actorId > 0 && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute("acting",actorId,actorName,cleanMedia) : "";
-        const openTag = route
-        ? `<a class="v2-actor-list-row v2-person-card-link" href="${escapeHTML(route)}" data-person-role="acting" data-person-media="${escapeHTML(cleanMedia)}" data-person-id="${escapeHTML(actorId)}" data-person-name="${escapeHTML(actorName)}">`
-        : `<div class="v2-actor-list-row">`;
-        const closeTag = route ? "</a>" : "</div>";
-
-        return `
-            ${openTag}
-                <div class="v2-actor-list-photo">${renderV2ActorImageHTML(actor)}</div>
-                <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${escapeHTML(actorName)}</div>
-                    <div class="v2-actor-role">${escapeHTML(actor.character || "Unknown Role")}</div>
-                </div>
-            ${closeTag}
-        `;
-    }).join("");
-}
-
-function renderV2ActorGridHTML(actors,limit=12){
-    const source = Array.isArray(actors) ? actors : [];
-    const list = limit === null ? source : source.slice(0,Number(limit || 12));
-
-    return list.map(actor=>{
-        return `
-            <div class="v2-actor-grid-card">
-                <div class="v2-actor-grid-photo">${renderV2ActorImageHTML(actor)}</div>
-                <div class="v2-actor-name">${escapeHTML(actor.name || "Unknown Actor")}</div>
-                <div class="v2-actor-role">${escapeHTML(actor.character || "Unknown Role")}</div>
-            </div>
-        `;
-    }).join("");
-}
-
-function renderV2ActorListSectionHTML(title,actors,extraClass="",options={}){
-    const limit = Object.prototype.hasOwnProperty.call(options,"limit") ? options.limit : 12;
-    const layout = getCastLayoutSetting();
-    const rows = layout === "grid" ? renderV2ActorGridHTML(actors,limit) : renderV2ActorListHTML(actors,limit);
-
-    if(!rows){
-        return "";
-    }
-
-    return `
-        <div class="modal-section v2-clean-section v2-actor-list-section ${escapeHTML(extraClass)} v2-cast-layout-${escapeHTML(layout)}">
-            <h3 class="modal-section-heading">${escapeHTML(title)}</h3>
-            <div class="${layout === "grid" ? "v2-actor-grid" : "v2-actor-list"}">${rows}</div>
-        </div>
-    `;
-}
-
 function getV2EpisodeCreditGroups(show,seasonNumber,episodeNumber){
     const key = `${Number(seasonNumber)}-${Number(episodeNumber)}`;
     const guestStars = show && show._episode_guest_stars && Array.isArray(show._episode_guest_stars[key])
@@ -1601,15 +1495,6 @@ function getV2EpisodeCreditGroups(show,seasonNumber,episodeNumber){
     : [];
 
     return {guestStars,cast};
-}
-
-function renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber){
-    const credits = getV2EpisodeCreditGroups(show,seasonNumber,episodeNumber);
-
-    return [
-        renderV2ActorListSectionHTML("Guest Stars",credits.guestStars,"v2-episode-guest-stars-section",{limit:null}),
-        renderV2ActorListSectionHTML("Cast",credits.cast,"v2-episode-cast-section",{limit:null})
-    ].filter(Boolean).join("");
 }
 
 function v2GetEpisodeDetailsObject(show,seasonNumber,episodeNumber){
@@ -1624,31 +1509,6 @@ function v2GetEpisodeDetailsObject(show,seasonNumber,episodeNumber){
         ...v2Details,
         external_ids:v2Details.external_ids || details.external_ids || null
     };
-}
-
-function renderV2EpisodeLinksHTML(show,seasonNumber,episodeNumber,episodeData){
-    const ids = episodeData && episodeData.external_ids ? episodeData.external_ids : {};
-    const links = [];
-
-    if(ids.imdb_id){
-        links.push(`<a class="v2-clean-link v2-external-pill" href="https://www.imdb.com/title/${escapeHTML(ids.imdb_id)}/" target="_blank" rel="noopener noreferrer">IMDb</a>`);
-    }
-
-    if(ids.tvdb_id){
-        links.push(`<a class="v2-clean-link v2-external-pill" href="https://thetvdb.com/dereferrer/episode/${escapeHTML(ids.tvdb_id)}" target="_blank" rel="noopener noreferrer">TVDB</a>`);
-    }
-
-    if(show && show.tmdb_id){
-        links.push(`<a class="v2-clean-link v2-external-pill" href="https://www.themoviedb.org/tv/${escapeHTML(show.tmdb_id)}/season/${escapeHTML(seasonNumber)}/episode/${escapeHTML(episodeNumber)}" target="_blank" rel="noopener noreferrer">TMDB</a>`);
-    }
-
-    if(!links.length){
-        return "";
-    }
-
-    return `<div class="v2-episode-links-line v2-show-action-line">${links.map((item,index)=>{
-        return `${index > 0 ? `<span class="modal-meta-separator">•</span>` : ""}${item}`;
-    }).join("")}</div>`;
 }
 
 function attachV2ShowModalEvents(show){
@@ -1696,18 +1556,6 @@ function renderShowDetailsPagePreservingScroll(show){
             page.scrollTop = scrollTop;
         });
     }
-}
-
-function renderPersonSilhouettePlaceholderHTML(className="person-silhouette-placeholder"){
-    const cleanClass = String(className || "person-silhouette-placeholder").trim() || "person-silhouette-placeholder";
-    return `
-        <div class="${escapeHTML(cleanClass)} person-silhouette-placeholder" aria-hidden="true">
-            <svg viewBox="0 0 64 64" focusable="false" role="img">
-                <path class="person-silhouette-head" d="M32 30c7.18 0 13-5.82 13-13S39.18 4 32 4 19 9.82 19 17s5.82 13 13 13Z"></path>
-                <path class="person-silhouette-body" d="M10 60c1.8-13.05 10.4-22 22-22s20.2 8.95 22 22H10Z"></path>
-            </svg>
-        </div>
-    `;
 }
 
 function formatMovieReleaseDate(dateString){
@@ -1760,52 +1608,19 @@ function getCountryLabel(code){
     return `${flag ? flag + " " : ""}${name}`;
 }
 
-function renderV2CrewMemberRows(people,fallbackRole="",media="tv"){
-    return (Array.isArray(people) ? people : []).map(person=>{
-        const routeRole = getCrewRouteRole(person,fallbackRole);
-        const photo = person.profile_path
-        ? `<img loading="lazy" decoding="async" src="${escapeHTML(trackerImageURL(person.profile_path,"w185"))}" alt="">`
-        : renderPersonSilhouettePlaceholderHTML("v2-actor-placeholder");
-
-        const personId = Number(person && person.id || 0);
-        const personName = person.name || "Unknown";
-        const cleanMedia = media === "movie" ? "movie" : "tv";
-        const route = routeRole && personId > 0 && typeof getPersonDetailRoute === "function" ? getPersonDetailRoute(routeRole,personId,personName,cleanMedia) : "";
-        const openTag = route
-        ? `<a class="v2-actor-list-row v2-person-card-link" href="${escapeHTML(route)}" data-person-role="${escapeHTML(routeRole)}" data-person-media="${escapeHTML(cleanMedia)}" data-person-id="${escapeHTML(personId)}" data-person-name="${escapeHTML(personName)}">`
-        : `<div class="v2-actor-list-row">`;
-        const closeTag = route ? "</a>" : "</div>";
-
-        return `
-            ${openTag}
-                <div class="v2-actor-list-photo">${photo}</div>
-                <div class="v2-actor-list-text">
-                    <div class="v2-actor-name">${escapeHTML(personName)}</div>
-                    <div class="v2-actor-role">${escapeHTML(person.job || "Crew")}${person.episode_count ? ` • ${Number(person.episode_count)} episodes` : ""}</div>
-                </div>
-            ${closeTag}
-        `;
-    }).join("");
-}
-
 function renderShowModal(show){
     renderShowDetailsPage(show,{preview:!(DATA.shows && DATA.shows[String(show && show.tmdb_id)])});
 }
 
-function stopNestedSeasonAction(event){
-    event.preventDefault();
-    event.stopPropagation();
-}
-
-
-
 function attachShowDetailsPageEvents(show,isTracked){
-    const backButton = document.getElementById("show-page-back-button");
+    const root = document.getElementById("show-detail-content");
+    if(!root) return;
+    const backButton = root.querySelector("#show-page-back-button");
     if(backButton){
         backButton.addEventListener("click",closeShowDetailsPage);
     }
 
-    document.querySelectorAll(".show-page-add-status-button").forEach(button=>{
+    root.querySelectorAll(".show-page-add-status-button").forEach(button=>{
         button.addEventListener("click",async function(){
             if(this.disabled){
                 return;
@@ -1821,20 +1636,20 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
+    root.querySelectorAll(".modal-status-button[data-status]").forEach(button=>{
         button.addEventListener("click",function(){
             updateShowStatus(show.tmdb_id,this.dataset.status);
         });
     });
 
-    document.querySelectorAll(".show-detail-tab").forEach(button=>{
+    root.querySelectorAll(".show-detail-tab").forEach(button=>{
         button.addEventListener("click",function(){
             activeShowDetailsTabs[String(show.tmdb_id)] = this.dataset.showDetailTab || "Info";
             renderShowDetailsPagePreservingScroll(show);
         });
     });
 
-    document.querySelectorAll(".show-info-subtab").forEach(button=>{
+    root.querySelectorAll(".show-info-subtab").forEach(button=>{
         button.addEventListener("click",function(){
             const showId = String(show.tmdb_id || "");
             activeShowInfoTabs[showId] = this.dataset.showInfoTab || "Cast";
@@ -1842,7 +1657,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
+    root.querySelectorAll(".show-genre-link[data-genre-name]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openGenrePage !== "function" || !isPlainAppLinkClick(event)){
                 return;
@@ -1852,7 +1667,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll("[data-discovery-type][data-discovery-value]").forEach(link=>{
+    root.querySelectorAll("[data-discovery-type][data-discovery-value]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openDiscoveryFilterPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
@@ -1863,7 +1678,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".v2-person-link[data-person-role][data-person-id]").forEach(link=>{
+    root.querySelectorAll(".v2-person-link[data-person-role][data-person-id]").forEach(link=>{
         link.addEventListener("click",function(event){
             if(typeof openPersonPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
@@ -1874,7 +1689,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".v2-person-card-link[data-person-role][data-person-id]").forEach(card=>{
+    root.querySelectorAll(".v2-person-card-link[data-person-role][data-person-id]").forEach(card=>{
         card.addEventListener("click",function(event){
             if(typeof openPersonPage !== "function" || !isPlainAppLinkClick(event)){
                 return;
@@ -1885,7 +1700,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
+    root.querySelectorAll(".season-toggle-area[data-season]").forEach(toggle=>{
         const activate = function(event){
             if(event){
                 event.preventDefault();
@@ -1902,64 +1717,15 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     });
 
-    document.querySelectorAll(".season-all-button").forEach(button=>{
+    // Vue's capture controller owns watched clicks; these pointer guards only
+    // prevent nested season controls from activating their parent interaction.
+    root.querySelectorAll(".season-all-button, .episode-check-button").forEach(button=>{
         ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
-            button.addEventListener(eventName,function(event){
-                event.stopPropagation();
-            });
-        });
-
-        button.addEventListener("click",async function(event){
-            stopNestedSeasonAction(event);
-
-            if(this.disabled || !isTracked){
-                return;
-            }
-
-            this.disabled = true;
-            try{
-                if(!this.classList.contains("checked")){
-                    await playCheckSuccessAnimation(this);
-                }
-                await markSeasonWatched(show.tmdb_id,Number(this.dataset.season));
-            }finally{
-                if(this.isConnected){
-                    this.disabled = false;
-                }
-            }
+            button.addEventListener(eventName,event=>event.stopPropagation());
         });
     });
 
-    document.querySelectorAll(".episode-check-button").forEach(button=>{
-        ["pointerdown","pointerup","mousedown","mouseup","touchstart"].forEach(eventName=>{
-            button.addEventListener(eventName,function(event){
-                event.stopPropagation();
-            });
-        });
-
-        button.addEventListener("click",async function(event){
-            stopNestedSeasonAction(event);
-
-            if(this.disabled || !isTracked){
-                return;
-            }
-
-            const currentlyWatched = this.dataset.watched === "true";
-            this.disabled = true;
-            try{
-                if(!currentlyWatched){
-                    await playCheckSuccessAnimation(this);
-                }
-                await updateEpisodeWatched(show.tmdb_id,Number(this.dataset.season),Number(this.dataset.episode),!currentlyWatched);
-            }finally{
-                if(this.isConnected){
-                    this.disabled = false;
-                }
-            }
-        });
-    });
-
-    document.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
+    root.querySelectorAll(".episode-row[data-season][data-episode]").forEach(row=>{
         const warmEpisodeDetails = function(){
             if(typeof prefetchEpisodeV2Details === "function"){
                 prefetchEpisodeV2Details(show.tmdb_id,Number(row.dataset.season),Number(row.dataset.episode));
@@ -1979,7 +1745,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         }
     });
 
-    const favoriteButton = document.querySelector("[data-show-favorite-button]");
+    const favoriteButton = root.querySelector("[data-show-favorite-button]");
     if(favoriteButton){
         favoriteButton.addEventListener("click",async function(){
             if(this.disabled){
@@ -1996,7 +1762,7 @@ function attachShowDetailsPageEvents(show,isTracked){
         });
     }
 
-    const removeButton = document.getElementById("remove-show-button");
+    const removeButton = root.querySelector("#remove-show-button");
     if(removeButton){
         removeButton.addEventListener("click",function(){
             removeShow(show.tmdb_id);
@@ -2092,219 +1858,6 @@ function getNextEpisodeTarget(show,seasonNumber,episodeNumber){
 
     return null;
 
-}
-
-
-
-function renderEpisodeModal(show,seasonNumber,episodeNumber,context={}){
-
-    const content = document.getElementById("episode-detail-content");
-
-    if(!content){
-        return;
-    }
-
-    const isDiscoverPreview = context && context.discoverPreview;
-    const episodeData = v2GetEpisodeDetailsObject(show,seasonNumber,episodeNumber);
-    const historyEntry = getEpisodeHistoryEntry(show.tmdb_id,seasonNumber,episodeNumber);
-    const isWatched = isEpisodeWatched(show,seasonNumber,episodeNumber);
-    const aired = isEpisodeLoggable(episodeData,show,seasonNumber);
-
-    const episodeTitle = episodeData.name || "Untitled Episode";
-    const episodeCode = `S${seasonNumber}E${String(episodeNumber).padStart(2,"0")}`;
-    const imagePath = episodeData.still_path || show.backdrop_path || "";
-    const backdrop = imagePath
-    ? `linear-gradient(to top, #080808 0%, rgba(8,8,8,0.9) 13%, rgba(8,8,8,0.52) 46%, rgba(8,8,8,0.14) 100%), ${trackerBackgroundImage(imagePath,"original")}`
-    : `linear-gradient(to top, #080808 0%, #141414 100%)`;
-
-    const airDateText = episodeData.air_date
-    ? formatAirDate(episodeData.air_date,episodeData,show)
-    : "Unknown";
-    const runtimeText = episodeData.runtime ? `${episodeData.runtime} min` : "";
-    const episodeRating = Number(episodeData.vote_average || 0);
-    const episodeRatingHTML = episodeRating > 0
-    ? `<span class="tmdb-rating-group"><span class="tmdb-rating-inline">${episodeRating.toFixed(1)}</span><span class="tmdb-rating-slash">/</span><span class="tmdb-rating-ten">10</span></span>`
-    : "";
-    const showRoute = typeof getShowDetailRoute === "function"
-    ? getShowDetailRoute(show.tmdb_id,show.title || show.name || "")
-    : "/app/list/watching";
-
-    const watchedText = isDiscoverPreview
-    ? "Not in library"
-    : historyEntry && historyEntry.watched_at
-    ? formatEpisodeWatchedDate(historyEntry.watched_at)
-    : "Not watched";
-
-    const statusText = isDiscoverPreview
-    ? "Preview"
-    : isWatched
-    ? "Watched"
-    : aired
-    ? "Unwatched"
-    : "Not aired yet";
-
-    const canToggle = !isDiscoverPreview && (aired || isWatched);
-    const statusClass = isWatched ? "watched" : "";
-    const previousEpisodeTarget = getPreviousEpisodeTarget(show,seasonNumber,episodeNumber);
-    const nextEpisodeTarget = getNextEpisodeTarget(show,seasonNumber,episodeNumber);
-    const externalLinksHTML = renderV2EpisodeLinksHTML(show,seasonNumber,episodeNumber,episodeData);
-
-    content.innerHTML = `
-        <div class="episode-detail-page-inner episode-page-rebuild">
-            <div class="show-page-hero-shell episode-page-hero-shell">
-                <button class="show-page-back-button episode-page-back-button" id="episode-open-show-button" type="button" aria-label="Back to show">
-                    <img src="/static/assets/icons/arrow-narrow-left.svg" alt="">
-                </button>
-
-                <div class="modal-hero show-detail-hero show-page-hero episode-page-hero" style='background-image:${backdrop}'></div>
-
-                <div class="show-page-identity-row episode-page-identity-row">
-                    <div class="show-page-hero-content episode-page-hero-content">
-                        <div class="modal-title show-page-title episode-page-title">${escapeHTML(episodeTitle)}</div>
-                        <div class="modal-meta modal-meta-under-status show-page-meta-line episode-page-meta-line">
-                            <a class="show-detail-entity-link episode-page-show-link" href="${escapeHTML(showRoute)}">${escapeHTML(show.title || "Untitled Show")}</a>
-                            <span class="modal-meta-separator">•</span>
-                            <span>${escapeHTML(episodeCode)}</span>
-                            <span class="modal-meta-separator">•</span>
-                            <span>${escapeHTML(airDateText)}</span>
-                            ${runtimeText ? `<span class="modal-meta-separator">•</span><span>${escapeHTML(runtimeText)}</span>` : ""}
-                            ${episodeRatingHTML ? `<span class="modal-meta-separator">•</span>${episodeRatingHTML}` : ""}
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal-body show-page-body episode-page-body">
-                <div class="episode-page-primary-row">
-                    <section class="modal-section show-info-synopsis-section episode-page-info-section">
-                        <h3 class="modal-section-heading">Episode Info</h3>
-                        <div class="modal-overview">${escapeHTML(episodeData.overview || "No episode overview available.")}</div>
-                        ${externalLinksHTML}
-                    </section>
-
-                    <section class="episode-page-actions-section" aria-label="Episode actions">
-                        <div class="show-page-actions-wrap episode-detail-actions episode-page-actions">
-                            <div class="modal-status-buttons show-page-status-buttons episode-page-action-buttons">
-                                ${canToggle ? `<button class="modal-status-button episode-page-action-button ${isWatched ? "active" : ""}" id="episode-toggle-watched-button" type="button">${isWatched ? "MARK UNWATCHED" : "MARK WATCHED"}</button>` : ""}
-                                ${previousEpisodeTarget ? `<a class="modal-status-button episode-page-action-button episode-page-nav-button" id="episode-prev-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,previousEpisodeTarget.season,previousEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">PREVIOUS EPISODE</a>` : ""}
-                                ${nextEpisodeTarget ? `<a class="modal-status-button episode-page-action-button episode-page-nav-button" id="episode-next-button" href="${escapeHTML(typeof getEpisodeDetailRoute === "function" ? getEpisodeDetailRoute(show.tmdb_id,nextEpisodeTarget.season,nextEpisodeTarget.episode,show.title || show.name || "") : "/app/list/watching")}">NEXT EPISODE</a>` : ""}
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <section class="modal-section episode-page-status-section">
-                    <div class="episode-page-status-grid">
-                        <div class="show-progress-card episode-page-status-card ${statusClass}">
-                            <div class="episode-detail-label">Status</div>
-                            <div class="episode-detail-value">${escapeHTML(statusText)}</div>
-                        </div>
-                        <div class="show-progress-card episode-page-status-card">
-                            <div class="episode-detail-label">Watched</div>
-                            <div class="episode-detail-value">${escapeHTML(watchedText)}</div>
-                        </div>
-                    </div>
-                </section>
-
-                ${renderV2EpisodeActorsHTML(show,seasonNumber,episodeNumber)}
-            </div>
-        </div>
-    `;
-
-    const openShowButton = document.getElementById("episode-open-show-button");
-
-    if(openShowButton){
-        openShowButton.addEventListener("click",function(){
-            if(!expandedSeasons[String(show.tmdb_id)]){
-                expandedSeasons[String(show.tmdb_id)] = {};
-            }
-
-            expandedSeasons[String(show.tmdb_id)][String(seasonNumber)] = true;
-            closeEpisodeDetailsPage();
-        });
-    }
-
-    const previousButton = document.getElementById("episode-prev-button");
-
-    if(previousButton && previousEpisodeTarget){
-        previousButton.addEventListener("click",function(event){
-            if(!isPlainAppLinkClick(event)){ return; }
-            event.preventDefault();
-
-            if(isDiscoverPreview){
-                openEpisodeModal(
-                    show.tmdb_id,
-                    previousEpisodeTarget.season,
-                    previousEpisodeTarget.episode,
-                    {backToShow:true,discoverPreview:true,replaceInPlace:true,replaceRoute:true}
-                );
-                return;
-            }
-
-            openEpisodeModal(
-                show.tmdb_id,
-                previousEpisodeTarget.season,
-                previousEpisodeTarget.episode,
-                {backToShow:true,replaceInPlace:true,replaceRoute:true}
-            );
-        });
-    }
-
-    const nextButton = document.getElementById("episode-next-button");
-
-    if(nextButton && nextEpisodeTarget){
-        nextButton.addEventListener("click",function(event){
-            if(!isPlainAppLinkClick(event)){ return; }
-            event.preventDefault();
-
-            if(isDiscoverPreview){
-                openEpisodeModal(
-                    show.tmdb_id,
-                    nextEpisodeTarget.season,
-                    nextEpisodeTarget.episode,
-                    {backToShow:true,discoverPreview:true,replaceInPlace:true,replaceRoute:true}
-                );
-                return;
-            }
-
-            openEpisodeModal(
-                show.tmdb_id,
-                nextEpisodeTarget.season,
-                nextEpisodeTarget.episode,
-                {backToShow:true,replaceInPlace:true,replaceRoute:true}
-            );
-        });
-    }
-
-    const toggleButton = document.getElementById("episode-toggle-watched-button");
-
-    if(toggleButton){
-        toggleButton.addEventListener("click",async function(){
-            if(this.disabled){
-                return;
-            }
-
-            this.disabled = true;
-
-            try{
-                if(!isWatched){
-                    await playCheckSuccessAnimation(this);
-                }
-
-                await updateEpisodeWatched(
-                    show.tmdb_id,
-                    seasonNumber,
-                    episodeNumber,
-                    !isWatched
-                );
-            }finally{
-                if(this.isConnected){
-                    this.disabled = false;
-                }
-            }
-        });
-    }
 }
 
 

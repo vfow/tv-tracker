@@ -5,6 +5,20 @@ const path = require('path');
 // Each removed entry was a disconnected renderer/helper in the ownership audit.
 // Scan shipped source and templates, including inline handlers and global names.
 const removed = [
+    "stopNestedSeasonAction",
+    "renderCrewJobGroupsHTML",
+    "renderV2ActorImageHTML",
+    "renderV2ActorListHTML",
+    "renderV2ActorGridHTML",
+    "renderV2ActorListSectionHTML",
+    "renderV2EpisodeActorsHTML",
+    "renderV2EpisodeLinksHTML",
+    "renderPersonSilhouettePlaceholderHTML",
+    "renderV2CrewMemberRows",
+    "renderEpisodeModal",
+    "renderTrackerEpisodeSkeletonHTML",
+    "getCastLayoutSetting",
+
     "renderLibrarySearchControl",
     "createLibraryFilterMenu",
     "createLibrarySearchBox",
