@@ -3047,25 +3047,6 @@ function getProfileHeaderImageLayerHTML(profile){
 }
 
 
-function getProfileHeaderPreviewHTML(profile){
-
-    const data = profile || {};
-
-    return `
-        <div class="settings-header-preview ${getProfileHeaderClass(data)}" id="settings-header-preview">
-            ${getProfileHeaderImageLayerHTML(data)}
-            <div class="settings-header-preview-content">
-                <div class="settings-header-mini-avatar">
-                    ${getProfileAvatarInnerHTML(data)}
-                </div>
-                <span>${escapeHTML(data.username || "Username")}</span>
-            </div>
-        </div>
-    `;
-
-}
-
-
 function createProfileSettingsDraft(){
 
     ensureProfileData();
@@ -3090,49 +3071,6 @@ function createProfileSettingsDraft(){
         header_preset:getProfileHeaderPreset(DATA.profile),
         header_image:DATA.profile.header_image || ""
     };
-
-}
-
-
-function updateProfileSettingsPreview(){
-
-    if(!profileSettingsDraft){
-        return;
-    }
-
-    const preview = document.getElementById("settings-avatar-preview");
-
-    if(preview){
-        preview.innerHTML = getProfileAvatarInnerHTML(profileSettingsDraft);
-    }
-
-    const headerPreview = document.getElementById("profile-header-preview-wrap");
-
-    if(headerPreview){
-        headerPreview.innerHTML = getProfileHeaderPreviewHTML(profileSettingsDraft);
-    }
-
-    document.querySelectorAll(".avatar-preset-button").forEach(button=>{
-
-        const type = button.dataset.avatarType;
-        const preset = button.dataset.avatarPreset || "";
-        const isActive = profileSettingsDraft.avatar_type === type && (
-            type !== "preset" || profileSettingsDraft.avatar_preset === preset
-        );
-
-        button.classList.toggle("active",isActive);
-
-    });
-
-    document.querySelectorAll(".profile-header-preset-button").forEach(button=>{
-
-        const preset = button.dataset.profileHeaderPreset || "default";
-        const isActive = profileSettingsDraft.header_type !== "upload" &&
-        profileSettingsDraft.header_preset === preset;
-
-        button.classList.toggle("active",isActive);
-
-    });
 
 }
 
@@ -3305,7 +3243,6 @@ function openAvatarCropModal(source){
             profileSettingsDraft.avatar_type = "upload";
             profileSettingsDraft.avatar_data = data;
             closeAvatarCropModal();
-            updateProfileSettingsPreview();
 
         });
 
@@ -3569,7 +3506,6 @@ function openProfileHeaderCropModal(source){
             profileSettingsDraft.header_type = "upload";
             profileSettingsDraft.header_image = data;
             closeProfileHeaderCropModal();
-            updateProfileSettingsPreview();
 
         });
 
