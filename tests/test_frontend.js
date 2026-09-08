@@ -68,12 +68,12 @@ assert(searchResultsVue.includes('data-person-role="person"'));
 assert(fs.readFileSync('static/js/show-details-vue-bridge.js','utf8').includes('global.safeExternalURL(show && show.homepage)'));
 assert(fs.readFileSync('static/js/movie-details-vue-bridge.js','utf8').includes('global.safeExternalURL(movie && movie.homepage)'));
 assert(!ui.includes('href="${escapeHTML(show.homepage)}"'));
-assert(ui.includes('for="library-year-filter">Year</label>'));
-assert(ui.includes('setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter())'));
+assert(fs.readFileSync('frontend/src/tracker-lists/TrackerListControls.vue','utf8').includes("title: 'Year'"));
+assert(fs.readFileSync('static/js/tracker-lists-state-bridge.js','utf8').includes('years:options("year")'));
 
 const libraryFilterSource = ui.slice(
   ui.indexOf('function getLibraryGenreFilter'),
-  ui.indexOf('function renderLibrarySearchControl')
+  ui.indexOf('function getWatchlistShowsForCurrentView')
 );
 const libraryFilterContext = {
   console,

@@ -74,7 +74,22 @@ export interface TrackerListEmptyViewModel {
   readonly text: string;
 }
 
+export type TrackerListControlKey = 'query' | 'genre' | 'network' | 'year' | 'sort';
+export interface TrackerListControlsModel {
+  readonly query: string;
+  readonly placeholder: string;
+  readonly genre: string;
+  readonly network: string;
+  readonly year: string;
+  readonly sort: string;
+  readonly genres: readonly Readonly<{value: string; label: string}>[];
+  readonly networks: readonly Readonly<{value: string; label: string}>[];
+  readonly years: readonly Readonly<{value: string; label: string}>[];
+  readonly active: boolean;
+}
+
 export interface TrackerListsViewModel {
+  readonly controls: TrackerListControlsModel;
   readonly surface: "watchlist";
   readonly activeFilter: TrackerListFilter;
   readonly routeSlug: TrackerListRouteSlug;
@@ -84,6 +99,8 @@ export interface TrackerListsViewModel {
 }
 
 export interface TrackerListsRendererActions {
+  changeControl(key: TrackerListControlKey, value: string): void;
+  resetControls(): void;
   perform(kind: TrackerListActionKind, showId: string, target: HTMLElement | null): Promise<void>;
 }
 

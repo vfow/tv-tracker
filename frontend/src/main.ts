@@ -156,6 +156,7 @@ let notificationsApp: VueApp<Element> | null = null;
 let notificationsRoot: Element | null = null;
 let trackerListsApp: VueApp<Element> | null = null;
 let trackerListsRoot: Element | null = null;
+const trackerListsModel = shallowRef<TrackerListsViewModel | null>(null);
 let historyApp: VueApp<Element> | null = null;
 let historyRoot: Element | null = null;
 let episodeTrackingControllerApp: VueApp<Element> | null = null;
@@ -231,6 +232,7 @@ function unmountTrackerLists(): void {
   if (trackerListsApp) trackerListsApp.unmount();
   trackerListsApp = null;
   trackerListsRoot = null;
+  trackerListsModel.value = null;
 }
 
 function unmountHistory(): void {
@@ -462,12 +464,19 @@ const trackerListsOwner: TrackerListsVueOwner = Object.freeze({
     const root = document.getElementById('show-list');
     const bridge = window.TVTrackerTrackerListsVueBridge;
     if (!root || !bridge) return;
+    if (trackerListsApp && trackerListsRoot === root && root.querySelector('[data-tvtracker-tracker-lists-owner="vue-watchlist"]')) {
+      trackerListsModel.value = model;
+      return;
+    }
     unmountHistory();
     unmountUpcomingNotifications('upcoming');
     unmountTrackerLists();
     root.replaceChildren();
     trackerListsRoot = root;
-    trackerListsApp = createApp(TrackerListsSurface, { model, actions: bridge.actions });
+    trackerListsModel.value = model;
+    trackerListsApp = createApp({setup: () => () => trackerListsModel.value ? h(TrackerListsSurface, {
+      model: trackerListsModel.value, actions: bridge.actions
+    }) : null});
     trackerListsApp.mount(root);
     root.setAttribute('data-tvtracker-tracker-lists-owner', 'vue-watchlist');
   },

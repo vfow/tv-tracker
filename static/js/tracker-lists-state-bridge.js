@@ -271,6 +271,19 @@
         return Object.freeze({title:message[0],text:message[1]});
     }
 
+    function controlsModel(state){
+        const base = typeof global.getLibraryBaseStatusShows === "function" ? global.getLibraryBaseStatusShows() : [];
+        const options = type => Object.freeze(typeof global.buildLibraryOptionCounts === "function"
+            ? global.buildLibraryOptionCounts(type,base).map(item=>Object.freeze({value:String(item.value),label:String(item.label)})) : []);
+        return Object.freeze({
+            query:String(global.librarySearchQuery || ""),
+            placeholder:"Search " + filterLabel(state.activeFilter),
+            genre:state.genre, network:state.network, year:state.year, sort:state.sort,
+            genres:options("genre"), networks:options("network"), years:options("year"),
+            active:state.genre !== "all" || state.network !== "all" || state.year !== "all" || state.sort !== "default"
+        });
+    }
+
     function viewModel(){
         const state = snapshot();
         const legacyView = typeof global.getWatchlistShowsForCurrentView === "function"
@@ -283,6 +296,7 @@
         const items = rawShows.map(show=>cardViewModel(show,state.activeFilter)).filter(Boolean);
         return Object.freeze({
             surface:"watchlist",
+            controls:controlsModel(state),
             activeFilter:state.activeFilter,
             routeSlug:state.routeSlug,
             query,

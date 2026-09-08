@@ -283,18 +283,15 @@ function renderShowsPage(){
     if(activeShowsTab === "watchlist"){
 
         filters.style.display = "flex";
-        renderLibrarySearchControl();
         renderWatchlist();
 
     }else if(activeShowsTab === "upcoming"){
 
-        removeLibrarySearchControl();
         filters.style.display = "none";
         renderUpcoming();
 
         }else if(activeShowsTab === "history"){
 
-        removeLibrarySearchControl();
         filters.style.display = "none";
         renderHistory();
 
@@ -887,23 +884,6 @@ function buildLibraryOptionCounts(type,baseShows=null){
     .map(([name,count])=>({value:name,label:name + " (" + count + ")"}));
 }
 
-function setSelectOptions(select,firstLabel,options,value){
-    if(!select){
-        return;
-    }
-
-    const cleanValue = String(value || "all");
-    const rows = [{value:"all",label:firstLabel}].concat(options || []);
-    select.innerHTML = rows.map(option=>{
-        const selected = String(option.value) === cleanValue ? " selected" : "";
-        return `<option value="${escapeHTML(option.value)}"${selected}>${escapeHTML(option.label)}</option>`;
-    }).join("");
-
-    if(!rows.some(option=>String(option.value) === cleanValue)){
-        select.value = "all";
-    }
-}
-
 function syncLibraryFilterRoute(){
     if(
         typeof window !== "undefined" &&
@@ -922,7 +902,6 @@ function resetLibraryFiltersToDefault(){
     libraryYearFilter = "all";
     librarySortMode = "default";
 
-    renderLibrarySearchControl();
     renderWatchlist();
     syncLibraryFilterRoute();
 }
@@ -1046,238 +1025,6 @@ function sortLibraryShows(shows,query){
         return titleCompare(a,b);
     });
 }
-
-function removeLibrarySearchControl(){
-
-    const existing = document.getElementById("library-search-box");
-
-    if(existing){
-        existing.remove();
-    }
-
-}
-
-
-
-function renderLibrarySearchControl(){
-
-    const filters = document.querySelector(".filters");
-
-    if(!filters){
-        return;
-    }
-
-    const statusTrack = filters.querySelector(".status-filter-track");
-    let menu = document.getElementById("library-filter-menu");
-
-    if(!menu){
-        menu = createLibraryFilterMenu();
-        if(statusTrack){
-            filters.insertBefore(menu,statusTrack);
-        }else{
-            filters.insertBefore(menu,filters.firstChild);
-        }
-    }
-
-    let box = document.getElementById("library-search-box");
-
-    if(!box){
-
-        box = createLibrarySearchBox();
-        filters.appendChild(box);
-
-    }
-
-    const input = box.querySelector("#library-search");
-    const genreSelect = menu.querySelector("#library-genre-filter");
-    const networkSelect = menu.querySelector("#library-network-filter");
-    const yearSelect = menu.querySelector("#library-year-filter");
-    const sortSelect = menu.querySelector("#library-sort-mode");
-    const resetButton = menu.querySelector("#library-reset-filters");
-
-    if(input){
-        input.placeholder = "Search " + getActiveFilterSearchLabel();
-        const nextValue = getLibrarySearchQuery();
-        if(document.activeElement !== input || input.value !== nextValue){
-            input.value = nextValue;
-        }
-    }
-
-    const baseStatusShows = getLibraryBaseStatusShows();
-    setSelectOptions(genreSelect,"All Genres",buildLibraryOptionCounts("genre",baseStatusShows),getLibraryGenreFilter());
-    setSelectOptions(networkSelect,"All Networks",buildLibraryOptionCounts("network",baseStatusShows),getLibraryNetworkFilter());
-    setSelectOptions(yearSelect,"All Years",buildLibraryOptionCounts("year",baseStatusShows),getLibraryYearFilter());
-
-    if(sortSelect){
-        sortSelect.value = getLibrarySortMode();
-    }
-
-    if(resetButton){
-        resetButton.hidden = !hasActiveLibraryControls();
-    }
-
-}
-
-
-
-function closeLibraryFilterDropdown(){
-    const dropdown = document.getElementById("library-filter-dropdown");
-    const toggle = document.getElementById("library-filter-toggle");
-
-    if(dropdown){
-        dropdown.hidden = true;
-    }
-
-    if(toggle){
-        toggle.setAttribute("aria-expanded","false");
-    }
-}
-
-function createLibraryFilterMenu(){
-
-    const menu = document.createElement("div");
-    menu.id = "library-filter-menu";
-    menu.className = "library-filter-menu";
-
-    menu.innerHTML = `
-        <button id="library-filter-toggle" class="library-filter-toggle" type="button" aria-label="Filters" aria-expanded="false" aria-controls="library-filter-dropdown">
-            <img src="/static/assets/icons/filter.svg" alt="">
-        </button>
-
-        <div id="library-filter-dropdown" class="library-filter-dropdown" hidden>
-            <label class="library-filter-label" for="library-genre-filter">Genre</label>
-            <select id="library-genre-filter" class="library-filter-select" aria-label="Filter by genre">
-                <option value="all">All Genres</option>
-            </select>
-
-            <label class="library-filter-label" for="library-network-filter">Network</label>
-            <select id="library-network-filter" class="library-filter-select" aria-label="Filter by network">
-                <option value="all">All Networks</option>
-            </select>
-
-            <label class="library-filter-label" for="library-year-filter">Year</label>
-            <select id="library-year-filter" class="library-filter-select" aria-label="Filter by year">
-                <option value="all">All Years</option>
-            </select>
-
-            <label class="library-filter-label" for="library-sort-mode">Sort</label>
-            <select id="library-sort-mode" class="library-filter-select library-sort-select" aria-label="Sort library">
-                <option value="default">Default Order</option>
-                <option value="title-az">Title A–Z</option>
-                <option value="title-za">Title Z–A</option>
-                <option value="recently-added">Recently Added</option>
-                <option value="recently-watched">Recently Watched</option>
-                <option value="rating-desc">Rating High to Low</option>
-                <option value="year-newest">Release Year Newest</option>
-                <option value="year-oldest">Release Year Oldest</option>
-            </select>
-
-            <button id="library-reset-filters" class="library-reset-button" type="button" hidden>Reset Filters</button>
-        </div>
-    `;
-
-    const toggle = menu.querySelector("#library-filter-toggle");
-    const dropdown = menu.querySelector("#library-filter-dropdown");
-    const genreSelect = menu.querySelector("#library-genre-filter");
-    const networkSelect = menu.querySelector("#library-network-filter");
-    const yearSelect = menu.querySelector("#library-year-filter");
-    const sortSelect = menu.querySelector("#library-sort-mode");
-    const resetButton = menu.querySelector("#library-reset-filters");
-
-    toggle.addEventListener("click",function(event){
-        event.stopPropagation();
-        const willOpen = dropdown.hidden;
-        dropdown.hidden = !willOpen;
-        toggle.setAttribute("aria-expanded",willOpen ? "true" : "false");
-    });
-
-    dropdown.addEventListener("click",function(event){
-        event.stopPropagation();
-    });
-
-    genreSelect.addEventListener("change",function(){
-        libraryGenreFilter = this.value || "all";
-        renderWatchlist();
-        syncLibraryFilterRoute();
-    });
-
-    networkSelect.addEventListener("change",function(){
-        libraryNetworkFilter = this.value || "all";
-        renderWatchlist();
-        syncLibraryFilterRoute();
-    });
-
-    yearSelect.addEventListener("change",function(){
-        libraryYearFilter = this.value || "all";
-        renderWatchlist();
-        syncLibraryFilterRoute();
-    });
-
-    sortSelect.addEventListener("change",function(){
-        librarySortMode = this.value || "default";
-        renderWatchlist();
-        syncLibraryFilterRoute();
-    });
-
-    resetButton.addEventListener("click",function(){
-        resetLibraryFiltersToDefault();
-        closeLibraryFilterDropdown();
-    });
-
-    if(!window.__tvTrackerLibraryFilterCloseBound){
-        window.__tvTrackerLibraryFilterCloseBound = true;
-        document.addEventListener("click",closeLibraryFilterDropdown);
-        document.addEventListener("keydown",function(event){
-            if(event.key === "Escape"){
-                closeLibraryFilterDropdown();
-            }
-        });
-    }
-
-    return menu;
-
-}
-
-function createLibrarySearchBox(){
-
-    const box = document.createElement("div");
-    box.id = "library-search-box";
-    box.className = "library-search-box library-control-row";
-
-    const value = getLibrarySearchQuery();
-
-    box.innerHTML = `
-        <input
-        id="library-search"
-        class="library-search-input"
-        type="search"
-        placeholder="Search ${escapeHTML(getActiveFilterSearchLabel())}"
-        autocomplete="off"
-        spellcheck="false"
-        autocorrect="off"
-        autocapitalize="off"
-        data-lpignore="true"
-        data-form-type="other"
-        value="${escapeHTML(value)}">
-    `;
-
-    const input = box.querySelector("#library-search");
-
-    input.addEventListener("input",function(){
-
-        librarySearchQuery = this.value;
-        renderWatchlist();
-        if(typeof scheduleLibrarySearchRouteUpdate === "function"){
-            scheduleLibrarySearchRouteUpdate();
-        }
-
-    });
-
-    return box;
-
-}
-
-
 
 function getWatchlistShowsForCurrentView(){
     const query = getLibrarySearchQuery();

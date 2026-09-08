@@ -44,7 +44,8 @@ bridge.attachVueOwner({render(model){ ownerModel = model; },unmount(){}});
 
 (async()=>{
   assert.strictEqual(await bridge.renderWatchlist(),true);
-  assert.strictEqual(libraryControls,1);
+  assert.strictEqual(libraryControls,0);
+  assert.strictEqual(ownerModel.controls.placeholder,"Search Watching");
   assert(ownerModel);
   assert.strictEqual(ownerModel.surface,'watchlist');
   assert.strictEqual(ownerModel.items.length,1);
@@ -64,6 +65,6 @@ bridge.attachVueOwner({render(model){ ownerModel = model; },unmount(){}});
   assert.deepStrictEqual(statusUpdate,['42','watching']);
 
   assert.strictEqual(await bridge.refreshWatchlistShows(['42']),true);
-  assert.strictEqual(libraryControls,2);
+  assert.strictEqual(libraryControls,0);
   console.log('Tracker Lists structured Vue renderer contract passed.');
 })().catch(error=>{ console.error(error); process.exitCode = 1; });
