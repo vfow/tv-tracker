@@ -18,8 +18,8 @@
 
     function includeAdultParam(media){
         const clean = String(media || "").trim().toLowerCase();
-        if(clean !== "movie" && clean !== "tv") return "false";
-        return enabled() ? "false" : "true";
+        if(clean !== "movie" && clean !== "tv") return "true";
+        return "true";
     }
 
     function isAdult(item){
@@ -27,18 +27,14 @@
     }
 
     function visible(item){
-        return !enabled() || !isAdult(item);
+        return true;
     }
 
     function filterItems(items){
-        return (Array.isArray(items) ? items : []).filter(visible);
+        return Array.isArray(items) ? items : [];
     }
 
     function filterPayload(payload){
-        if(!enabled() || !payload || typeof payload !== "object") return payload;
-        if(Array.isArray(payload.results)){
-            return Object.assign({},payload,{results:filterItems(payload.results)});
-        }
         return payload;
     }
 
@@ -54,26 +50,11 @@
     }
 
     function visibleTrackedItem(item,kind=""){
-        if(!enabled()) return true;
-        if(!item || typeof item !== "object") return true;
-        if(isAdult(item)) return false;
-        if(item.show && isAdult(item.show)) return false;
-        if(item.movie && isAdult(item.movie)) return false;
-
-        const cleanKind = String(kind || item.media_type || "").toLowerCase();
-        if(cleanKind === "movie"){
-            const record = trackedRecord("movie",mediaId(item));
-            return !isAdult(record);
-        }
-        if(cleanKind === "tv" || cleanKind === "show"){
-            const record = trackedRecord("tv",mediaId(item));
-            return !isAdult(record);
-        }
         return true;
     }
 
     function filterTrackedItems(items,kind=""){
-        return (Array.isArray(items) ? items : []).filter(item=>visibleTrackedItem(item,kind));
+        return Array.isArray(items) ? items : [];
     }
 
     function isMovieHistory(entry){
@@ -85,13 +66,7 @@
     }
 
     function isHistoryEntryVisible(entry){
-        if(!enabled() || !entry || typeof entry !== "object") return true;
-        if(isAdult(entry)) return false;
-        const movie = isMovieHistory(entry);
-        const id = movie
-            ? String(entry.movie_id || entry.tmdb_id || "").trim()
-            : String(entry.tmdb_id || entry.show_id || "").trim();
-        return !isAdult(trackedRecord(movie ? "movie" : "tv",id));
+        return true;
     }
 
     function copyAdultClassification(target,source){
@@ -130,7 +105,6 @@
         const original = global.filterShow;
         if(typeof original !== "function" || original[WRAPPER_MARK]) return false;
         const wrapped = function(show,...args){
-            if(!visibleTrackedItem(show,"tv")) return false;
             return original.call(this,show,...args);
         };
         wrapped[WRAPPER_MARK] = true;
@@ -143,7 +117,6 @@
         const original = global.getUpcomingScheduleItems;
         if(typeof original !== "function" || original[WRAPPER_MARK]) return false;
         const wrapped = function(show,...args){
-            if(!visibleTrackedItem(show,"tv")) return [];
             return original.call(this,show,...args);
         };
         wrapped[WRAPPER_MARK] = true;
@@ -153,24 +126,19 @@
     }
 
     function installRuntimeWrappers(){
-        // Persist TMDB's own classification whenever a title becomes tracker data.
-        // No maturity/rating inference is performed here: only an explicit boolean
-        // `adult` value supplied by TMDB is copied into tracker metadata.
         wrapRecordBuilder("createShowObject",0);
         wrapRecordBuilder("getMovieRecordFromDetails",0);
         wrapRecordBuilder("normalizeMovieTrackingRecord",0);
         wrapRecordBuilder("normalizeFavoriteMovieRecord",0);
 
-        // Read-time visibility boundaries hide records without deleting or
-        // rewriting the underlying tracker state.
         wrapFilterShow();
-        wrapArrayResult("getWatchlistShowsForCurrentView",items=>filterTrackedItems(items,"tv"));
-        wrapArrayResult("getLibraryBaseStatusShows",items=>filterTrackedItems(items,"tv"));
-        wrapArrayResult("getFavoriteShows",items=>filterTrackedItems(items,"tv"));
-        wrapArrayResult("getFavoriteMovies",items=>filterTrackedItems(items,"movie"));
-        wrapArrayResult("getUpcomingShows",items=>items.filter(item=>visibleTrackedItem(item && item.show ? item.show : item,"tv")));
+        wrapArrayResult("getWatchlistShowsForCurrentView",items=>items);
+        wrapArrayResult("getLibraryBaseStatusShows",items=>items);
+        wrapArrayResult("getFavoriteShows",items=>items);
+        wrapArrayResult("getFavoriteMovies",items=>items);
+        wrapArrayResult("getUpcomingShows",items=>items);
         wrapUpcomingScheduleItems();
-        wrapArrayResult("getActivityHistoryEntries",items=>items.filter(isHistoryEntryVisible));
+        wrapArrayResult("getActivityHistoryEntries",items=>items);
     }
 
     function classificationCandidates(){
@@ -203,9 +171,6 @@
     async function fetchClassification(candidate){
         if(!candidate || typeof global.tmdbFetchJSON !== "function") return null;
         try{
-            // Search TV/Movie is the classification boundary because those TMDB
-            // response contracts expose `adult`. Never infer from ratings and never
-            // accept a same-title result unless its TMDB id is the tracked id.
             const payload = await global.tmdbFetchJSON(
                 "search/" + candidate.kind,
                 {query:candidate.query,include_adult:"true",page:1},
@@ -221,7 +186,7 @@
 
     async function classifyTrackedMedia(){
         installRuntimeWrappers();
-        if(!enabled() || typeof global.tmdbFetchJSON !== "function") return {checked:0,changed:0};
+        if(typeof global.tmdbFetchJSON !== "function") return {checked:0,changed:0};
         if(classificationPromise) return classificationPromise;
 
         classificationPromise = (async()=>{
@@ -247,11 +212,7 @@
             if(changedKeys.size && typeof global.saveData === "function"){
                 try{
                     await global.saveData({stateKeys:Array.from(changedKeys)});
-                }catch(error){
-                    // Classification enrichment is optional metadata. Keep the
-                    // in-memory visibility policy useful and retry persistence on
-                    // a later normal save rather than surfacing technical errors.
-                }
+                }catch(error){}
             }
 
             if(changed && typeof global.renderAll === "function"){
@@ -268,7 +229,7 @@
     }
 
     function scheduleClassification(delay=0){
-        if(!enabled() || typeof global.setTimeout !== "function") return;
+        if(typeof global.setTimeout !== "function") return;
         if(classificationTimer !== null && typeof global.clearTimeout === "function"){
             global.clearTimeout(classificationTimer);
         }
@@ -280,6 +241,30 @@
             }
             classifyTrackedMedia().catch(()=>{});
         },Math.max(0,Number(delay) || 0));
+    }
+
+    function installPosterBlurStyles(){
+        if(!global.document || !global.document.head) return;
+        const styleId = "tvtracker-adult-poster-blur-style";
+        if(global.document.getElementById(styleId)) return;
+        const style = global.document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+            html.tt-adult-filter-on .genre-result-card:has(.adult-movie-badge) .genre-result-poster img,
+            html.tt-adult-filter-on .discover-card:has(.adult-movie-badge) .discover-card-poster img,
+            html.tt-adult-filter-on .v2-similar-card:has(.adult-movie-badge) .v2-similar-poster img,
+            html.tt-adult-filter-on .movie-detail-page-inner:has(.adult-movie-badge) .movie-page-hero-poster img,
+            html.tt-adult-filter-on .person-result-card:has(.adult-movie-badge) .genre-result-poster img {
+                filter: blur(18px);
+                transform: scale(1.06);
+            }
+        `;
+        global.document.head.appendChild(style);
+    }
+
+    function updatePosterBlurState(){
+        if(!global.document || !global.document.documentElement) return;
+        global.document.documentElement.classList.toggle("tt-adult-filter-on",enabled());
     }
 
     function clearAdultSensitiveCaches(){
@@ -301,6 +286,8 @@
 
     function refresh(){
         installRuntimeWrappers();
+        installPosterBlurStyles();
+        updatePosterBlurState();
         clearAdultSensitiveCaches();
         scheduleClassification(0);
         if(global.activePage === "shows" && typeof global.renderShowsPage === "function") global.renderShowsPage();
@@ -309,23 +296,15 @@
         }else if(typeof global.renderAll === "function") global.renderAll();
     }
 
-    // Central TMDB request policy. Search/discover requests opt out of adult
-    // results while the preference is enabled, and result arrays are filtered a
-    // second time so stale browser caches cannot leak TMDB-labelled adult titles.
-    // Internal classification requests are the sole exception: they request the
-    // complete search set, then accept only the exact tracked TMDB id.
     const originalTMDBFetch = global.tmdbFetchJSON;
     if(typeof originalTMDBFetch === "function" && !originalTMDBFetch[WRAPPER_MARK]){
         const wrapped = async function(path,params={},options={}){
-            const cleanPath = String(path || "").replace(/^\/+/,"").toLowerCase();
+            const cleanPath = String(path || "").replace(/^\\/+/,"").toLowerCase();
             const nextParams = Object.assign({},params || {});
-            const classificationRequest = !!(options && options.adultPolicyClassification === true);
-            if(/^search\/(movie|tv)$/.test(cleanPath) || /^discover\/(movie|tv)$/.test(cleanPath)){
-                const media = cleanPath.endsWith("movie") ? "movie" : "tv";
-                nextParams.include_adult = classificationRequest ? "true" : includeAdultParam(media);
+            if(/^search\\/(movie|tv)$/.test(cleanPath) || /^discover\\/(movie|tv)$/.test(cleanPath)){
+                nextParams.include_adult = "true";
             }
-            const payload = await originalTMDBFetch.call(this,path,nextParams,options);
-            return classificationRequest ? payload : filterPayload(payload);
+            return originalTMDBFetch.call(this,path,nextParams,options);
         };
         wrapped[WRAPPER_MARK] = true;
         wrapped._tvtrackerOriginal = originalTMDBFetch;
@@ -335,12 +314,9 @@
     const originalDiscoverPage = global.tmdbGetDiscoverPage;
     if(typeof originalDiscoverPage === "function" && !originalDiscoverPage[WRAPPER_MARK]){
         const wrappedDiscover = async function(path,params={}){
-            const cleanPath = String(path || "").toLowerCase();
             const nextParams = Object.assign({},params || {});
-            if(/^(movie|tv)\//.test(cleanPath) || /^discover\/(movie|tv)/.test(cleanPath)){
-                nextParams.include_adult = includeAdultParam(cleanPath.startsWith("movie") || cleanPath.includes("/movie") ? "movie" : "tv");
-            }
-            return filterPayload(await originalDiscoverPage.call(this,path,nextParams));
+            nextParams.include_adult = "true";
+            return originalDiscoverPage.call(this,path,nextParams);
         };
         wrappedDiscover[WRAPPER_MARK] = true;
         wrappedDiscover._tvtrackerOriginal = originalDiscoverPage;
@@ -350,7 +326,7 @@
     const originalSearchMediaPage = global.tmdbSearchMediaPage;
     if(typeof originalSearchMediaPage === "function" && !originalSearchMediaPage[WRAPPER_MARK]){
         const wrappedSearch = async function(...args){
-            return filterPayload(await originalSearchMediaPage.apply(this,args));
+            return originalSearchMediaPage.apply(this,args);
         };
         wrappedSearch[WRAPPER_MARK] = true;
         wrappedSearch._tvtrackerOriginal = originalSearchMediaPage;
@@ -358,9 +334,13 @@
     }
 
     installRuntimeWrappers();
+    installPosterBlurStyles();
+    updatePosterBlurState();
     if(global.document && global.document.readyState === "loading" && typeof global.document.addEventListener === "function"){
         global.document.addEventListener("DOMContentLoaded",()=>{
             installRuntimeWrappers();
+            installPosterBlurStyles();
+            updatePosterBlurState();
             scheduleClassification(1000);
         },{once:true});
     }else{
