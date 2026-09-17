@@ -48,8 +48,8 @@ function loadPolicy(profile = {}, options = {}) {
 {
   const { policy } = loadPolicy({});
   assert.strictEqual(policy.enabled(), true, "Adult Filter must default ON");
-  assert.strictEqual(policy.includeAdultParam("movie"), "false");
-  assert.strictEqual(policy.includeAdultParam("tv"), "false");
+  assert.strictEqual(policy.includeAdultParam("movie"), "true");
+  assert.strictEqual(policy.includeAdultParam("tv"), "true");
 }
 
 {
@@ -60,15 +60,15 @@ function loadPolicy(profile = {}, options = {}) {
 }
 
 {
-  const visible = { id: 1, adult: false };
-  const hidden = { id: 2, adult: true };
-  const sourceItems = [visible, hidden];
+  const normal = { id: 1, adult: false };
+  const adult = { id: 2, adult: true };
+  const sourceItems = [normal, adult];
   const { policy } = loadPolicy({ adult_filter: true });
   const filtered = policy.filterItems(sourceItems);
 
-  assert.deepStrictEqual(Array.from(filtered, item => item.id), [1]);
-  assert.strictEqual(sourceItems.length, 2, "Filtering must hide adult titles, never delete tracker/cache data");
-  assert.strictEqual(sourceItems[1], hidden, "Filtering must not rewrite the hidden record");
+  assert.deepStrictEqual(Array.from(filtered, item => item.id), [1, 2]);
+  assert.strictEqual(filtered, sourceItems, "Adult titles remain in the result set for poster blurring");
+  assert.strictEqual(sourceItems[1], adult, "Filtering must not rewrite the adult record");
 }
 
 {
@@ -76,13 +76,13 @@ function loadPolicy(profile = {}, options = {}) {
   const { policy } = loadPolicy({ adult_filter: true });
   const filtered = policy.filterPayload(payload);
 
-  assert.notStrictEqual(filtered, payload, "Filtered TMDB result payload should be a shallow copy");
-  assert.deepStrictEqual(Array.from(filtered.results, item => item.id), [2]);
+  assert.strictEqual(filtered, payload, "TMDB payload must remain intact so adult results can be rendered and blurred");
+  assert.deepStrictEqual(Array.from(filtered.results, item => item.id), [1, 2]);
   assert.strictEqual(payload.results.length, 2, "Original TMDB payload must remain intact");
 }
 
 {
-  const adultShow = { tmdb_id: 10, title: "Hidden Show", adult: true, status: "watching" };
+  const adultShow = { tmdb_id: 10, title: "Adult Show", adult: true, status: "watching" };
   const normalShow = { tmdb_id: 11, title: "Visible Show", adult: false, status: "watching" };
   const shows = { "10": adultShow, "11": normalShow };
   const sourceArray = [adultShow, normalShow];
@@ -99,22 +99,22 @@ function loadPolicy(profile = {}, options = {}) {
     }
   );
 
-  assert.deepStrictEqual(Array.from(window.getWatchlistShowsForCurrentView(), item=>item.tmdb_id), [11]);
-  assert.deepStrictEqual(Array.from(window.getLibraryBaseStatusShows(), item=>item.tmdb_id), [11]);
-  assert.deepStrictEqual(Array.from(window.getFavoriteShows(), item=>item.tmdb_id), [11]);
-  assert.strictEqual(window.filterShow(adultShow), false);
-  assert.deepStrictEqual(Array.from(window.getUpcomingScheduleItems(adultShow)), []);
-  assert.deepStrictEqual(Array.from(window.getUpcomingShows(), item=>item.show.tmdb_id), [11]);
-  assert.strictEqual(window.DATA.shows["10"], adultShow, "Hidden tracked shows must remain in DATA");
+  assert.deepStrictEqual(Array.from(window.getWatchlistShowsForCurrentView(), item=>item.tmdb_id), [10, 11]);
+  assert.deepStrictEqual(Array.from(window.getLibraryBaseStatusShows(), item=>item.tmdb_id), [10, 11]);
+  assert.deepStrictEqual(Array.from(window.getFavoriteShows(), item=>item.tmdb_id), [10, 11]);
+  assert.strictEqual(window.filterShow(adultShow), true);
+  assert.deepStrictEqual(Array.from(window.getUpcomingScheduleItems(adultShow)), [{ show: adultShow }]);
+  assert.deepStrictEqual(Array.from(window.getUpcomingShows(), item=>item.show.tmdb_id), [10, 11]);
+  assert.strictEqual(window.DATA.shows["10"], adultShow, "Adult tracked shows must remain in DATA");
   assert.strictEqual(Object.keys(window.DATA.shows).length, 2, "Adult Filter must never delete a tracked show");
 }
 
 {
-  const adultMovie = { id: "20", tmdb_id: "20", title: "Hidden Movie", adult: true };
+  const adultMovie = { id: "20", tmdb_id: "20", title: "Adult Movie", adult: true };
   const normalMovie = { id: "21", tmdb_id: "21", title: "Visible Movie", adult: false };
   const movies = { "20": adultMovie, "21": normalMovie };
   const history = [
-    { media_type: "movie", movie_id: "20", title: "Hidden Movie" },
+    { media_type: "movie", movie_id: "20", title: "Adult Movie" },
     { media_type: "movie", movie_id: "21", title: "Visible Movie" },
     { tmdb_id: "30", title: "Visible Show Episode" }
   ];
@@ -130,9 +130,9 @@ function loadPolicy(profile = {}, options = {}) {
     }
   );
 
-  assert.deepStrictEqual(Array.from(window.getFavoriteMovies(), item=>String(item.id)), ["21"]);
-  assert.deepStrictEqual(Array.from(window.getActivityHistoryEntries(), item=>item.title), ["Visible Movie", "Visible Show Episode"]);
-  assert.strictEqual(window.DATA.movies["20"], adultMovie, "Hidden tracked movies must remain in DATA");
+  assert.deepStrictEqual(Array.from(window.getFavoriteMovies(), item=>String(item.id)), ["20", "21"]);
+  assert.deepStrictEqual(Array.from(window.getActivityHistoryEntries(), item=>item.title), ["Adult Movie", "Visible Movie", "Visible Show Episode"]);
+  assert.strictEqual(window.DATA.movies["20"], adultMovie, "Adult tracked movies must remain in DATA");
   assert.strictEqual(window.DATA.history.length, 3, "History filtering must not remove stored history entries");
 }
 
@@ -152,9 +152,9 @@ function loadPolicy(profile = {}, options = {}) {
     }
   );
 
-  assert.strictEqual(window.getWatchlistShowsForCurrentView().length, 1, "Turning Adult Filter off must restore tracked shows");
-  assert.strictEqual(window.getFavoriteMovies().length, 1, "Turning Adult Filter off must restore tracked movies");
-  assert.strictEqual(window.getActivityHistoryEntries().length, 1, "Turning Adult Filter off must restore hidden history");
+  assert.strictEqual(window.getWatchlistShowsForCurrentView().length, 1, "Turning Adult Filter off must keep tracked shows available");
+  assert.strictEqual(window.getFavoriteMovies().length, 1, "Turning Adult Filter off must keep tracked movies available");
+  assert.strictEqual(window.getActivityHistoryEntries().length, 1, "Turning Adult Filter off must keep history available");
 }
 
 {
@@ -178,6 +178,7 @@ function loadPolicy(profile = {}, options = {}) {
   const { policy } = loadPolicy({ adult_filter: true });
   assert.strictEqual(policy.visibleTrackedItem({adult:false,rating:"NC-17"},"movie"),true,"Ratings must not be treated as adult classification");
   assert.strictEqual(policy.visibleTrackedItem({adult:false,certification:"18"},"tv"),true,"Maturity metadata must not be treated as adult classification");
+  assert.strictEqual(policy.visibleTrackedItem({adult:true,rating:"NC-17"},"movie"),true,"TMDB adult titles remain available for poster blurring");
 }
 
-console.log("Phase 6 adult policy contracts passed.");
+console.log("Adult poster-blur policy contracts passed.");
