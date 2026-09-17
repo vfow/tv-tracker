@@ -73,7 +73,9 @@ check(!!document.querySelector('.person-profile-bio-wrap.is-expanded'),'biograph
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedShow==='3','open TV preview');
 document.querySelector('[data-person-media="movie"]').click();await flush();check(count()===2,'movie switch');
 DATA.profile.adult_filter=true;personPageState.credits=getPersonCreditsForRole(person,'','movie');renderActivePersonPage();await flush();
-check(count()===1,'adult policy');
+check(count()===2,'adult entries remain for poster blurring');
+check(!!document.querySelector('.person-result-card .adult-movie-badge'),'adult entry still marked');
+check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker');
 personPageState={personId:'10',loading:true};renderActivePersonPage();await flush();
 check(!!document.querySelector('[aria-label="Loading person credits"]'),'loading');
 personPageState={personId:'10',error:'Provider unavailable'};renderActivePersonPage();await flush();
