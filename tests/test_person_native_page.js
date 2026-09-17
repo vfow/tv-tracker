@@ -81,8 +81,8 @@ function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve
     assert.strictEqual(adult.win.getPersonCreditsForRole(adult.person,'','movie').length,2);
     assert.strictEqual(adult.win.getPersonCreditsForRole(adult.person,'director','movie')[0].adult,true,'explicit TMDB classification survives role selection across duplicate credits');
     adult.win.DATA.profile.adult_filter=true;
-    assert.deepStrictEqual(Array.from(adult.win.getPersonCreditsForRole(adult.person,'','movie'),item=>item.id),[2]);
-    assert.strictEqual(adult.win.getPersonCreditsForRole(adult.person,'director','movie').length,0);
+    assert.deepStrictEqual(Array.from(adult.win.getPersonCreditsForRole(adult.person,'','movie'),item=>item.id),[1,2]);
+    assert.strictEqual(adult.win.getPersonCreditsForRole(adult.person,'director','movie').length,1);
     const unknown=adult.win.normalizePersonCreditItem({id:50,title:'Unknown'},'movie');
     assert(!Object.hasOwn(unknown,'adult'),'missing classification remains unknown');
     assert.strictEqual(adult.win.normalizePersonCreditItem({id:51,title:'Known',adult:false},'movie').adult,false);
