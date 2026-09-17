@@ -21,6 +21,7 @@ function loadPolicy(profile = {}, options = {}) {
       key(){ return null; },
       removeItem(){}
     },
+    TVTrackerBrowse: options.TVTrackerBrowse,
     createShowObject: options.createShowObject,
     getMovieRecordFromDetails: options.getMovieRecordFromDetails,
     normalizeMovieTrackingRecord: options.normalizeMovieTrackingRecord,
@@ -44,6 +45,9 @@ function loadPolicy(profile = {}, options = {}) {
   vm.runInNewContext(source, { window, encodeURIComponent }, { filename: "adult-filter.js" });
   return { window, policy: window.TVTrackerAdultPolicy };
 }
+
+assert.ok(source.includes("discover-hub-card"), "Adult poster policy must target the live Discover Hub card");
+assert.ok(source.includes("installBrowseAdultParamOverride"), "Adult poster policy must preserve adult Discover results");
 
 {
   const { policy } = loadPolicy({});
@@ -79,6 +83,20 @@ function loadPolicy(profile = {}, options = {}) {
   assert.strictEqual(filtered, payload, "TMDB payload must remain intact so adult results can be rendered and blurred");
   assert.deepStrictEqual(Array.from(filtered.results, item => item.id), [1, 2]);
   assert.strictEqual(payload.results.length, 2, "Original TMDB payload must remain intact");
+}
+
+{
+  const calls = [];
+  const browseApi = Object.freeze({
+    buildTMDBParams(input){
+      calls.push(input);
+      return { include_adult: "false", page: 1 };
+    }
+  });
+  const { window } = loadPolicy({ adult_filter: true }, { TVTrackerBrowse: browseApi });
+  const params = window.TVTrackerBrowse.buildTMDBParams({ media: "movie" });
+  assert.deepStrictEqual(params, { include_adult: "true", page: 1 });
+  assert.strictEqual(calls.length, 1, "Browse parameter override must preserve the original builder call");
 }
 
 {
