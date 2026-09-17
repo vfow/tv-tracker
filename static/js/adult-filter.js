@@ -132,7 +132,6 @@
         wrapRecordBuilder("getMovieRecordFromDetails",0);
         wrapRecordBuilder("normalizeMovieTrackingRecord",0);
         wrapRecordBuilder("normalizeFavoriteMovieRecord",0);
-
         wrapFilterShow();
         wrapArrayResult("getWatchlistShowsForCurrentView",items=>items);
         wrapArrayResult("getLibraryBaseStatusShows",items=>items);
@@ -141,6 +140,21 @@
         wrapArrayResult("getUpcomingShows",items=>items);
         wrapUpcomingScheduleItems();
         wrapArrayResult("getActivityHistoryEntries",items=>items);
+        installBrowseAdultParamOverride();
+    }
+
+    function installBrowseAdultParamOverride(){
+        const browse = global.TVTrackerBrowse;
+        if(!browse || typeof browse.buildTMDBParams !== "function" || browse.buildTMDBParams[WRAPPER_MARK]) return false;
+        const original = browse.buildTMDBParams;
+        const wrapped = function(...args){
+            const result = original.apply(this,args);
+            return Object.assign({},result,{include_adult:"true"});
+        };
+        wrapped[WRAPPER_MARK] = true;
+        wrapped._tvtrackerOriginal = original;
+        global.TVTrackerBrowse = Object.freeze(Object.assign({},browse,{buildTMDBParams:wrapped}));
+        return true;
     }
 
     function classificationCandidates(){
@@ -164,9 +178,7 @@
             Object.values(global.DATA.movies).forEach(record=>add("movie",record,"movies"));
         }
         const favorites = profile().favorite_movies;
-        if(Array.isArray(favorites)){
-            favorites.forEach(record=>add("movie",record,"profile"));
-        }
+        if(Array.isArray(favorites)) favorites.forEach(record=>add("movie",record,"profile"));
         return Array.from(candidates.values());
     }
 
@@ -190,7 +202,6 @@
         installRuntimeWrappers();
         if(typeof global.tmdbFetchJSON !== "function") return {checked:0,changed:0};
         if(classificationPromise) return classificationPromise;
-
         classificationPromise = (async()=>{
             const candidates = classificationCandidates();
             const changedKeys = new Set();
@@ -210,38 +221,25 @@
 
             const workerCount = Math.min(CLASSIFICATION_CONCURRENCY,candidates.length);
             await Promise.all(Array.from({length:workerCount},()=>worker()));
-
             if(changedKeys.size && typeof global.saveData === "function"){
-                try{
-                    await global.saveData({stateKeys:Array.from(changedKeys)});
-                }catch(error){}
+                try{ await global.saveData({stateKeys:Array.from(changedKeys)}); }catch(error){}
             }
-
             if(changed && typeof global.renderAll === "function"){
                 try{ global.renderAll(); }catch(error){}
             }
             markAdultPosters();
             return {checked:candidates.length,changed};
         })();
-
-        try{
-            return await classificationPromise;
-        }finally{
-            classificationPromise = null;
-        }
+        try{ return await classificationPromise; }
+        finally{ classificationPromise = null; }
     }
 
     function scheduleClassification(delay=0){
         if(typeof global.setTimeout !== "function") return;
-        if(classificationTimer !== null && typeof global.clearTimeout === "function"){
-            global.clearTimeout(classificationTimer);
-        }
+        if(classificationTimer !== null && typeof global.clearTimeout === "function") global.clearTimeout(classificationTimer);
         classificationTimer = global.setTimeout(()=>{
             classificationTimer = null;
-            if(global.appDataReady === false){
-                scheduleClassification(1000);
-                return;
-            }
+            if(global.appDataReady === false){ scheduleClassification(1000); return; }
             classifyTrackedMedia().catch(()=>{});
         },Math.max(0,Number(delay) || 0));
     }
@@ -253,7 +251,12 @@
         const style = global.document.createElement("style");
         style.id = styleId;
         style.textContent = `
-            html.tt-adult-filter-on .${POSTER_BLUR_CLASS}{
+            html.tt-adult-filter-on .tt-adult-poster-blur,
+            html.tt-adult-filter-on .genre-result-card:has(.adult-movie-badge) .genre-result-poster img,
+            html.tt-adult-filter-on .discover-hub-card:has(.adult-movie-badge) .discover-card-poster img,
+            html.tt-adult-filter-on .v2-similar-card:has(.adult-movie-badge) .v2-similar-poster img,
+            html.tt-adult-filter-on .movie-detail-page-inner:has(.adult-movie-badge) .movie-page-hero-poster img,
+            html.tt-adult-filter-on .person-result-card:has(.adult-movie-badge) .genre-result-poster img {
                 filter: blur(18px);
                 transform: scale(1.06);
             }
@@ -282,12 +285,11 @@
                 ".person-result-card"
             ]);
             if(!card) return;
-
+            card.setAttribute("data-tvtracker-adult-poster","true");
             if(card.matches && card.matches(".movie-detail-page-inner")){
                 card.querySelectorAll(".movie-page-hero-poster img").forEach(img=>img.classList.add(POSTER_BLUR_CLASS));
                 return;
             }
-
             card.querySelectorAll(".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img").forEach(img=>{
                 img.classList.add(POSTER_BLUR_CLASS);
             });
@@ -315,11 +317,7 @@
                 const remove = [];
                 for(let index=0;index<global.sessionStorage.length;index+=1){
                     const key = global.sessionStorage.key(index) || "";
-                    if(
-                        key.startsWith("tv-tracker-tmdb-search:") ||
-                        key.startsWith("tv-tracker-discover-hub:") ||
-                        key.startsWith("tv-tracker-tmdb-collection-detail:")
-                    ) remove.push(key);
+                    if(key.startsWith("tv-tracker-tmdb-search:") || key.startsWith("tv-tracker-discover-hub:") || key.startsWith("tv-tracker-tmdb-collection-detail:")) remove.push(key);
                 }
                 remove.forEach(key=>global.sessionStorage.removeItem(key));
             }catch(error){}
@@ -328,6 +326,7 @@
 
     function refresh(){
         installRuntimeWrappers();
+        installBrowseAdultParamOverride();
         installPosterBlurStyles();
         updatePosterBlurState();
         installPosterBlurObserver();
@@ -344,9 +343,7 @@
         const wrapped = async function(path,params={},options={}){
             const cleanPath = String(path || "").replace(/^\\/+/,"").toLowerCase();
             const nextParams = Object.assign({},params || {});
-            if(/^search\\/(movie|tv)$/.test(cleanPath) || /^discover\\/(movie|tv)$/.test(cleanPath)){
-                nextParams.include_adult = "true";
-            }
+            if(/^search\\/(movie|tv)$/.test(cleanPath) || /^discover\\/(movie|tv)$/.test(cleanPath)) nextParams.include_adult = "true";
             return originalTMDBFetch.call(this,path,nextParams,options);
         };
         wrapped[WRAPPER_MARK] = true;
@@ -377,11 +374,13 @@
     }
 
     installRuntimeWrappers();
+    installBrowseAdultParamOverride();
     installPosterBlurStyles();
     updatePosterBlurState();
     if(global.document && global.document.readyState === "loading" && typeof global.document.addEventListener === "function"){
         global.document.addEventListener("DOMContentLoaded",()=>{
             installRuntimeWrappers();
+            installBrowseAdultParamOverride();
             installPosterBlurStyles();
             updatePosterBlurState();
             installPosterBlurObserver();
@@ -404,6 +403,7 @@
         filterPayload,
         copyAdultClassification,
         installRuntimeWrappers,
+        installBrowseAdultParamOverride,
         classifyTrackedMedia,
         installPosterBlurStyles,
         markAdultPosters,
