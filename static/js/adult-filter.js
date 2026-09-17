@@ -3,8 +3,10 @@
 
     const WRAPPER_MARK = "_tvtrackerAdultPolicy";
     const CLASSIFICATION_CONCURRENCY = 3;
+    const POSTER_BLUR_CLASS = "tt-adult-poster-blur";
     let classificationPromise = null;
     let classificationTimer = null;
+    let posterObserver = null;
 
     function profile(){
         if(!global.DATA || typeof global.DATA !== "object") return {};
@@ -218,6 +220,7 @@
             if(changed && typeof global.renderAll === "function"){
                 try{ global.renderAll(); }catch(error){}
             }
+            markAdultPosters();
             return {checked:candidates.length,changed};
         })();
 
@@ -250,11 +253,7 @@
         const style = global.document.createElement("style");
         style.id = styleId;
         style.textContent = `
-            html.tt-adult-filter-on .genre-result-card:has(.adult-movie-badge) .genre-result-poster img,
-            html.tt-adult-filter-on .discover-card:has(.adult-movie-badge) .discover-card-poster img,
-            html.tt-adult-filter-on .v2-similar-card:has(.adult-movie-badge) .v2-similar-poster img,
-            html.tt-adult-filter-on .movie-detail-page-inner:has(.adult-movie-badge) .movie-page-hero-poster img,
-            html.tt-adult-filter-on .person-result-card:has(.adult-movie-badge) .genre-result-poster img {
+            html.tt-adult-filter-on .${POSTER_BLUR_CLASS}{
                 filter: blur(18px);
                 transform: scale(1.06);
             }
@@ -262,9 +261,52 @@
         global.document.head.appendChild(style);
     }
 
+    function closestFirst(element,selectors){
+        if(!element || typeof element.closest !== "function") return null;
+        for(const selector of selectors){
+            const match = element.closest(selector);
+            if(match) return match;
+        }
+        return null;
+    }
+
+    function markAdultPosters(){
+        if(!global.document || typeof global.document.querySelectorAll !== "function") return;
+        const badges = Array.from(global.document.querySelectorAll(".adult-movie-badge"));
+        badges.forEach(badge=>{
+            const card = closestFirst(badge,[
+                ".genre-result-card",
+                ".discover-hub-card",
+                ".v2-similar-card",
+                ".movie-detail-page-inner",
+                ".person-result-card"
+            ]);
+            if(!card) return;
+
+            if(card.matches && card.matches(".movie-detail-page-inner")){
+                card.querySelectorAll(".movie-page-hero-poster img").forEach(img=>img.classList.add(POSTER_BLUR_CLASS));
+                return;
+            }
+
+            card.querySelectorAll(".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img").forEach(img=>{
+                img.classList.add(POSTER_BLUR_CLASS);
+            });
+        });
+    }
+
+    function installPosterBlurObserver(){
+        if(!global.document || !global.document.documentElement) return;
+        if(typeof global.MutationObserver === "function" && !posterObserver){
+            posterObserver = new global.MutationObserver(()=>markAdultPosters());
+            posterObserver.observe(global.document.documentElement,{subtree:true,childList:true});
+        }
+        markAdultPosters();
+    }
+
     function updatePosterBlurState(){
         if(!global.document || !global.document.documentElement) return;
         global.document.documentElement.classList.toggle("tt-adult-filter-on",enabled());
+        markAdultPosters();
     }
 
     function clearAdultSensitiveCaches(){
@@ -288,6 +330,7 @@
         installRuntimeWrappers();
         installPosterBlurStyles();
         updatePosterBlurState();
+        installPosterBlurObserver();
         clearAdultSensitiveCaches();
         scheduleClassification(0);
         if(global.activePage === "shows" && typeof global.renderShowsPage === "function") global.renderShowsPage();
@@ -341,9 +384,11 @@
             installRuntimeWrappers();
             installPosterBlurStyles();
             updatePosterBlurState();
+            installPosterBlurObserver();
             scheduleClassification(1000);
         },{once:true});
     }else{
+        installPosterBlurObserver();
         scheduleClassification(1000);
     }
 
@@ -360,6 +405,8 @@
         copyAdultClassification,
         installRuntimeWrappers,
         classifyTrackedMedia,
+        installPosterBlurStyles,
+        markAdultPosters,
         clearAdultSensitiveCaches,
         refresh
     });
