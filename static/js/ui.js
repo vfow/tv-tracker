@@ -2335,6 +2335,7 @@ function createProfileSettingsDraft(){
 
     return {
         username:DATA.profile.username || "Username",
+        bio:String(DATA.profile.bio || "").trim().slice(0,300),
         avatar_type:DATA.profile.avatar_type || "initial",
         avatar_preset:savedPreset,
         avatar_data:DATA.profile.avatar_data || "",
@@ -2980,9 +2981,7 @@ function renderProfileHomeView(profile,stats){
                             ${escapeHTML(stats.username)}
                         </div>
 
-                        ${stats.bio
-                        ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
-                        : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
+                        ${stats.bio ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>` : ""}
 
                     </div>
 
