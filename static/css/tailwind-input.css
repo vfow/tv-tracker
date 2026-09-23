@@ -7643,3 +7643,92 @@
         max-width:320px;
     }
 }
+
+/* Exact V1 Activity / Lists control */
+.profile-feed-tabs-wrap{
+    width:100%;
+    max-width:1280px;
+    margin:42px auto 56px;
+    padding:0 32px;
+    display:flex;
+    justify-content:center;
+    box-sizing:border-box;
+}
+
+.profile-feed-tabs{
+    position:relative;
+    width:fit-content;
+    min-width:260px;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(120px,1fr));
+    padding:3px;
+    border:1px solid #252525;
+    border-radius:999px;
+    background:#070707;
+    isolation:isolate;
+}
+
+.profile-feed-tab-indicator{
+    position:absolute;
+    top:3px;
+    bottom:3px;
+    left:3px;
+    width:calc(50% - 3px);
+    border-radius:999px;
+    background:#fff;
+    transition:transform .24s cubic-bezier(.22,1,.36,1);
+    z-index:0;
+}
+
+.profile-feed-tabs[data-active-tab="lists"] .profile-feed-tab-indicator{
+    transform:translateX(100%);
+}
+
+.profile-feed-tab{
+    position:relative;
+    z-index:1;
+    min-height:38px;
+    padding:0 22px;
+    border:0;
+    border-radius:999px;
+    background:transparent;
+    color:#777;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:700;
+    transition:color .2s ease;
+}
+
+.profile-feed-tab.active{
+    color:#000;
+}
+
+.profile-feed-tab:hover{
+    color:#fff;
+}
+
+.profile-feed-tab.active:hover{
+    color:#000;
+}
+
+@media (max-width:900px){
+    .profile-feed-tabs-wrap{
+        padding-left:24px;
+        padding-right:24px;
+    }
+}
+
+@media (max-width:680px){
+    .profile-feed-tabs-wrap{
+        padding-left:18px;
+        padding-right:18px;
+        margin-top:34px;
+        margin-bottom:40px;
+    }
+
+    .profile-feed-tabs{
+        width:100%;
+        min-width:0;
+        max-width:320px;
+    }
+}
