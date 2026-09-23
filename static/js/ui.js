@@ -2974,13 +2974,17 @@ function renderProfileHomeView(profile,stats){
 
                 <div class="profile-identity">
 
-                    <div class="profile-name">
-                        ${escapeHTML(stats.username)}
-                    </div>
+                    <div class="profile-identity-main">
 
-                    ${stats.bio
-                    ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
-                    : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
+                        <div class="profile-name">
+                            ${escapeHTML(stats.username)}
+                        </div>
+
+                        ${stats.bio
+                        ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
+                        : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
+
+                    </div>
 
                     <div class="profile-summary-stats">
 
@@ -2995,7 +2999,7 @@ function renderProfileHomeView(profile,stats){
 
                         </div>
 
-                        <div class="profile-summary-stat profile-summary-stat-separated">
+                        <div class="profile-summary-stat">
 
                             <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
 
@@ -3006,7 +3010,7 @@ function renderProfileHomeView(profile,stats){
 
                         </div>
 
-                        <button class="profile-summary-stat profile-summary-stat-button profile-summary-stat-separated" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
+                        <button class="profile-summary-stat profile-summary-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
 
                             <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
 
