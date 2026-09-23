@@ -44,6 +44,7 @@ if (typeof draft.adult_filter !== 'boolean') draft.adult_filter = true;
 window.profileSettingsDraft = draft;
 
 const username = ref(String(draft.username || 'Username'));
+const bio = ref(String(draft.bio || ''));
 const adultFilter = ref(draft.adult_filter !== false);
 const saving = ref(false);
 const bridgeUnavailable = ref(false);
@@ -82,6 +83,10 @@ function navigate(section: string, event: MouseEvent): void {
 
 function onUsernameInput(): void {
   draft.username = username.value;
+}
+
+function onBioInput(): void {
+  draft.bio = bio.value;
 }
 
 function chooseInitial(): void {
@@ -138,6 +143,7 @@ async function saveProfile(): Promise<void> {
   }
 
   draft.username = username.value;
+  draft.bio = bio.value;
   draft.adult_filter = adultFilter.value;
   const liveProfile = window.DATA?.profile;
   const previousAdultFilter = liveProfile?.adult_filter !== false;
@@ -234,6 +240,19 @@ onMounted(() => {
               <button id="remove-profile-avatar" class="settings-v2-button" type="button" @click="removeAvatar">Remove Avatar</button>
             </div>
           </div>
+        </div>
+
+        <div class="settings-v2-field" style="margin-top:28px">
+          <label for="profile-bio-input">Bio</label>
+          <textarea
+            id="profile-bio-input"
+            v-model="bio"
+            class="settings-v2-input settings-v2-textarea"
+            maxlength="300"
+            rows="3"
+            placeholder="Tell people a little about yourself."
+            @input="onBioInput"
+          ></textarea>
         </div>
 
         <div class="settings-v2-field" style="margin-top:28px">
