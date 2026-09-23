@@ -176,7 +176,7 @@ function updateShellTitle(){
 
 function normalizePrimaryNavPage(page){
     const clean = String(page || "").trim().toLowerCase();
-    return ["shows","discover","profile","settings"].includes(clean) ? clean : "";
+    return ["home","shows","discover","profile","settings"].includes(clean) ? clean : "";
 }
 
 function setAppPrimaryNavActive(page){
