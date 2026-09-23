@@ -2963,121 +2963,103 @@ function renderProfileHomeView(profile,stats){
     const activeFeedTab = typeof activeProfileFeedTab !== "undefined" && activeProfileFeedTab === "lists" ? "lists" : "activity";
 
     profile.innerHTML = `
-        <div class="profile-cinema">
+        <main class="profile-studio">
 
-            <header class="profile-cinema-banner ${getProfileHeaderClass(stats)}">
+            <section class="profile-studio-hero ${getProfileHeaderClass(stats)}">
                 ${getProfileHeaderImageLayerHTML(stats)}
-                <div class="profile-cinema-banner-shade" aria-hidden="true"></div>
-                <div class="profile-cinema-banner-mark" aria-hidden="true">TV TRACKER</div>
-            </header>
+                <div class="profile-studio-hero-overlay" aria-hidden="true"></div>
 
-            <section class="profile-cinema-identity">
+                <div class="profile-studio-hero-content">
 
-                <div class="profile-cinema-avatar">
-                    ${getProfileAvatarInnerHTML(stats)}
-                </div>
+                    <div class="profile-studio-avatar">
+                        ${getProfileAvatarInnerHTML(stats)}
+                    </div>
 
-                <div class="profile-cinema-name-wrap">
-                    <div class="profile-cinema-kicker">PROFILE</div>
-                    <h1 class="profile-cinema-name">${escapeHTML(stats.username)}</h1>
-                    ${stats.bio
-                    ? `<div class="profile-cinema-bio">${escapeHTML(stats.bio)}</div>`
-                    : `<div class="profile-cinema-bio profile-cinema-bio-empty">No bio yet.</div>`}
-                </div>
+                    <div class="profile-studio-intro">
+                        <div class="profile-studio-intro-rule" aria-hidden="true"></div>
 
-            </section>
+                        <div class="profile-studio-name-row">
+                            <h1 class="profile-studio-name">${escapeHTML(stats.username)}</h1>
+                        </div>
 
-            <section class="profile-cinema-stats" aria-label="Profile statistics">
-
-                <div class="profile-cinema-stat">
-                    <span class="profile-cinema-stat-index">01</span>
-                    <span class="profile-cinema-stat-copy">
-                        <span class="profile-cinema-stat-label">FILMS</span>
-                        <strong>${Number(stats.moviesWatched || 0).toLocaleString()}</strong>
-                    </span>
-                    <span class="profile-cinema-stat-icon profile-cinema-stat-icon-placeholder" aria-hidden="true"></span>
-                </div>
-
-                <div class="profile-cinema-stat">
-                    <span class="profile-cinema-stat-index">02</span>
-                    <span class="profile-cinema-stat-copy">
-                        <span class="profile-cinema-stat-label">EPISODES</span>
-                        <strong>${Number(stats.episodesWatched || 0).toLocaleString()}</strong>
-                    </span>
-                    <img class="profile-cinema-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
-                </div>
-
-                <button class="profile-cinema-stat profile-cinema-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
-                    <span class="profile-cinema-stat-index">03</span>
-                    <span class="profile-cinema-stat-copy">
-                        <span class="profile-cinema-stat-label">WATCH TIME</span>
-                        <strong>${escapeHTML(stats.watchTimeText || "0h")}</strong>
-                    </span>
-                    <img class="profile-cinema-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
-                    <span class="profile-cinema-stat-arrow" aria-hidden="true">↗</span>
-                </button>
-
-            </section>
-
-            <nav class="profile-cinema-feed-wrap" aria-label="Profile content">
-                <div class="profile-cinema-feed">
-
-                    <span class="profile-cinema-feed-caption">PROFILE CONTENT</span>
-
-                    <div class="profile-cinema-feed-tabs" data-active-tab="${activeFeedTab}">
-                        <span class="profile-cinema-feed-indicator" aria-hidden="true"></span>
-
-                        <button class="profile-cinema-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
-                            Activity
-                        </button>
-
-                        <button class="profile-cinema-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
-                            Lists
-                        </button>
+                        ${stats.bio
+                        ? `<p class="profile-studio-bio">${escapeHTML(stats.bio)}</p>`
+                        : `<p class="profile-studio-bio profile-studio-bio-empty">No bio yet.</p>`}
                     </div>
 
                 </div>
+            </section>
+
+            <section class="profile-studio-meta" aria-label="Profile overview">
+
+                <div class="profile-studio-meta-heading">
+                    <span>Overview</span>
+                </div>
+
+                <div class="profile-studio-stats">
+
+                    <div class="profile-studio-stat profile-studio-stat-primary">
+                        <span class="profile-studio-stat-label">Watch time</span>
+                        <strong>${escapeHTML(stats.watchTimeText || "0h")}</strong>
+                        <button class="profile-studio-stat-link" id="open-profile-stats" type="button">View stats</button>
+                    </div>
+
+                    <div class="profile-studio-stat">
+                        <span class="profile-studio-stat-label">Episodes</span>
+                        <strong>${Number(stats.episodesWatched || 0).toLocaleString()}</strong>
+                    </div>
+
+                    <div class="profile-studio-stat">
+                        <span class="profile-studio-stat-label">Films</span>
+                        <strong>${Number(stats.moviesWatched || 0).toLocaleString()}</strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <nav class="profile-studio-tabs" aria-label="Profile content">
+                <button class="profile-studio-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
+                    Activity
+                </button>
+                <button class="profile-studio-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
+                    Lists
+                </button>
             </nav>
 
-            <section class="profile-cinema-favorites">
+            <section class="profile-studio-section">
 
-                <div class="profile-cinema-section-heading">
-                    <span class="profile-cinema-section-number">01</span>
+                <div class="profile-studio-section-header">
                     <div>
-                        <div class="profile-cinema-section-kicker">CURATED</div>
-                        <h2>FAVORITE SHOWS</h2>
+                        <h2>Favorite shows</h2>
+                        <p>Eight titles worth keeping close.</p>
                     </div>
-                    <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">
-                        Edit
-                    </button>
+                    <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">Edit favorites</button>
                 </div>
 
-                <div class="profile-favorites-grid">
+                <div class="profile-studio-poster-grid">
                     ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
                 </div>
 
             </section>
 
-            <section class="profile-cinema-favorites profile-cinema-favorites-movies">
+            <section class="profile-studio-section profile-studio-section-movies">
 
-                <div class="profile-cinema-section-heading">
-                    <span class="profile-cinema-section-number">02</span>
+                <div class="profile-studio-section-header">
                     <div>
-                        <div class="profile-cinema-section-kicker">CURATED</div>
-                        <h2>FAVORITE MOVIES</h2>
+                        <h2>Favorite movies</h2>
+                        <p>Personal picks from your film history.</p>
                     </div>
-                    <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">
-                        Edit
-                    </button>
+                    <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">Edit favorites</button>
                 </div>
 
-                <div class="profile-favorites-grid">
+                <div class="profile-studio-poster-grid">
                     ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
                 </div>
 
             </section>
 
-        </div>
+        </main>
     `;
 
     document.getElementById("open-profile-stats").addEventListener("click",function(){
@@ -3093,12 +3075,6 @@ function renderProfileHomeView(profile,stats){
 
             if(typeof activeProfileFeedTab !== "undefined"){
                 activeProfileFeedTab = tab;
-            }
-
-            const control = this.closest(".profile-cinema-feed-tabs");
-
-            if(control){
-                control.dataset.activeTab = tab;
             }
 
             document.querySelectorAll("[data-profile-feed-tab]").forEach(tabButton=>{
@@ -3124,6 +3100,7 @@ function renderProfileHomeView(profile,stats){
         button.addEventListener("click",function(event){
             if(!isPlainAppLinkClick(event)){ return; }
             event.preventDefault();
+
             const id = this.dataset.favoriteId || "";
             const kind = this.dataset.favoriteKind || "show";
 
