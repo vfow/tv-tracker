@@ -7011,6 +7011,7 @@
 
 .profile-identity-main{
     min-width:0;
+    transform:translateY(30px);
 }
 
 .profile-name{
