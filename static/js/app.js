@@ -13025,6 +13025,7 @@ async function saveProfileSettings(settings){
 
     const next = settings && typeof settings === "object" ? settings : {};
     const username = String(next.username || "").trim().slice(0,30) || "Username";
+    const bio = String(next.bio || "").trim().slice(0,300);
     const allowedTypes = ["initial","preset","upload"];
     const avatarType = allowedTypes.includes(next.avatar_type) ? next.avatar_type : "initial";
     const avatarPreset = ["silhouette-1","silhouette-2","silhouette-3","silhouette-4"].includes(next.avatar_preset)
@@ -13044,6 +13045,7 @@ async function saveProfileSettings(settings){
     : "";
 
     DATA.profile.username = username;
+    DATA.profile.bio = bio;
     DATA.profile.avatar_type = avatarType === "upload" && !avatarData ? "initial" : avatarType;
     DATA.profile.avatar_preset = avatarPreset;
     DATA.profile.avatar_data = avatarData;
