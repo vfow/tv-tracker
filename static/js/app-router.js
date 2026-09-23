@@ -276,6 +276,9 @@
             return buildParsedRoute("search",path,searchState.search,{query:searchState.query,media:searchState.media,eyeState:searchState.eyeState});
         }
 
+        if(path === "/app/home"){
+            return buildParsedRoute("home",path,"",{});
+        }
         if(path === "/app/upcoming"){
             return buildParsedRoute("upcoming",path,"",{});
         }
@@ -574,6 +577,9 @@
             const media = typeof searchRouteState !== "undefined" && searchRouteState ? searchRouteState.media : "tv";
             return typeof getSearchRoute === "function" ? getSearchRoute(query,media,searchRouteState || {}) : "/app/search";
         }
+        if(activePage === "home"){
+            return "/app/home";
+        }
         if(activePage === "discover"){
             return "/app/discover";
         }
@@ -831,6 +837,12 @@
             configureInitialListSkeleton(activeFilter);
             setInitialShowsTab("watchlist");
             setActiveFilterButtons();
+            return;
+        }
+        if(parsed.type === "home"){
+            activePage = "home";
+            setPageActiveWithoutRender("home-page","home");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
         if(parsed.type === "upcoming" || parsed.type === "history"){
