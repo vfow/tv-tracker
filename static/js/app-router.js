@@ -279,6 +279,9 @@
         if(path === "/app/home"){
             return buildParsedRoute("home",path,"",{});
         }
+        if(path === "/app/movies"){
+            return buildParsedRoute("movies",path,"",{});
+        }
         if(path === "/app/upcoming"){
             return buildParsedRoute("upcoming",path,"",{});
         }
@@ -580,6 +583,9 @@
         if(activePage === "home"){
             return "/app/home";
         }
+        if(activePage === "movies"){
+            return "/app/movies";
+        }
         if(activePage === "discover"){
             return "/app/discover";
         }
@@ -842,6 +848,12 @@
         if(parsed.type === "home"){
             activePage = "home";
             setPageActiveWithoutRender("home-page","home");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
+            return;
+        }
+        if(parsed.type === "movies"){
+            activePage = "movies";
+            setPageActiveWithoutRender("movies-page","movies");
             if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
@@ -1112,6 +1124,20 @@
             }else{
                 showPage("discover");
             }
+            return;
+        }
+        if(parsed.type === "home"){
+            clearDetailState();
+            activePage = "home";
+            setPageActiveWithoutRender("home-page","home");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
+            return;
+        }
+        if(parsed.type === "movies"){
+            clearDetailState();
+            activePage = "movies";
+            setPageActiveWithoutRender("movies-page","movies");
+            if(typeof updateShellTitle === "function"){ updateShellTitle(); }
             return;
         }
         if(parsed.type === "discover-category"){
