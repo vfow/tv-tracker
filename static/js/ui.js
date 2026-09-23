@@ -2986,7 +2986,16 @@ function renderProfileHomeView(profile,stats){
 
                     </div>
 
-                    <div class="profile-summary-stats">
+
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <div class="profile-summary-stats">
 
                         <div class="profile-summary-stat">
 
@@ -3022,12 +3031,6 @@ function renderProfileHomeView(profile,stats){
                         </button>
 
                     </div>
-
-                </div>
-
-            </div>
-
-        </header>
 
 
 
