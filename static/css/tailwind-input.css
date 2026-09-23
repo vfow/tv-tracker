@@ -6939,405 +6939,422 @@
 
 
 
-/* Profile layout V2 — alternate visual system */
+/* Profile layout V3 — cinema editorial */
 .profile{
     min-height:100%;
-    background:#071018;
-    color:#eef5f8;
-    padding:22px 0 70px;
+    background:#0a0a0a;
+    color:#f4f0e8;
+    padding:0 0 84px;
 }
 
-.profile-hero{
-    width:min(1320px,calc(100% - 44px));
-    min-height:288px;
-    margin:0 auto;
+.profile-cinema{
+    width:100%;
+    background:#0a0a0a;
+}
+
+.profile-cinema-banner{
+    width:100%;
+    min-height:340px;
     position:relative;
     overflow:hidden;
-    border:1px solid rgba(163,211,226,.18);
-    border-radius:24px;
-    background:
-        radial-gradient(circle at 82% 18%,rgba(70,211,186,.24),transparent 30%),
-        radial-gradient(circle at 18% 88%,rgba(59,130,246,.2),transparent 32%),
-        linear-gradient(135deg,#122b38 0%,#0d1d28 48%,#101b2a 100%);
-    box-shadow:0 24px 60px rgba(0,0,0,.34);
-    isolation:isolate;
     box-sizing:border-box;
+    background:#171717;
+    isolation:isolate;
 }
 
-.profile-hero::before{
-    content:"";
+.profile-cinema-banner .profile-header-image-layer img{
+    filter:saturate(.7) contrast(1.08);
+}
+
+.profile-cinema-banner .profile-header-image-overlay{
+    background:
+        linear-gradient(90deg,rgba(7,7,7,.56),rgba(7,7,7,.08) 52%,rgba(7,7,7,.48)),
+        linear-gradient(0deg,rgba(10,10,10,.86),rgba(10,10,10,.08) 55%,rgba(10,10,10,.18));
+}
+
+.profile-cinema-banner-shade{
     position:absolute;
     inset:0;
     background:
-        linear-gradient(120deg,rgba(255,255,255,.05),transparent 35%),
-        repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 1px,transparent 1px 80px);
+        linear-gradient(180deg,rgba(0,0,0,.1),transparent 48%),
+        linear-gradient(90deg,rgba(232,73,55,.08),transparent 32%);
     pointer-events:none;
-    z-index:0;
-}
-
-.profile-hero::after{
-    content:"";
-    position:absolute;
-    left:0;
-    right:0;
-    bottom:0;
-    height:120px;
-    background:linear-gradient(to bottom,transparent,rgba(7,16,24,.68));
-    pointer-events:none;
-    z-index:0;
-}
-
-.profile-hero .profile-header-image-layer{
-    opacity:.52;
-}
-
-.profile-hero .profile-header-image-overlay{
-    background:
-        linear-gradient(90deg,rgba(7,16,24,.72),rgba(7,16,24,.22) 58%,rgba(7,16,24,.66)),
-        linear-gradient(0deg,rgba(7,16,24,.72),rgba(7,16,24,.08) 64%,rgba(7,16,24,.26));
-}
-
-.profile-hero-inner{
-    width:100%;
-    min-height:288px;
-    padding:34px 38px 34px;
-    display:grid;
-    grid-template-columns:146px minmax(0,1fr);
-    align-items:end;
-    gap:28px;
-    box-sizing:border-box;
-    position:relative;
     z-index:1;
 }
 
-.profile-avatar{
-    width:146px;
-    height:146px;
-    min-width:146px;
-    flex:0 0 146px;
-    margin:0;
-    align-self:end;
-    border:4px solid #071018;
-    outline:2px solid #72e2c7;
-    box-shadow:0 16px 36px rgba(0,0,0,.36);
-    box-sizing:border-box;
-    grid-column:1;
-    background:#12202a;
-}
-
-.profile-identity{
-    min-width:0;
-    display:flex;
-    flex-direction:column;
-    justify-content:flex-end;
-    gap:22px;
-    grid-column:2;
-}
-
-.profile-identity-main{
-    min-width:0;
-}
-
-.profile-name{
-    margin:0;
-    color:#f5fbfd;
-    font-size:46px;
-    line-height:.98;
-    font-weight:800;
-    letter-spacing:-1.6px;
-}
-
-.profile-bio{
-    margin-top:12px;
-    max-width:740px;
-    color:#b6c8cf;
-    font-size:16px;
-    line-height:1.55;
-}
-
-.profile-bio-empty{
-    color:#78909a;
-}
-
-.profile-summary-stats{
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:10px;
-    width:100%;
-    margin:0;
-    padding:0;
-    border:0;
-}
-
-.profile-summary-stat{
-    min-width:0;
-    min-height:74px;
-    padding:13px 16px;
-    display:flex;
-    align-items:center;
-    gap:12px;
-    border:1px solid rgba(196,233,239,.13);
-    border-radius:12px;
-    background:rgba(7,16,24,.5);
-    color:#eef5f8;
-    text-align:left;
-    box-sizing:border-box;
-    backdrop-filter:blur(10px);
-}
-
-.profile-summary-stat-button{
-    width:100%;
-    cursor:pointer;
-    transition:transform .18s ease,border-color .18s ease,background-color .18s ease;
-}
-
-.profile-summary-stat-button:hover{
-    transform:translateY(-2px);
-    border-color:rgba(114,226,199,.48);
-    background:rgba(7,16,24,.72);
-}
-
-.profile-summary-stat-button:focus-visible{
-    outline:2px solid #72e2c7;
-    outline-offset:3px;
-}
-
-.profile-summary-stat-icon{
-    width:32px;
-    height:32px;
-    flex:0 0 32px;
-    object-fit:contain;
-    filter:invert(1);
-    opacity:.92;
-}
-
-.profile-summary-stat-icon-placeholder{
-    width:32px;
-    height:32px;
-    flex:0 0 32px;
-    display:block;
-    border-radius:8px;
-    background:linear-gradient(135deg,#72e2c7,#4ca6ff);
-    position:relative;
-}
-
-.profile-summary-stat-icon-placeholder::after{
-    content:"";
+.profile-cinema-banner-mark{
     position:absolute;
-    width:10px;
-    height:14px;
-    left:11px;
-    top:9px;
-    border:2px solid #071018;
-    border-top-width:3px;
-    border-bottom-width:3px;
-    border-radius:2px;
-}
-
-.profile-summary-stat-copy{
-    min-width:0;
-    display:flex;
-    flex-direction:column;
-    gap:6px;
-}
-
-.profile-summary-stat-copy .profile-stat-label{
-    color:#82a1ac;
+    top:28px;
+    right:34px;
+    color:rgba(255,255,255,.58);
     font-size:10px;
     font-weight:800;
-    letter-spacing:1.45px;
+    letter-spacing:2.2px;
+    z-index:2;
+}
+
+.profile-cinema-identity{
+    width:min(1180px,calc(100% - 56px));
+    margin:-74px auto 0;
+    position:relative;
+    z-index:4;
+    display:flex;
+    align-items:flex-end;
+    gap:24px;
+}
+
+.profile-cinema-avatar{
+    width:148px;
+    height:148px;
+    flex:0 0 148px;
+    border:5px solid #0a0a0a;
+    border-radius:50%;
+    overflow:hidden;
+    background:#1b1b1b;
+    box-shadow:0 12px 28px rgba(0,0,0,.5);
+    box-sizing:border-box;
+}
+
+.profile-cinema-name-wrap{
+    min-width:0;
+    padding:0 0 10px;
+}
+
+.profile-cinema-kicker,
+.profile-cinema-section-kicker{
+    color:#e84937;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:2px;
     line-height:1;
 }
 
-.profile-summary-stat-value{
-    display:block;
+.profile-cinema-name{
+    margin:8px 0 0;
+    color:#f4f0e8;
+    font-size:52px;
+    line-height:.94;
+    font-weight:700;
+    letter-spacing:-2px;
+}
+
+.profile-cinema-bio{
+    max-width:700px;
+    margin-top:11px;
+    color:#aaa49a;
+    font-size:15px;
+    line-height:1.5;
+}
+
+.profile-cinema-bio-empty{
+    color:#67645e;
+}
+
+.profile-cinema-stats{
+    width:min(1180px,calc(100% - 56px));
+    margin:34px auto 0;
+    padding:16px 0;
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    border-top:1px solid #2b2a28;
+    border-bottom:1px solid #2b2a28;
+}
+
+.profile-cinema-stat{
+    min-width:0;
+    min-height:92px;
+    display:grid;
+    grid-template-columns:32px minmax(0,1fr) 32px;
+    align-items:center;
+    gap:13px;
+    padding:11px 24px;
+    border:0;
+    border-right:1px solid #2b2a28;
+    background:transparent;
+    color:#f4f0e8;
+    text-align:left;
+    box-sizing:border-box;
+}
+
+.profile-cinema-stat:last-child{
+    border-right:0;
+}
+
+.profile-cinema-stat-button{
+    width:100%;
+    cursor:pointer;
+    position:relative;
+    transition:background-color .18s ease,transform .18s ease;
+}
+
+.profile-cinema-stat-button:hover{
+    background:#11100f;
+}
+
+.profile-cinema-stat-button:focus-visible{
+    outline:2px solid #e84937;
+    outline-offset:4px;
+}
+
+.profile-cinema-stat-index{
+    align-self:start;
+    padding-top:2px;
+    color:#5e5b56;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:1.2px;
+}
+
+.profile-cinema-stat-copy{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+}
+
+.profile-cinema-stat-label{
+    color:#7f7a73;
+    font-size:9px;
+    font-weight:800;
+    letter-spacing:1.5px;
+    line-height:1;
+}
+
+.profile-cinema-stat-copy strong{
     min-width:0;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
-    color:#f5fbfd;
-    font-size:25px;
+    color:#f4f0e8;
+    font-size:28px;
     line-height:1;
-    font-weight:800;
-    letter-spacing:-.35px;
+    font-weight:700;
+    letter-spacing:-.5px;
 }
 
-.profile-section{
-    width:min(1320px,calc(100% - 44px));
-    max-width:none;
-    margin:0 auto;
-    padding:34px 0 0;
+.profile-cinema-stat-icon{
+    width:27px;
+    height:27px;
+    justify-self:end;
+    object-fit:contain;
+    filter:invert(1);
+    opacity:.72;
+}
+
+.profile-cinema-stat-icon-placeholder{
+    width:27px;
+    height:27px;
+    justify-self:end;
+    position:relative;
+    border:1px solid #514f4a;
     box-sizing:border-box;
 }
 
-.profile-section + .profile-section{
-    padding-top:52px;
+.profile-cinema-stat-icon-placeholder::before,
+.profile-cinema-stat-icon-placeholder::after{
+    content:"";
+    position:absolute;
+    left:6px;
+    right:6px;
+    height:2px;
+    background:#e84937;
 }
 
-.profile-section-header{
-    margin-bottom:18px;
+.profile-cinema-stat-icon-placeholder::before{top:9px}
+.profile-cinema-stat-icon-placeholder::after{top:15px}
+
+.profile-cinema-stat-arrow{
+    position:absolute;
+    top:12px;
+    right:18px;
+    color:#e84937;
+    font-size:15px;
+    opacity:.7;
+}
+
+.profile-cinema-feed-wrap{
+    width:min(1180px,calc(100% - 56px));
+    margin:42px auto 0;
+}
+
+.profile-cinema-feed{
     display:flex;
     align-items:center;
     justify-content:space-between;
     gap:20px;
 }
 
-.profile-section-header h2{
-    margin:0;
-    color:#f5fbfd;
-    font-size:28px;
+.profile-cinema-feed-caption{
+    color:#6d6963;
+    font-size:10px;
     font-weight:800;
+    letter-spacing:1.6px;
+}
+
+.profile-cinema-feed-tabs{
+    position:relative;
+    min-width:250px;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(120px,1fr));
+    padding:2px;
+    border:1px solid #34322e;
+    background:#0e0e0d;
+    border-radius:2px;
+}
+
+.profile-cinema-feed-indicator{
+    position:absolute;
+    top:2px;
+    bottom:2px;
+    left:2px;
+    width:calc(50% - 2px);
+    background:#f4f0e8;
+    transition:transform .23s cubic-bezier(.22,1,.36,1);
+    z-index:0;
+}
+
+.profile-cinema-feed-tabs[data-active-tab="lists"] .profile-cinema-feed-indicator{
+    transform:translateX(100%);
+}
+
+.profile-cinema-feed-tab{
+    position:relative;
+    z-index:1;
+    min-height:36px;
+    border:0;
+    background:transparent;
+    color:#747069;
+    cursor:pointer;
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.3px;
+}
+
+.profile-cinema-feed-tab.active{
+    color:#0a0a0a;
+}
+
+.profile-cinema-feed-tab:hover{
+    color:#f4f0e8;
+}
+
+.profile-cinema-feed-tab.active:hover{
+    color:#0a0a0a;
+}
+
+.profile-cinema-favorites{
+    width:min(1180px,calc(100% - 56px));
+    margin:52px auto 0;
+}
+
+.profile-cinema-favorites-movies{
+    margin-top:68px;
+}
+
+.profile-cinema-section-heading{
+    display:grid;
+    grid-template-columns:42px auto minmax(20px,1fr) auto;
+    align-items:end;
+    gap:13px;
+    margin-bottom:18px;
+}
+
+.profile-cinema-section-number{
+    color:#e84937;
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:1px;
+    padding-bottom:3px;
+}
+
+.profile-cinema-section-heading h2{
+    margin:5px 0 0;
+    color:#f4f0e8;
+    font-size:29px;
     line-height:1;
-    letter-spacing:-.45px;
+    font-weight:700;
+    letter-spacing:-.5px;
 }
 
-.profile-section-header::after{
+.profile-cinema-section-heading::after{
     content:"";
-    flex:1;
+    width:100%;
     height:1px;
-    margin-left:4px;
-    background:linear-gradient(90deg,rgba(114,226,199,.3),rgba(255,255,255,0));
-    order:2;
+    background:#2b2a28;
+    margin-bottom:5px;
 }
 
-.profile-section-header h2{
-    order:1;
-}
-
-.profile-section-header .profile-edit-button{
-    order:3;
+.profile-cinema-section-heading .profile-edit-button{
+    align-self:end;
 }
 
 .profile-favorites-grid{
     display:grid;
     grid-template-columns:repeat(8,minmax(0,1fr));
-    gap:14px;
+    gap:11px;
 }
 
 .profile-favorite-slot{
     width:100%;
     height:auto;
     aspect-ratio:2 / 3;
-    box-sizing:border-box;
-    border-radius:8px;
     overflow:hidden;
-    transition:transform .2s ease,box-shadow .2s ease,filter .2s ease;
+    box-sizing:border-box;
+    border-radius:0;
+    transition:transform .2s ease,filter .2s ease;
 }
 
 .profile-favorite-slot.filled{
-    box-shadow:0 12px 28px rgba(0,0,0,.28);
+    box-shadow:none;
 }
 
 .profile-favorite-slot.filled:hover{
-    transform:translateY(-7px) scale(1.015);
-    box-shadow:0 20px 36px rgba(0,0,0,.42);
-    filter:saturate(1.08);
+    transform:translateY(-5px);
+    box-shadow:none;
+    filter:brightness(1.08);
 }
 
 .profile-favorite-slot.empty{
-    border:1px dashed rgba(114,226,199,.28);
-    background:#0c1821;
-    color:#72e2c7;
+    border:1px dashed #393732;
+    background:#11110f;
+    color:#e84937;
 }
 
 .profile-favorite-slot.empty:hover{
-    border-color:rgba(114,226,199,.58);
-    background:#0e2029;
+    border-color:#e84937;
+    background:#151412;
 }
 
 .profile-edit-button{
     flex:0 0 auto;
-    min-width:58px;
-    padding:7px 13px;
-    border:1px solid rgba(114,226,199,.3);
-    border-radius:7px;
-    background:#0b1921;
-    color:#8fe6d0;
-    font-size:11px;
+    min-width:60px;
+    padding:7px 12px;
+    border:1px solid #3b3935;
+    border-radius:2px;
+    background:transparent;
+    color:#a8a39c;
+    font-size:10px;
     font-weight:800;
-    letter-spacing:.8px;
+    letter-spacing:1px;
     text-transform:uppercase;
     cursor:pointer;
-    transition:background-color .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
+    transition:background-color .16s ease,color .16s ease,border-color .16s ease;
 }
 
 .profile-edit-button:hover{
-    background:#72e2c7;
-    border-color:#72e2c7;
-    color:#071018;
-    transform:translateY(-1px);
-}
-
-.profile-feed-tabs-wrap{
-    width:min(1320px,calc(100% - 44px));
-    max-width:none;
-    margin:54px auto 0;
-    padding:0;
-    display:flex;
-    justify-content:flex-start;
-    box-sizing:border-box;
-}
-
-.profile-feed-tabs{
-    position:relative;
-    width:fit-content;
-    min-width:300px;
-    display:grid;
-    grid-template-columns:repeat(2,minmax(140px,1fr));
-    padding:4px;
-    border:1px solid rgba(114,226,199,.2);
-    border-radius:12px;
-    background:#0a141c;
-    box-shadow:0 10px 26px rgba(0,0,0,.22);
-    isolation:isolate;
-}
-
-.profile-feed-tab-indicator{
-    position:absolute;
-    top:4px;
-    bottom:4px;
-    left:4px;
-    width:calc(50% - 4px);
-    border-radius:8px;
-    background:linear-gradient(135deg,#72e2c7,#5bb9f2);
-    box-shadow:0 5px 14px rgba(40,125,130,.28);
-    transition:transform .25s cubic-bezier(.22,1,.36,1);
-    z-index:0;
-}
-
-.profile-feed-tabs[data-active-tab="lists"] .profile-feed-tab-indicator{
-    transform:translateX(100%);
-}
-
-.profile-feed-tab{
-    position:relative;
-    z-index:1;
-    min-height:42px;
-    padding:0 22px;
-    border:0;
-    border-radius:8px;
-    background:transparent;
-    color:#78909a;
-    cursor:pointer;
-    font-size:13px;
-    font-weight:800;
-    letter-spacing:.35px;
-    transition:color .18s ease;
-}
-
-.profile-feed-tab.active{
-    color:#071018;
-}
-
-.profile-feed-tab:hover{
-    color:#d8eef3;
-}
-
-.profile-feed-tab.active:hover{
-    color:#071018;
+    border-color:#e84937;
+    background:#e84937;
+    color:#0a0a0a;
 }
 
 @media (max-width:1199px){
+    .profile-cinema-stats,
+    .profile-cinema-feed-wrap,
+    .profile-cinema-favorites,
+    .profile-cinema-identity{
+        width:calc(100% - 44px);
+    }
+
     .profile-favorites-grid{
         grid-template-columns:repeat(6,minmax(0,1fr));
         gap:12px;
@@ -7345,185 +7362,161 @@
 }
 
 @media (max-width:900px){
-    .profile{
-        padding-top:16px;
+    .profile-cinema-banner{
+        min-height:270px;
     }
 
-    .profile-hero,
-    .profile-section,
-    .profile-feed-tabs-wrap{
-        width:calc(100% - 32px);
+    .profile-cinema-identity{
+        margin-top:-52px;
+        gap:18px;
     }
 
-    .profile-hero,
-    .profile-hero-inner{
-        min-height:0;
+    .profile-cinema-avatar{
+        width:112px;
+        height:112px;
+        flex-basis:112px;
+        border-width:4px;
     }
 
-    .profile-hero-inner{
-        padding:28px 26px 26px;
-        grid-template-columns:94px minmax(0,1fr);
-        gap:20px;
+    .profile-cinema-name{
+        font-size:40px;
+        letter-spacing:-1.3px;
     }
 
-    .profile-avatar{
-        width:94px;
-        height:94px;
-        min-width:94px;
-        flex-basis:94px;
+    .profile-cinema-stats{
+        margin-top:28px;
     }
 
-    .profile-name{
-        font-size:36px;
-    }
-
-    .profile-summary-stats{
+    .profile-cinema-stat{
+        padding:11px 14px;
+        grid-template-columns:25px minmax(0,1fr) 25px;
         gap:8px;
     }
 
-    .profile-summary-stat{
-        min-height:66px;
-        padding:11px 12px;
-        gap:9px;
+    .profile-cinema-stat-copy strong{
+        font-size:22px;
     }
 
-    .profile-summary-stat-icon,
-    .profile-summary-stat-icon-placeholder{
-        width:27px;
-        height:27px;
-        flex-basis:27px;
+    .profile-cinema-feed{
+        align-items:flex-start;
+        flex-direction:column;
     }
 
-    .profile-summary-stat-value{
-        font-size:21px;
+    .profile-cinema-feed-tabs{
+        min-width:250px;
     }
 
-    .profile-section{
-        padding-top:30px;
-    }
-
-    .profile-favorites-grid{
-        grid-template-columns:repeat(4,minmax(0,1fr));
-    }
-
-    .profile-feed-tabs-wrap{
-        margin-top:46px;
+    .profile-cinema-section-heading{
+        grid-template-columns:34px auto minmax(14px,1fr) auto;
     }
 }
 
 @media (max-width:680px){
     .profile{
-        padding:10px 0 54px;
+        padding-bottom:54px;
     }
 
-    .profile{
-        background:
-            radial-gradient(circle at 90% 0,rgba(70,211,186,.06),transparent 26%),
-            #071018;
+    .profile-cinema-banner{
+        min-height:220px;
     }
 
-    .profile-hero,
-    .profile-section,
-    .profile-feed-tabs-wrap{
-        width:calc(100% - 20px);
+    .profile-cinema-banner-mark{
+        top:18px;
+        right:18px;
+        font-size:8px;
+        letter-spacing:1.5px;
     }
 
-    .profile-hero{
-        border-radius:18px;
+    .profile-cinema-identity,
+    .profile-cinema-stats,
+    .profile-cinema-feed-wrap,
+    .profile-cinema-favorites{
+        width:calc(100% - 24px);
     }
 
-    .profile-hero-inner{
-        display:flex;
+    .profile-cinema-identity{
+        margin-top:-42px;
         flex-direction:column;
         align-items:flex-start;
-        padding:24px 18px 18px;
-        gap:17px;
+        gap:12px;
     }
 
-    .profile-avatar{
-        width:82px;
-        height:82px;
-        min-width:82px;
-        flex-basis:82px;
+    .profile-cinema-avatar{
+        width:88px;
+        height:88px;
+        flex-basis:88px;
+        border-width:4px;
     }
 
-    .profile-identity{
-        width:100%;
-        gap:16px;
+    .profile-cinema-name-wrap{
+        padding-bottom:0;
     }
 
-    .profile-name{
-        font-size:31px;
-        letter-spacing:-.8px;
+    .profile-cinema-name{
+        font-size:32px;
+        letter-spacing:-.9px;
     }
 
-    .profile-bio{
+    .profile-cinema-bio{
         margin-top:8px;
         font-size:13px;
     }
 
-    .profile-summary-stats{
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:5px;
+    .profile-cinema-stats{
+        margin-top:28px;
+        grid-template-columns:1fr;
+        padding:0;
     }
 
-    .profile-summary-stat{
-        min-height:64px;
-        padding:9px 8px;
-        gap:6px;
-        flex-direction:column;
-        align-items:flex-start;
-        justify-content:center;
-        border-radius:9px;
+    .profile-cinema-stat{
+        min-height:70px;
+        padding:11px 6px;
+        border-right:0;
+        border-bottom:1px solid #2b2a28;
+        grid-template-columns:25px minmax(0,1fr) 25px;
     }
 
-    .profile-summary-stat-icon,
-    .profile-summary-stat-icon-placeholder{
-        width:20px;
-        height:20px;
-        flex-basis:20px;
+    .profile-cinema-stat:last-child{
+        border-bottom:0;
     }
 
-    .profile-summary-stat-icon-placeholder::after{
-        width:7px;
-        height:10px;
-        left:7px;
-        top:5px;
-        border-width:1.5px;
+    .profile-cinema-stat-copy strong{
+        font-size:21px;
     }
 
-    .profile-summary-stat-copy{
-        gap:3px;
+    .profile-cinema-feed-wrap{
+        margin-top:28px;
     }
 
-    .profile-summary-stat-copy .profile-stat-label{
-        font-size:7px;
-        letter-spacing:.75px;
+    .profile-cinema-feed-tabs{
+        width:100%;
+        min-width:0;
     }
 
-    .profile-summary-stat-value{
-        font-size:15px;
+    .profile-cinema-favorites{
+        margin-top:40px;
     }
 
-    .profile-section{
-        padding-top:28px;
+    .profile-cinema-favorites-movies{
+        margin-top:52px;
     }
 
-    .profile-section + .profile-section{
-        padding-top:40px;
+    .profile-cinema-section-heading{
+        grid-template-columns:29px minmax(0,1fr) auto;
+        gap:8px;
+        align-items:end;
     }
 
-    .profile-section-header{
-        margin-bottom:12px;
-        gap:10px;
-    }
-
-    .profile-section-header::after{
+    .profile-cinema-section-heading::after{
         display:none;
     }
 
-    .profile-section-header h2{
-        font-size:22px;
+    .profile-cinema-section-number{
+        padding-bottom:2px;
+    }
+
+    .profile-cinema-section-heading h2{
+        font-size:23px;
     }
 
     .profile-favorites-grid{
@@ -7533,18 +7526,6 @@
 
     .profile-edit-button{
         min-width:52px;
-        padding:6px 10px;
-        font-size:10px;
-    }
-
-    .profile-feed-tabs-wrap{
-        margin-top:40px;
-        justify-content:center;
-    }
-
-    .profile-feed-tabs{
-        width:100%;
-        min-width:0;
-        max-width:360px;
+        padding:6px 9px;
     }
 }
