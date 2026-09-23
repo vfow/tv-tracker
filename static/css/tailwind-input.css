@@ -6946,24 +6946,38 @@
 }
 
 .profile-hero{
-    min-height:340px;
+    min-height:300px;
     display:flex;
     align-items:stretch;
     overflow:hidden;
     position:relative;
     isolation:isolate;
-    border-bottom:1px solid #222;
     box-sizing:border-box;
+}
+
+.profile-hero::after{
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:96px;
+    background:linear-gradient(to bottom,rgba(0,0,0,0),#000);
+    pointer-events:none;
+    z-index:0;
 }
 
 .profile-hero-inner{
     width:100%;
     max-width:1280px;
     margin:0 auto;
-    padding:24px 32px 22px;
-    display:flex;
+    padding:24px 32px 18px;
+    display:grid;
+    grid-template-columns:124px minmax(0,1fr);
+    grid-template-rows:auto auto;
     align-items:center;
-    gap:28px;
+    column-gap:28px;
+    row-gap:14px;
     box-sizing:border-box;
     position:relative;
     z-index:1;
@@ -6978,14 +6992,20 @@
     transform:none;
     border:2px solid #fff;
     box-sizing:border-box;
+    grid-column:1;
+    grid-row:1 / span 2;
 }
 
 .profile-identity{
     min-width:0;
-    flex:1 1 auto;
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
+    display:contents;
+}
+
+.profile-identity-main{
+    min-width:0;
+    grid-column:2;
+    grid-row:1;
+    align-self:end;
 }
 
 .profile-name{
@@ -7010,11 +7030,13 @@
 }
 
 .profile-summary-stats{
-    margin-top:26px;
+    margin-top:0;
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
     align-items:stretch;
     width:100%;
+    grid-column:2;
+    grid-row:2;
 }
 
 .profile-summary-stat{
@@ -7029,11 +7051,6 @@
     color:#fff;
     text-align:left;
     box-sizing:border-box;
-}
-
-.profile-summary-stat-separated{
-    padding-left:22px;
-    border-left:1px solid rgba(255,255,255,.13);
 }
 
 .profile-summary-stat-button{
@@ -7095,7 +7112,7 @@
     width:100%;
     max-width:1280px;
     margin:0 auto;
-    padding:42px 32px 0;
+    padding:28px 32px 0;
     box-sizing:border-box;
 }
 
@@ -7212,8 +7229,10 @@
     }
 
     .profile-hero-inner{
-        padding:24px 24px;
-        gap:22px;
+        padding:22px 24px 18px;
+        column-gap:22px;
+        row-gap:12px;
+        grid-template-columns:108px minmax(0,1fr);
     }
 
     .profile-avatar{
@@ -7244,9 +7263,10 @@
     }
 
     .profile-hero-inner{
+        display:flex;
         align-items:flex-start;
         flex-direction:column;
-        padding:30px 18px 28px;
+        padding:28px 18px 24px;
         gap:16px;
     }
 
@@ -7264,6 +7284,7 @@
     .profile-summary-stats{
         grid-template-columns:1fr;
         margin-top:22px;
+        width:100%;
     }
 
     .profile-summary-stat,
