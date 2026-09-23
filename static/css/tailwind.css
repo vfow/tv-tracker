@@ -7,7 +7,7 @@
 }
 
 .profile-hero{
-    min-height:340px;
+    min-height:300px;
     display:flex;
     align-items:stretch;
     overflow:hidden;
@@ -21,7 +21,7 @@
     width:100%;
     max-width:1280px;
     margin:0 auto;
-    padding:44px 32px 38px;
+    padding:24px 32px 22px;
     display:flex;
     align-items:center;
     gap:28px;
@@ -269,11 +269,11 @@
 
 @media (max-width:900px){
     .profile-hero{
-        min-height:360px;
+        min-height:320px;
     }
 
     .profile-hero-inner{
-        padding:36px 24px;
+        padding:24px 24px;
         gap:22px;
     }
 
