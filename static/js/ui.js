@@ -3015,6 +3015,26 @@ function renderProfileHomeView(profile,stats){
         </div>
 
 
+        <nav class="profile-feed-tabs-wrap" aria-label="Profile content">
+
+            <div class="profile-feed-tabs" data-active-tab="${activeFeedTab}">
+
+                <span class="profile-feed-tab-indicator" aria-hidden="true"></span>
+
+                <button class="profile-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
+                    Activity
+                </button>
+
+                <button class="profile-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
+                    Lists
+                </button>
+
+            </div>
+
+        </nav>
+
+  
+
         <section class="profile-section">
 
             <div class="profile-section-header">
@@ -3051,25 +3071,7 @@ function renderProfileHomeView(profile,stats){
 
 
 
-        <nav class="profile-feed-tabs-wrap" aria-label="Profile content">
-
-            <div class="profile-feed-tabs" data-active-tab="${activeFeedTab}">
-
-                <span class="profile-feed-tab-indicator" aria-hidden="true"></span>
-
-                <button class="profile-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
-                    Activity
-                </button>
-
-                <button class="profile-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
-                    Lists
-                </button>
-
-            </div>
-
-        </nav>
-
-    `;
+  `;
 
     document.getElementById("open-profile-stats").addEventListener("click",function(){
         activeProfileView = "stats";
