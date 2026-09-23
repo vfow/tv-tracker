@@ -1916,7 +1916,10 @@
     }
 
     .profile-header-default{
-        background:radial-gradient(circle at 10% 20%, rgba(120,0,40,.45), transparent 35%),linear-gradient(135deg,#111 0%,#080808 60%,#000 100%);
+        background:
+            radial-gradient(circle at 8% 22%, rgba(120,0,40,.42), transparent 58%),
+            radial-gradient(circle at 48% 36%, rgba(120,0,40,.18), transparent 70%),
+            linear-gradient(135deg,#111 0%,#080808 64%,#000 100%);
     }
 
     .profile-header-blue{
