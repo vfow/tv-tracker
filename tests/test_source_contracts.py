@@ -1284,6 +1284,29 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertEqual(app_js.count('function canUseTMDBShow(show)'), 1)
 
 
+    def test_home_and_movies_primary_navigation_routes_exist(self):
+        template = self.read('templates/index.html')
+        routing = self.read('tvtracker/web/routing.py')
+        router = self.read('static/js/app-router.js')
+        ui = self.read('static/js/ui.js')
+
+        self.assertIn('data-page="home" href="/app/home"', template)
+        self.assertIn('data-page="movies" href="/app/movies"', template)
+        self.assertIn('<div id="home-page" class="page"></div>', template)
+        self.assertIn('<div id="movies-page" class="page"></div>', template)
+        self.assertIn('"/app/home",', routing)
+        self.assertIn('"/app/movies",', routing)
+        self.assertIn('if(path === "/app/home")', router)
+        self.assertIn('if(path === "/app/movies")', router)
+        self.assertIn('buildParsedRoute("home",path,"",{})', router)
+        self.assertIn('buildParsedRoute("movies",path,"",{})', router)
+        self.assertIn('if(parsed.type === "home")', router)
+        self.assertIn('if(parsed.type === "movies")', router)
+        self.assertIn('return "/app/home";', router)
+        self.assertIn('return "/app/movies";', router)
+        self.assertIn('"home","movies","shows"', ui)
+
+
 if __name__ == '__main__':
     unittest.main()
 
