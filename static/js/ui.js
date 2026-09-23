@@ -2960,50 +2960,74 @@ function renderProfileHomeView(profile,stats){
 
     const favoriteShows = stats.favoriteShows || [];
     const favoriteMovies = typeof getFavoriteMovies === "function" ? getFavoriteMovies() : [];
+    const activeFeedTab = typeof activeProfileFeedTab !== "undefined" && activeProfileFeedTab === "lists" ? "lists" : "activity";
 
     profile.innerHTML = `
 
-        <div class="profile-hero ${getProfileHeaderClass(stats)}">
+        <header class="profile-hero ${getProfileHeaderClass(stats)}">
 
             ${getProfileHeaderImageLayerHTML(stats)}
 
-            <div class="profile-avatar">${getProfileAvatarInnerHTML(stats)}</div>
+            <div class="profile-hero-inner">
 
-            <div class="profile-name">
-                ${escapeHTML(stats.username)}
-            </div>
+                <div class="profile-avatar">${getProfileAvatarInnerHTML(stats)}</div>
 
-        </div>
+                <div class="profile-identity">
 
+                    <div class="profile-name">
+                        ${escapeHTML(stats.username)}
+                    </div>
 
+                    ${stats.bio
+                    ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
+                    : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
 
-        <button class="profile-stats-preview-card" id="open-profile-stats" type="button" aria-label="Open stats">
+                    <div class="profile-summary-stats">
 
-            <div class="profile-stats-preview-item">
-                <div class="profile-stat-label">WATCH TIME</div>
-                <div class="profile-stat-value profile-stat-value-with-icon">
-                    <img class="profile-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
-                    <span>${escapeHTML(stats.watchTimeText)}</span>
+                        <div class="profile-summary-stat">
+
+                            <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">FILMS</span>
+                                <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
+                            </span>
+
+                        </div>
+
+                        <div class="profile-summary-stat profile-summary-stat-separated">
+
+                            <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">EPISODES</span>
+                                <span class="profile-summary-stat-value">${Number(stats.episodesWatched || 0).toLocaleString()}</span>
+                            </span>
+
+                        </div>
+
+                        <button class="profile-summary-stat profile-summary-stat-button profile-summary-stat-separated" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
+
+                            <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">WATCH TIME</span>
+                                <span class="profile-summary-stat-value">${escapeHTML(stats.watchTimeText || "0h")}</span>
+                            </span>
+
+                        </button>
+
+                    </div>
+
                 </div>
+
             </div>
 
-            <div class="profile-stats-preview-divider"></div>
-
-            <div class="profile-stats-preview-item">
-                <div class="profile-stat-label">EPISODES WATCHED</div>
-                <div class="profile-stat-value profile-stat-value-with-icon">
-                    <img class="profile-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
-                    <span>${Number(stats.episodesWatched).toLocaleString()}</span>
-                </div>
-            </div>
-
-            <div class="profile-stats-preview-arrow">›</div>
-
-        </button>
+        </header>
 
 
 
-        <div class="profile-section">
+        <section class="profile-section">
 
             <div class="profile-section-header">
                 <h2>FAVORITE SHOWS</h2>
@@ -3017,9 +3041,11 @@ function renderProfileHomeView(profile,stats){
                 ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
             </div>
 
-        </div>
+        </section>
 
-        <div class="profile-section">
+
+
+        <section class="profile-section">
 
             <div class="profile-section-header">
                 <h2>FAVORITE MOVIES</h2>
@@ -3033,13 +3059,59 @@ function renderProfileHomeView(profile,stats){
                 ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
             </div>
 
-        </div>
+        </section>
+
+
+
+        <nav class="profile-feed-tabs-wrap" aria-label="Profile content">
+
+            <div class="profile-feed-tabs" data-active-tab="${activeFeedTab}">
+
+                <span class="profile-feed-tab-indicator" aria-hidden="true"></span>
+
+                <button class="profile-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
+                    Activity
+                </button>
+
+                <button class="profile-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
+                    Lists
+                </button>
+
+            </div>
+
+        </nav>
 
     `;
 
     document.getElementById("open-profile-stats").addEventListener("click",function(){
         activeProfileView = "stats";
         renderProfile();
+    });
+
+    document.querySelectorAll("[data-profile-feed-tab]").forEach(button=>{
+
+        button.addEventListener("click",function(){
+
+            const tab = this.dataset.profileFeedTab === "lists" ? "lists" : "activity";
+
+            if(typeof activeProfileFeedTab !== "undefined"){
+                activeProfileFeedTab = tab;
+            }
+
+            const control = this.closest(".profile-feed-tabs");
+
+            if(control){
+                control.dataset.activeTab = tab;
+            }
+
+            document.querySelectorAll("[data-profile-feed-tab]").forEach(tabButton=>{
+                const active = tabButton.dataset.profileFeedTab === tab;
+                tabButton.classList.toggle("active",active);
+                tabButton.setAttribute("aria-pressed",active ? "true" : "false");
+            });
+
+        });
+
     });
 
     document.querySelectorAll("[data-favorite-action='edit'], .profile-edit-button[data-favorite-kind]").forEach(button=>{
@@ -3070,7 +3142,6 @@ function renderProfileHomeView(profile,stats){
     });
 
 }
-
 
 
 function renderProfileStatsView(profile,stats){
