@@ -7005,7 +7005,7 @@
     min-width:0;
     grid-column:2;
     grid-row:1;
-    align-self:end;
+    align-self:center;
 }
 
 .profile-name{
