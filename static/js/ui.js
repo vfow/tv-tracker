@@ -125,6 +125,8 @@ function playCheckSuccessAnimation(element){
 function getTrackerDocumentTitleLabel(){
 
     const pageTitles = {
+        home:"Home",
+        movies:"Movies",
         discover:"Discover",
         search:(typeof searchRouteState !== "undefined" && searchRouteState && searchRouteState.query ? `Search: ${searchRouteState.query}` : "Search"),
         profile:"Profile",
@@ -176,7 +178,7 @@ function updateShellTitle(){
 
 function normalizePrimaryNavPage(page){
     const clean = String(page || "").trim().toLowerCase();
-    return ["home","shows","discover","profile","settings"].includes(clean) ? clean : "";
+    return ["home","movies","shows","discover","profile","settings"].includes(clean) ? clean : "";
 }
 
 function setAppPrimaryNavActive(page){
