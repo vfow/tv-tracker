@@ -27,6 +27,7 @@ var activePage = "shows";
 var activeShowsTab = "watchlist";
 var activeFilter = "watching";
 var activeProfileView = "home";
+var activeProfileFeedTab = "activity";
 var activeFavoritesMode = "show";
 var pendingShow = null;
 var discoverPreviewShow = null;
@@ -12353,6 +12354,8 @@ function getMovieRecordFromDetails(movie){
     }
 
     const releaseDate = String(movie.release_date || movie.date || "").trim();
+    const runtime = Number(movie.runtime || movie.runtime_minutes || 0);
+
     return {
         id:id,
         tmdb_id:id,
@@ -12360,7 +12363,8 @@ function getMovieRecordFromDetails(movie){
         poster_path:String(movie.poster_path || "").trim(),
         backdrop_path:String(movie.backdrop_path || "").trim(),
         release_date:releaseDate,
-        year:String(movie.year || (releaseDate ? releaseDate.slice(0,4) : "")).trim()
+        year:String(movie.year || (releaseDate ? releaseDate.slice(0,4) : "")).trim(),
+        runtime:Number.isFinite(runtime) && runtime > 0 ? runtime : 0
     };
 }
 
@@ -12385,6 +12389,8 @@ function normalizeMovieTrackingRecord(rawRecord,recordId=""){
         return null;
     }
 
+    const runtime = Number(rawRecord.runtime || rawRecord.runtime_minutes || 0);
+
     return {
         id:id,
         tmdb_id:id,
@@ -12393,6 +12399,7 @@ function normalizeMovieTrackingRecord(rawRecord,recordId=""){
         backdrop_path:String(rawRecord.backdrop_path || "").trim(),
         release_date:releaseDate,
         year:String(rawRecord.year || (releaseDate ? releaseDate.slice(0,4) : "")).trim(),
+        runtime:Number.isFinite(runtime) && runtime > 0 ? runtime : 0,
         watched:watched,
         plan:plan,
         favorite:favorite,
@@ -12449,6 +12456,7 @@ function upsertMovieTrackingRecord(movie,updates={}){
         backdrop_path:"",
         release_date:"",
         year:"",
+        runtime:0,
         watched:false,
         plan:false,
         favorite:false,
@@ -12463,6 +12471,15 @@ function upsertMovieTrackingRecord(movie,updates={}){
     record.backdrop_path = String(record.backdrop_path || "").trim();
     record.release_date = String(record.release_date || "").trim();
     record.year = String(record.year || (record.release_date ? record.release_date.slice(0,4) : "")).trim();
+
+    const runtimeCandidate = Number(
+        (updates && (updates.runtime || updates.runtime_minutes)) ||
+        (base && (base.runtime || base.runtime_minutes)) ||
+        (existing && (existing.runtime || existing.runtime_minutes)) ||
+        0
+    );
+    record.runtime = Number.isFinite(runtimeCandidate) && runtimeCandidate > 0 ? runtimeCandidate : 0;
+
     record.watched = record.watched === true;
     record.plan = record.watched ? false : record.plan === true;
     record.favorite = record.favorite === true;
@@ -12534,6 +12551,7 @@ function createMovieHistoryEntry(movie,watchedAt){
         backdrop_path:base.backdrop_path,
         release_date:base.release_date,
         year:base.year,
+        runtime:Number(base.runtime || 0),
         watched_at:timestamp,
         date:timestamp.slice(0,10),
         action:"watched"
@@ -13150,16 +13168,51 @@ function getTopShowNetworks(shows,limit=10){
 function getProfileStats(){
 
     ensureProfileData();
+    ensureMovieTrackingData();
 
     const shows = Object.values(DATA.shows || {});
     const eligibleStatsShows = getEligibleStatsShows();
     const historyEntries = getHistoryEntries();
+    const movieHistoryEntries = Array.isArray(DATA.history)
+    ? DATA.history.filter(entry=>isMovieHistoryRecord(entry))
+    : [];
+
     const episodesWatched = historyEntries.length;
     const specialEpisodesWatched = historyEntries.filter(entry=>{
         return Number(entry.season) === 0 || entry.special === true;
     }).length;
     const regularEpisodesWatched = Math.max(episodesWatched - specialEpisodesWatched,0);
-    const watchMinutes = getTotalWatchMinutes(historyEntries);
+    const episodeWatchMinutes = getTotalWatchMinutes(historyEntries);
+
+    const watchedMovieRecords = Object.values(DATA.movies || {})
+    .filter(movie=>movie && movie.watched === true);
+
+    const movieHistoryById = new Map();
+    movieHistoryEntries.forEach(entry=>{
+        const id = normalizeMovieTrackingId(entry && (entry.movie_id || entry.tmdb_id || ""));
+        if(id){
+            movieHistoryById.set(id,entry);
+        }
+    });
+
+    const watchedMovieIds = new Set(
+        watchedMovieRecords
+        .map(movie=>normalizeMovieTrackingId(movie.id || movie.tmdb_id || ""))
+        .filter(Boolean)
+    );
+
+    movieHistoryById.forEach((_,id)=>watchedMovieIds.add(id));
+
+    let movieWatchMinutes = 0;
+
+    watchedMovieIds.forEach(id=>{
+        const movie = DATA.movies[String(id)] || null;
+        const historyEntry = movieHistoryById.get(id) || null;
+        movieWatchMinutes += getMovieWatchMinutes(movie,historyEntry);
+    });
+
+    const moviesWatched = watchedMovieIds.size;
+    const watchMinutes = episodeWatchMinutes + movieWatchMinutes;
 
     const statusCounts = {
         watching:0,
@@ -13179,6 +13232,7 @@ function getProfileStats(){
 
     return {
         username:DATA.profile.username || "Username",
+        bio:String(DATA.profile.bio || "").trim(),
         avatar_type:DATA.profile.avatar_type || "initial",
         avatar_preset:DATA.profile.avatar_preset || "silhouette-1",
         avatar_data:DATA.profile.avatar_data || "",
@@ -13188,6 +13242,9 @@ function getProfileStats(){
         watchMinutes:watchMinutes,
         watchTimeText:formatWatchTime(watchMinutes),
         watchHoursRounded:Math.round(watchMinutes / 60),
+        moviesWatched:moviesWatched,
+        movieWatchMinutes:movieWatchMinutes,
+        episodeWatchMinutes:episodeWatchMinutes,
         episodesWatched:episodesWatched,
         regularEpisodesWatched:regularEpisodesWatched,
         specialEpisodesWatched:specialEpisodesWatched,
@@ -13202,6 +13259,20 @@ function getProfileStats(){
         topNetworks:getTopShowNetworks(eligibleStatsShows,10),
         favoriteShows:getFavoriteShows()
     };
+
+}
+
+function getMovieWatchMinutes(movie,historyEntry){
+
+    const movieRuntime = Number(movie && (movie.runtime || movie.runtime_minutes) || 0);
+
+    if(Number.isFinite(movieRuntime) && movieRuntime > 0){
+        return movieRuntime;
+    }
+
+    const historyRuntime = Number(historyEntry && (historyEntry.runtime || historyEntry.runtime_minutes) || 0);
+
+    return Number.isFinite(historyRuntime) && historyRuntime > 0 ? historyRuntime : 0;
 
 }
 
