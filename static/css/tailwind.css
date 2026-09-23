@@ -67,9 +67,7 @@
     grid-column:2;
 }
 
-.profile-identity-main{
-    min-width:0;
-}
+.profile-identity-main{min-width:0;transform:translateY(30px)}
 
 .profile-name{
     margin:0;
