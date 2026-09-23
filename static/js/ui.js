@@ -2965,72 +2965,54 @@ function renderProfileHomeView(profile,stats){
 
     profile.innerHTML = `
 
-        <header class="profile-hero ${getProfileHeaderClass(stats)}">
+        <div class="profile-social-top">
 
-            ${getProfileHeaderImageLayerHTML(stats)}
+            <header class="profile-hero ${getProfileHeaderClass(stats)}">
+                ${getProfileHeaderImageLayerHTML(stats)}
+            </header>
 
-            <div class="profile-hero-inner">
+            <div class="profile-social-identity">
 
                 <div class="profile-avatar">${getProfileAvatarInnerHTML(stats)}</div>
 
                 <div class="profile-identity">
-
                     <div class="profile-identity-main">
-
-                        <div class="profile-name">
-                            ${escapeHTML(stats.username)}
-                        </div>
-
+                        <div class="profile-name">${escapeHTML(stats.username)}</div>
                         ${stats.bio ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>` : ""}
-
                     </div>
-
-
-
                 </div>
 
             </div>
 
-        </header>
+            <div class="profile-summary-stats">
 
+                <div class="profile-summary-stat">
+                    <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+                    <span class="profile-summary-stat-copy">
+                        <span class="profile-stat-label">FILMS</span>
+                        <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
+                    </span>
+                </div>
 
-        <div class="profile-summary-stats">
+                <div class="profile-summary-stat">
+                    <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
+                    <span class="profile-summary-stat-copy">
+                        <span class="profile-stat-label">EPISODES</span>
+                        <span class="profile-summary-stat-value">${Number(stats.episodesWatched || 0).toLocaleString()}</span>
+                    </span>
+                </div>
 
-                        <div class="profile-summary-stat">
+                <button class="profile-summary-stat profile-summary-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
+                    <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
+                    <span class="profile-summary-stat-copy">
+                        <span class="profile-stat-label">WATCH TIME</span>
+                        <span class="profile-summary-stat-value">${escapeHTML(stats.watchTimeText || "0h")}</span>
+                    </span>
+                </button>
 
-                            <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+            </div>
 
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">FILMS</span>
-                                <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
-                            </span>
-
-                        </div>
-
-                        <div class="profile-summary-stat">
-
-                            <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
-
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">EPISODES</span>
-                                <span class="profile-summary-stat-value">${Number(stats.episodesWatched || 0).toLocaleString()}</span>
-                            </span>
-
-                        </div>
-
-                        <button class="profile-summary-stat profile-summary-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
-
-                            <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
-
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">WATCH TIME</span>
-                                <span class="profile-summary-stat-value">${escapeHTML(stats.watchTimeText || "0h")}</span>
-                            </span>
-
-                        </button>
-
-                    </div>
-
+        </div>
 
 
         <section class="profile-section">
