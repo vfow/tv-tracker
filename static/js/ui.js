@@ -2963,103 +2963,128 @@ function renderProfileHomeView(profile,stats){
     const activeFeedTab = typeof activeProfileFeedTab !== "undefined" && activeProfileFeedTab === "lists" ? "lists" : "activity";
 
     profile.innerHTML = `
-        <main class="profile-studio">
 
-            <section class="profile-studio-hero ${getProfileHeaderClass(stats)}">
-                ${getProfileHeaderImageLayerHTML(stats)}
-                <div class="profile-studio-hero-overlay" aria-hidden="true"></div>
+        <header class="profile-hero ${getProfileHeaderClass(stats)}">
 
-                <div class="profile-studio-hero-content">
+            ${getProfileHeaderImageLayerHTML(stats)}
 
-                    <div class="profile-studio-avatar">
-                        ${getProfileAvatarInnerHTML(stats)}
-                    </div>
+            <div class="profile-hero-inner">
 
-                    <div class="profile-studio-intro">
-                        <div class="profile-studio-intro-rule" aria-hidden="true"></div>
+                <div class="profile-avatar">${getProfileAvatarInnerHTML(stats)}</div>
 
-                        <div class="profile-studio-name-row">
-                            <h1 class="profile-studio-name">${escapeHTML(stats.username)}</h1>
+                <div class="profile-identity">
+
+                    <div class="profile-identity-main">
+
+                        <div class="profile-name">
+                            ${escapeHTML(stats.username)}
                         </div>
 
                         ${stats.bio
-                        ? `<p class="profile-studio-bio">${escapeHTML(stats.bio)}</p>`
-                        : `<p class="profile-studio-bio profile-studio-bio-empty">No bio yet.</p>`}
+                        ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
+                        : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
+
+                    </div>
+
+                    <div class="profile-summary-stats">
+
+                        <div class="profile-summary-stat">
+
+                            <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">FILMS</span>
+                                <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
+                            </span>
+
+                        </div>
+
+                        <div class="profile-summary-stat">
+
+                            <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">EPISODES</span>
+                                <span class="profile-summary-stat-value">${Number(stats.episodesWatched || 0).toLocaleString()}</span>
+                            </span>
+
+                        </div>
+
+                        <button class="profile-summary-stat profile-summary-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
+
+                            <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
+
+                            <span class="profile-summary-stat-copy">
+                                <span class="profile-stat-label">WATCH TIME</span>
+                                <span class="profile-summary-stat-value">${escapeHTML(stats.watchTimeText || "0h")}</span>
+                            </span>
+
+                        </button>
+
                     </div>
 
                 </div>
-            </section>
 
-            <section class="profile-studio-meta" aria-label="Profile overview">
+            </div>
 
-                <div class="profile-studio-meta-heading">
-                    <span>Overview</span>
-                </div>
+        </header>
 
-                <div class="profile-studio-stats">
 
-                    <div class="profile-studio-stat profile-studio-stat-primary">
-                        <span class="profile-studio-stat-label">Watch time</span>
-                        <strong>${escapeHTML(stats.watchTimeText || "0h")}</strong>
-                        <button class="profile-studio-stat-link" id="open-profile-stats" type="button">View stats</button>
-                    </div>
 
-                    <div class="profile-studio-stat">
-                        <span class="profile-studio-stat-label">Episodes</span>
-                        <strong>${Number(stats.episodesWatched || 0).toLocaleString()}</strong>
-                    </div>
+        <section class="profile-section">
 
-                    <div class="profile-studio-stat">
-                        <span class="profile-studio-stat-label">Films</span>
-                        <strong>${Number(stats.moviesWatched || 0).toLocaleString()}</strong>
-                    </div>
+            <div class="profile-section-header">
+                <h2>FAVORITE SHOWS</h2>
 
-                </div>
+                <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">
+                    Edit
+                </button>
+            </div>
 
-            </section>
+            <div class="profile-favorites-grid">
+                ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
+            </div>
 
-            <nav class="profile-studio-tabs" aria-label="Profile content">
-                <button class="profile-studio-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
+        </section>
+
+
+
+        <section class="profile-section">
+
+            <div class="profile-section-header">
+                <h2>FAVORITE MOVIES</h2>
+
+                <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">
+                    Edit
+                </button>
+            </div>
+
+            <div class="profile-favorites-grid">
+                ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
+            </div>
+
+        </section>
+
+
+
+        <nav class="profile-feed-tabs-wrap" aria-label="Profile content">
+
+            <div class="profile-feed-tabs" data-active-tab="${activeFeedTab}">
+
+                <span class="profile-feed-tab-indicator" aria-hidden="true"></span>
+
+                <button class="profile-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
                     Activity
                 </button>
-                <button class="profile-studio-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
+
+                <button class="profile-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
                     Lists
                 </button>
-            </nav>
 
-            <section class="profile-studio-section">
+            </div>
 
-                <div class="profile-studio-section-header">
-                    <div>
-                        <h2>Favorite shows</h2>
-                        <p>Eight titles worth keeping close.</p>
-                    </div>
-                    <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">Edit favorites</button>
-                </div>
+        </nav>
 
-                <div class="profile-studio-poster-grid">
-                    ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
-                </div>
-
-            </section>
-
-            <section class="profile-studio-section profile-studio-section-movies">
-
-                <div class="profile-studio-section-header">
-                    <div>
-                        <h2>Favorite movies</h2>
-                        <p>Personal picks from your film history.</p>
-                    </div>
-                    <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">Edit favorites</button>
-                </div>
-
-                <div class="profile-studio-poster-grid">
-                    ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
-                </div>
-
-            </section>
-
-        </main>
     `;
 
     document.getElementById("open-profile-stats").addEventListener("click",function(){
@@ -3075,6 +3100,12 @@ function renderProfileHomeView(profile,stats){
 
             if(typeof activeProfileFeedTab !== "undefined"){
                 activeProfileFeedTab = tab;
+            }
+
+            const control = this.closest(".profile-feed-tabs");
+
+            if(control){
+                control.dataset.activeTab = tab;
             }
 
             document.querySelectorAll("[data-profile-feed-tab]").forEach(tabButton=>{
@@ -3100,25 +3131,23 @@ function renderProfileHomeView(profile,stats){
         button.addEventListener("click",function(event){
             if(!isPlainAppLinkClick(event)){ return; }
             event.preventDefault();
-
             const id = this.dataset.favoriteId || "";
             const kind = this.dataset.favoriteKind || "show";
-
             if(kind === "movie" && id && typeof openMoviePage === "function"){
                 const movie = typeof getFavoriteMovieById === "function" ? getFavoriteMovieById(id) : null;
                 openMoviePage(id,{movieName:movie ? movie.title : "",navigationContext:"profile"});
                 return;
             }
-
             if(id && typeof openShowDetailsPage === "function"){
                 openShowDetailsPage(id,{navigationContext:"profile"});
             }
-
         });
 
     });
 
 }
+
+
 function renderProfileStatsView(profile,stats){
 
     const statCards = [
