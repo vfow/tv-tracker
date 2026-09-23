@@ -63,6 +63,7 @@ APP_LIBRARY_SORT_MODES = {
 }
 APP_PERSON_PATH_RE = re.compile(rf"^/app/person/({APP_ROUTE_ID_SLUG})$")
 APP_SECTION_PATHS = {
+    "/app/home",
     "/app/upcoming",
     "/app/history",
     "/app/discover",
