@@ -2963,128 +2963,121 @@ function renderProfileHomeView(profile,stats){
     const activeFeedTab = typeof activeProfileFeedTab !== "undefined" && activeProfileFeedTab === "lists" ? "lists" : "activity";
 
     profile.innerHTML = `
+        <div class="profile-cinema">
 
-        <header class="profile-hero ${getProfileHeaderClass(stats)}">
+            <header class="profile-cinema-banner ${getProfileHeaderClass(stats)}">
+                ${getProfileHeaderImageLayerHTML(stats)}
+                <div class="profile-cinema-banner-shade" aria-hidden="true"></div>
+                <div class="profile-cinema-banner-mark" aria-hidden="true">TV TRACKER</div>
+            </header>
 
-            ${getProfileHeaderImageLayerHTML(stats)}
+            <section class="profile-cinema-identity">
 
-            <div class="profile-hero-inner">
+                <div class="profile-cinema-avatar">
+                    ${getProfileAvatarInnerHTML(stats)}
+                </div>
 
-                <div class="profile-avatar">${getProfileAvatarInnerHTML(stats)}</div>
+                <div class="profile-cinema-name-wrap">
+                    <div class="profile-cinema-kicker">PROFILE</div>
+                    <h1 class="profile-cinema-name">${escapeHTML(stats.username)}</h1>
+                    ${stats.bio
+                    ? `<div class="profile-cinema-bio">${escapeHTML(stats.bio)}</div>`
+                    : `<div class="profile-cinema-bio profile-cinema-bio-empty">No bio yet.</div>`}
+                </div>
 
-                <div class="profile-identity">
+            </section>
 
-                    <div class="profile-identity-main">
+            <section class="profile-cinema-stats" aria-label="Profile statistics">
 
-                        <div class="profile-name">
-                            ${escapeHTML(stats.username)}
-                        </div>
+                <div class="profile-cinema-stat">
+                    <span class="profile-cinema-stat-index">01</span>
+                    <span class="profile-cinema-stat-copy">
+                        <span class="profile-cinema-stat-label">FILMS</span>
+                        <strong>${Number(stats.moviesWatched || 0).toLocaleString()}</strong>
+                    </span>
+                    <span class="profile-cinema-stat-icon profile-cinema-stat-icon-placeholder" aria-hidden="true"></span>
+                </div>
 
-                        ${stats.bio
-                        ? `<div class="profile-bio">${escapeHTML(stats.bio)}</div>`
-                        : `<div class="profile-bio profile-bio-empty">No bio yet.</div>`}
+                <div class="profile-cinema-stat">
+                    <span class="profile-cinema-stat-index">02</span>
+                    <span class="profile-cinema-stat-copy">
+                        <span class="profile-cinema-stat-label">EPISODES</span>
+                        <strong>${Number(stats.episodesWatched || 0).toLocaleString()}</strong>
+                    </span>
+                    <img class="profile-cinema-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
+                </div>
 
-                    </div>
+                <button class="profile-cinema-stat profile-cinema-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
+                    <span class="profile-cinema-stat-index">03</span>
+                    <span class="profile-cinema-stat-copy">
+                        <span class="profile-cinema-stat-label">WATCH TIME</span>
+                        <strong>${escapeHTML(stats.watchTimeText || "0h")}</strong>
+                    </span>
+                    <img class="profile-cinema-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
+                    <span class="profile-cinema-stat-arrow" aria-hidden="true">↗</span>
+                </button>
 
-                    <div class="profile-summary-stats">
+            </section>
 
-                        <div class="profile-summary-stat">
+            <nav class="profile-cinema-feed-wrap" aria-label="Profile content">
+                <div class="profile-cinema-feed">
 
-                            <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+                    <span class="profile-cinema-feed-caption">PROFILE CONTENT</span>
 
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">FILMS</span>
-                                <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
-                            </span>
+                    <div class="profile-cinema-feed-tabs" data-active-tab="${activeFeedTab}">
+                        <span class="profile-cinema-feed-indicator" aria-hidden="true"></span>
 
-                        </div>
-
-                        <div class="profile-summary-stat">
-
-                            <img class="profile-summary-stat-icon" src="/static/assets/icons/EPISODES%20WATCHED.svg" alt="">
-
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">EPISODES</span>
-                                <span class="profile-summary-stat-value">${Number(stats.episodesWatched || 0).toLocaleString()}</span>
-                            </span>
-
-                        </div>
-
-                        <button class="profile-summary-stat profile-summary-stat-button" id="open-profile-stats" type="button" aria-label="Open detailed watch-time statistics">
-
-                            <img class="profile-summary-stat-icon" src="/static/assets/icons/WATCH%20TIME.svg" alt="">
-
-                            <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">WATCH TIME</span>
-                                <span class="profile-summary-stat-value">${escapeHTML(stats.watchTimeText || "0h")}</span>
-                            </span>
-
+                        <button class="profile-cinema-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
+                            Activity
                         </button>
 
+                        <button class="profile-cinema-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
+                            Lists
+                        </button>
                     </div>
 
                 </div>
+            </nav>
 
-            </div>
+            <section class="profile-cinema-favorites">
 
-        </header>
+                <div class="profile-cinema-section-heading">
+                    <span class="profile-cinema-section-number">01</span>
+                    <div>
+                        <div class="profile-cinema-section-kicker">CURATED</div>
+                        <h2>FAVORITE SHOWS</h2>
+                    </div>
+                    <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">
+                        Edit
+                    </button>
+                </div>
 
+                <div class="profile-favorites-grid">
+                    ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
+                </div>
 
+            </section>
 
-        <section class="profile-section">
+            <section class="profile-cinema-favorites profile-cinema-favorites-movies">
 
-            <div class="profile-section-header">
-                <h2>FAVORITE SHOWS</h2>
+                <div class="profile-cinema-section-heading">
+                    <span class="profile-cinema-section-number">02</span>
+                    <div>
+                        <div class="profile-cinema-section-kicker">CURATED</div>
+                        <h2>FAVORITE MOVIES</h2>
+                    </div>
+                    <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">
+                        Edit
+                    </button>
+                </div>
 
-                <button class="profile-edit-button" id="edit-favorites-button" data-favorite-kind="show">
-                    Edit
-                </button>
-            </div>
+                <div class="profile-favorites-grid">
+                    ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
+                </div>
 
-            <div class="profile-favorites-grid">
-                ${renderProfileFavoriteSlotsHTML("show",favoriteShows)}
-            </div>
+            </section>
 
-        </section>
-
-
-
-        <section class="profile-section">
-
-            <div class="profile-section-header">
-                <h2>FAVORITE MOVIES</h2>
-
-                <button class="profile-edit-button" id="edit-favorite-movies-button" data-favorite-kind="movie">
-                    Edit
-                </button>
-            </div>
-
-            <div class="profile-favorites-grid">
-                ${renderProfileFavoriteSlotsHTML("movie",favoriteMovies)}
-            </div>
-
-        </section>
-
-
-
-        <nav class="profile-feed-tabs-wrap" aria-label="Profile content">
-
-            <div class="profile-feed-tabs" data-active-tab="${activeFeedTab}">
-
-                <span class="profile-feed-tab-indicator" aria-hidden="true"></span>
-
-                <button class="profile-feed-tab${activeFeedTab === "activity" ? " active" : ""}" type="button" data-profile-feed-tab="activity" aria-pressed="${activeFeedTab === "activity" ? "true" : "false"}">
-                    Activity
-                </button>
-
-                <button class="profile-feed-tab${activeFeedTab === "lists" ? " active" : ""}" type="button" data-profile-feed-tab="lists" aria-pressed="${activeFeedTab === "lists" ? "true" : "false"}">
-                    Lists
-                </button>
-
-            </div>
-
-        </nav>
-
+        </div>
     `;
 
     document.getElementById("open-profile-stats").addEventListener("click",function(){
@@ -3102,7 +3095,7 @@ function renderProfileHomeView(profile,stats){
                 activeProfileFeedTab = tab;
             }
 
-            const control = this.closest(".profile-feed-tabs");
+            const control = this.closest(".profile-cinema-feed-tabs");
 
             if(control){
                 control.dataset.activeTab = tab;
@@ -3133,21 +3126,22 @@ function renderProfileHomeView(profile,stats){
             event.preventDefault();
             const id = this.dataset.favoriteId || "";
             const kind = this.dataset.favoriteKind || "show";
+
             if(kind === "movie" && id && typeof openMoviePage === "function"){
                 const movie = typeof getFavoriteMovieById === "function" ? getFavoriteMovieById(id) : null;
                 openMoviePage(id,{movieName:movie ? movie.title : "",navigationContext:"profile"});
                 return;
             }
+
             if(id && typeof openShowDetailsPage === "function"){
                 openShowDetailsPage(id,{navigationContext:"profile"});
             }
+
         });
 
     });
 
 }
-
-
 function renderProfileStatsView(profile,stats){
 
     const statCards = [
