@@ -26,37 +26,25 @@
 
 <body class="app-shell tw-antialiased" data-theme="tvtracker">
 
-<aside class="sidebar" id="app-sidebar">
-    <nav class="sidebar-nav app-primary-nav" aria-label="Primary navigation">
-        <a class="tw-font-league" data-page="home" href="/app/home">
-            HOME
+<header class="app-header" id="app-header">
+    <a class="app-header-brand tw-font-league" href="/app/home" aria-label="TV Tracker home">
+        TV TRACKER
+    </a>
+
+    <nav class="header-nav app-primary-nav" aria-label="Primary navigation">
+        <a class="tw-font-league" data-page="home" href="/app/home">HOME</a>
+        <a class="tw-font-league" data-page="movies" href="/app/movies">MOVIES</a>
+        <a class="tw-font-league" data-page="shows" href="/app/list/watching">SHOWS</a>
+        <a class="tw-font-league" data-page="discover" href="/app/discover">DiSCOVER</a>
+
+        <a class="header-notifications-link tw-font-league" data-page="notifications" href="/app/notifications">
+            <span class="header-notifications-label">NOTiFiCATIONS<span class="notification-unread-dot header-notification-unread-dot" aria-hidden="true" hidden></span></span>
         </a>
 
-        <a class="tw-font-league" data-page="movies" href="/app/movies">
-            MOVIES
-        </a>
-
-        <a class="tw-font-league" data-page="shows" href="/app/list/watching">
-            SHOWS
-        </a>
-
-        <a class="tw-font-league" data-page="discover" href="/app/discover">
-            DiSCOVER
-        </a>
-
-        <a class="sidebar-notifications-link tw-font-league" data-page="notifications" href="/app/notifications">
-            <span class="sidebar-notifications-label">NOTiFiCATIONS<span class="notification-unread-dot sidebar-notification-unread-dot" aria-hidden="true" hidden></span></span>
-        </a>
-
-        <a class="tw-font-league" data-page="profile" href="/app/profile">
-            PROFILE
-        </a>
-
-        <a class="sidebar-settings-button tw-font-league" data-page="settings" href="/app/settings">
-            SETTINGS
-        </a>
+        <a class="tw-font-league" data-page="profile" href="/app/profile">PROFILE</a>
+        <a class="header-settings-button tw-font-league" data-page="settings" href="/app/settings">SETTINGS</a>
     </nav>
-</aside>
+</header>
 
 <nav class="mobile-bottom-nav app-primary-nav" aria-label="Primary navigation">
     <a class="tw-font-league" data-page="shows" href="/app/list/watching">SHOWS</a>
