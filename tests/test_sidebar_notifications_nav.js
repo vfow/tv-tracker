@@ -7,12 +7,12 @@ const ROOT = path.resolve(__dirname,'..');
 const css = fs.readFileSync(path.join(ROOT,'static/css/notifications-nav.css'),'utf8');
 const source = fs.readFileSync(path.join(ROOT,'static/js/notifications-nav.js'),'utf8');
 
-assert(css.includes('.sidebar-notifications-link'),'Notifications sidebar selector must remain covered before JavaScript removes the node');
-assert(css.includes('display:none !important'),'Notifications sidebar entry must never flash while the app boots');
-assert(!css.includes('--tt-sidebar-width:220px'),'Removing Notifications must restore the normal desktop sidebar width');
+assert(css.includes('.header-notifications-link'),'Notifications header selector must remain covered before JavaScript removes the node');
+assert(css.includes('display:none !important'),'Notifications header entry must never flash while the app boots');
+assert(!css.includes('--tt-header-width:220px'),'Removing Notifications must restore the normal desktop header width');
 assert(css.includes('.notifications-page .notifications-loading'),'The transient Notifications loading copy must never be visible');
 assert(css.includes('.tv-runtime-save-status[data-state="saved"]'),'Routine Saved status badge must stay hidden');
-assert(!source.includes('setInterval('),'Removed sidebar entry must not leave a useless unread polling loop behind');
+assert(!source.includes('setInterval('),'Removed header entry must not leave a useless unread polling loop behind');
 
 function classList(initial=[]){
     const values = new Set(initial);
@@ -51,7 +51,7 @@ function response(payload={notifications:[]}){
 const document = {
     readyState:'complete',
     querySelector(selector){
-        if(selector === '.sidebar [data-page="notifications"]') return notificationLink.removed ? null : notificationLink;
+        if(selector === '.app-header [data-page="notifications"]') return notificationLink.removed ? null : notificationLink;
         if(selector === 'meta[name="csrf-token"]') return {content:'csrf'};
         return null;
     },
@@ -94,7 +94,7 @@ vm.createContext(context);
 vm.runInContext(source,context,{filename:'notifications-nav.js'});
 
 (async()=>{
-    assert.strictEqual(notificationLink.removed,true,'NOTiFiCATIONS must be removed from the desktop sidebar DOM');
+    assert.strictEqual(notificationLink.removed,true,'NOTiFiCATIONS must be removed from the desktop header DOM');
     assert.strictEqual(typeof win.TVTrackerNotifications.openNotificationsPage,'function','Notifications route must remain available from the bell/URL');
 
     await win.TVTrackerNotifications.openNotificationsPage({fromRoute:true});
@@ -106,7 +106,7 @@ vm.runInContext(source,context,{filename:'notifications-nav.js'});
     assert.strictEqual(links[1].classList.contains('active'),false);
     assert.strictEqual(links[3].classList.contains('active'),false);
 
-    console.log('notifications sidebar removal and instant route regression passed');
+    console.log('notifications header removal and instant route regression passed');
 })().catch(error=>{
     console.error(error);
     process.exit(1);
