@@ -5,11 +5,11 @@
 
     function notificationLink(){
         return global.document && typeof global.document.querySelector === "function"
-            ? global.document.querySelector('.app-header [data-page="notifications"]')
+            ? global.document.querySelector('.sidebar [data-page="notifications"]')
             : null;
     }
 
-    function removeHeaderEntry(){
+    function removeSidebarEntry(){
         const link = notificationLink();
         if(link && typeof link.remove === "function") link.remove();
     }
@@ -184,7 +184,7 @@
 
     function boot(){
         installEndedResponseFilter();
-        removeHeaderEntry();
+        removeSidebarEntry();
         installInstantNotificationsRoute();
         void purgeEndedNotifications().catch(error=>{
             if(global.console && typeof global.console.warn === "function"){
