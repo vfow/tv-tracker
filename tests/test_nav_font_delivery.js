@@ -49,7 +49,7 @@ assert.ok(
 );
 
 assert.ok(
-    sourceCss.includes(".app-header") && sourceCss.includes(".header-nav :is(button,a)") &&
+    sourceCss.includes(".sidebar .sidebar-nav :is(button,a)") &&
     sourceCss.includes(".top-tabs :is(button,a)") &&
     sourceCss.includes(".mobile-bottom-nav :is(button,a)"),
     "Tailwind source should continue supporting semantic nav links"
