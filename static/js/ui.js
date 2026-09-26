@@ -2991,10 +2991,10 @@ function renderProfileHomeView(profile,stats){
 
                         <div class="profile-summary-stat">
 
-                            <span class="profile-summary-stat-icon profile-summary-stat-icon-placeholder" aria-hidden="true"></span>
+                            <img class="profile-summary-stat-icon" src="/static/assets/icons/Movies.svg" alt="">
 
                             <span class="profile-summary-stat-copy">
-                                <span class="profile-stat-label">FILMS</span>
+                                <span class="profile-stat-label">MOVIES</span>
                                 <span class="profile-summary-stat-value">${Number(stats.moviesWatched || 0).toLocaleString()}</span>
                             </span>
 
