@@ -66,7 +66,6 @@ module.exports = {
         sans: ['Arial', 'Helvetica', 'sans-serif']
       },
       spacing: {
-        sidebar: '160px',
         'mobile-nav': '64px'
       },
       boxShadow: {
