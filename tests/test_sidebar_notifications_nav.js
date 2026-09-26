@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(ROOT,'static/js/notifications-nav.js'),
 
 assert(css.includes('.header-notifications-link'),'Notifications header selector must remain covered before JavaScript removes the node');
 assert(css.includes('display:none !important'),'Notifications header entry must never flash while the app boots');
-assert(!css.includes('--tt-header-width:220px'),'Removing Notifications must restore the normal desktop header width');
+assert(!css.includes('--tt-sidebar-width:220px'),'Legacy desktop sidebar width must remain absent');
 assert(css.includes('.notifications-page .notifications-loading'),'The transient Notifications loading copy must never be visible');
 assert(css.includes('.tv-runtime-save-status[data-state="saved"]'),'Routine Saved status badge must stay hidden');
 assert(!source.includes('setInterval('),'Removed header entry must not leave a useless unread polling loop behind');
