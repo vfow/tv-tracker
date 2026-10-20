@@ -26,7 +26,7 @@ class PersonNativeBrowserTests(unittest.TestCase):
 
         fixture = '''<!doctype html><html><body><div id="person-detail-content"></div>
 <script src="/static/js/app.js"></script><script src="/static/js/ui.js"></script>
-<script>window.DATA.profile.adult_filter=false;window.appDataReady=true;window.__tvTrackerScriptErrors=[];window.addEventListener("error",event=>window.__tvTrackerScriptErrors.push(String(event.message||event.error||"unknown error")+" @"+String(event.filename||"")+":"+String(event.lineno||"")));</script><script src="/static/js/adult-filter.js"></script>
+<script>window.DATA.profile.adult_filter=false;window.appDataReady=true;window.__tvTrackerScriptErrors=[];window.addEventListener("error",event=>window.__tvTrackerScriptErrors.push(String(event.message||event.error||"unknown error")+" @"+String(event.filename||"")+":"+String(event.lineno||"")));window.addEventListener("DOMContentLoaded",()=>window.setTimeout(()=>{window.appDataReady=true;},0),{once:true});</script><script src="/static/js/adult-filter.js"></script>
 <script src="/static/js/discover-vue-bridge.js"></script><script>
 const failures=[];
 const check=(value,message)=>{if(!value)failures.push(message);};
