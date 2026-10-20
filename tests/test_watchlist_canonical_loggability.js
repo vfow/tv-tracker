@@ -115,4 +115,23 @@ assert(nextSeasonEpisode,"the first episode of a newly aired season must remain 
 assert.strictEqual(nextSeasonEpisode.season,2);
 assert.strictEqual(nextSeasonEpisode.episode,1);
 
+const delayedSeasonAirDate = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000))
+    .toISOString().slice(0,10);
+const delayedProviderSeasonShow = {
+    status:"watching",
+    number_of_seasons:2,
+    episodes_watched:{"1":[10]},
+    last_episode_to_air:{season_number:1,episode_number:10},
+    _episode_details:{},
+    _episode_list:{
+        "1":[{episode_number:10,air_date:"2026-10-01",name:"Season 1 finale"}],
+        "2":[{episode_number:1,air_date:delayedSeasonAirDate,name:"New season premiere"}]
+    }
+};
+availability.set("2:1",true);
+const delayedSeasonEpisode = context.getNextEpisode(delayedProviderSeasonShow);
+assert(delayedSeasonEpisode,"a later-season premiere must remain loggable while the provider's last-aired pointer lags behind by a week");
+assert.strictEqual(delayedSeasonEpisode.season,2);
+assert.strictEqual(delayedSeasonEpisode.episode,1);
+
 console.log("Watchlist canonical loggability regression tests passed.");
