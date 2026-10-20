@@ -26,7 +26,7 @@ class PersonNativeBrowserTests(unittest.TestCase):
 
         fixture = '''<!doctype html><html><body><div id="person-detail-content"></div>
 <script src="/static/js/app.js"></script><script src="/static/js/ui.js"></script>
-<script>window.DATA.profile.adult_filter=false;</script><script src="/static/js/adult-filter.js"></script>
+<script>window.DATA.profile.adult_filter=false;window.__tvTrackerScriptErrors=[];window.addEventListener("error",event=>window.__tvTrackerScriptErrors.push(String(event.message||event.error||"unknown error")+" @"+String(event.filename||"")+":"+String(event.lineno||"")));</script><script src="/static/js/adult-filter.js"></script>
 <script src="/static/js/discover-vue-bridge.js"></script><script>
 const failures=[];
 const check=(value,message)=>{if(!value)failures.push(message);};
@@ -74,7 +74,7 @@ check(!!document.querySelector('.person-profile-bio-wrap.is-expanded'),'biograph
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedShow==='3','open TV preview');
 document.querySelector('[data-person-media="movie"]').click();await flush();check(count()===2,'movie switch');
 DATA.profile.adult_filter=true;personPageState.credits=getPersonCreditsForRole(person,'','movie');renderActivePersonPage();await flush();
-window.TVTrackerAdultPolicy.markAdultPosters();
+if(window.TVTrackerAdultPolicy&&typeof window.TVTrackerAdultPolicy.markAdultPosters==='function')window.TVTrackerAdultPolicy.markAdultPosters();else failures.push('adult policy unavailable '+JSON.stringify(window.__tvTrackerScriptErrors||[]));
 check(count()===2,'adult entries remain for poster blurring');
 check(!!document.querySelector('.person-result-card .adult-movie-badge'),'adult entry still marked');
 check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker '+JSON.stringify(Array.from(document.querySelectorAll('.person-result-card')).map(card=>({classes:card.className,posterPath:card.dataset.posterPath,images:Array.from(card.querySelectorAll('img')).map(img=>({src:img.getAttribute('src'),className:img.className})),badges:card.querySelectorAll('.adult-movie-badge').length}))));
