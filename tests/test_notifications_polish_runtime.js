@@ -107,6 +107,8 @@ function createUpcomingRepairSandbox(){
         prepareUpcomingData:async()=>{ calls.prepared += 1; },
         getUpcomingScheduleItems:()=>[],
         refreshShowForSchedule:async()=>{},
+        getTrackedShowRefreshFingerprint:show=>JSON.stringify(show || null),
+        refreshInterfaceForDataChanges:()=>{},
         saveData:async()=>{},
         renderUpcoming:async()=>{},
         Map,
