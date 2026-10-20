@@ -1,0 +1,37 @@
+name: Refresh Vue assets for dependency security patches (temporary)
+
+on:
+  push:
+    branches:
+      - maintenance/npm-security-patches-2026-10
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-vue-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --audit=false
+      - name: Build patched Vue runtime bundle
+        run: npm run build:frontend
+      - name: Commit generated Vue assets to the maintenance branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add static/vue
+          if git diff --cached --quiet; then
+            echo 'Committed Vue assets are already current.'
+            exit 0
+          fi
+          git commit -m 'build: refresh compiled Vue assets for patched runtime'
+          git push origin HEAD:maintenance/npm-security-patches-2026-10
