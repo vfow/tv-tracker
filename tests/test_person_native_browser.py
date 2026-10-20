@@ -77,7 +77,7 @@ DATA.profile.adult_filter=true;personPageState.credits=getPersonCreditsForRole(p
 window.TVTrackerAdultPolicy.markAdultPosters();
 check(count()===2,'adult entries remain for poster blurring');
 check(!!document.querySelector('.person-result-card .adult-movie-badge'),'adult entry still marked');
-check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker');
+check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker '+JSON.stringify(Array.from(document.querySelectorAll('.person-result-card')).map(card=>({classes:card.className,posterPath:card.dataset.posterPath,images:Array.from(card.querySelectorAll('img')).map(img=>({src:img.getAttribute('src'),className:img.className})),badges:card.querySelectorAll('.adult-movie-badge').length}))));
 personPageState={personId:'10',loading:true};renderActivePersonPage();await flush();
 check(!!document.querySelector('[aria-label="Loading person credits"]'),'loading');
 personPageState={personId:'10',error:'Provider unavailable'};renderActivePersonPage();await flush();
