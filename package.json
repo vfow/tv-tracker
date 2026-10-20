@@ -4,7 +4,7 @@
   "scripts": {
     "css:build": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --minify",
     "build:css": "npm run css:build",
-    "css:watch": "tailwindcss -i ./static/css/tailwind-input.css -o ./static/css/tailwind.css --watch",
+    "css:watch": "npm run css:build",
     "frontend:typecheck": "vue-tsc --noEmit -p frontend/tsconfig.json",
     "frontend:build": "vite build --config frontend/vite.config.ts",
     "build:frontend": "npm run frontend:typecheck && npm run frontend:build"
@@ -14,8 +14,8 @@
     "daisyui": "4.12.13",
     "tailwindcss": "^3.4.17",
     "typescript": "6.0.3",
-    "vite": "7.3.6",
-    "vue": "3.5.41",
+    "vite": "7.3.7",
+    "vue": "3.5.44",
     "vue-tsc": "3.3.10"
   }
 }
