@@ -344,9 +344,9 @@
     const originalTMDBFetch = global.tmdbFetchJSON;
     if(typeof originalTMDBFetch === "function" && !originalTMDBFetch[WRAPPER_MARK]){
         const wrapped = async function(path,params={},options={}){
-            const cleanPath = String(path || "").replace(/^\\/+/,"").toLowerCase();
+            const cleanPath = String(path || "").replace(/^\/+/, "").toLowerCase();
             const nextParams = Object.assign({},params || {});
-            if(/^search\\/(movie|tv)$/.test(cleanPath) || /^discover\\/(movie|tv)$/.test(cleanPath)) nextParams.include_adult = "true";
+            if(/^search\/(movie|tv)$/.test(cleanPath) || /^discover\/(movie|tv)$/.test(cleanPath)) nextParams.include_adult = "true";
             return originalTMDBFetch.call(this,path,nextParams,options);
         };
         wrapped[WRAPPER_MARK] = true;
