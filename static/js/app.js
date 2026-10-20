@@ -11227,9 +11227,11 @@ function isStaleEpisodeBeyondProviderLastAired(showInfo,seasonNumber,episodeInfo
         return false;
     }
 
-    // Allow a brief provider-propagation window, but don't trust a months-old
-    // scheduled date beyond the provider's latest aired episode during a hiatus.
-    const propagationWindowMs = 3 * 24 * 60 * 60 * 1000;
+    // A stale schedule in the current season should be rejected quickly.
+    // A later season gets a longer grace window because providers can lag behind
+    // a premiere while last_episode_to_air still points at the previous season.
+    const propagationWindowDays = candidateSeason > lastSeason ? 30 : 3;
+    const propagationWindowMs = propagationWindowDays * 24 * 60 * 60 * 1000;
     return Date.now() - airDateEnd > propagationWindowMs;
 }
 
