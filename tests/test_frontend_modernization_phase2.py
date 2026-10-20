@@ -13,18 +13,18 @@ class FrontendModernizationPhase2Tests(unittest.TestCase):
     def test_vue_vite_typescript_toolchain_is_locked(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertFalse(package.get("dependencies"))
-        self.assertEqual(package["devDependencies"]["vue"], "3.5.41")
-        self.assertEqual(package["devDependencies"]["vite"], "7.3.6")
-        self.assertEqual(package["devDependencies"]["@vitejs/plugin-vue"], "6.0.8")
+        self.assertEqual(package["devDependencies"]["vue"], "3.5.43")
+        self.assertEqual(package["devDependencies"]["vite"], "7.3.7")
+        self.assertEqual(package["devDependencies"]["@vitejs/plugin-vue"], "6.0.9")
         self.assertEqual(package["devDependencies"]["typescript"], "6.0.3")
-        self.assertEqual(package["devDependencies"]["vue-tsc"], "3.3.10")
+        self.assertEqual(package["devDependencies"]["vue-tsc"], "3.3.11")
         self.assertIn("frontend:typecheck", package["scripts"])
         self.assertIn("frontend:build", package["scripts"])
 
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
-        self.assertEqual(lock["packages"]["node_modules/vue"]["version"], "3.5.41")
+        self.assertEqual(lock["packages"]["node_modules/vue"]["version"], "3.5.43")
         self.assertTrue(lock["packages"]["node_modules/vue"].get("dev"))
-        self.assertEqual(lock["packages"]["node_modules/vite"]["version"], "7.3.6")
+        self.assertEqual(lock["packages"]["node_modules/vite"]["version"], "7.3.7")
         self.assertEqual(lock["packages"]["node_modules/typescript"]["version"], "6.0.3")
 
     def test_vite_output_is_hashed_committed_and_manifest_driven(self):
