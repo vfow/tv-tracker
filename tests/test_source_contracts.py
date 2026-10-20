@@ -1128,7 +1128,10 @@ class TMDBOnlyContractTests(unittest.TestCase):
         self.assertIn('v2-rail-button-icon', show_details_bridge)
 
         self.assertIn('async function refreshOpenTrackedShowMetadata(showId)', app)
-        self.assertIn('if(!show || !shouldRefreshShow(show)){ return false; }', app)
+        self.assertIn('if(!show || !shouldRefreshShow(show) || !canUseTMDBShow(show)){ return false; }', app)
+        self.assertIn('const refreshed = await refreshShowForSchedule(show);', app)
+        self.assertIn('reconcileShowStatusFromEpisodeData(show);', app)
+        self.assertIn('TV Tracker startup metadata refresh failed', app)
         self.assertIn('refreshOpenTrackedShowMetadata(id).catch(()=>{});', app)
         self.assertIn('const twelveHours = 12 * 60 * 60 * 1000;', app)
 
