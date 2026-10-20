@@ -43,8 +43,8 @@ window.openMoviePage=async(id)=>{document.body.dataset.openedMovie=id;};
 window.openDiscoverShowModal=async(item)=>{document.body.dataset.openedShow=item.id;};
 window.navigateBackOrRouteFallback=route=>{document.body.dataset.back=route;};
 const person=normalizePersonDetails({id:10,name:'Synthetic Person',biography:'<img src=x onerror=alert(1)> biography '.repeat(20),combined_credits:{cast:[
-{id:1,media_type:'movie',title:'First movie',character:'Lead',popularity:20,release_date:'2005-01-01',adult:true},
-{id:2,media_type:'movie',title:'Second movie',character:'Guest',popularity:10,release_date:'2008-01-01'},
+{id:1,media_type:'movie',title:'First movie',character:'Lead',popularity:20,release_date:'2005-01-01',poster_path:'/synthetic-adult-poster.jpg',adult:true},
+{id:2,media_type:'movie',title:'Second movie',character:'Guest',popularity:10,release_date:'2008-01-01',poster_path:'/synthetic-poster.jpg'},
 {id:3,media_type:'tv',name:'Synthetic show',character:'TV lead',popularity:5,first_air_date:'2010-01-01'}
 ],crew:[{id:1,media_type:'movie',title:'First movie',job:'Director',department:'Directing',popularity:20,release_date:'2005-01-01'}]}});
 window.personPageState={personId:'10',role:'',media:'movie',person,credits:getPersonCreditsForRole(person,'','movie')};
