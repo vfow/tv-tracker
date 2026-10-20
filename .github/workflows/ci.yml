@@ -49,6 +49,14 @@ jobs:
         run: |
           npm run build:frontend
           git diff --exit-code -- static/vue
+      - name: Upload generated Vue assets for dependency-patch refresh
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tv-tracker-generated-vue
+          path: static/vue/
+          if-no-files-found: error
+          retention-days: 1
       - name: Run full regression suite
         env:
           TEST_DATABASE_URL: postgresql://tvtracker_test:tvtracker_test@127.0.0.1:5432/tvtracker_test
