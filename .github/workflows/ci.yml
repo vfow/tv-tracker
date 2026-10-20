@@ -39,8 +39,8 @@ jobs:
       - name: Audit Python runtime dependencies
         run: pip-audit -r requirements.txt --strict
       - run: npm ci --audit=false
-      - name: Verify npm build dependency security
-        run: npm audit --audit-level=high
+      - name: Verify npm build dependency security (time-boxed unpatched advisory)
+        run: python tools/check_npm_audit.py
       - name: Build and verify committed Tailwind CSS
         run: |
           npm run build:css
