@@ -31,6 +31,7 @@ class PersonNativeBrowserTests(unittest.TestCase):
 const failures=[];
 const check=(value,message)=>{if(!value)failures.push(message);};
 const flush=()=>new Promise(resolve=>setTimeout(resolve,25));
+window.trackerImageURL=(path,size)=>String(path||'').trim()?'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=':'';
 const count=()=>document.querySelectorAll('.person-result-card').length;
 const button=label=>Array.from(document.querySelectorAll('button')).find(node=>node.textContent.trim()===label);
 window.activePage='person-detail';window.selectedPersonContext={personId:'10',role:''};
@@ -73,6 +74,7 @@ check(!!document.querySelector('.person-profile-bio-wrap.is-expanded'),'biograph
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedShow==='3','open TV preview');
 document.querySelector('[data-person-media="movie"]').click();await flush();check(count()===2,'movie switch');
 DATA.profile.adult_filter=true;personPageState.credits=getPersonCreditsForRole(person,'','movie');renderActivePersonPage();await flush();
+window.TVTrackerAdultPolicy.markAdultPosters();
 check(count()===2,'adult entries remain for poster blurring');
 check(!!document.querySelector('.person-result-card .adult-movie-badge'),'adult entry still marked');
 check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker');
