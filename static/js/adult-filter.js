@@ -290,7 +290,10 @@
                 card.querySelectorAll(".movie-page-hero-poster img").forEach(img=>img.classList.add(POSTER_BLUR_CLASS));
                 return;
             }
-            card.querySelectorAll(".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img").forEach(img=>{
+            const posterSelector = card.matches && card.matches(".person-result-card")
+                ? "img"
+                : ".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img";
+            card.querySelectorAll(posterSelector).forEach(img=>{
                 img.classList.add(POSTER_BLUR_CLASS);
             });
         });
