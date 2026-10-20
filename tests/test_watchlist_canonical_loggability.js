@@ -71,4 +71,67 @@ futureShow.episodes_watched = {"1":[1]};
 assert.strictEqual(context.getNextEpisode(futureShow),null,"watched episodes must remain excluded");
 assert.strictEqual(context.filterShow(futureShow),false);
 
+
+const today = new Date().toISOString().slice(0,10);
+const staleAirDate = new Date(Date.now() - (14 * 24 * 60 * 60 * 1000))
+    .toISOString().slice(0,10);
+
+const staleHiatusShow = {
+    status:"watching",
+    number_of_seasons:1,
+    episodes_watched:{"1":[1180]},
+    last_episode_to_air:{season_number:1,episode_number:1180},
+    _episode_details:{},
+    _episode_list:{
+        "1":[
+            {episode_number:1180,air_date:"2026-09-27",name:"Episode 1180"},
+            {episode_number:1181,air_date:staleAirDate,name:"Unconfirmed episode 1181"}
+        ]
+    }
+};
+availability.set("1:1180",true);
+availability.set("1:1181",true);
+assert.strictEqual(
+    context.getNextEpisode(staleHiatusShow),
+    null,
+    "a stale past-dated episode after TMDB's last aired episode must not become the next loggable episode"
+);
+
+const newSeasonShow = {
+    status:"watching",
+    number_of_seasons:2,
+    episodes_watched:{"1":[10]},
+    last_episode_to_air:{season_number:1,episode_number:10},
+    _episode_details:{},
+    _episode_list:{
+        "1":[{episode_number:10,air_date:"2026-10-01",name:"Season 1 finale"}],
+        "2":[{episode_number:1,air_date:today,name:"New season premiere"}]
+    }
+};
+availability.set("1:10",true);
+availability.set("2:1",true);
+const nextSeasonEpisode = context.getNextEpisode(newSeasonShow);
+assert(nextSeasonEpisode,"the first episode of a newly aired season must remain loggable during provider propagation");
+assert.strictEqual(nextSeasonEpisode.season,2);
+assert.strictEqual(nextSeasonEpisode.episode,1);
+
+const delayedSeasonAirDate = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000))
+    .toISOString().slice(0,10);
+const delayedProviderSeasonShow = {
+    status:"watching",
+    number_of_seasons:2,
+    episodes_watched:{"1":[10]},
+    last_episode_to_air:{season_number:1,episode_number:10},
+    _episode_details:{},
+    _episode_list:{
+        "1":[{episode_number:10,air_date:"2026-10-01",name:"Season 1 finale"}],
+        "2":[{episode_number:1,air_date:delayedSeasonAirDate,name:"New season premiere"}]
+    }
+};
+availability.set("2:1",true);
+const delayedSeasonEpisode = context.getNextEpisode(delayedProviderSeasonShow);
+assert(delayedSeasonEpisode,"a later-season premiere must remain loggable while the provider's last-aired pointer lags behind by a week");
+assert.strictEqual(delayedSeasonEpisode.season,2);
+assert.strictEqual(delayedSeasonEpisode.episode,1);
+
 console.log("Watchlist canonical loggability regression tests passed.");

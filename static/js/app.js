@@ -1317,6 +1317,14 @@ function scheduleInitialBackgroundMaintenance(){
         }catch(error){
             console.error("TV Tracker startup maintenance failed",error);
         }
+
+        try{
+            if(typeof refreshUpcomingDataInBackground === "function"){
+                await refreshUpcomingDataInBackground();
+            }
+        }catch(error){
+            console.warn("TV Tracker startup metadata refresh failed",error);
+        }
     };
 
     if(typeof requestIdleCallback === "function"){
@@ -1833,15 +1841,43 @@ function getTrackedShowExternalMetadataFingerprint(show){
     try{ return JSON.stringify(snapshot); }catch(error){ return String(Date.now()); }
 }
 
+function getTrackedShowRefreshFingerprint(show){
+    if(!show){ return ""; }
+    const seasons = Object.keys(show._episode_list || {})
+    .sort((a,b)=>Number(a)-Number(b))
+    .map(seasonKey=>{
+        const episodes = Array.isArray(show._episode_list[seasonKey])
+        ? show._episode_list[seasonKey]
+        : [];
+        const first = episodes[0] || {};
+        const last = episodes[episodes.length - 1] || {};
+        return [
+            seasonKey,
+            episodes.length,
+            Number(first.episode_number || 0),
+            Number(last.episode_number || 0),
+            String(last.air_date || "")
+        ];
+    });
+    return JSON.stringify({
+        metadata:getTrackedShowExternalMetadataFingerprint(show),
+        status:String(show.status || ""),
+        completed_at:String(show.completed_at || ""),
+        was_unreleased_when_added:show.was_unreleased_when_added === true,
+        seasons
+    });
+}
+
 async function refreshOpenTrackedShowMetadata(showId){
     const id = String(showId || "");
     const show = DATA.shows && DATA.shows[id] ? DATA.shows[id] : null;
-    if(!show || !shouldRefreshShow(show)){ return false; }
-    const before = getTrackedShowExternalMetadataFingerprint(show);
-    const refreshed = await refreshShowDetails(show);
+    if(!show || !shouldRefreshShow(show) || !canUseTMDBShow(show)){ return false; }
+    const before = getTrackedShowRefreshFingerprint(show);
+    const refreshed = await refreshShowForSchedule(show);
     if(!refreshed){ return false; }
+    reconcileShowStatusFromEpisodeData(show);
     await saveData({showIds:[id]});
-    const changed = before !== getTrackedShowExternalMetadataFingerprint(show);
+    const changed = before !== getTrackedShowRefreshFingerprint(show);
     if(changed && String(selectedShowId || "") === id && selectedEpisodeContext === null){
         renderShowDetailsPagePreservingScroll(show);
         if(typeof updateShellTitle === "function"){ updateShellTitle(); }
@@ -1892,20 +1928,20 @@ function normalizeEpisodeReleaseFields(show){
 async function refreshShowForSchedule(show,forceRefresh=false){
 
     if(!show){
-        return;
+        return false;
     }
 
     if(!canUseTMDBShow(show)){
-        return;
+        return false;
     }
 
     const needsTMDBRefresh = forceRefresh || shouldRefreshShow(show);
 
     if(!needsTMDBRefresh){
-        return;
+        return false;
     }
 
-    await refreshShowDetails(show);
+    const refreshed = await refreshShowDetails(show);
 
     await ensureSeasonLoaded(show,1,true);
 
@@ -1923,6 +1959,50 @@ async function refreshShowForSchedule(show,forceRefresh=false){
             Number(show.next_episode_to_air.season_number),
             true
         );
+
+    }
+
+    return refreshed === true;
+
+}
+
+
+function reconcileShowStatusFromEpisodeData(show){
+
+    if(!show){
+        return;
+    }
+
+    const released = hasAnyAiredEpisode(show);
+    const availableUnwatched = hasAvailableUnwatchedEpisode(show);
+
+    if(!released){
+
+        show.status = "plan";
+        show.was_unreleased_when_added = true;
+        show.completed_at = "";
+        return;
+
+    }
+
+    if(
+        show.was_unreleased_when_added === true &&
+        show.status === "plan" &&
+        availableUnwatched
+    ){
+
+        show.status = "watching";
+        show.was_unreleased_when_added = false;
+
+    }
+
+    if(
+        show.status === "finished" &&
+        availableUnwatched
+    ){
+
+        show.status = "watching";
+        show.completed_at = "";
 
     }
 
@@ -1965,38 +2045,7 @@ async function autoUpdateStatuses(forceRefresh=false,allowRemoteRefresh=true){
 
         }
 
-        const released = hasAnyAiredEpisode(show);
-        const availableUnwatched = hasAvailableUnwatchedEpisode(show);
-
-        if(!released){
-
-            show.status = "plan";
-            show.was_unreleased_when_added = true;
-            show.completed_at = "";
-            continue;
-
-        }
-
-        if(
-            show.was_unreleased_when_added === true &&
-            show.status === "plan" &&
-            availableUnwatched
-        ){
-
-            show.status = "watching";
-            show.was_unreleased_when_added = false;
-
-        }
-
-        if(
-            show.status === "finished" &&
-            availableUnwatched
-        ){
-
-            show.status = "watching";
-            show.completed_at = "";
-
-        }
+        reconcileShowStatusFromEpisodeData(show);
 
     }
 
@@ -11131,11 +11180,71 @@ function isUnknownDateEpisodeInReleasedSeason(showInfo,seasonNumber,episodeInfo=
     return false;
 }
 
+function isStaleEpisodeBeyondProviderLastAired(showInfo,seasonNumber,episodeInfo=null){
+    const last = showInfo && showInfo.last_episode_to_air
+    ? showInfo.last_episode_to_air
+    : null;
+
+    if(!last || !episodeInfo || typeof episodeInfo !== "object"){
+        return false;
+    }
+
+    const candidateSeason = Number(
+        episodeInfo.season_number !== undefined
+        ? episodeInfo.season_number
+        : episodeInfo.season !== undefined
+        ? episodeInfo.season
+        : seasonNumber
+    );
+    const candidateEpisode = getEpisodeNumberFromInfo(episodeInfo);
+    const lastSeason = Number(last.season_number);
+    const lastEpisode = Number(last.episode_number);
+
+    if(
+        !Number.isFinite(candidateSeason) ||
+        !Number.isFinite(candidateEpisode) ||
+        !Number.isFinite(lastSeason) ||
+        !Number.isFinite(lastEpisode)
+    ){
+        return false;
+    }
+
+    const isAfterLatestAired =
+        candidateSeason > lastSeason ||
+        (candidateSeason === lastSeason && candidateEpisode > lastEpisode);
+
+    if(!isAfterLatestAired){
+        return false;
+    }
+
+    const airDate = String(episodeInfo.air_date || "").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(airDate)){
+        return false;
+    }
+
+    const airDateEnd = new Date(airDate + "T23:59:59").getTime();
+    if(!Number.isFinite(airDateEnd)){
+        return false;
+    }
+
+    // A stale schedule in the current season should be rejected quickly.
+    // A later season gets a longer grace window because providers can lag behind
+    // a premiere while last_episode_to_air still points at the previous season.
+    const propagationWindowDays = candidateSeason > lastSeason ? 30 : 3;
+    const propagationWindowMs = propagationWindowDays * 24 * 60 * 60 * 1000;
+    return Date.now() - airDateEnd > propagationWindowMs;
+}
+
+
 function isEpisodeLoggable(episodeInfo=null,showInfo=null,seasonNumber=null){
     const timingEpisode = getEpisodeTimingInfo(episodeInfo,seasonNumber);
     const airDate = timingEpisode && typeof timingEpisode === "object"
     ? timingEpisode.air_date
     : "";
+
+    if(isStaleEpisodeBeyondProviderLastAired(showInfo,seasonNumber,timingEpisode)){
+        return false;
+    }
 
     if(isEpisodeAired(airDate,timingEpisode,showInfo)){
         return true;
@@ -11328,6 +11437,13 @@ async function refreshUpcomingDataInBackground(){
         return;
     }
 
+    const before = new Map(
+        Object.entries(DATA.shows || {}).map(([id,show])=>[
+            String(id),
+            getTrackedShowRefreshFingerprint(show)
+        ])
+    );
+
     isRefreshingUpcoming = true;
 
     try{
@@ -11340,6 +11456,25 @@ async function refreshUpcomingDataInBackground(){
 
     }
 
+    const changedShowIds = Object.entries(DATA.shows || {})
+    .filter(([id,show])=>{
+        return before.get(String(id)) !== getTrackedShowRefreshFingerprint(show);
+    })
+    .map(([id])=>String(id));
+
+    if(changedShowIds.length > 0){
+        if(typeof refreshInterfaceForDataChanges === "function"){
+            refreshInterfaceForDataChanges({
+                showIds:changedShowIds,
+                historyChanged:false,
+                stateChanged:false,
+                remote:false
+            });
+        }else if(typeof renderAll === "function"){
+            renderAll();
+        }
+    }
+
     if(activePage === "shows" && activeShowsTab === "upcoming"){
         renderUpcoming(false);
     }
@@ -11347,9 +11482,6 @@ async function refreshUpcomingDataInBackground(){
     await repairMissingWatchingSchedules();
 
 }
-
-
-
 
 
 function getUpcomingShows(){
