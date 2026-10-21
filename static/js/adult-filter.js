@@ -290,7 +290,10 @@
                 card.querySelectorAll(".movie-page-hero-poster img").forEach(img=>img.classList.add(POSTER_BLUR_CLASS));
                 return;
             }
-            card.querySelectorAll(".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img").forEach(img=>{
+            const posterSelector = card.matches && card.matches(".person-result-card")
+                ? "img"
+                : ".genre-result-poster img, .discover-card-poster img, .v2-similar-poster img";
+            card.querySelectorAll(posterSelector).forEach(img=>{
                 img.classList.add(POSTER_BLUR_CLASS);
             });
         });
@@ -341,9 +344,9 @@
     const originalTMDBFetch = global.tmdbFetchJSON;
     if(typeof originalTMDBFetch === "function" && !originalTMDBFetch[WRAPPER_MARK]){
         const wrapped = async function(path,params={},options={}){
-            const cleanPath = String(path || "").replace(/^\\/+/,"").toLowerCase();
+            const cleanPath = String(path || "").replace(/^\/+/, "").toLowerCase();
             const nextParams = Object.assign({},params || {});
-            if(/^search\\/(movie|tv)$/.test(cleanPath) || /^discover\\/(movie|tv)$/.test(cleanPath)) nextParams.include_adult = "true";
+            if(/^search\/(movie|tv)$/.test(cleanPath) || /^discover\/(movie|tv)$/.test(cleanPath)) nextParams.include_adult = "true";
             return originalTMDBFetch.call(this,path,nextParams,options);
         };
         wrapped[WRAPPER_MARK] = true;

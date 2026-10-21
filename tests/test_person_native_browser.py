@@ -26,11 +26,12 @@ class PersonNativeBrowserTests(unittest.TestCase):
 
         fixture = '''<!doctype html><html><body><div id="person-detail-content"></div>
 <script src="/static/js/app.js"></script><script src="/static/js/ui.js"></script>
-<script>window.DATA.profile.adult_filter=false;</script><script src="/static/js/adult-filter.js"></script>
+<script>window.DATA.profile.adult_filter=false;window.appDataReady=true;window.__tvTrackerScriptErrors=[];window.addEventListener("error",event=>window.__tvTrackerScriptErrors.push(String(event.message||event.error||"unknown error")+" @"+String(event.filename||"")+":"+String(event.lineno||"")));window.addEventListener("DOMContentLoaded",()=>window.setTimeout(()=>{window.appDataReady=true;},0),{once:true});</script><script src="/static/js/adult-filter.js"></script>
 <script src="/static/js/discover-vue-bridge.js"></script><script>
 const failures=[];
 const check=(value,message)=>{if(!value)failures.push(message);};
 const flush=()=>new Promise(resolve=>setTimeout(resolve,25));
+window.trackerImageURL=(path,size)=>String(path||'').trim()?'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=':'';
 const count=()=>document.querySelectorAll('.person-result-card').length;
 const button=label=>Array.from(document.querySelectorAll('button')).find(node=>node.textContent.trim()===label);
 window.activePage='person-detail';window.selectedPersonContext={personId:'10',role:''};
@@ -43,8 +44,8 @@ window.openMoviePage=async(id)=>{document.body.dataset.openedMovie=id;};
 window.openDiscoverShowModal=async(item)=>{document.body.dataset.openedShow=item.id;};
 window.navigateBackOrRouteFallback=route=>{document.body.dataset.back=route;};
 const person=normalizePersonDetails({id:10,name:'Synthetic Person',biography:'<img src=x onerror=alert(1)> biography '.repeat(20),combined_credits:{cast:[
-{id:1,media_type:'movie',title:'First movie',character:'Lead',popularity:20,release_date:'2005-01-01',adult:true},
-{id:2,media_type:'movie',title:'Second movie',character:'Guest',popularity:10,release_date:'2008-01-01'},
+{id:1,media_type:'movie',title:'First movie',character:'Lead',popularity:20,release_date:'2005-01-01',poster_path:'/synthetic-adult-poster.jpg',adult:true},
+{id:2,media_type:'movie',title:'Second movie',character:'Guest',popularity:10,release_date:'2008-01-01',poster_path:'/synthetic-poster.jpg'},
 {id:3,media_type:'tv',name:'Synthetic show',character:'TV lead',popularity:5,first_air_date:'2010-01-01'}
 ],crew:[{id:1,media_type:'movie',title:'First movie',job:'Director',department:'Directing',popularity:20,release_date:'2005-01-01'}]}});
 window.personPageState={personId:'10',role:'',media:'movie',person,credits:getPersonCreditsForRole(person,'','movie')};
@@ -73,9 +74,10 @@ check(!!document.querySelector('.person-profile-bio-wrap.is-expanded'),'biograph
 document.querySelector('.person-result-card').click();await flush();check(document.body.dataset.openedShow==='3','open TV preview');
 document.querySelector('[data-person-media="movie"]').click();await flush();check(count()===2,'movie switch');
 DATA.profile.adult_filter=true;personPageState.credits=getPersonCreditsForRole(person,'','movie');renderActivePersonPage();await flush();
+if(window.TVTrackerAdultPolicy&&typeof window.TVTrackerAdultPolicy.markAdultPosters==='function')window.TVTrackerAdultPolicy.markAdultPosters();else failures.push('adult policy unavailable '+JSON.stringify(window.__tvTrackerScriptErrors||[]));
 check(count()===2,'adult entries remain for poster blurring');
 check(!!document.querySelector('.person-result-card .adult-movie-badge'),'adult entry still marked');
-check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker');
+check(!!document.querySelector('.person-result-card img.tt-adult-poster-blur'),'adult poster blur marker '+JSON.stringify(Array.from(document.querySelectorAll('.person-result-card')).map(card=>({classes:card.className,posterPath:card.dataset.posterPath,images:Array.from(card.querySelectorAll('img')).map(img=>({src:img.getAttribute('src'),className:img.className})),badges:card.querySelectorAll('.adult-movie-badge').length}))));
 personPageState={personId:'10',loading:true};renderActivePersonPage();await flush();
 check(!!document.querySelector('[aria-label="Loading person credits"]'),'loading');
 personPageState={personId:'10',error:'Provider unavailable'};renderActivePersonPage();await flush();

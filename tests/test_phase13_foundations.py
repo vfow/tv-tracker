@@ -1794,8 +1794,8 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
             },
         )
         self.assertFalse(package.get("dependencies"), "Node runtime dependencies remain forbidden")
-        self.assertEqual(package["devDependencies"].get("vue"), "3.5.41")
-        self.assertEqual(package["devDependencies"].get("vite"), "7.3.6")
+        self.assertEqual(package["devDependencies"].get("vue"), "3.5.43")
+        self.assertEqual(package["devDependencies"].get("vite"), "7.3.7")
         self.assertEqual(package["devDependencies"].get("typescript"), "6.0.3")
 
         decision = (ROOT / "docs/architecture/FRONTEND_MODERNIZATION_DECISION_2026-08-28.md").read_text(
@@ -1835,6 +1835,8 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
         attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
         ci_commands = workflow_run_commands(ci_path)
         deploy_commands = workflow_run_commands(deploy_path)
+        audit_checker = (ROOT / "tools/check_npm_audit.py").read_text(encoding="utf-8")
+        self.assertIn('"npm", "audit", "--audit-level=high", "--json"', audit_checker)
 
         self.assertIn("static/css/tailwind-input.css text eol=lf", attributes)
         self.assertIn("static/css/tailwind.css text eol=lf", attributes)
@@ -1852,7 +1854,7 @@ class Phase13ArchitectureFoundationTests(unittest.TestCase):
                 )
                 self.assertEqual(commands.count("npm ci --audit=false"), 1)
                 self.assertEqual(
-                    commands.count("npm audit --audit-level=high"),
+                    commands.count("python tools/check_npm_audit.py"),
                     1,
                 )
                 self.assertEqual(commands.count("npm run build:css"), 1)
