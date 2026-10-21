@@ -101,7 +101,7 @@ jobs:
           printf 'app_dir_b64=%s\n' "$APP_DIR_B64" >> "$GITHUB_OUTPUT"
       - name: Deploy over SSH
         id: deploy
-        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
         env:
           APP_DIR_B64: ${{ steps.deploy-inputs.outputs.app_dir_b64 }}
           DEPLOY_SHA: ${{ github.sha }}
@@ -245,7 +245,7 @@ jobs:
       - name: Roll back failed production activation
         id: rollback
         if: ${{ failure() && steps.deploy.outcome == 'success' }}
-        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
         env:
           APP_DIR_B64: ${{ steps.deploy-inputs.outputs.app_dir_b64 }}
         with:
